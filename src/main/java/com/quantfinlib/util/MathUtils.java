@@ -192,6 +192,66 @@ public final class MathUtils {
                 / (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
     }
 
+    /** Standard normal density. */
+    public static double normPdf(double x) {
+        return Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI);
+    }
+
+    /**
+     * Standard normal CDF (Abramowitz &amp; Stegun 26.2.17, |error| &lt; 7.5e-8).
+     */
+    public static double normCdf(double x) {
+        if (x < 0) {
+            return 1 - normCdf(-x);
+        }
+        double t = 1 / (1 + 0.2316419 * x);
+        double poly = t * (0.319381530 + t * (-0.356563782 + t * (1.781477937
+                + t * (-1.821255978 + t * 1.330274429))));
+        return 1 - normPdf(x) * poly;
+    }
+
+    /**
+     * Solves {@code A x = b} by Gaussian elimination with partial pivoting.
+     * Inputs are not modified.
+     */
+    public static double[] solveLinear(double[][] a, double[] b) {
+        int n = b.length;
+        double[][] m = new double[n][];
+        double[] rhs = b.clone();
+        for (int i = 0; i < n; i++) {
+            m[i] = a[i].clone();
+        }
+        for (int col = 0; col < n; col++) {
+            int pivot = col;
+            for (int r = col + 1; r < n; r++) {
+                if (Math.abs(m[r][col]) > Math.abs(m[pivot][col])) {
+                    pivot = r;
+                }
+            }
+            if (Math.abs(m[pivot][col]) < 1e-12) {
+                throw new IllegalArgumentException("singular system at column " + col);
+            }
+            double[] tmp = m[col]; m[col] = m[pivot]; m[pivot] = tmp;
+            double tb = rhs[col]; rhs[col] = rhs[pivot]; rhs[pivot] = tb;
+            for (int r = col + 1; r < n; r++) {
+                double f = m[r][col] / m[col][col];
+                rhs[r] -= f * rhs[col];
+                for (int c = col; c < n; c++) {
+                    m[r][c] -= f * m[col][c];
+                }
+            }
+        }
+        double[] x = new double[n];
+        for (int i = n - 1; i >= 0; i--) {
+            double s = rhs[i];
+            for (int j = i + 1; j < n; j++) {
+                s -= m[i][j] * x[j];
+            }
+            x[i] = s / m[i][i];
+        }
+        return x;
+    }
+
     public static double clamp(double v, double lo, double hi) {
         return Math.max(lo, Math.min(hi, v));
     }

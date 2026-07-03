@@ -277,6 +277,42 @@ Stop-loss / take-profit exits are worked through the same model — a patient ex
 style exits slowly, and that realism (plus the strategy-alpha-vs-execution-cost
 trade-off) shows up directly in the equity curve.
 
+## Hedging Algorithms — `hedging`, `pricing`
+
+Quantitative hedging across asset classes, built on a dependency-free
+Black-Scholes-Merton engine:
+
+- **`BlackScholes`** (`pricing`) — pricing + full Greeks (delta, gamma, vega, theta,
+  rho) with continuous carry, so the same formulas cover equity dividends and FX
+  (Garman-Kohlhagen); implied vol by bisection. Verified against textbook values.
+- **`DeltaHedger`** — dynamic delta hedging simulator: sell an option, replicate along
+  a price path with a rebalance band and transaction costs, and measure the replication
+  error. Quantifies the desk trade-off: tighter bands → smaller hedge error, more costs.
+- **`GreekHedger`** — delta-gamma and delta-gamma-vega neutralization (exact linear
+  solve), plus a general N-greek / N-instrument solver with residual verification.
+- **`MinimumVarianceHedge`** — optimal hedge ratio (cov/var), hedge effectiveness (ρ²),
+  realized variance reduction, and futures contract sizing for beta adjustment
+  (`N = (β_target - β) · V / (F · multiplier)`).
+- **`FxHedger`** — currency exposure netting across a book, variance-minimizing FX
+  hedge ratio for foreign assets, forward-carry cost of the hedge in bps, and hedge
+  notional sizing.
+- **`PairsHedger`** — statistical hedging: OLS hedge ratio, spread construction,
+  z-score for entry/exit, and mean-reversion half-life from an AR(1) fit (∞ when the
+  spread doesn't revert).
+
+```java
+// Delta-hedge a short call daily with 1bp costs and measure replication error:
+var report = DeltaHedger.simulateShortOption(OptionType.CALL, 100, 0.5,
+        0.05, 0, 0.20, pricePath, 1.0 / 252, DeltaHedger.Config.every(1));
+report.finalPnl();          // hedging error vs the option payoff
+
+// Neutralize a book's delta/gamma/vega with spot + two options:
+double[] qty = GreekHedger.deltaGammaVegaHedge(1_200, -80, 250, opt1, opt2);
+
+// Hedge a $10M beta-1.2 portfolio with index futures:
+double contracts = MinimumVarianceHedge.fullHedgeContracts(1.2, 10_000_000, 5_000, 50);
+```
+
 ## Ultra-Low-Latency / HFT Path
 
 The library ships two market data paths. The convenience path
@@ -330,7 +366,10 @@ com.quantfinlib
 ├── core          Bar, BarSeries (primitive-array OHLCV time series)
 ├── orderbook     OrderBook matching engine, BookAnalytics, Side, LimitOrder
 ├── microstructure QueueModel, MarketImpactModel, TransactionCostAnalyzer
-├── pricing       FairValueEngine, TriangularArbitrage, ForwardCurve
+├── pricing       FairValueEngine, TriangularArbitrage, ForwardCurve,
+│                 BlackScholes (Greeks, Garman-Kohlhagen, implied vol)
+├── hedging       DeltaHedger, GreekHedger, MinimumVarianceHedge,
+│                 FxHedger, PairsHedger
 ├── execution     TWAP/VWAP schedulers, SmartOrderRouter, IcebergOrder,
 │                 DarkPoolSimulator, MidPegTracker, VenueBenchmark
 ├── regulatory    FixAnalyzer, BestExecutionAnalyzer, MarketQualityMetrics
