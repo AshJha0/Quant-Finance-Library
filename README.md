@@ -9,9 +9,11 @@ Built for quantitative researchers, algorithmic traders, developers, fintech tea
 financial professionals: focus on building winning strategies while the platform handles
 everything from backtesting to reporting.
 
-- **Ultra low latency by design** — zero runtime dependencies, primitive-array
-  (structure-of-arrays) time series, allocation-free hot paths, a lock-free SPSC ring
-  buffer for market data, and parallel Monte Carlo across all cores.
+- **Ultra low latency / HFT-grade hot path** — a zero-allocation, lock-free tick
+  pipeline (Disruptor-style primitive ring buffer, dense int symbol ids, O(1) streaming
+  indicators) measured at **~200 ns median publish-to-strategy latency** and
+  **9-12M ticks/sec sustained** with a live strategy attached. See
+  [Ultra-Low-Latency / HFT Path](#ultra-low-latency--hft-path).
 - **Production-ready** — deterministic seeded algorithms, NaN-safe indicator warm-ups,
   gap-aware stop-loss/take-profit fills, and a full JUnit 5 test suite.
 - **Modular architecture, clean APIs** — each capability lives in its own package with
@@ -165,12 +167,58 @@ BacktestResult r = StrategyBuilder.named("EMA momentum")
         .backtest(series, 100_000);
 ```
 
+## Ultra-Low-Latency / HFT Path
+
+The library ships two market data paths. The convenience path
+(`MarketDataProcessor`, String symbols, event objects) is for research and monitoring.
+The **HFT path** is a zero-allocation, zero-lock, zero-map-lookup tick pipeline for
+latency-critical trading:
+
+| Component | Design |
+|---|---|
+| `TickRingBuffer` | Disruptor-style SPSC ring: preallocated primitive slots (`int/double/long` arrays — no event objects), cache-line-padded sequences (no false sharing), acquire/release publication (no CAS), producer/consumer sequence caching (minimal cross-core traffic) |
+| `SymbolRegistry` | Symbols interned to dense int ids once at setup — the hot path never hashes a String |
+| `HftMarketDataBus` | Array-indexed listener dispatch and last-price cache (no map lookups), optional busy-spin consumer (`Thread.onSpinWait()`) for minimum hand-off latency |
+| `StreamingIndicators` | O(1)-per-tick SMA / EMA / RSI / MACD / VWAP, verified value-for-value identical to the batch engine — backtest results transfer to live execution exactly |
+| `LatencyRecorder` | Zero-allocation log-linear nanosecond histogram (HdrHistogram-style) for measuring your own path |
+
+```java
+try (HftMarketDataBus bus = new HftMarketDataBus(1 << 16, 16, /*busySpin*/ true)) {
+    int eurusd = bus.registerSymbol("EURUSD");           // setup: intern once
+    var fast = new StreamingIndicators.Ema(12);
+    var slow = new StreamingIndicators.Ema(26);
+    bus.subscribe(eurusd, (id, price, size, tsNanos) -> { // hot path: primitives only
+        if (fast.update(price) > slow.update(price)) { /* fire order */ }
+    });
+    bus.start();
+    bus.publish(eurusd, 1.0850, 1_000_000, System.nanoTime()); // zero allocation
+}
+```
+
+**Measured** (`HftLatencyBenchmark`, JDK 24, Windows 11, stock desktop hardware —
+strategy workload of 2×EMA + RSI per tick plus latency recording included in every number):
+
+```
+Throughput:                  9-12 million ticks/sec sustained (0 ticks lost)
+Publish-to-strategy latency: p50=204ns  p99=300-800ns  p99.9=~2.4us   (across runs)
+```
+
+Reproduce with:
+
+```bash
+java -Xms512m -Xmx512m -XX:+AlwaysPreTouch -cp target/classes com.quantfinlib.examples.HftLatencyBenchmark
+```
+
+Steady-state the hot path allocates nothing, so GC choice barely matters; for
+production-grade tail latency also consider `-XX:+UseZGC`, core pinning via OS affinity
+for the producer and consumer threads, and disabling CPU frequency scaling.
+
 ## Project Layout
 
 ```
 com.quantfinlib
 ├── core          Bar, BarSeries (primitive-array OHLCV time series)
-├── indicators    21-indicator technical analysis engine
+├── indicators    21-indicator batch engine + O(1) StreamingIndicators for live/HFT
 ├── risk          RiskMetrics, PortfolioRiskAnalyzer, Portfolio, metric registry
 ├── ml            GradientBoostedRegressor, VolatilityForecaster
 ├── optimization  PortfolioOptimizer (max Sharpe / min vol / frontier / rebalance)
@@ -179,10 +227,11 @@ com.quantfinlib
 ├── dsl           Rule, Rules, StrategyBuilder
 ├── screener      Technical + fundamental filters, ranking, CSV export
 ├── simulation    MonteCarloSimulator, SimulationResult
-├── marketdata    RingBuffer, MarketDataProcessor, HistoricalDataStore
+├── marketdata    HFT path: TickRingBuffer, HftMarketDataBus, SymbolRegistry
+│                 convenience path: RingBuffer, MarketDataProcessor, HistoricalDataStore
 ├── report        Report model + HTML/CSV/PDF/XLSX exporters, ReportGenerator
-├── util          MathUtils (percentiles, Cholesky, inverse normal CDF, ...)
-└── examples      QuickStartDemo (end-to-end tour of all 11 capabilities)
+├── util          MathUtils, LatencyRecorder (nanosecond histogram)
+└── examples      QuickStartDemo (all 11 capabilities), HftLatencyBenchmark
 ```
 
 ## License
