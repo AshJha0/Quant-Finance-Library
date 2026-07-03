@@ -4,14 +4,14 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.fdequant</groupId>
+    <groupId>com.quantfinlib</groupId>
     <artifactId>quant-finance-library</artifactId>
     <version>1.0.0</version>
     <packaging>jar</packaging>
 
     <name>Quant-Finance-Library</name>
     <description>
-        fdequant: production-ready quantitative finance platform unifying risk management,
+        quantfinlib: production-ready quantitative finance platform unifying risk management,
         portfolio optimization, machine learning, technical analysis, strategy development,
         market screening, Monte Carlo simulation, reporting, and algorithmic research.
     </description>
