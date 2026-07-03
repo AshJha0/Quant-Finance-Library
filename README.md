@@ -167,6 +167,79 @@ BacktestResult r = StrategyBuilder.named("EMA momentum")
         .backtest(series, 100_000);
 ```
 
+## Trading & Execution Stack
+
+Beyond the 11 research capabilities, the library ships a full trading-side stack across
+six areas:
+
+### 1. Market Microstructure & Liquidity Analytics — `orderbook`, `microstructure`
+- **`OrderBook`** — price-time-priority matching engine: placement, cancels, partial
+  fills, trade callbacks, queue position (`qtyAhead`), and message counters for
+  order-to-trade ratio.
+- **`BookAnalytics`** — quoted spread (bps), size-weighted microprice, depth imbalance,
+  depth-within-bps, and non-destructive **sweep simulation** (VWAP-to-fill + impact of a
+  large marketable order).
+- **`QueueModel`** — fill probability from queue position, and the fill-probability edge
+  bought by a latency advantage.
+- **`MarketImpactModel`** — square-root law plus Almgren-Chriss-style temporary/permanent
+  decomposition and expected schedule cost.
+- **`TransactionCostAnalyzer`** — implementation shortfall vs arrival mid, slippage vs
+  interval VWAP (or synthetic forward), effective spread per fill.
+
+### 2. Pricing & Fair Value Construction — `pricing`
+- **`FairValueEngine`** — microprice + mid-drift estimation → **latency-adjusted fair
+  price** ("true mid" projected to when your order actually arrives).
+- **`TriangularArbitrage`** — executable (bid/ask-based) round-trip edge across three FX
+  pairs.
+- **`ForwardCurve`** — implied forward curve construction with interpolation, implied
+  rate differentials, and covered-interest-parity mispricing checks.
+
+### 3. Surveillance / Credit / Limits Risk Models — `risk`
+- **`CounterpartyExposureTracker`** — netted current exposure + tenor-bucketed potential
+  future exposure (BIS CEM-style add-ons).
+- **`PreTradeLimitChecker`** — synchronous order gate: size, notional, position, price
+  collar, restricted symbols, counterparty credit headroom.
+- **`SettlementRiskAnalyzer`** — Herstatt exposure per counterparty and peak intraday
+  settlement exposure.
+- **`ConcentrationRisk`** — HHI, effective positions, top-N share, single-name limit
+  breaches.
+
+### 4. Statistical & ML Applications — `ml`
+- **`MarketImpactPredictor`** — gradient-boosted impact prediction + calibrated
+  book-sweep probability.
+- **`IntradayLiquidityForecaster`** — seasonal volume profiles, session peaks
+  (Tokyo/London/NY), VWAP-ready weight curves.
+- **`AnomalyDetector`** — quote-stuffing detection (message-rate z-score × order-to-trade
+  ratio) and price-spike surveillance.
+
+### 5. Execution Strategy Support — `execution`
+- **`TwapScheduler` / `VwapScheduler`** — schedule design with anti-gaming randomization
+  and exact largest-remainder quantity allocation.
+- **`MidPegTracker`** — mid-rate pegging with offset, limit cap, and reprice-threshold
+  logic.
+- **`SmartOrderRouter`** — fee-adjusted multi-venue splitting with displayed-size limits
+  and dark-first routing.
+- **`IcebergOrder`** — display/reload state machine with randomized tranche sizes.
+- **`DarkPoolSimulator`** — midpoint-cross venue with minimum-execution-quantity
+  constraints.
+- **`VenueBenchmark`** — fill rate, latency-to-fill, effective spread, and post-trade
+  markout per venue, ranked.
+
+### 6. Benchmark & Regulatory Metrics — `regulatory`
+- **`FixAnalyzer`** — WM/Reuters-style fix calculation (median of window samples) and
+  "banging the close" screening (participation × aligned run-up × reversion).
+- **`BestExecutionAnalyzer`** — MiFID II-style report: slippage, latency-to-fill,
+  price-improvement rate, per-venue breakdown.
+- **`MarketQualityMetrics`** — quoted/effective/realized spread, price impact,
+  order-to-trade ratio.
+
+```java
+// Route 900 across venues, benchmark the result, and TCA the fills:
+var plan = SmartOrderRouter.route(Side.BUY, 900, venueQuotes, /*preferDark*/ true);
+var tca  = TransactionCostAnalyzer.analyze(fills, arrivalMid, marketVwap, midsAtFill);
+var sweep = BookAnalytics.sweep(orderBook, Side.BUY, 500_000);   // what would it cost?
+```
+
 ## Ultra-Low-Latency / HFT Path
 
 The library ships two market data paths. The convenience path
@@ -218,9 +291,18 @@ for the producer and consumer threads, and disabling CPU frequency scaling.
 ```
 com.quantfinlib
 ├── core          Bar, BarSeries (primitive-array OHLCV time series)
+├── orderbook     OrderBook matching engine, BookAnalytics, Side, LimitOrder
+├── microstructure QueueModel, MarketImpactModel, TransactionCostAnalyzer
+├── pricing       FairValueEngine, TriangularArbitrage, ForwardCurve
+├── execution     TWAP/VWAP schedulers, SmartOrderRouter, IcebergOrder,
+│                 DarkPoolSimulator, MidPegTracker, VenueBenchmark
+├── regulatory    FixAnalyzer, BestExecutionAnalyzer, MarketQualityMetrics
 ├── indicators    21-indicator batch engine + O(1) StreamingIndicators for live/HFT
-├── risk          RiskMetrics, PortfolioRiskAnalyzer, Portfolio, metric registry
-├── ml            GradientBoostedRegressor, VolatilityForecaster
+├── risk          RiskMetrics, PortfolioRiskAnalyzer, Portfolio, metric registry,
+│                 CounterpartyExposureTracker, PreTradeLimitChecker,
+│                 SettlementRiskAnalyzer, ConcentrationRisk
+├── ml            GradientBoostedRegressor, VolatilityForecaster,
+│                 MarketImpactPredictor, IntradayLiquidityForecaster, AnomalyDetector
 ├── optimization  PortfolioOptimizer (max Sharpe / min vol / frontier / rebalance)
 ├── backtest      Backtester, config, trades, performance analytics
 │   └── strategies  SMA/EMA cross, RSI, MACD, Bollinger built-ins
@@ -233,7 +315,3 @@ com.quantfinlib
 ├── util          MathUtils, LatencyRecorder (nanosecond histogram)
 └── examples      QuickStartDemo (all 11 capabilities), HftLatencyBenchmark
 ```
-
-## License
-
-MIT
