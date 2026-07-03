@@ -299,6 +299,15 @@ Black-Scholes-Merton engine:
 - **`PairsHedger`** — statistical hedging: OLS hedge ratio, spread construction,
   z-score for entry/exit, and mean-reversion half-life from an AR(1) fit (∞ when the
   spread doesn't revert).
+- **`HedgingSimulator`** — Monte Carlo delta hedging: runs `DeltaHedger` across
+  thousands of GBM paths in parallel (deterministic per seed) and returns the full
+  `HedgingErrorDistribution` — replication error, hedging VaR/CVaR, probability of
+  loss, cost and rebalance statistics. Hedge vol and realized vol are separate inputs,
+  so both discretization risk and vol mispricing are directly measurable.
+- **`VolSurface`** (`pricing`) — implied vol surface from pillar quotes or market
+  prices (via `impliedVol`): linear smile interpolation in strike with flat wings,
+  and total-variance (σ²T) interpolation across expiries for a calendar-consistent
+  term structure; surface-consistent pricing and skew helpers.
 
 ```java
 // Delta-hedge a short call daily with 1bp costs and measure replication error:
@@ -311,6 +320,20 @@ double[] qty = GreekHedger.deltaGammaVegaHedge(1_200, -80, 250, opt1, opt2);
 
 // Hedge a $10M beta-1.2 portfolio with index futures:
 double contracts = MinimumVarianceHedge.fullHedgeContracts(1.2, 10_000_000, 5_000, 50);
+
+// Hedging-error distribution across 5,000 Monte Carlo paths (sold at 25 vol,
+// realized 15): where does the vol P&L and the tail risk sit?
+HedgingErrorDistribution dist = new HedgingSimulator(42).simulate(
+        OptionType.CALL, 100, 100, 0.5, 0.02, 0,
+        /*hedgeVol*/ 0.25, /*realizedVol*/ 0.15, 126, 5_000, DeltaHedger.Config.every(1));
+dist.mean(); dist.valueAtRisk(0.95); dist.probabilityOfLoss();
+
+// Vol surface from pillar quotes; interpolated smile + term structure:
+VolSurface surface = VolSurface.builder()
+        .add(0.25, 90, 0.25).add(0.25, 100, 0.20)
+        .add(1.00, 90, 0.28).add(1.00, 100, 0.24).build();
+surface.vol(0.5, 95);                                  // any (expiry, strike)
+surface.price(OptionType.PUT, 100, 95, 0.02, 0, 0.5);  // surface-consistent price
 ```
 
 ## Ultra-Low-Latency / HFT Path
@@ -367,9 +390,9 @@ com.quantfinlib
 ├── orderbook     OrderBook matching engine, BookAnalytics, Side, LimitOrder
 ├── microstructure QueueModel, MarketImpactModel, TransactionCostAnalyzer
 ├── pricing       FairValueEngine, TriangularArbitrage, ForwardCurve,
-│                 BlackScholes (Greeks, Garman-Kohlhagen, implied vol)
-├── hedging       DeltaHedger, GreekHedger, MinimumVarianceHedge,
-│                 FxHedger, PairsHedger
+│                 BlackScholes (Greeks, Garman-Kohlhagen, implied vol), VolSurface
+├── hedging       DeltaHedger, GreekHedger, MinimumVarianceHedge, FxHedger,
+│                 PairsHedger, HedgingSimulator (Monte Carlo hedging error)
 ├── execution     TWAP/VWAP schedulers, SmartOrderRouter, IcebergOrder,
 │                 DarkPoolSimulator, MidPegTracker, VenueBenchmark
 ├── regulatory    FixAnalyzer, BestExecutionAnalyzer, MarketQualityMetrics
