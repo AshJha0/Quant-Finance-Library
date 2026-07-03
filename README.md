@@ -240,6 +240,43 @@ var tca  = TransactionCostAnalyzer.analyze(fills, arrivalMid, marketVwap, midsAt
 var sweep = BookAnalytics.sweep(orderBook, Side.BUY, 500_000);   // what would it cost?
 ```
 
+### Execution-aware backtesting — `backtest`
+
+The classic `Backtester` assumes instant fills at the close. `ExecutionAwareBacktester`
+instead turns every strategy signal into a **parent order worked through an
+`ExecutionModel`** — fills can span multiple bars, liquidity is finite, and execution
+cost becomes a measured output instead of an assumption:
+
+- **`InstantExecution`** — baseline (classic fill assumption, all-in pricing).
+- **`SorExecution`** — a synthetic fragmented market per bar (spread + per-venue
+  liquidity share of bar volume, fees, dark venues) routed by `SmartOrderRouter`;
+  large parents take multiple bars to fill.
+- **`IcebergExecution`** — wraps any model with the `IcebergOrder` display/reload
+  state machine plus an optional participation cap, so entries and exits are worked
+  patiently.
+
+Every child fill is recorded per parent order, and TCA is one call:
+
+```java
+ExecutionAwareResult r = ExecutionAwareBacktester.run(
+        new SmaCrossStrategy(20, 50), series, BacktestConfig.defaults(),
+        new IcebergExecution(
+                new SorExecution(List.of(
+                        new SorExecution.VenueConfig("LIT_A", 1.0, 0.05, false),
+                        new SorExecution.VenueConfig("LIT_B", 0.5, 0.05, false),
+                        new SorExecution.VenueConfig("DARK_X", 0.2, 0.03, true)),
+                        /*halfSpreadBps*/ 5, /*preferDark*/ true),
+                /*displayQty*/ 1_000));
+
+r.backtest().metrics();                    // performance net of realistic execution
+ParentOrder entry = r.parentOrders().getFirst();
+r.tca(entry).implementationShortfallBps(); // measured cost vs arrival mid
+```
+
+Stop-loss / take-profit exits are worked through the same model — a patient execution
+style exits slowly, and that realism (plus the strategy-alpha-vs-execution-cost
+trade-off) shows up directly in the equity curve.
+
 ## Ultra-Low-Latency / HFT Path
 
 The library ships two market data paths. The convenience path
@@ -304,7 +341,8 @@ com.quantfinlib
 ├── ml            GradientBoostedRegressor, VolatilityForecaster,
 │                 MarketImpactPredictor, IntradayLiquidityForecaster, AnomalyDetector
 ├── optimization  PortfolioOptimizer (max Sharpe / min vol / frontier / rebalance)
-├── backtest      Backtester, config, trades, performance analytics
+├── backtest      Backtester, config, trades, performance analytics,
+│   │             ExecutionAwareBacktester + Instant/Sor/Iceberg execution models
 │   └── strategies  SMA/EMA cross, RSI, MACD, Bollinger built-ins
 ├── dsl           Rule, Rules, StrategyBuilder
 ├── screener      Technical + fundamental filters, ranking, CSV export
