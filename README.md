@@ -396,6 +396,8 @@ latency-critical trading:
 | `HftMarketDataBus` | Array-indexed listener dispatch and last-price cache (no map lookups), optional busy-spin consumer (`Thread.onSpinWait()`) for minimum hand-off latency |
 | `StreamingIndicators` | O(1)-per-tick SMA / EMA / RSI / MACD / VWAP, verified value-for-value identical to the batch engine — backtest results transfer to live execution exactly |
 | `LatencyRecorder` | Zero-allocation log-linear nanosecond histogram (HdrHistogram-style) for measuring your own path |
+| `HftRiskGate` (`trading`) | Zero-allocation pre-trade risk gate over dense int symbol ids: order size, notional, position, price collar, halt — int reason codes, ~1 ns/check, positions updated on fills |
+| `HftOrderGateway` + `OrderRingBuffer` (`trading`) | The fast lane out: risk check → release-store publish into a preallocated primitive order ring → venue thread; zero allocation per order (proven by a per-thread allocation-counter test) |
 
 ```java
 try (HftMarketDataBus bus = new HftMarketDataBus(1 << 16, 16, /*busySpin*/ true)) {
@@ -414,14 +416,23 @@ try (HftMarketDataBus bus = new HftMarketDataBus(1 << 16, 16, /*busySpin*/ true)
 strategy workload of 2×EMA + RSI per tick plus latency recording included in every number):
 
 ```
-Throughput:                  9-12 million ticks/sec sustained (0 ticks lost)
-Publish-to-strategy latency: p50=204ns  p99=300-800ns  p99.9=~2.4us   (across runs)
+Market data (HftLatencyBenchmark):
+  Throughput:                  9-12 million ticks/sec sustained (0 ticks lost)
+  Publish-to-strategy latency: p50=204ns  p99=300-800ns  p99.9=~2.4us
+
+Order entry (HftOrderBenchmark):
+  Risk gate:                   ~1 ns per pre-trade check
+  Submit-to-venue latency:     p50=102ns  p99=296ns  p99.9=1.4us
+  Tick-to-order END-TO-END:    p50=504ns  p99=1.0us  p99.9=4.0us
+                               (tick -> bus -> 2xEMA strategy -> risk gate -> order ring -> venue)
+  Throughput:                  15.3 million orders/sec sustained
 ```
 
 Reproduce with:
 
 ```bash
 java -Xms512m -Xmx512m -XX:+AlwaysPreTouch -cp target/classes com.quantfinlib.examples.HftLatencyBenchmark
+java -Xms512m -Xmx512m -XX:+AlwaysPreTouch -cp target/classes com.quantfinlib.examples.HftOrderBenchmark
 ```
 
 Steady-state the hot path allocates nothing, so GC choice barely matters; for
@@ -458,7 +469,8 @@ com.quantfinlib
 ├── data          CsvBarLoader, HttpBarFetcher (real market data in/out)
 ├── rates         YieldCurve (bootstrap, forwards), BondPricer (duration, DV01)
 ├── volatility    EwmaVolatility, Garch11 (MLE fit + forecasts)
-├── trading       OrderGateway, PaperTradingGateway (risk-gated paper venue)
+├── trading       OrderGateway, PaperTradingGateway (risk-gated paper venue),
+│                 fast lane: HftRiskGate, OrderRingBuffer, HftOrderGateway
 ├── dsl           Rule, Rules, StrategyBuilder
 ├── screener      Technical + fundamental filters, ranking, CSV export
 ├── simulation    MonteCarloSimulator, SimulationResult
