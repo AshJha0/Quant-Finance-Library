@@ -374,6 +374,22 @@ wf.outOfSampleMetrics();       // honest, stitched out-of-sample performance
   calibration: parametric smiles on top of `VolSurface` pillars.
 - **Cointegration** (`hedging.CointegrationTest`) — Engle-Granger two-step with ADF
   t-statistic and critical values: the statistical gate before any `PairsHedger` trade.
+- **Options book risk** (`hedging.OptionsBook`) — aggregate Greeks across positions and
+  the underlying hedge, full-revaluation spot×vol scenario grids, and
+  delta-gamma-vega-theta P&L explain with an unexplained residual.
+- **Market conventions** (`rates`) — `DayCount` (ACT/360, ACT/365, 30/360, ACT/ACT
+  ISDA), `BusinessCalendar` (holidays, FOLLOWING / MODIFIED_FOLLOWING / PRECEDING
+  rolls, T+n settlement, coupon schedules), and date-based `BondPricer` methods
+  (dirty/clean price, accrued interest) usable against real term sheets.
+- **Portfolio construction** (`optimization`) — `RiskParityOptimizer` (equal risk
+  contribution), `BlackLitterman` (equilibrium returns + view blending), and
+  `ConstrainedPortfolioOptimizer` (position caps/floors, turnover penalty).
+- **Regime detection** (`ml.RegimeDetector`) — 2-state Gaussian Markov-switching model
+  (Baum-Welch EM): smoothed high-vol probabilities, transition persistence, current
+  regime — feeds vol targeting and liquidity forecasting.
+- **Corporate actions** (`data.CorporateActions`) — CRSP-style back-adjustment for
+  splits (price and volume) and cash dividends (price only), composing across actions —
+  the difference between toy and usable equity backtests.
 
 ## Hedging Algorithms — `hedging`, `pricing`
 
@@ -433,6 +449,30 @@ VolSurface surface = VolSurface.builder()
 surface.vol(0.5, 95);                                  // any (expiry, strike)
 surface.price(OptionType.PUT, 100, 95, 0.02, 0, 0.5);  // surface-consistent price
 ```
+
+## Tooling & Operations
+
+- **CLI** (`cli.Main`) — run the library without writing Java:
+  ```bash
+  java -cp target/classes com.quantfinlib.cli.Main backtest \
+      --csv bars.csv --symbol EURUSD --strategy sma --fast 10 --slow 30 --out report.html
+  java -cp target/classes com.quantfinlib.cli.Main walkforward \
+      --csv bars.csv --symbol EURUSD --train 252 --test 63 --fast 5,10,20 --slow 40,60
+  java -cp target/classes com.quantfinlib.cli.Main report --csv bars.csv --symbol X --out x.html
+  ```
+- **Live dashboard** (`trading.TradingDashboard`) — zero-dep embedded HTTP server
+  (JDK `httpserver`) showing the paper-trading account live in a browser: equity, cash,
+  realized P&L, positions, rejections, and attached latency histograms
+  (`/` self-refreshing page, `/api/status` JSON).
+- **JMH microbenchmarks** (test scope only — the runtime stays zero-dependency):
+  ```bash
+  mvn test-compile exec:java -Dexec.mainClass=com.quantfinlib.bench.BenchRunner \
+      -Dexec.classpathScope=test -Dexec.args=CoreBenchmarks
+  ```
+- **Model-based fuzz tests** — the `OrderBook` is hammered with 100k random operations
+  against an independent reference model (uncrossed book, depth conservation, cancel
+  idempotence, queue-position consistency), and all three ring buffers run 2M-item
+  concurrent SPSC stress with randomized batching.
 
 ## Ultra-Low-Latency / HFT Path
 

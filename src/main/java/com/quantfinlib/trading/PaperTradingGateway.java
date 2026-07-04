@@ -197,6 +197,17 @@ public final class PaperTradingGateway implements OrderGateway {
         return List.copyOf(rejectionLog);
     }
 
+    /** Snapshot of non-zero positions by symbol (for dashboards/monitoring). */
+    public Map<String, Double> positionsSnapshot() {
+        Map<String, Double> out = new java.util.LinkedHashMap<>();
+        positions.forEach((symbol, p) -> {
+            if (p.quantity != 0) {
+                out.put(symbol, p.quantity);
+            }
+        });
+        return out;
+    }
+
     // ------------------------------------------------------------------
 
     private boolean passesRiskGate(WorkingOrder order, double referencePrice) {
