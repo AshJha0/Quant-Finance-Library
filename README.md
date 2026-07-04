@@ -304,6 +304,27 @@ trade-off) shows up directly in the equity curve.
   possible for backtesting, or paced at any speed multiple of recorded time for
   live-like feeds. Record a session once, run every experiment against identical real
   microstructure.
+- **FIX 4.4 connectivity** (`fix`) — a zero-dependency FIX engine: validated
+  wire-format codec (BodyLength/CheckSum framing, fragmentation-safe stream decoder),
+  full session layer (Logon handshake, Heartbeats with TestRequest probing and
+  staleness disconnect, sequence-gap detection, Logout handshake), and the trading
+  flow — `sendNewOrderSingle` out, typed `ExecutionReport`s in. Both **initiator and
+  acceptor** roles, so the same class connects to a broker or *is* the venue
+  simulator. v1 scope, stated honestly: gaps are detected and reported, not resent;
+  sequence numbers reset per connection (no message store).
+
+```java
+FixSession session = FixSession.initiate("broker.example.com", 9876,
+        new FixSession.Config("MYFIRM", "BROKER", 30),
+        new FixSession.Listener() {
+            @Override public void onExecutionReport(FixSession s, ExecutionReport r) {
+                if (r.isFill()) { /* update positions */ }
+            }
+        });
+session.sendNewOrderSingle("ord-1", "EURUSD", Side.BUY, 1_000_000, 1.0851,
+        NewOrderSingle.TIF_DAY);
+```
+
 - **Tick-level backtesting** (`backtest.tick`) — event-driven `TickBacktester` replays
   QFLT files through a `TickStrategy` with microstructure-aware fills: market orders
   pay half the spread; passive limit orders fill fully only when a print trades
@@ -499,6 +520,8 @@ com.quantfinlib
 ├── volatility    EwmaVolatility, Garch11 (MLE fit + forecasts)
 ├── trading       OrderGateway, PaperTradingGateway (risk-gated paper venue),
 │                 fast lane: HftRiskGate, OrderRingBuffer, HftOrderGateway
+├── fix           FIX 4.4 engine: FixMessage codec, FixSession (initiator/acceptor,
+│                 logon/heartbeat/logout), NewOrderSingle, ExecutionReport
 ├── dsl           Rule, Rules, StrategyBuilder
 ├── screener      Technical + fundamental filters, ranking, CSV export
 ├── simulation    MonteCarloSimulator, SimulationResult
