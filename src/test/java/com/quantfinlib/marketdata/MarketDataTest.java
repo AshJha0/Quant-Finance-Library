@@ -53,6 +53,11 @@ class MarketDataTest {
             assertEquals(2, symbolEvents.get());
             assertEquals(1.0855, mdp.latestPrice("EURUSD"), 1e-12);
             assertEquals(1.2701, mdp.latestPrice("GBPUSD"), 1e-12);
+            // processedCount increments after listener dispatch: wait for it.
+            long deadline = System.nanoTime() + 5_000_000_000L;
+            while (mdp.processedCount() < 3 && System.nanoTime() < deadline) {
+                Thread.onSpinWait();
+            }
             assertEquals(3, mdp.processedCount());
             assertEquals(0, mdp.droppedCount());
         }
