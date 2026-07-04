@@ -298,6 +298,32 @@ trade-off) shows up directly in the equity curve.
 - **Data I/O** (`data`) — `CsvBarLoader` (flexible headers/date formats, file-level
   epoch-seconds detection, round-trip save) and `HttpBarFetcher` (pure `java.net.http`)
   bring real historical data into every module.
+- **Tick capture & replay** (`data`) — `TickCapture` records every tick flowing through
+  the `HftMarketDataBus` into the compact QFLT binary format (28 bytes/tick, inline
+  symbol definitions); `TickFileReader` replays sessions deterministically — as fast as
+  possible for backtesting, or paced at any speed multiple of recorded time for
+  live-like feeds. Record a session once, run every experiment against identical real
+  microstructure.
+- **Tick-level backtesting** (`backtest.tick`) — event-driven `TickBacktester` replays
+  QFLT files through a `TickStrategy` with microstructure-aware fills: market orders
+  pay half the spread; passive limit orders fill fully only when a print trades
+  *through* the price, and fills at the level are earned print-by-print against a
+  simulated queue ahead (`defaultQueueAhead`) — the level below bar backtesting, where
+  queue position decides whether your order actually trades. Orders can never fill
+  against the print that triggered them.
+
+```java
+// Capture a live session...
+try (TickCapture capture = TickCapture.attach(bus, Path.of("session.qflt"))) {
+    bus.start();
+    /* ... trading day ... */
+}
+// ...then backtest strategies at tick level against the exact same tape:
+var result = TickBacktester.run(myTickStrategy, Path.of("session.qflt"),
+        TickBacktester.Config.defaults().withDefaultQueueAhead(500));
+result.fills();            // every child fill with venue "TICK_SIM"
+result.metrics();          // metrics on the sampled equity curve
+```
 
 ```java
 var wf = WalkForwardAnalyzer.analyze(series,
@@ -465,8 +491,10 @@ com.quantfinlib
 │   ├── strategies  SMA/EMA cross, RSI, MACD, Bollinger built-ins
 │   ├── validation  ParameterGrid, GridSearchOptimizer, WalkForwardAnalyzer,
 │   │               SharpeValidation (probabilistic + deflated Sharpe)
-│   └── portfolio   PortfolioBacktester (multi-asset long/short), PositionSizing
-├── data          CsvBarLoader, HttpBarFetcher (real market data in/out)
+│   ├── portfolio   PortfolioBacktester (multi-asset long/short), PositionSizing
+│   └── tick        TickBacktester (event-driven, queue-aware fills), TickStrategy
+├── data          CsvBarLoader, HttpBarFetcher, TickFileWriter/Reader (QFLT format),
+│                 TickCapture (record the live bus for deterministic replay)
 ├── rates         YieldCurve (bootstrap, forwards), BondPricer (duration, DV01)
 ├── volatility    EwmaVolatility, Garch11 (MLE fit + forecasts)
 ├── trading       OrderGateway, PaperTradingGateway (risk-gated paper venue),
