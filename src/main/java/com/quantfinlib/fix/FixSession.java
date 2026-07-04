@@ -23,11 +23,16 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * detection, Logout handshake, and the application flow NewOrderSingle out /
  * ExecutionReport in (or the reverse, on the venue side). Zero dependencies.
  *
- * <p>Scope notes (v1, documented honestly): gaps are <i>detected</i> and
- * reported via {@link Listener#onSequenceGap} but not recovered with
- * ResendRequest, and sequence numbers reset on every connection (no message
- * store). Suitable for venue simulators, test harnesses, and sessions where
- * the counterparty accepts seqnum reset on logon.</p>
+ * <p>Gap recovery: inbound gaps trigger a ResendRequest(2) and out-of-order
+ * messages are dropped until redelivered; inbound ResendRequests are serviced
+ * from an in-session message store — application messages are replayed with
+ * PossDupFlag(43)/OrigSendingTime(122) and admin runs are coalesced into
+ * SequenceReset-GapFill(4). Duplicates (PossDup below the expected seqnum)
+ * are suppressed; a too-low seqnum without PossDup disconnects the session.</p>
+ *
+ * <p>Remaining scope note: the message store is in-memory and sequence
+ * numbers reset on every connection — recovery works within a session, not
+ * across reconnects.</p>
  */
 public final class FixSession implements AutoCloseable {
 
@@ -62,6 +67,10 @@ public final class FixSession implements AutoCloseable {
         default void onSequenceGap(long expectedSeqNum, long receivedSeqNum) {
         }
 
+        /** This session serviced a peer's ResendRequest for [beginSeqNo, endSeqNo]. */
+        default void onResendServed(long beginSeqNo, long endSeqNo) {
+        }
+
         default void onDisconnect(String reason) {
         }
     }
@@ -69,6 +78,13 @@ public final class FixSession implements AutoCloseable {
     private static final DateTimeFormatter UTC_TIMESTAMP =
             DateTimeFormatter.ofPattern("yyyyMMdd-HH:mm:ss.SSS", Locale.ROOT).withZone(ZoneOffset.UTC);
     private static final long ESTABLISH_TIMEOUT_SECONDS = 10;
+    private static final java.util.Set<String> ADMIN_TYPES = java.util.Set.of(
+            FixMessage.HEARTBEAT, FixMessage.TEST_REQUEST, FixMessage.RESEND_REQUEST,
+            FixMessage.SEQUENCE_RESET, FixMessage.LOGOUT, FixMessage.LOGON);
+
+    /** Stored outbound application message, replayable on ResendRequest. */
+    private record StoredMessage(String msgType, String body, String sendingTime) {
+    }
 
     private final Socket socket;
     private final InputStream in;
@@ -89,7 +105,10 @@ public final class FixSession implements AutoCloseable {
     private volatile long lastReceivedNanos = System.nanoTime();
     private volatile boolean testRequestPending;
     private long outgoingSeq = 1;        // guarded by writeLock
+    private final java.util.Map<Long, StoredMessage> messageStore = new java.util.HashMap<>(); // guarded by writeLock
     private long expectedIncomingSeq = 1; // reader thread only
+    private boolean resendPending;        // reader thread only
+    private long resendTriggerSeq;        // reader thread only
     private final Thread readerThread;
     private final Thread heartbeatThread;
 
@@ -226,14 +245,29 @@ public final class FixSession implements AutoCloseable {
     void send(FixMessage.Builder builder) {
         try {
             synchronized (writeLock) {
-                byte[] bytes = builder.encode(config.senderCompId(), config.targetCompId(),
-                        outgoingSeq++, UTC_TIMESTAMP.format(Instant.now()));
-                out.write(bytes);
+                long seq = outgoingSeq++;
+                String sendingTime = UTC_TIMESTAMP.format(Instant.now());
+                if (!ADMIN_TYPES.contains(builder.msgType())) {
+                    messageStore.put(seq, new StoredMessage(builder.msgType(), builder.body(), sendingTime));
+                }
+                out.write(builder.encode(config.senderCompId(), config.targetCompId(),
+                        seq, sendingTime));
                 out.flush();
                 lastSentNanos = System.nanoTime();
             }
         } catch (IOException e) {
             disconnect("send failed: " + e.getMessage());
+        }
+    }
+
+    /** Writes a replayed/gap-fill message with an explicit (past) sequence number. */
+    private void writeReplay(FixMessage.Builder builder, long seqNum, String origSendingTime)
+            throws IOException {
+        synchronized (writeLock) {
+            out.write(builder.encode(config.senderCompId(), config.targetCompId(), seqNum,
+                    UTC_TIMESTAMP.format(Instant.now()), true, origSendingTime));
+            out.flush();
+            lastSentNanos = System.nanoTime();
         }
     }
 
@@ -272,13 +306,41 @@ public final class FixSession implements AutoCloseable {
 
     private void handle(FixMessage m) {
         long seq = m.getLong(FixMessage.MSG_SEQ_NUM);
+        String type = m.msgType();
+
+        // SequenceReset carries sequencing semantics itself; handle before validation.
+        if (FixMessage.SEQUENCE_RESET.equals(type)) {
+            handleSequenceReset(m);
+            return;
+        }
         if (seq > expectedIncomingSeq) {
+            // Gap: ask for a resend and drop this message — it will be redelivered.
             listener.onSequenceGap(expectedIncomingSeq, seq);
-        }
-        if (seq >= expectedIncomingSeq) {
+            resendTriggerSeq = Math.max(resendTriggerSeq, seq);
+            if (!resendPending) {
+                resendPending = true;
+                send(FixMessage.builder(FixMessage.RESEND_REQUEST)
+                        .field(FixMessage.BEGIN_SEQ_NO, expectedIncomingSeq)
+                        .field(FixMessage.END_SEQ_NO, 0));
+            }
+            // Session-critical messages still act despite the gap.
+            if (!(FixMessage.LOGON.equals(type) || FixMessage.LOGOUT.equals(type))) {
+                return;
+            }
+        } else if (seq < expectedIncomingSeq) {
+            if ("Y".equals(m.getString(FixMessage.POSS_DUP_FLAG, "N"))) {
+                return;   // duplicate from a resend overlap: suppress silently
+            }
+            disconnect("MsgSeqNum too low: expected " + expectedIncomingSeq
+                    + " got " + seq + " without PossDupFlag");
+            return;
+        } else {
             expectedIncomingSeq = seq + 1;
+            if (resendPending && expectedIncomingSeq > resendTriggerSeq) {
+                resendPending = false;   // gap fully recovered
+            }
         }
-        switch (m.msgType()) {
+        switch (type) {
             case FixMessage.LOGON -> {
                 if (!established) {
                     if (acceptor) {
@@ -314,12 +376,74 @@ public final class FixSession implements AutoCloseable {
                     // closing anyway
                 }
             }
+            case FixMessage.RESEND_REQUEST -> handleResendRequest(m);
             case FixMessage.EXECUTION_REPORT ->
                     listener.onExecutionReport(this, ExecutionReport.fromMessage(m));
             case FixMessage.NEW_ORDER_SINGLE ->
                     listener.onNewOrderSingle(this, NewOrderSingle.fromMessage(m));
             default -> listener.onMessage(this, m);
         }
+    }
+
+    /**
+     * SequenceReset (35=4): GapFill (123=Y) from a peer's resend, or a hard
+     * reset — either way, jump the expected inbound sequence forward.
+     */
+    private void handleSequenceReset(FixMessage m) {
+        long newSeqNo = m.getLong(FixMessage.NEW_SEQ_NO);
+        if (newSeqNo > expectedIncomingSeq) {
+            expectedIncomingSeq = newSeqNo;
+            if (resendPending && expectedIncomingSeq > resendTriggerSeq) {
+                resendPending = false;
+            }
+        }
+        // Stale resets (PossDup replays of old gap-fills) are ignored.
+    }
+
+    /**
+     * Services a peer's ResendRequest: replays stored application messages
+     * with PossDupFlag/OrigSendingTime and coalesces admin-message runs into
+     * SequenceReset-GapFill.
+     */
+    private void handleResendRequest(FixMessage m) {
+        long begin = m.getLong(FixMessage.BEGIN_SEQ_NO);
+        long endRequested = m.getLong(FixMessage.END_SEQ_NO);
+        try {
+            synchronized (writeLock) {
+                long last = outgoingSeq - 1;
+                long end = endRequested == 0 ? last : Math.min(endRequested, last);
+                long gapFillStart = -1;
+                for (long seq = begin; seq <= end; seq++) {
+                    StoredMessage stored = messageStore.get(seq);
+                    if (stored == null) {
+                        if (gapFillStart < 0) {
+                            gapFillStart = seq;
+                        }
+                        continue;
+                    }
+                    if (gapFillStart >= 0) {
+                        sendGapFill(gapFillStart, seq);
+                        gapFillStart = -1;
+                    }
+                    writeReplay(FixMessage.Builder.restore(stored.msgType(), stored.body()),
+                            seq, stored.sendingTime());
+                }
+                if (gapFillStart >= 0) {
+                    sendGapFill(gapFillStart, end + 1);
+                }
+                listener.onResendServed(begin, end);
+            }
+        } catch (IOException e) {
+            disconnect("resend failed: " + e.getMessage());
+        }
+    }
+
+    /** SequenceReset-GapFill: "seqs [seq, newSeqNo) were admin; skip to newSeqNo". */
+    private void sendGapFill(long seq, long newSeqNo) throws IOException {
+        writeReplay(FixMessage.builder(FixMessage.SEQUENCE_RESET)
+                        .field(FixMessage.GAP_FILL_FLAG, "Y")
+                        .field(FixMessage.NEW_SEQ_NO, newSeqNo),
+                seq, null);
     }
 
     private void heartbeatLoop() {

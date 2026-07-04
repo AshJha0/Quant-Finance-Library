@@ -37,6 +37,11 @@ class FixSessionTest {
         final AtomicLong gapExpected = new AtomicLong(-1);
         final AtomicLong gapReceived = new AtomicLong(-1);
         final CountDownLatch gap = new CountDownLatch(1);
+        final CountDownLatch disconnected = new CountDownLatch(1);
+        volatile String disconnectReason;
+        final CountDownLatch resendServed = new CountDownLatch(1);
+        final AtomicLong resendBegin = new AtomicLong(-1);
+        final AtomicLong resendEnd = new AtomicLong(-1);
         volatile FixSession session;
 
         @Override
@@ -70,6 +75,19 @@ class FixSessionTest {
             gapExpected.set(expected);
             gapReceived.set(received);
             gap.countDown();
+        }
+
+        @Override
+        public void onResendServed(long beginSeqNo, long endSeqNo) {
+            resendBegin.set(beginSeqNo);
+            resendEnd.set(endSeqNo);
+            resendServed.countDown();
+        }
+
+        @Override
+        public void onDisconnect(String reason) {
+            disconnectReason = reason;
+            disconnected.countDown();
         }
     }
 
@@ -181,8 +199,8 @@ class FixSessionTest {
         assertTrue(clientEvents.gap.await(5, TimeUnit.SECONDS), "gap not detected");
         assertEquals(50, clientEvents.gapReceived.get());
         assertTrue(clientEvents.gapExpected.get() < 50);
-        // Session recovers and continues at the new sequence.
-        assertEquals(51, client.expectedIncomingSeqNum());
+        // Recovery: the heartbeat run is gap-filled and the sequence catches up.
+        awaitTrue(() -> client.expectedIncomingSeqNum() == 51, "gap not recovered");
     }
 
     @Test
@@ -195,6 +213,75 @@ class FixSessionTest {
         assertFalse(venue.isEstablished());
         assertThrows(IllegalStateException.class,
                 () -> client.sendNewOrderSingle("x", "EURUSD", Side.BUY, 1, 1.0, '0'));
+    }
+
+    @Test
+    void gapRecoveryRedeliversMissedApplicationMessages() throws Exception {
+        connect(30);
+        ExecutionReport report = new ExecutionReport("X-9", "E-9",
+                ExecutionReport.EXEC_TYPE_TRADE, ExecutionReport.ORD_STATUS_FILLED,
+                "ord-9", "EURUSD", Side.BUY, 100, 1.09, 100, 0, 1.09);
+
+        // Venue jumps its outbound seq to 50: 2..49 never existed on the wire.
+        venue.forceOutgoingSeq(50);
+        venue.sendExecutionReport(report);
+
+        // Client detects the gap, asks for a resend; venue gap-fills 2..49 and
+        // replays the report at seq 50 with PossDup — exactly one delivery.
+        assertTrue(clientEvents.gap.await(5, TimeUnit.SECONDS), "gap not detected");
+        awaitTrue(() -> clientEvents.reports.size() == 1, "report not recovered");
+        assertEquals("ord-9", clientEvents.reports.getFirst().clOrdId());
+        assertTrue(venueEvents.resendServed.await(5, TimeUnit.SECONDS), "resend not serviced");
+        assertEquals(2, venueEvents.resendBegin.get());
+        assertEquals(50, venueEvents.resendEnd.get());
+        awaitTrue(() -> client.expectedIncomingSeqNum() == 51, "sequence not recovered");
+        assertTrue(client.isEstablished() && venue.isEstablished());
+
+        // Session continues normally after recovery.
+        venue.sendExecutionReport(report);
+        awaitTrue(() -> clientEvents.reports.size() == 2, "post-recovery message lost");
+    }
+
+    @Test
+    void servicedResendsAreSuppressedAsDuplicatesByThePeer() throws Exception {
+        connect(30);
+        client.sendNewOrderSingle("ord-1", "EURUSD", Side.BUY, 100, 1.0851,
+                NewOrderSingle.TIF_DAY);
+        awaitTrue(() -> venueEvents.orders.size() == 1, "order not received");
+
+        // Venue explicitly asks for everything again.
+        venue.send(FixMessage.builder(FixMessage.RESEND_REQUEST)
+                .field(FixMessage.BEGIN_SEQ_NO, 2)
+                .field(FixMessage.END_SEQ_NO, 0));
+
+        assertTrue(clientEvents.resendServed.await(5, TimeUnit.SECONDS), "resend not serviced");
+        assertEquals(2, clientEvents.resendBegin.get());
+        Thread.sleep(300);   // give the PossDup replay time to arrive
+        // The replayed order is recognized as a duplicate, not a new order.
+        assertEquals(1, venueEvents.orders.size());
+        assertTrue(venue.isEstablished());
+    }
+
+    @Test
+    void tooLowSequenceWithoutPossDupDisconnects() throws Exception {
+        connect(30);
+        venue.forceOutgoingSeq(1);   // repeats an already-used seqnum
+        venue.send(FixMessage.builder(FixMessage.HEARTBEAT));
+
+        assertTrue(clientEvents.disconnected.await(5, TimeUnit.SECONDS), "no disconnect");
+        assertTrue(clientEvents.disconnectReason.contains("too low"),
+                clientEvents.disconnectReason);
+        assertFalse(client.isEstablished());
+    }
+
+    @Test
+    void hardSequenceResetJumpsExpectedSeqNum() throws Exception {
+        connect(30);
+        venue.send(FixMessage.builder(FixMessage.SEQUENCE_RESET)
+                .field(FixMessage.GAP_FILL_FLAG, "N")
+                .field(FixMessage.NEW_SEQ_NO, 100));
+        awaitTrue(() -> client.expectedIncomingSeqNum() == 100, "reset not applied");
+        assertTrue(client.isEstablished());
     }
 
     private static void awaitTrue(java.util.function.BooleanSupplier condition, String message)

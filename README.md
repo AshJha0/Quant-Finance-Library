@@ -310,8 +310,13 @@ trade-off) shows up directly in the equity curve.
   staleness disconnect, sequence-gap detection, Logout handshake), and the trading
   flow — `sendNewOrderSingle` out, typed `ExecutionReport`s in. Both **initiator and
   acceptor** roles, so the same class connects to a broker or *is* the venue
-  simulator. v1 scope, stated honestly: gaps are detected and reported, not resent;
-  sequence numbers reset per connection (no message store).
+  simulator. **Full gap recovery**: inbound gaps trigger a ResendRequest (out-of-order
+  messages are dropped and redelivered exactly once); inbound ResendRequests are
+  serviced from the session's message store — application messages replayed with
+  PossDupFlag/OrigSendingTime, admin runs coalesced into SequenceReset-GapFill;
+  PossDup duplicates are suppressed and a too-low seqnum without PossDup disconnects.
+  Remaining scope note: the store is in-memory, so recovery works within a session,
+  not across reconnects.
 
 ```java
 FixSession session = FixSession.initiate("broker.example.com", 9876,

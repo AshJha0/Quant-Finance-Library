@@ -19,20 +19,24 @@ public final class FixMessage {
 
     // Common tags.
     public static final int AVG_PX = 6;
+    public static final int BEGIN_SEQ_NO = 7;
     public static final int BEGIN_STRING_TAG = 8;
     public static final int BODY_LENGTH = 9;
     public static final int CHECK_SUM = 10;
     public static final int CL_ORD_ID = 11;
     public static final int CUM_QTY = 14;
+    public static final int END_SEQ_NO = 16;
     public static final int EXEC_ID = 17;
     public static final int LAST_PX = 31;
     public static final int LAST_QTY = 32;
     public static final int MSG_SEQ_NUM = 34;
     public static final int MSG_TYPE = 35;
+    public static final int NEW_SEQ_NO = 36;
     public static final int ORDER_ID = 37;
     public static final int ORDER_QTY = 38;
     public static final int ORD_STATUS = 39;
     public static final int ORD_TYPE = 40;
+    public static final int POSS_DUP_FLAG = 43;
     public static final int PRICE = 44;
     public static final int SENDER_COMP_ID = 49;
     public static final int SENDING_TIME = 52;
@@ -44,12 +48,16 @@ public final class FixMessage {
     public static final int ENCRYPT_METHOD = 98;
     public static final int HEART_BT_INT = 108;
     public static final int TEST_REQ_ID = 112;
+    public static final int ORIG_SENDING_TIME = 122;
+    public static final int GAP_FILL_FLAG = 123;
     public static final int EXEC_TYPE = 150;
     public static final int LEAVES_QTY = 151;
 
     // Message types.
     public static final String HEARTBEAT = "0";
     public static final String TEST_REQUEST = "1";
+    public static final String RESEND_REQUEST = "2";
+    public static final String SEQUENCE_RESET = "4";
     public static final String LOGON = "A";
     public static final String LOGOUT = "5";
     public static final String NEW_ORDER_SINGLE = "D";
@@ -170,6 +178,18 @@ public final class FixMessage {
             this.msgType = msgType;
         }
 
+        /** Rebuilds a builder from a stored message body (resend path). */
+        static Builder restore(String msgType, String storedBody) {
+            Builder b = new Builder(msgType);
+            b.body.append(storedBody);
+            return b;
+        }
+
+        /** Raw body fields (for the session's outbound message store). */
+        String body() {
+            return body.toString();
+        }
+
         public Builder field(int tag, String value) {
             body.append(tag).append('=').append(value).append(SOH);
             return this;
@@ -199,11 +219,23 @@ public final class FixMessage {
         /** Frames the message with header, body length and checksum. */
         public byte[] encode(String senderCompId, String targetCompId, long seqNum,
                              String sendingTimeUtc) {
+            return encode(senderCompId, targetCompId, seqNum, sendingTimeUtc, false, null);
+        }
+
+        /**
+         * Framing with resend header fields: {@code possDup} sets
+         * PossDupFlag(43)=Y and {@code origSendingTime} adds
+         * OrigSendingTime(122) — required when replaying stored messages.
+         */
+        public byte[] encode(String senderCompId, String targetCompId, long seqNum,
+                             String sendingTimeUtc, boolean possDup, String origSendingTime) {
             String afterLength = "35=" + msgType + SOH
                     + "49=" + senderCompId + SOH
                     + "56=" + targetCompId + SOH
                     + "34=" + seqNum + SOH
+                    + (possDup ? "43=Y" + SOH : "")
                     + "52=" + sendingTimeUtc + SOH
+                    + (origSendingTime != null ? "122=" + origSendingTime + SOH : "")
                     + body;
             String head = "8=" + BEGIN_STRING + SOH + "9=" + afterLength.length() + SOH;
             byte[] payload = (head + afterLength).getBytes(StandardCharsets.ISO_8859_1);
