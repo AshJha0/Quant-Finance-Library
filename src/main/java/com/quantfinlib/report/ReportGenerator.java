@@ -148,6 +148,18 @@ public final class ReportGenerator {
         return this;
     }
 
+    /** Inline SVG equity-curve chart (rendered in HTML export only). */
+    public ReportGenerator addEquityCurveChart(String title, double[] equity) {
+        builder.addHtmlSection(title, SvgCharts.equityChart(equity));
+        return this;
+    }
+
+    /** Inline SVG drawdown chart (rendered in HTML export only). */
+    public ReportGenerator addDrawdownChart(String title, double[] equity) {
+        builder.addHtmlSection(title, SvgCharts.drawdownChart(equity));
+        return this;
+    }
+
     public Report build() {
         return builder.build();
     }

@@ -12,7 +12,20 @@ import java.util.Map;
  */
 public final class Report {
 
-    public record Section(String title, List<String> headers, List<List<String>> rows) {
+    /**
+     * A report section: either tabular (headers + rows) or raw HTML content
+     * such as an inline SVG chart ({@code html != null}). HTML sections are
+     * rendered by the HTML exporter only; tabular exporters skip them.
+     */
+    public record Section(String title, List<String> headers, List<List<String>> rows, String html) {
+
+        public Section(String title, List<String> headers, List<List<String>> rows) {
+            this(title, headers, rows, null);
+        }
+
+        public boolean isHtml() {
+            return html != null;
+        }
     }
 
     private final String title;
@@ -51,6 +64,12 @@ public final class Report {
 
         public Builder addTableSection(String sectionTitle, List<String> headers, List<List<String>> rows) {
             sections.add(new Section(sectionTitle, List.copyOf(headers), List.copyOf(rows)));
+            return this;
+        }
+
+        /** Raw HTML section (e.g. an inline SVG chart); HTML export only. */
+        public Builder addHtmlSection(String sectionTitle, String html) {
+            sections.add(new Section(sectionTitle, List.of(), List.of(), html));
             return this;
         }
 

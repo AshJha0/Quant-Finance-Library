@@ -74,6 +74,18 @@ public final class BarSeries {
     public double[] closes()          { return close; }
     public double[] volumes()         { return volume; }
 
+    /** Copy of the bar range [from, toExclusive) as a new series (for train/test splits). */
+    public BarSeries slice(int from, int toExclusive) {
+        if (from < 0 || toExclusive > size || from >= toExclusive) {
+            throw new IllegalArgumentException("bad slice [" + from + "," + toExclusive + ") of " + size);
+        }
+        Builder b = builder(symbol);
+        for (int i = from; i < toExclusive; i++) {
+            b.add(timestamps[i], open[i], high[i], low[i], close[i], volume[i]);
+        }
+        return b.build();
+    }
+
     /** Simple (arithmetic) returns; length = size - 1. */
     public double[] returns() {
         double[] r = new double[size - 1];

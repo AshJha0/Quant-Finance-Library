@@ -84,6 +84,9 @@ public final class PdfReportExporter implements ReportExporter {
         lines.add("Generated " + report.generatedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
                 + " by quantfinlib Quant-Finance-Library");
         for (Report.Section s : report.sections()) {
+            if (s.isHtml()) {
+                continue;   // charts are HTML-export only
+            }
             lines.add("");
             lines.add("== " + s.title() + " ==");
             int cols = s.headers().size();

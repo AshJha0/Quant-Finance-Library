@@ -28,7 +28,12 @@ public final class HtmlReportExporter implements ReportExporter {
                 .append(" by quantfinlib Quant-Finance-Library</p>\n");
 
         for (Report.Section s : report.sections()) {
-            sb.append("<h2>").append(escape(s.title())).append("</h2>\n<table>\n<tr>");
+            sb.append("<h2>").append(escape(s.title())).append("</h2>\n");
+            if (s.isHtml()) {
+                sb.append(s.html()).append('\n');
+                continue;
+            }
+            sb.append("<table>\n<tr>");
             for (String h : s.headers()) {
                 sb.append("<th>").append(escape(h)).append("</th>");
             }

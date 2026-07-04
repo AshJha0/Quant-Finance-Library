@@ -38,6 +38,9 @@ public final class XlsxReportExporter implements ReportExporter {
                 .append("<sheetData>");
         appendRow(sb, List.of(report.title()));
         for (Report.Section s : report.sections()) {
+            if (s.isHtml()) {
+                continue;   // charts are HTML-export only
+            }
             appendRow(sb, List.of());
             appendRow(sb, List.of(s.title()));
             appendRow(sb, s.headers());

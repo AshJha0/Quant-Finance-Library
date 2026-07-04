@@ -16,6 +16,9 @@ public final class CsvReportExporter implements ReportExporter {
         try (Writer w = Files.newBufferedWriter(path)) {
             w.write("# " + report.title() + "\n");
             for (Report.Section s : report.sections()) {
+                if (s.isHtml()) {
+                    continue;   // charts are HTML-export only
+                }
                 w.write("\n## " + s.title() + "\n");
                 w.write(String.join(",", s.headers().stream().map(CsvReportExporter::quote).toList()) + "\n");
                 for (var row : s.rows()) {
