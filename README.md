@@ -277,6 +277,52 @@ Stop-loss / take-profit exits are worked through the same model — a patient ex
 style exits slowly, and that realism (plus the strategy-alpha-vs-execution-cost
 trade-off) shows up directly in the equity curve.
 
+## Research Validation & Portfolio Engine
+
+- **Walk-forward analysis** (`backtest.validation`) — `ParameterGrid` +
+  `GridSearchOptimizer` optimize a strategy on rolling train windows; each winner is
+  evaluated on the unseen test window and out-of-sample equity is stitched into one
+  curve (capital carries across folds). The **walk-forward efficiency ratio** (OOS/IS)
+  exposes curve-fitting at a glance.
+- **Deflated Sharpe** (`SharpeValidation`) — Bailey/López de Prado probabilistic Sharpe
+  (track length, skew, kurtosis) and the deflated variant that haircuts for the number
+  of parameter combinations tried.
+- **Portfolio backtesting** (`backtest.portfolio`) — multi-asset, long/short,
+  weight-based `PortfolioBacktester` with rebalance cadence and commission on turnover;
+  `PositionSizing` supplies Kelly / half-Kelly, fixed-fractional risk, inverse-vol
+  weights, and vol-target leverage.
+- **Paper trading** (`trading`) — `OrderGateway` abstraction + quote-driven
+  `PaperTradingGateway`: market/limit orders, resting-order crosses, average-cost
+  positions with realized P&L, commissions, and the `PreTradeLimitChecker` wired in as
+  a pre-market risk gate — the research→production loop, closed.
+- **Data I/O** (`data`) — `CsvBarLoader` (flexible headers/date formats, file-level
+  epoch-seconds detection, round-trip save) and `HttpBarFetcher` (pure `java.net.http`)
+  bring real historical data into every module.
+
+```java
+var wf = WalkForwardAnalyzer.analyze(series,
+        new ParameterGrid().add("fast", 5, 10, 20).add("slow", 40, 60, 100),
+        p -> new SmaCrossStrategy(p.get("fast").intValue(), p.get("slow").intValue()),
+        BacktestConfig.defaults(), 252, 63, PerformanceMetrics::sharpeRatio);
+wf.efficiency();               // OOS/IS objective ratio: ~1 robust, ~0 overfit
+wf.outOfSampleMetrics();       // honest, stitched out-of-sample performance
+```
+
+## Quant Models — `rates`, `volatility`, `pricing`, `hedging`
+
+- **Fixed income** (`rates`) — `YieldCurve` (zero curve, discount factors, implied
+  forwards, classic bootstrap from annual par swap rates) and `BondPricer`
+  (price/yield, Macaulay/modified duration, convexity, DV01, curve pricing).
+- **Volatility models** (`volatility`) — `EwmaVolatility` (RiskMetrics λ=0.94) and
+  `Garch11` (Gaussian MLE with variance targeting; k-step forecasts mean-revert to the
+  unconditional variance).
+- **American options** (`pricing.BinomialTree`) — CRR tree with early-exercise premium;
+  converges to Black-Scholes for European payoffs.
+- **SABR** (`pricing.SabrModel`) — Hagan 2002 implied vol + deterministic (α, ρ, ν)
+  calibration: parametric smiles on top of `VolSurface` pillars.
+- **Cointegration** (`hedging.CointegrationTest`) — Engle-Granger two-step with ADF
+  t-statistic and critical values: the statistical gate before any `PairsHedger` trade.
+
 ## Hedging Algorithms — `hedging`, `pricing`
 
 Quantitative hedging across asset classes, built on a dependency-free
@@ -389,8 +435,8 @@ com.quantfinlib
 ├── core          Bar, BarSeries (primitive-array OHLCV time series)
 ├── orderbook     OrderBook matching engine, BookAnalytics, Side, LimitOrder
 ├── microstructure QueueModel, MarketImpactModel, TransactionCostAnalyzer
-├── pricing       FairValueEngine, TriangularArbitrage, ForwardCurve,
-│                 BlackScholes (Greeks, Garman-Kohlhagen, implied vol), VolSurface
+├── pricing       FairValueEngine, TriangularArbitrage, ForwardCurve, BlackScholes,
+│                 VolSurface, BinomialTree (American), SabrModel
 ├── hedging       DeltaHedger, GreekHedger, MinimumVarianceHedge, FxHedger,
 │                 PairsHedger, HedgingSimulator (Monte Carlo hedging error)
 ├── execution     TWAP/VWAP schedulers, SmartOrderRouter, IcebergOrder,
@@ -405,13 +451,21 @@ com.quantfinlib
 ├── optimization  PortfolioOptimizer (max Sharpe / min vol / frontier / rebalance)
 ├── backtest      Backtester, config, trades, performance analytics,
 │   │             ExecutionAwareBacktester + Instant/Sor/Iceberg execution models
-│   └── strategies  SMA/EMA cross, RSI, MACD, Bollinger built-ins
+│   ├── strategies  SMA/EMA cross, RSI, MACD, Bollinger built-ins
+│   ├── validation  ParameterGrid, GridSearchOptimizer, WalkForwardAnalyzer,
+│   │               SharpeValidation (probabilistic + deflated Sharpe)
+│   └── portfolio   PortfolioBacktester (multi-asset long/short), PositionSizing
+├── data          CsvBarLoader, HttpBarFetcher (real market data in/out)
+├── rates         YieldCurve (bootstrap, forwards), BondPricer (duration, DV01)
+├── volatility    EwmaVolatility, Garch11 (MLE fit + forecasts)
+├── trading       OrderGateway, PaperTradingGateway (risk-gated paper venue)
 ├── dsl           Rule, Rules, StrategyBuilder
 ├── screener      Technical + fundamental filters, ranking, CSV export
 ├── simulation    MonteCarloSimulator, SimulationResult
 ├── marketdata    HFT path: TickRingBuffer, HftMarketDataBus, SymbolRegistry
 │                 convenience path: RingBuffer, MarketDataProcessor, HistoricalDataStore
-├── report        Report model + HTML/CSV/PDF/XLSX exporters, ReportGenerator
+├── report        Report model + HTML/CSV/PDF/XLSX exporters, ReportGenerator,
+│                 SvgCharts (inline equity/drawdown charts in HTML reports)
 ├── util          MathUtils, LatencyRecorder (nanosecond histogram)
 └── examples      QuickStartDemo (all 11 capabilities), HftLatencyBenchmark
 ```
