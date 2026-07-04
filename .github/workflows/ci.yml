@@ -19,3 +19,13 @@ jobs:
           cache: maven
       - name: Build and test
         run: mvn -B --no-transfer-progress test
+      - name: Coverage summary
+        run: |
+          awk -F, 'NR>1 {missed+=$8; covered+=$9} END \
+            {printf "Line coverage: %.1f%% (%d/%d lines)\n", 100*covered/(covered+missed), covered, covered+missed}' \
+            target/site/jacoco/jacoco.csv | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: target/site/jacoco

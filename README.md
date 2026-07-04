@@ -1,5 +1,7 @@
 # Quant-Finance-Library (quantfinlib)
 
+[![CI](https://github.com/AshJha0/Quant-Finance-Library/actions/workflows/ci.yml/badge.svg)](https://github.com/AshJha0/Quant-Finance-Library/actions/workflows/ci.yml)
+
 **quantfinlib** is a production-ready quantitative finance platform for the JVM that unifies
 risk management, portfolio optimization, machine learning, technical analysis, strategy
 development, market screening, Monte Carlo simulation, reporting, and algorithmic research
@@ -28,7 +30,11 @@ everything from backtesting to reporting.
 ```bash
 mvn test                                                    # build + full test suite
 java -cp target/classes com.quantfinlib.examples.QuickStartDemo # end-to-end tour
+mvn package && java -jar target/quant-finance-library-*.jar help   # runnable CLI jar
 ```
+
+Tagged releases publish the library, sources and javadoc jars automatically
+(GitHub Actions → Releases); see [CHANGELOG.md](CHANGELOG.md).
 
 ## The 11 Capabilities
 
