@@ -304,6 +304,26 @@ trade-off) shows up directly in the equity curve.
   possible for backtesting, or paced at any speed multiple of recorded time for
   live-like feeds. Record a session once, run every experiment against identical real
   microstructure.
+- **Live market data over WebSocket** (`feed`) — real ticks into the HFT bus with pure
+  JDK (`java.net.http` WebSocket client): pluggable `FeedParser` per exchange
+  (`BinanceTradeParser` ships as the reference — raw and combined streams), automatic
+  reconnection with exponential backoff, optional subscribe message, and exchange
+  event-time timestamps so recorded sessions replay with true market pacing. Tested
+  end-to-end against an in-repo RFC 6455 loopback server (connect, trades → bus →
+  capture, subscribe protocol, abrupt-disconnect reconnect) — CI never touches a real
+  exchange.
+
+```java
+HftMarketDataBus bus = new HftMarketDataBus();
+TickCapture capture = TickCapture.attach(bus, Path.of("session.qflt"));
+bus.start();
+try (WebSocketFeed feed = new WebSocketFeed(
+        BinanceTradeParser.streamUri("BTCUSDT", "ETHUSDT"),
+        new BinanceTradeParser(), bus)) {
+    feed.start();   // live ticks now flow into strategies AND the recorder
+}
+```
+
 - **FIX 4.4 connectivity** (`fix`) — a zero-dependency FIX engine: validated
   wire-format codec (BodyLength/CheckSum framing, fragmentation-safe stream decoder),
   full session layer (Logon handshake, Heartbeats with TestRequest probing and
@@ -560,7 +580,9 @@ com.quantfinlib
 │   ├── portfolio   PortfolioBacktester (multi-asset long/short), PositionSizing
 │   └── tick        TickBacktester (event-driven, queue-aware fills), TickStrategy
 ├── data          CsvBarLoader, HttpBarFetcher, TickFileWriter/Reader (QFLT format),
-│                 TickCapture (record the live bus for deterministic replay)
+│                 TickCapture (record the live bus for deterministic replay),
+│                 CorporateActions (split/dividend back-adjustment)
+├── feed          WebSocketFeed (live exchange data -> HFT bus), BinanceTradeParser
 ├── rates         YieldCurve (bootstrap, forwards), BondPricer (duration, DV01)
 ├── volatility    EwmaVolatility, Garch11 (MLE fit + forecasts)
 ├── trading       OrderGateway, PaperTradingGateway (risk-gated paper venue),
