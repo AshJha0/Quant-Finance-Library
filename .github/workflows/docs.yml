@@ -1,0 +1,58 @@
+name: Docs
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 24
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '24'
+          cache: maven
+      - name: Generate javadoc
+        run: mvn -B --no-transfer-progress -DskipTests javadoc:javadoc
+      - name: Assemble site
+        run: |
+          mkdir -p _site/api
+          cp docs/index.html _site/
+          if [ -d target/site/apidocs ]; then
+            cp -r target/site/apidocs/* _site/api/
+          else
+            cp -r target/reports/apidocs/* _site/api/
+          fi
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  # Deployment requires GitHub Pages, which is unavailable on private repos
+  # under the free plan. The step is non-fatal: the site is always built and
+  # downloadable as an artifact, and publishing starts automatically the day
+  # the repository is made public (Settings -> Pages -> Source: Actions).
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+        continue-on-error: true

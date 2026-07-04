@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>quantfinlib — quantitative finance platform for the JVM</title>
+<style>
+:root{--teal:#16697a;--green:#16a085;--ink:#1a1a2e;--muted:#556}
+body{font-family:'Segoe UI',Arial,sans-serif;margin:0;color:var(--ink);background:#f7f8fa}
+header{background:var(--teal);color:#fff;padding:3rem 2rem}
+header h1{margin:0 0 .5rem;font-size:2.2rem}
+header p{margin:0;max-width:52rem;opacity:.92;line-height:1.5}
+.wrap{max-width:64rem;margin:0 auto;padding:0 2rem}
+nav{margin-top:1.2rem}
+nav a{display:inline-block;background:var(--green);color:#fff;text-decoration:none;
+  padding:.55rem 1.1rem;margin-right:.6rem;border-radius:4px;font-weight:600}
+nav a.secondary{background:rgba(255,255,255,.15)}
+h2{color:var(--teal);border-bottom:2px solid #e3e8ec;padding-bottom:.3rem;margin-top:2.5rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(17rem,1fr));gap:1rem;margin:1.2rem 0}
+.card{background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.12);padding:1rem 1.2rem;border-radius:4px}
+.card h3{margin:.1rem 0 .5rem;font-size:1.02rem;color:var(--teal)}
+.card p{margin:0;font-size:.9rem;color:var(--muted);line-height:1.45}
+pre{background:#10222a;color:#d7e3ea;padding:1rem 1.2rem;border-radius:4px;overflow-x:auto;
+  font-size:.85rem;line-height:1.5}
+.numbers{background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.12);border-radius:4px;
+  padding:1rem 1.4rem;font-family:Consolas,monospace;font-size:.88rem;line-height:1.7}
+footer{margin:3rem 0 2rem;color:var(--muted);font-size:.85rem;text-align:center}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>quantfinlib</h1>
+    <p>A zero-dependency quantitative finance platform for the JVM: research, validation,
+       execution, and connectivity — from walk-forward backtesting to a measured
+       sub-microsecond tick-to-order path, in one Java library.</p>
+    <nav>
+      <a href="api/index.html">API documentation</a>
+      <a class="secondary" href="https://github.com/AshJha0/Quant-Finance-Library">GitHub</a>
+      <a class="secondary" href="https://github.com/AshJha0/Quant-Finance-Library/releases">Releases</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+  <h2>Measured, not claimed</h2>
+  <div class="numbers">
+    Market data publish-to-strategy&nbsp;&nbsp; p50 = 204 ns&nbsp; p99 &lt; 1 µs (9–12M ticks/s)<br>
+    Pre-trade risk gate&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ≈ 1 ns per check, zero allocation (proven by test)<br>
+    Tick-to-order end-to-end&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; p50 = 504 ns&nbsp; p99 = 1.0 µs (15M orders/s)<br>
+    Test suite&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ~300 tests, ~86% line coverage, CI on every push
+  </div>
+
+  <h2>What's inside</h2>
+  <div class="grid">
+    <div class="card"><h3>Research</h3>
+      <p>21 technical indicators (batch + O(1) streaming), strategy DSL, screener,
+         Monte Carlo, ML (GARCH, gradient boosting, 2-state regime HMM).</p></div>
+    <div class="card"><h3>Honest validation</h3>
+      <p>Walk-forward analysis with stitched out-of-sample equity, deflated Sharpe,
+         VaR backtesting (Kupiec + Christoffersen).</p></div>
+    <div class="card"><h3>Execution</h3>
+      <p>Smart order router, TWAP/VWAP, iceberg, dark pool, Almgren-Chriss optimal
+         trajectories, execution-aware and tick-level backtesting with TCA.</p></div>
+    <div class="card"><h3>Derivatives &amp; hedging</h3>
+      <p>Black-Scholes/Garman-Kohlhagen, American trees, SABR, vol surfaces,
+         options-book Greeks and scenario grids, Monte Carlo hedging error.</p></div>
+    <div class="card"><h3>Rates &amp; portfolio</h3>
+      <p>Curve bootstrap, day counts and calendars, bond analytics; risk parity,
+         Black-Litterman, constrained optimization, position sizing.</p></div>
+    <div class="card"><h3>Connectivity</h3>
+      <p>Live WebSocket feeds, FIX 4.4 with resend recovery and persistent sessions,
+         tick capture &amp; deterministic replay, paper venue, live dashboard.</p></div>
+  </div>
+
+  <h2>Quick start</h2>
+<pre>git clone https://github.com/AshJha0/Quant-Finance-Library && cd Quant-Finance-Library
+mvn package
+java -jar target/quant-finance-library-*.jar backtest \
+    --csv bars.csv --symbol EURUSD --strategy sma --fast 10 --slow 30 --out report.html</pre>
+
+  <footer>quantfinlib — built with zero runtime dependencies on the JDK.</footer>
+</div>
+</body>
+</html>

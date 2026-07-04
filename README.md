@@ -191,6 +191,9 @@ six areas:
   decomposition and expected schedule cost.
 - **`TransactionCostAnalyzer`** — implementation shortfall vs arrival mid, slippage vs
   interval VWAP (or synthetic forward), effective spread per fill.
+- **`AlmgrenChriss`** — optimal execution trajectories (closed-form): minimize
+  expected cost + λ·variance; risk aversion front-loads the schedule, λ→0 recovers
+  TWAP, and the efficient frontier maps the urgency trade-off.
 
 ### 2. Pricing & Fair Value Construction — `pricing`
 - **`FairValueEngine`** — microprice + mid-drift estimation → **latency-adjusted fair
@@ -293,6 +296,9 @@ trade-off) shows up directly in the equity curve.
 - **Deflated Sharpe** (`SharpeValidation`) — Bailey/López de Prado probabilistic Sharpe
   (track length, skew, kurtosis) and the deflated variant that haircuts for the number
   of parameter combinations tried.
+- **VaR backtesting** (`risk.VarBacktest`) — Kupiec proportion-of-failures (two-sided),
+  Christoffersen independence (exception clustering), and joint conditional coverage:
+  the difference between producing VaR numbers and producing *validated* VaR numbers.
 - **Portfolio backtesting** (`backtest.portfolio`) — multi-asset, long/short,
   weight-based `PortfolioBacktester` with rebalance cadence and commission on turnover;
   `PositionSizing` supplies Kelly / half-Kelly, fixed-fractional risk, inverse-vol
@@ -341,8 +347,9 @@ try (WebSocketFeed feed = new WebSocketFeed(
   serviced from the session's message store — application messages replayed with
   PossDupFlag/OrigSendingTime, admin runs coalesced into SequenceReset-GapFill;
   PossDup duplicates are suppressed and a too-low seqnum without PossDup disconnects.
-  Remaining scope note: the store is in-memory, so recovery works within a session,
-  not across reconnects.
+  **Persistent sessions**: pass a `FileSessionStore` to `initiate`/`accept` for
+  sequence-number continuation across restarts — ResendRequests are then serviced
+  from messages sent before the reconnect, as production counterparties expect.
 
 ```java
 FixSession session = FixSession.initiate("broker.example.com", 9876,
@@ -495,6 +502,9 @@ surface.price(OptionType.PUT, 100, 95, 0.02, 0, 0.5);  // surface-consistent pri
   mvn test-compile exec:java -Dexec.mainClass=com.quantfinlib.bench.BenchRunner \
       -Dexec.classpathScope=test -Dexec.args=CoreBenchmarks
   ```
+- **Docs site** — the Docs workflow builds a landing page + full javadoc site on every
+  push to main (downloadable as the `github-pages` artifact; auto-publishes to GitHub
+  Pages once the repository is public).
 - **Model-based fuzz tests** — the `OrderBook` is hammered with 100k random operations
   against an independent reference model (uncrossed book, depth conservation, cancel
   idempotence, queue-position consistency), and all three ring buffers run 2M-item

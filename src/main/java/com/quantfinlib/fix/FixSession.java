@@ -30,9 +30,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * SequenceReset-GapFill(4). Duplicates (PossDup below the expected seqnum)
  * are suppressed; a too-low seqnum without PossDup disconnects the session.</p>
  *
- * <p>Remaining scope note: the message store is in-memory and sequence
- * numbers reset on every connection — recovery works within a session, not
- * across reconnects.</p>
+ * <p>Persistence: sessions default to an in-memory {@link FixSessionStore}
+ * (sequence numbers reset per connection); pass a {@link FileSessionStore} to
+ * the {@code initiate}/{@code accept} overloads for sequence-number
+ * continuation across restarts, with ResendRequests serviced from messages
+ * sent before the reconnect.</p>
  */
 public final class FixSession implements AutoCloseable {
 
@@ -82,9 +84,6 @@ public final class FixSession implements AutoCloseable {
             FixMessage.HEARTBEAT, FixMessage.TEST_REQUEST, FixMessage.RESEND_REQUEST,
             FixMessage.SEQUENCE_RESET, FixMessage.LOGOUT, FixMessage.LOGON);
 
-    /** Stored outbound application message, replayable on ResendRequest. */
-    private record StoredMessage(String msgType, String body, String sendingTime) {
-    }
 
     private final Socket socket;
     private final InputStream in;
@@ -104,16 +103,16 @@ public final class FixSession implements AutoCloseable {
     private volatile long lastSentNanos = System.nanoTime();
     private volatile long lastReceivedNanos = System.nanoTime();
     private volatile boolean testRequestPending;
-    private long outgoingSeq = 1;        // guarded by writeLock
-    private final java.util.Map<Long, StoredMessage> messageStore = new java.util.HashMap<>(); // guarded by writeLock
-    private long expectedIncomingSeq = 1; // reader thread only
+    private final FixSessionStore store;
+    private long outgoingSeq;             // guarded by writeLock
+    private long expectedIncomingSeq;     // reader thread only
     private boolean resendPending;        // reader thread only
     private long resendTriggerSeq;        // reader thread only
     private final Thread readerThread;
     private final Thread heartbeatThread;
 
-    private FixSession(Socket socket, Config config, Listener listener, boolean acceptor)
-            throws IOException {
+    private FixSession(Socket socket, Config config, Listener listener, boolean acceptor,
+                       FixSessionStore store) throws IOException {
         this.socket = socket;
         this.socket.setTcpNoDelay(true);
         this.in = socket.getInputStream();
@@ -121,6 +120,9 @@ public final class FixSession implements AutoCloseable {
         this.config = config;
         this.listener = listener;
         this.acceptor = acceptor;
+        this.store = store;
+        this.outgoingSeq = store.nextOutgoingSeq();
+        this.expectedIncomingSeq = store.expectedIncomingSeq();
         this.readerThread = new Thread(this::readerLoop,
                 "fix-reader-" + config.senderCompId());
         this.heartbeatThread = new Thread(this::heartbeatLoop,
@@ -132,9 +134,15 @@ public final class FixSession implements AutoCloseable {
     /** Connects, sends Logon, and blocks until the handshake completes. */
     public static FixSession initiate(String host, int port, Config config, Listener listener)
             throws IOException {
+        return initiate(host, port, config, listener, FixSessionStore.inMemory());
+    }
+
+    /** As {@link #initiate(String, int, Config, Listener)} with a durable session store. */
+    public static FixSession initiate(String host, int port, Config config, Listener listener,
+                                      FixSessionStore store) throws IOException {
         Socket socket = new Socket();
         socket.connect(new InetSocketAddress(host, port), 10_000);
-        FixSession session = new FixSession(socket, config, listener, false);
+        FixSession session = new FixSession(socket, config, listener, false, store);
         session.readerThread.start();
         session.heartbeatThread.start();
         session.send(FixMessage.builder(FixMessage.LOGON)
@@ -147,7 +155,13 @@ public final class FixSession implements AutoCloseable {
     /** Accepts one connection, awaits the peer's Logon, replies, and returns established. */
     public static FixSession accept(ServerSocket server, Config config, Listener listener)
             throws IOException {
-        FixSession session = new FixSession(server.accept(), config, listener, true);
+        return accept(server, config, listener, FixSessionStore.inMemory());
+    }
+
+    /** As {@link #accept(ServerSocket, Config, Listener)} with a durable session store. */
+    public static FixSession accept(ServerSocket server, Config config, Listener listener,
+                                    FixSessionStore store) throws IOException {
+        FixSession session = new FixSession(server.accept(), config, listener, true, store);
         session.readerThread.start();
         session.heartbeatThread.start();
         session.awaitEstablished();
@@ -236,6 +250,13 @@ public final class FixSession implements AutoCloseable {
         } catch (IOException ignored) {
             // closing anyway
         }
+        if (store instanceof AutoCloseable closeable) {
+            try {
+                closeable.close();
+            } catch (Exception ignored) {
+                // best effort
+            }
+        }
     }
 
     // ------------------------------------------------------------------
@@ -248,8 +269,10 @@ public final class FixSession implements AutoCloseable {
                 long seq = outgoingSeq++;
                 String sendingTime = UTC_TIMESTAMP.format(Instant.now());
                 if (!ADMIN_TYPES.contains(builder.msgType())) {
-                    messageStore.put(seq, new StoredMessage(builder.msgType(), builder.body(), sendingTime));
+                    store.storeMessage(seq, new FixSessionStore.StoredMessage(
+                            builder.msgType(), builder.body(), sendingTime));
                 }
+                store.saveOutgoingSeq(outgoingSeq);
                 out.write(builder.encode(config.senderCompId(), config.targetCompId(),
                         seq, sendingTime));
                 out.flush();
@@ -335,10 +358,7 @@ public final class FixSession implements AutoCloseable {
                     + " got " + seq + " without PossDupFlag");
             return;
         } else {
-            expectedIncomingSeq = seq + 1;
-            if (resendPending && expectedIncomingSeq > resendTriggerSeq) {
-                resendPending = false;   // gap fully recovered
-            }
+            advanceIncoming(seq + 1);
         }
         switch (type) {
             case FixMessage.LOGON -> {
@@ -392,12 +412,17 @@ public final class FixSession implements AutoCloseable {
     private void handleSequenceReset(FixMessage m) {
         long newSeqNo = m.getLong(FixMessage.NEW_SEQ_NO);
         if (newSeqNo > expectedIncomingSeq) {
-            expectedIncomingSeq = newSeqNo;
-            if (resendPending && expectedIncomingSeq > resendTriggerSeq) {
-                resendPending = false;
-            }
+            advanceIncoming(newSeqNo);
         }
         // Stale resets (PossDup replays of old gap-fills) are ignored.
+    }
+
+    private void advanceIncoming(long newExpected) {
+        expectedIncomingSeq = newExpected;
+        store.saveIncomingSeq(newExpected);
+        if (resendPending && expectedIncomingSeq > resendTriggerSeq) {
+            resendPending = false;   // gap fully recovered
+        }
     }
 
     /**
@@ -414,7 +439,7 @@ public final class FixSession implements AutoCloseable {
                 long end = endRequested == 0 ? last : Math.min(endRequested, last);
                 long gapFillStart = -1;
                 for (long seq = begin; seq <= end; seq++) {
-                    StoredMessage stored = messageStore.get(seq);
+                    FixSessionStore.StoredMessage stored = store.retrieve(seq);
                     if (stored == null) {
                         if (gapFillStart < 0) {
                             gapFillStart = seq;
