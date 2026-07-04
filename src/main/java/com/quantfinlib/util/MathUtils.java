@@ -280,6 +280,46 @@ public final class MathUtils {
         return x;
     }
 
+    /** Matrix inverse by Gauss-Jordan elimination with partial pivoting. */
+    public static double[][] inverse(double[][] a) {
+        int n = a.length;
+        double[][] aug = new double[n][2 * n];
+        for (int i = 0; i < n; i++) {
+            System.arraycopy(a[i], 0, aug[i], 0, n);
+            aug[i][n + i] = 1;
+        }
+        for (int col = 0; col < n; col++) {
+            int pivot = col;
+            for (int r = col + 1; r < n; r++) {
+                if (Math.abs(aug[r][col]) > Math.abs(aug[pivot][col])) {
+                    pivot = r;
+                }
+            }
+            if (Math.abs(aug[pivot][col]) < 1e-12) {
+                throw new IllegalArgumentException("singular matrix at column " + col);
+            }
+            double[] tmp = aug[col]; aug[col] = aug[pivot]; aug[pivot] = tmp;
+            double diag = aug[col][col];
+            for (int c = 0; c < 2 * n; c++) {
+                aug[col][c] /= diag;
+            }
+            for (int r = 0; r < n; r++) {
+                if (r == col) {
+                    continue;
+                }
+                double f = aug[r][col];
+                for (int c = 0; c < 2 * n; c++) {
+                    aug[r][c] -= f * aug[col][c];
+                }
+            }
+        }
+        double[][] inv = new double[n][n];
+        for (int i = 0; i < n; i++) {
+            System.arraycopy(aug[i], n, inv[i], 0, n);
+        }
+        return inv;
+    }
+
     public static double clamp(double v, double lo, double hi) {
         return Math.max(lo, Math.min(hi, v));
     }

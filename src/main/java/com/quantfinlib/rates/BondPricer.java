@@ -99,4 +99,67 @@ public final class BondPricer {
         }
         return (int) Math.round(yearsToMaturity * frequency);
     }
+
+    // ------------------------------------------------------------------
+    // Date-based pricing with real conventions
+    // ------------------------------------------------------------------
+
+    /**
+     * Dirty price with real-world conventions: coupon dates generated from the
+     * maturity, payment dates rolled on the business calendar, accrual and
+     * discounting measured with the day-count convention. Coupons accrue on
+     * <i>unadjusted</i> period dates (bond-market convention); each coupon is
+     * {@code face * couponRate * yearFraction(periodStart, periodEnd)}.
+     */
+    public static double dirtyPrice(double face, double couponRate, int frequency,
+                                    java.time.LocalDate settlement, java.time.LocalDate maturity,
+                                    double yield, DayCount dayCount,
+                                    BusinessCalendar calendar, BusinessCalendar.Roll roll) {
+        java.util.List<java.time.LocalDate> unadjusted =
+                BusinessCalendar.unadjustedSchedule(settlement, maturity, frequency);
+        java.time.LocalDate periodStart = unadjusted.getFirst().minusMonths(12 / frequency);
+        double price = 0;
+        for (int i = 0; i < unadjusted.size(); i++) {
+            java.time.LocalDate periodEnd = unadjusted.get(i);
+            java.time.LocalDate payDate = calendar.roll(periodEnd, roll);
+            double coupon = face * couponRate * dayCount.yearFraction(periodStart, periodEnd);
+            double t = dayCount.yearFraction(settlement, payDate);
+            double df = Math.pow(1 + yield / frequency, -frequency * t);
+            price += coupon * df;
+            if (i == unadjusted.size() - 1) {
+                price += face * df;
+            }
+            periodStart = periodEnd;
+        }
+        return price;
+    }
+
+    /** Accrued interest at settlement (accrual on unadjusted period dates). */
+    public static double accruedInterest(double face, double couponRate, int frequency,
+                                         java.time.LocalDate settlement, java.time.LocalDate maturity,
+                                         DayCount dayCount) {
+        java.util.List<java.time.LocalDate> unadjusted =
+                BusinessCalendar.unadjustedSchedule(settlement, maturity, frequency);
+        java.time.LocalDate periodStart = unadjusted.getFirst().minusMonths(12 / frequency);
+        if (!settlement.isAfter(periodStart)) {
+            return 0;
+        }
+        return face * couponRate * dayCount.yearFraction(periodStart, settlement);
+    }
+
+    /** Clean price = dirty price minus accrued interest. */
+    public static double cleanPrice(double face, double couponRate, int frequency,
+                                    java.time.LocalDate settlement, java.time.LocalDate maturity,
+                                    double yield, DayCount dayCount,
+                                    BusinessCalendar calendar, BusinessCalendar.Roll roll) {
+        return dirtyPrice(face, couponRate, frequency, settlement, maturity, yield,
+                dayCount, calendar, roll)
+                - accruedInterest(face, couponRate, frequency, settlement, maturity, dayCount);
+    }
+
+    /** Settlement date from a trade date and settlement lag (e.g. T+2). */
+    public static java.time.LocalDate settlementDate(java.time.LocalDate tradeDate, int lagDays,
+                                                     BusinessCalendar calendar) {
+        return calendar.addBusinessDays(tradeDate, lagDays);
+    }
 }
