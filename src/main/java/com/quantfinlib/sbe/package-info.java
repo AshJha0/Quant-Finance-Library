@@ -1,8 +1,9 @@
 /**
  * SBE-style binary wire codecs and channel adapters — the professional-grade
  * alternative to the text edges (JSON WebSocket in, FIX tag-value out):
- * {@link com.quantfinlib.sbe.TradeFlyweight} and
- * {@link com.quantfinlib.sbe.OrderFlyweight} encode/decode at fixed buffer
+ * {@link com.quantfinlib.sbe.TradeFlyweight},
+ * {@link com.quantfinlib.sbe.OrderFlyweight} and
+ * {@link com.quantfinlib.sbe.QuoteFlyweight} encode/decode at fixed buffer
  * offsets with zero allocation, zero parsing and zero copying;
  * {@link com.quantfinlib.sbe.BinaryMarketDataClient} feeds the
  * {@code HftMarketDataBus} from a binary stream and

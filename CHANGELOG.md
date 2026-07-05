@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+- **FX asset class** (`fx`, new package): `CurrencyPair` market conventions
+  (pips, precision, T+1/T+2 spot lags, dual-calendar tenor dates with
+  modified-following/end-end), `SwapPointsCurve` (quoted points → outrights,
+  broken dates, CIP implied carry), `FxSwap` (near/far legs, points MTM,
+  roll cost), `Ndf` (per-currency fixing lags, USD-settled difference),
+  `FxVolSurface` (delta-quoted smile: ATM DNS + RR/BF, premium-adjusted
+  delta↔strike solving), `FixingRisk` (fix-window TWAP/VWAP tracking error).
+- **e-FX hot path**: `fx.AggregatedBook` (zero-alloc multi-venue composite
+  BBO with venue attribution), `fx.CrossRateEngine` (streaming synthetic
+  crosses on the bus consumer thread), `sbe.QuoteFlyweight` (48-byte binary
+  two-sided quote codec), `trading.HftQuoter` (streaming market maker:
+  inventory skew, tick-grid snap, conflation — measured tick-to-two-sided-
+  quote p50 592 ns via the new `HftQuoterBenchmark`), `trading.AutoHedger`
+  (live position-band hedging with cooldown), `pricing.IncrementalGreeks`
+  (zero-alloc delta-gamma tick updates with off-path re-anchoring).
+- **Options exotics** (`pricing`): `DigitalOption` (cash/asset-or-nothing),
+  `TouchOption` (one-touch/no-touch hit probabilities), `BarrierOption`
+  (regular knock-in/out closed form, in-out parity, reverse barriers
+  rejected explicitly), `VannaVolga` (three-pillar smile-consistent pricing,
+  exact at pillars) — all Monte Carlo cross-checked in tests.
+- **Equities mechanics**: `pricing.DividendSchedule` (escrowed discrete
+  dividends + borrow cost), `microstructure.TickSizeSchedule` (MiFID II-style
+  price-banded ticks, wired into `TickBacktester.Config.withTickSchedule`),
+  `microstructure.Auction` (call-auction uncross: max volume → min surplus →
+  reference proximity, market-on-auction orders).
+- **FX backtest realism**: `backtest.LastLookExecution` (LP rejects on
+  adverse hold-window moves; reject-rate TCA).
 - **License**: released under the MIT License (`LICENSE` file added; license
   metadata in `pom.xml`, badge and section in the README, docs-site footer).
 

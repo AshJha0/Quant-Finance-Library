@@ -40,3 +40,12 @@ jobs:
               com.quantfinlib.examples.HftOrderBenchmark
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: HFT quoter benchmark
+        run: |
+          {
+            echo '## HFT quoter benchmark (shared runner — indicative only)'
+            echo '```'
+            java -Xms1g -Xmx1g -XX:+AlwaysPreTouch -cp target/classes \
+              com.quantfinlib.examples.HftQuoterBenchmark
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"

@@ -14,14 +14,19 @@ they are documented here so the path beyond is clear.
 | Lock-free SPSC rings with padded sequences | `marketdata.TickRingBuffer`, `trading.OrderRingBuffer` | No locks/CAS on the hot path; cache-line padding prevents false sharing between producer and consumer cores; acquire/release publication is the minimal memory-ordering cost. |
 | Sequence caching | both rings | Each side caches the other's counter and re-reads the volatile only when apparently blocked — removes most cross-core cache traffic. |
 | Dense int symbol ids, array-indexed dispatch | `SymbolRegistry`, `HftMarketDataBus`, `HftRiskGate` | The hot path never hashes a `String` or boxes a number. |
-| Binary flyweight codecs (SBE-style) | `sbe.TradeFlyweight`, `sbe.OrderFlyweight` + channel adapters | Fixed-offset primitive reads/writes over a reused buffer: no parsing, no copying, no per-message objects — the wire technique of ITCH/SBE feeds, replacing the text edges (JSON WebSocket, FIX tag-value) where a counterparty offers binary. |
+| Binary flyweight codecs (SBE-style) | `sbe.TradeFlyweight`, `sbe.OrderFlyweight`, `sbe.QuoteFlyweight` + channel adapters | Fixed-offset primitive reads/writes over a reused buffer: no parsing, no copying, no per-message objects — the wire technique of ITCH/SBE feeds, replacing the text edges (JSON WebSocket, FIX tag-value) where a counterparty offers binary. |
+| Streaming quoting/hedging on the fast lane | `trading.HftQuoter` (mid + inventory skew + grid snap + conflation), `trading.AutoHedger` (position-band hedging) | The market-making loop as hot-path code: two-sided quotes and hedge orders reuse the same zero-alloc gate→ring→venue machinery — no separate "slow" quoting stack to fall out of. |
+| Multi-venue aggregation without objects | `fx.AggregatedBook` (composite BBO), `fx.CrossRateEngine` (synthetic crosses) | e-FX structures as primitive arrays with linear rescan: zero allocation per quote, venue attribution preserved, crossed composites reported to the strategy rather than hidden. |
+| Tick-fresh Greeks without tick repricing | `pricing.IncrementalGreeks` | Delta-gamma Taylor updates per tick (two multiplies); the full Black-Scholes re-anchor runs off the hot path when spot drifts — how live options risk actually stays current. |
 | Busy-spin wait strategy (`Thread.onSpinWait`) | bus and gateway consumer threads (optional) | Sub-µs hand-off instead of park/unpark scheduling latency; trades a core for latency. |
-| Platform stall attribution | `util.HiccupMonitor` (jHiccup-style) | Separates GC/safepoint/scheduler pauses from code latency; both benchmarks print a hiccup summary so tail outliers can be attributed correctly. |
+| Platform stall attribution | `util.HiccupMonitor` (jHiccup-style) | Separates GC/safepoint/scheduler pauses from code latency; all three benchmarks print a hiccup summary so tail outliers can be attributed correctly. |
 | Zero-allocation histograms | `util.LatencyRecorder` | Measurement that doesn't perturb the measured. |
 | Deterministic replay | `data.TickCapture` / `TickFileReader` | Identical input across experiments removes market noise from performance comparisons. |
 
-**Measured on a Windows desktop, stock JVM** (reproduce with `HftLatencyBenchmark` / `HftOrderBenchmark`):
-publish→strategy p50 204 ns; risk check ≈1 ns; tick→order end-to-end p50 504 ns, p99 1 µs; 15M orders/s.
+**Measured on a Windows desktop, stock JVM** (reproduce with `HftLatencyBenchmark` /
+`HftOrderBenchmark` / `HftQuoterBenchmark`): publish→strategy p50 204 ns; risk check ≈1 ns;
+tick→order end-to-end p50 504 ns, p99 1 µs; tick→two-sided-quote p50 592 ns, p99 912 ns
+(skew + grid snap + 2× risk gate + both sides at the venue); 15M orders/s.
 
 ---
 

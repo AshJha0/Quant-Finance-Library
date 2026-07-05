@@ -4,6 +4,7 @@ import com.quantfinlib.backtest.PerformanceAnalytics;
 import com.quantfinlib.backtest.PerformanceMetrics;
 import com.quantfinlib.data.TickFileReader;
 import com.quantfinlib.microstructure.Execution;
+import com.quantfinlib.microstructure.TickSizeSchedule;
 import com.quantfinlib.orderbook.Side;
 
 import java.io.IOException;
@@ -43,37 +44,46 @@ public final class TickBacktester implements TickFileReader.ReplayHandler, TickT
      * {@code tickSize > 0} snaps limit-order matching to the exchange price
      * grid (prices within the same tick are one level); 0 falls back to
      * epsilon equality — use a real tick size with real market data.
+     * A {@code tickSchedule} (MiFID II-style price-banded ticks) takes
+     * precedence over the flat {@code tickSize} when present.
      */
     public record Config(double initialCash, double spreadBps, double commissionBps,
-                         long defaultQueueAhead, int equitySampleEvery, double tickSize) {
+                         long defaultQueueAhead, int equitySampleEvery, double tickSize,
+                         TickSizeSchedule tickSchedule) {
 
         public static Config defaults() {
-            return new Config(1_000_000, 2.0, 0.2, 0, 1_000, 0);
+            return new Config(1_000_000, 2.0, 0.2, 0, 1_000, 0, null);
         }
 
         public Config withSpreadBps(double bps) {
             return new Config(initialCash, bps, commissionBps, defaultQueueAhead,
-                    equitySampleEvery, tickSize);
+                    equitySampleEvery, tickSize, tickSchedule);
         }
 
         public Config withCommissionBps(double bps) {
             return new Config(initialCash, spreadBps, bps, defaultQueueAhead,
-                    equitySampleEvery, tickSize);
+                    equitySampleEvery, tickSize, tickSchedule);
         }
 
         public Config withDefaultQueueAhead(long qty) {
             return new Config(initialCash, spreadBps, commissionBps, qty,
-                    equitySampleEvery, tickSize);
+                    equitySampleEvery, tickSize, tickSchedule);
         }
 
         public Config withEquitySampleEvery(int ticks) {
             return new Config(initialCash, spreadBps, commissionBps, defaultQueueAhead,
-                    ticks, tickSize);
+                    ticks, tickSize, tickSchedule);
         }
 
         public Config withTickSize(double size) {
             return new Config(initialCash, spreadBps, commissionBps, defaultQueueAhead,
-                    equitySampleEvery, size);
+                    equitySampleEvery, size, tickSchedule);
+        }
+
+        /** Price-banded ticks: the tick in force is looked up per price. */
+        public Config withTickSchedule(TickSizeSchedule schedule) {
+            return new Config(initialCash, spreadBps, commissionBps, defaultQueueAhead,
+                    equitySampleEvery, tickSize, schedule);
         }
     }
 
@@ -253,17 +263,31 @@ public final class TickBacktester implements TickFileReader.ReplayHandler, TickT
 
     // ------------------------------------------------------------------
 
+    /**
+     * The tick in force for grid-snapping around a limit price: a banded
+     * schedule wins over the flat size. Uses the LIMIT price's band — the
+     * resting order defines the level being tested.
+     */
+    private double tickAt(double limitPrice) {
+        if (config.tickSchedule() != null) {
+            return config.tickSchedule().tickFor(limitPrice);
+        }
+        return config.tickSize();
+    }
+
     private boolean samePriceLevel(double a, double b) {
-        if (config.tickSize() > 0) {
-            return Math.round(a / config.tickSize()) == Math.round(b / config.tickSize());
+        double tick = tickAt(b);
+        if (tick > 0) {
+            return Math.round(a / tick) == Math.round(b / tick);
         }
         return Math.abs(a - b) <= PRICE_EPS;
     }
 
     private boolean tradesThrough(Side side, double printPrice, double limitPrice) {
-        if (config.tickSize() > 0) {
-            long print = Math.round(printPrice / config.tickSize());
-            long limit = Math.round(limitPrice / config.tickSize());
+        double tick = tickAt(limitPrice);
+        if (tick > 0) {
+            long print = Math.round(printPrice / tick);
+            long limit = Math.round(limitPrice / tick);
             return side == Side.BUY ? print < limit : print > limit;
         }
         return side == Side.BUY

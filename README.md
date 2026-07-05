@@ -519,6 +519,42 @@ surface.price(OptionType.PUT, 100, 95, 0.02, 0, 0.5);  // surface-consistent pri
   idempotence, queue-position consistency), and all three ring buffers run 2M-item
   concurrent SPSC stress with randomized batching.
 
+## FX & Equities Instruments
+
+Beyond spot, the library speaks the market's own conventions per asset class:
+
+- **FX conventions** (`fx.CurrencyPair`) — pip sizes/precision (JPY quotes), T+1/T+2
+  spot lags, settlement dates against *both* currencies' holiday calendars, forward
+  tenor arithmetic (ON/TN/SN, weeks, months with modified-following and the end-end
+  rule). Resolved to primitives at setup so the hot path never re-parses conventions.
+- **FX forwards & swaps** (`fx.SwapPointsCurve`, `fx.FxSwap`) — quoted points per tenor
+  → outrights for any broken date (linear in days, the interbank convention),
+  covered-interest-parity implied carry, at-market swaps that value to zero by
+  construction, points MTM with optional discounting, tom-next roll cost.
+- **NDFs** (`fx.Ndf`) — fixing vs settlement dates per restricted currency (INR/KRW/TWD
+  2-day lags, BRL PTAX 1-day), the USD-settled difference formula (divides by the
+  fixing), MTM off the forward to the *fixing* date; `fx.FixingRisk` quantifies
+  fix-window tracking error (σ²T/3 law) and participation.
+- **FX options** (`fx.FxVolSurface`, `pricing.VannaVolga`) — the delta-quoted smile the
+  market actually trades: ATM DNS + 25Δ/10Δ risk-reversal/butterfly → solved strikes
+  (closed-form forward delta, bisection for premium-adjusted), then vanna-volga
+  smile-consistent pricing/vols at any strike (exact at the pillars).
+- **First-generation exotics** (`pricing`) — cash/asset-or-nothing digitals, one-touch/
+  no-touch (reflection-principle hit probabilities), regular single-barrier knock-in/out
+  (Reiner-Rubinstein closed form with in-out parity; reverse barriers are rejected, not
+  silently mispriced) — all Monte Carlo cross-checked in tests.
+- **Equity dividends & borrow** (`pricing.DividendSchedule`) — escrowed discrete
+  dividends (PV-stripped spot), forwards with borrow cost, dividend-consistent
+  European pricing; the forward-looking counterpart of `data.CorporateActions`.
+- **Exchange mechanics** (`microstructure`) — `TickSizeSchedule` (MiFID II-style
+  price-banded ticks with directional rounding, wired into the tick backtester via
+  `Config.withTickSchedule`) and `Auction` (call-auction uncross: max volume →
+  min surplus → reference proximity, market-on-auction orders, indicative feed).
+- **Last look** (`backtest.LastLookExecution`) — FX-realistic execution model: the LP
+  rejects fills when the intra-bar move runs beyond a threshold in the taker's favor,
+  so backtests chase the market the way live FX flow actually does; reject-rate TCA
+  included.
+
 ## Ultra-Low-Latency / HFT Path
 
 The library ships two market data paths. The convenience path
@@ -535,8 +571,12 @@ latency-critical trading:
 | `LatencyRecorder` | Zero-allocation log-linear nanosecond histogram (HdrHistogram-style) for measuring your own path |
 | `HftRiskGate` (`trading`) | Zero-allocation pre-trade risk gate over dense int symbol ids: order size, notional, position, price collar, halt — int reason codes, ~1 ns/check, positions updated on fills |
 | `HftOrderGateway` + `OrderRingBuffer` (`trading`) | The fast lane out: risk check → release-store publish into a preallocated primitive order ring → venue thread; zero allocation per order (proven by a per-thread allocation-counter test) |
-| `sbe` package | SBE-style binary flyweight codecs (`TradeFlyweight`, `OrderFlyweight`: fixed-offset primitives, zero parse/copy/alloc — proven by test) with channel adapters replacing the text edges: `BinaryMarketDataClient` → bus, gateway → `BinaryOrderPublisher`; fragmentation-safe decode loops |
-| `HiccupMonitor` (`util`) | jHiccup-style platform stall attribution: both benchmarks print a hiccup summary so tail outliers are correctly attributed to GC/safepoints/scheduler vs code (on the Windows dev box: benchmark max 541µs vs platform hiccups up to 1.6ms — the platform owns the tail) |
+| `sbe` package | SBE-style binary flyweight codecs (`TradeFlyweight`, `OrderFlyweight`, `QuoteFlyweight`: fixed-offset primitives, zero parse/copy/alloc — proven by test) with channel adapters replacing the text edges: `BinaryMarketDataClient` → bus, gateway → `BinaryOrderPublisher`; fragmentation-safe decode loops |
+| `HftQuoter` (`trading`) | Streaming market maker on the fast lane: mid + inventory skew (read live from the risk gate) + tick-grid snap → two-sided quote through the gate and order ring, with conflation (min-move / min-interval) — zero allocation per tick |
+| `AutoHedger` (`trading`) | Live position-band hedger: band breach on any tick fires a flattening order for the excess through the fast lane, with per-symbol cooldown while the hedge fill is in flight |
+| `AggregatedBook` + `CrossRateEngine` (`fx`) | Multi-venue composite BBO with venue attribution (primitive arrays, zero alloc per quote, crossed composites reported not hidden) and streaming synthetic crosses (EURJPY from EURUSD×USDJPY) chained on the bus consumer thread |
+| `IncrementalGreeks` (`pricing`) | Tick-fresh options risk without tick-frequency repricing: delta-gamma Taylor updates per tick (two multiplies, zero alloc), full Black-Scholes re-anchor off the hot path on drift |
+| `HiccupMonitor` (`util`) | jHiccup-style platform stall attribution: all three benchmarks print a hiccup summary so tail outliers are correctly attributed to GC/safepoints/scheduler vs code (on the Windows dev box: benchmark max 541µs vs platform hiccups up to 1.6ms — the platform owns the tail) |
 
 ```java
 try (HftMarketDataBus bus = new HftMarketDataBus(1 << 16, 16, /*busySpin*/ true)) {
@@ -565,6 +605,10 @@ Order entry (HftOrderBenchmark):
   Tick-to-order END-TO-END:    p50=504ns  p99=1.0us  p99.9=4.0us
                                (tick -> bus -> 2xEMA strategy -> risk gate -> order ring -> venue)
   Throughput:                  15.3 million orders/sec sustained
+
+Market making (HftQuoterBenchmark):
+  Tick-to-two-sided-quote:     p50=592ns  p99=912ns  p99.9=4.5us
+                               (tick -> bus -> quoter: skew + grid snap -> risk gate x2 -> order ring -> venue, BOTH sides)
 ```
 
 Reproduce with:
@@ -572,6 +616,7 @@ Reproduce with:
 ```bash
 java -Xms512m -Xmx512m -XX:+AlwaysPreTouch -cp target/classes com.quantfinlib.examples.HftLatencyBenchmark
 java -Xms512m -Xmx512m -XX:+AlwaysPreTouch -cp target/classes com.quantfinlib.examples.HftOrderBenchmark
+java -Xms512m -Xmx512m -XX:+AlwaysPreTouch -cp target/classes com.quantfinlib.examples.HftQuoterBenchmark
 ```
 
 Steady-state the hot path allocates nothing, so GC choice barely matters; for
@@ -591,9 +636,15 @@ workflow), and the kernel-bypass/off-heap/hardware frontier beyond a pure-JDK li
 com.quantfinlib
 ├── core          Bar, BarSeries (primitive-array OHLCV time series)
 ├── orderbook     OrderBook matching engine, BookAnalytics, Side, LimitOrder
-├── microstructure QueueModel, MarketImpactModel, TransactionCostAnalyzer
+├── microstructure QueueModel, MarketImpactModel, TransactionCostAnalyzer,
+│                 TickSizeSchedule (MiFID II price bands), Auction (call uncross)
+├── fx            CurrencyPair conventions, SwapPointsCurve, FxSwap, Ndf,
+│                 FxVolSurface (delta-quoted smile), FixingRisk,
+│                 AggregatedBook (multi-venue BBO), CrossRateEngine (streaming)
 ├── pricing       FairValueEngine, TriangularArbitrage, ForwardCurve, BlackScholes,
-│                 VolSurface, BinomialTree (American), SabrModel
+│                 VolSurface, BinomialTree (American), SabrModel, VannaVolga,
+│                 DigitalOption, TouchOption, BarrierOption, DividendSchedule,
+│                 IncrementalGreeks (tick-path delta-gamma updates)
 ├── hedging       DeltaHedger, GreekHedger, MinimumVarianceHedge, FxHedger,
 │                 PairsHedger, HedgingSimulator (Monte Carlo hedging error)
 ├── execution     TWAP/VWAP schedulers, SmartOrderRouter, IcebergOrder,
@@ -607,7 +658,7 @@ com.quantfinlib
 │                 MarketImpactPredictor, IntradayLiquidityForecaster, AnomalyDetector
 ├── optimization  PortfolioOptimizer (max Sharpe / min vol / frontier / rebalance)
 ├── backtest      Backtester, config, trades, performance analytics,
-│   │             ExecutionAwareBacktester + Instant/Sor/Iceberg execution models
+│   │             ExecutionAwareBacktester + Instant/Sor/Iceberg/LastLook models
 │   ├── strategies  SMA/EMA cross, RSI, MACD, Bollinger built-ins
 │   ├── validation  ParameterGrid, GridSearchOptimizer, WalkForwardAnalyzer,
 │   │               SharpeValidation (probabilistic + deflated Sharpe)
@@ -620,7 +671,8 @@ com.quantfinlib
 ├── rates         YieldCurve (bootstrap, forwards), BondPricer (duration, DV01)
 ├── volatility    EwmaVolatility, Garch11 (MLE fit + forecasts)
 ├── trading       OrderGateway, PaperTradingGateway (risk-gated paper venue),
-│                 fast lane: HftRiskGate, OrderRingBuffer, HftOrderGateway
+│                 fast lane: HftRiskGate, OrderRingBuffer, HftOrderGateway,
+│                 HftQuoter (streaming market maker), AutoHedger (band hedging)
 ├── fix           FIX 4.4 engine: FixMessage codec, FixSession (initiator/acceptor,
 │                 logon/heartbeat/logout), NewOrderSingle, ExecutionReport
 ├── dsl           Rule, Rules, StrategyBuilder
