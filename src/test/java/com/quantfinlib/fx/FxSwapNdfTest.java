@@ -81,6 +81,55 @@ class FxSwapNdfTest {
     }
 
     @Test
+    void agedSwapMarksAgainstALaterCurveWithoutThrowing() {
+        // Book a spot-vs-3M swap, then re-mark two weeks later: the near leg
+        // has settled (realized cash) and must contribute zero, while the
+        // far leg still marks against the new curve — routine daily P&L.
+        SwapPointsCurve struck = curve(1.0850, 12.6, 38.4);
+        FxSwap swap = FxSwap.atMarket(struck, "SPOT", "3M", 10_000_000);
+        LocalDate laterTrade = trade.plusWeeks(2);
+        SwapPointsCurve later = SwapPointsCurve.builder(eurusd, laterTrade, 1.0900)
+                .add("1M", 11.0)
+                .add("3M", 33.0)
+                .build();
+        // Near date (old spot) is before the new curve's spot: settled leg.
+        assertTrue(swap.nearDate().isBefore(later.spotDate()));
+        double mtm = swap.markToMarket(later);
+        double farOnly = -10_000_000 * (later.outright(swap.farDate()) - swap.farRate());
+        assertEquals(farOnly, mtm, 1e-9);
+        // The discounted overload skips the settled leg the same way.
+        com.quantfinlib.rates.YieldCurve usd = com.quantfinlib.rates.YieldCurve.ofZeroRates(
+                new double[]{1}, new double[]{0.05});
+        assertEquals(Math.signum(farOnly), Math.signum(swap.markToMarket(later, usd)));
+    }
+
+    @Test
+    void ndfFixingCountsLocalNotJointBusinessDays() {
+        // USDINR settling Wednesday with the preceding Monday a US-only
+        // holiday: the RBI fixing counts INDIAN business days, so Monday
+        // still counts and the fixing is Monday — a joint-calendar walk
+        // would wrongly skip to Friday.
+        com.quantfinlib.rates.BusinessCalendar usHoliday =
+                com.quantfinlib.rates.BusinessCalendar.withHolidays(LocalDate.of(2026, 2, 9));
+        CurrencyPair usdinr = CurrencyPair.of("USDINR")
+                .withCalendars(usHoliday, com.quantfinlib.rates.BusinessCalendar.weekendsOnly());
+        // Settlement lands Wed 2026-02-11 via explicit dates for precision.
+        Ndf ndf = Ndf.of(usdinr, 1_000_000, 84.50,
+                LocalDate.of(2026, 2, 9), LocalDate.of(2026, 2, 11));
+        assertEquals(LocalDate.of(2026, 2, 9), ndf.fixingDate());
+        // And the tenor-booking path: fixing walked back on the QUOTE (INR)
+        // calendar ignores the US holiday.
+        Ndf booked = Ndf.of(usdinr, LocalDate.of(2026, 1, 7), "1M", 84.50, 1_000_000);
+        LocalDate expected = booked.settlementDate();
+        for (int i = 0; i < 2; i++) { // walk back 2 INR business days
+            do {
+                expected = expected.minusDays(1);
+            } while (!usdinr.quoteCalendar().isBusinessDay(expected));
+        }
+        assertEquals(expected, booked.fixingDate());
+    }
+
+    @Test
     void ndfSettlementDividesByTheFixing() {
         CurrencyPair usdinr = CurrencyPair.of("USDINR");
         Ndf ndf = Ndf.of(usdinr, trade, "1M", 84.50, 1_000_000);

@@ -60,6 +60,16 @@ class TickSizeAuctionTest {
     }
 
     @Test
+    void clampedLookupIsTotalBelowTheFirstBand() {
+        TickSizeSchedule s = TickSizeSchedule.builder().addBand(1.0, 0.01).build();
+        // Strict lookup protects order entry; the clamped one keeps engines
+        // total over any positive price a strategy can produce.
+        assertThrows(IllegalArgumentException.class, () -> s.tickFor(0.95));
+        assertEquals(0.01, s.tickForClamped(0.95));
+        assertEquals(0.01, s.tickForClamped(5.0)); // in-band: identical to strict
+    }
+
+    @Test
     void scheduleValidation() {
         assertThrows(IllegalStateException.class, () -> TickSizeSchedule.builder().build());
         assertThrows(IllegalArgumentException.class, () -> TickSizeSchedule.flat(0));

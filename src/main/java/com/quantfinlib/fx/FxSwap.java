@@ -93,31 +93,47 @@ public final class FxSwap {
      * each leg's (current forward − traded rate) × signed base notional.
      * The near leg is long base when {@code baseNotional > 0}, the far leg
      * short — so an at-market swap marks to ~zero on its own curve.
+     *
+     * <p><b>Aged swaps</b>: a leg whose settlement date lies before the
+     * marking curve's spot has already settled — its P&amp;L is realized
+     * cash in the books, not mark-to-market — so it contributes zero here.
+     * Routine daily marking of a seasoned swap therefore values only the
+     * remaining live leg(s).</p>
      */
     public double markToMarket(SwapPointsCurve current) {
-        double nearFwd = nearDate.equals(current.spotDate())
-                ? current.spotRate()
-                : current.outright(nearDate);
-        double nearPnl = baseNotional * (nearFwd - nearRate);
-        double farPnl = -baseNotional * (current.outright(farDate) - farRate);
-        return nearPnl + farPnl;
+        return legPnl(nearDate, nearRate, +1, current)
+                + legPnl(farDate, farRate, -1, current);
     }
 
     /**
-     * Discounted mark-to-market: leg P&amp;Ls discounted off a quote-currency
-     * zero curve (ACT/365 from the valuation curve's spot date).
+     * Discounted mark-to-market: live-leg P&amp;Ls discounted off a
+     * quote-currency zero curve (ACT/365 from the valuation curve's spot
+     * date). Settled legs contribute zero, as in the undiscounted form.
      */
     public double markToMarket(SwapPointsCurve current, YieldCurve quoteDiscount) {
-        double nearFwd = nearDate.equals(current.spotDate())
+        double mtm = 0;
+        if (!nearDate.isBefore(current.spotDate())) {
+            double tNear = ChronoUnit.DAYS.between(current.spotDate(), nearDate) / 365.0;
+            mtm += legPnl(nearDate, nearRate, +1, current)
+                    * (tNear > 0 ? quoteDiscount.discountFactor(tNear) : 1.0);
+        }
+        if (!farDate.isBefore(current.spotDate())) {
+            double tFar = ChronoUnit.DAYS.between(current.spotDate(), farDate) / 365.0;
+            mtm += legPnl(farDate, farRate, -1, current)
+                    * (tFar > 0 ? quoteDiscount.discountFactor(tFar) : 1.0);
+        }
+        return mtm;
+    }
+
+    /** One leg's undiscounted P&L: zero once settled, spot at spot, else the outright. */
+    private double legPnl(LocalDate legDate, double legRate, int sign, SwapPointsCurve current) {
+        if (legDate.isBefore(current.spotDate())) {
+            return 0; // settled: realized cash, not MTM
+        }
+        double forward = legDate.equals(current.spotDate())
                 ? current.spotRate()
-                : current.outright(nearDate);
-        double tNear = ChronoUnit.DAYS.between(current.spotDate(), nearDate) / 365.0;
-        double tFar = ChronoUnit.DAYS.between(current.spotDate(), farDate) / 365.0;
-        double nearPnl = baseNotional * (nearFwd - nearRate)
-                * (tNear > 0 ? quoteDiscount.discountFactor(tNear) : 1.0);
-        double farPnl = -baseNotional * (current.outright(farDate) - farRate)
-                * quoteDiscount.discountFactor(tFar);
-        return nearPnl + farPnl;
+                : current.outright(legDate);
+        return sign * baseNotional * (forward - legRate);
     }
 
     /**

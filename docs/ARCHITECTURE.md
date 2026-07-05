@@ -33,13 +33,14 @@ javadoc form (rendered on the docs site under `api/`).
 |---|---|---|---|
 | `core` | Primitive-array OHLCV time series | `Bar`, `BarSeries` | (covered via all consumers) |
 | `util` | Numerics + measurement | `MathUtils`, `LatencyRecorder`, `HiccupMonitor` | `LatencyRecorderTest`, `HiccupMonitorTest` |
-| `data` | Data in/out and preparation | `CsvBarLoader`, `HttpBarFetcher`, `TickFileWriter/Reader`, `TickCapture`, `SeriesAligner`, `CorporateActions` | `CsvBarLoaderTest`, `HttpBarFetcherTest`, `TickFileTest`, `SeriesAlignerTest`, `CorporateActionsTest` |
+| `data` | Data in/out and preparation | `CsvBarLoader`, `HttpBarFetcher`, `TickFileWriter/Reader`, `TickCapture`, `SeriesAligner`, `CorporateActions`, `PointInTimeUniverse` + `UniverseCsvLoader` (membership + delisting/merger events, CSV interchange format) | `CsvBarLoaderTest`, `HttpBarFetcherTest`, `TickFileTest`, `SeriesAlignerTest`, `CorporateActionsTest`, `PointInTimeUniverseTest`, `UniverseCsvLoaderTest` |
 | `feed` | Live WebSocket market data | `WebSocketFeed`, `BinanceTradeParser` | `WebSocketFeedTest` (loopback RFC6455 server) |
 | `sbe` | Binary flyweight codecs + channel adapters | `TradeFlyweight`, `OrderFlyweight`, `QuoteFlyweight`, `BinaryMarketDataClient`, `BinaryOrderPublisher/Receiver` | `SbeCodecTest`, `QuoteFlyweightTest` (incl. zero-alloc proofs) |
 | `fx` | FX conventions, curves, instruments, e-FX | `CurrencyPair`, `SwapPointsCurve`, `FxSwap`, `Ndf`, `FxVolSurface`, `FixingRisk`, `AggregatedBook`, `CrossRateEngine` | `CurrencyPairTest`, `SwapPointsCurveTest`, `FxVolSurfaceTest`, `FxSwapNdfTest`, `FixingRiskCrossRateTest`, `AggregatedBookTest` (incl. zero-alloc proof) |
 | `marketdata` | Market data transport | HFT lane: `HftMarketDataBus`, `TickRingBuffer`, `SymbolRegistry`; convenience: `MarketDataProcessor`, `RingBuffer`, `HistoricalDataStore` | `HftPathTest`, `MarketDataTest`, `RingBufferStressTest` |
 | `indicators` | Technical analysis | `Indicators` (21 batch), `StreamingIndicators` (O(1) live) | `IndicatorsTest`, `StreamingIndicatorsTest` (batch/stream parity) |
 | `orderbook` | Matching engine + book analytics | `OrderBook`, `BookAnalytics`, `Side` | `OrderBookTest`, `OrderBookInvariantTest` (model-based fuzz) |
+| `alpha` | Factor research pipeline (signal → IC → validation → cost-aware backtest → construction → report) | `AlphaContext`, `AlphaFactor`, `Factors`, `SignalEvaluator`, `AlphaValidation`, `AlphaBacktester`, `PortfolioConstruction`, `AlphaReport` | `FactorsTest`, `SignalEvaluatorTest`, `AlphaValidationTest`, `PortfolioConstructionTest`, `AlphaBacktesterReportTest` |
 | `microstructure` | Impact, queues, TCA, optimal execution, exchange mechanics | `MarketImpactModel`, `QueueModel`, `TransactionCostAnalyzer`, `AlmgrenChriss`, `TickSizeSchedule`, `Auction` | `MicrostructureTest`, `AlmgrenChrissTest`, `TickSizeAuctionTest` |
 | `pricing` | Fair value & derivatives pricing | `BlackScholes`, `VolSurface`, `SabrModel`, `BinomialTree`, `FairValueEngine`, `TriangularArbitrage`, `ForwardCurve`, `VannaVolga`, `DigitalOption`, `TouchOption`, `BarrierOption`, `DividendSchedule`, `IncrementalGreeks` | `BlackScholesTest`, `VolSurfaceTest`, `AmericanAndSabrTest`, `PricingTest`, `ExoticOptionsTest` (MC cross-checked), `VannaVolgaTest`, `DividendScheduleTest`, `IncrementalGreeksTest` |
 | `rates` | Fixed income | `YieldCurve`, `BondPricer`, `DayCount`, `BusinessCalendar` | `RatesTest`, `ConventionsTest` |
@@ -51,7 +52,7 @@ javadoc form (rendered on the docs site under `api/`).
 | `backtest` | Bar backtesting + execution models | `Backtester`, `ExecutionAwareBacktester`, `Instant/Sor/Iceberg/LastLookExecution` | `BacktesterTest`, `ExecutionAwareBacktesterTest`, `LastLookExecutionTest` |
 | `backtest.strategies` | Built-in strategies | SMA/EMA cross, RSI, MACD, Bollinger | (covered by backtest/CLI tests) |
 | `backtest.validation` | Overfitting defense | `WalkForwardAnalyzer`, `GridSearchOptimizer`, `SharpeValidation`, `ParameterGrid` | `ValidationTest` |
-| `backtest.portfolio` | Multi-asset backtesting | `PortfolioBacktester`, `PositionSizing` | `PortfolioBacktestTest` |
+| `backtest.portfolio` | Multi-asset backtesting | `PortfolioBacktester` (survivorship-aware overload: delistings, mergers, index drops, ex-date cash dividends), `CrossSectionalMomentum` (point-in-time 12-1 long/short), `PositionSizing` | `PortfolioBacktestTest`, `SurvivorshipBacktestTest`, `CrossSectionalMomentumTest` |
 | `backtest.tick` | Tick-level backtesting | `TickBacktester` (queue-aware fills, flat or banded tick grid) | `TickBacktesterTest` |
 | `dsl` | Strategy builder | `StrategyBuilder`, `Rules`, `Rule` | `StrategyBuilderTest` |
 | `screener` | Stock screening | `StockScreener`, `TechnicalFilters`, `FundamentalFilters`, `RankingEngine` | `ScreenerTest` |

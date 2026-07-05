@@ -8,7 +8,12 @@
  * {@link com.quantfinlib.data.TickCapture} (record the live bus for
  * deterministic replay), {@link com.quantfinlib.data.SeriesAligner}
  * (timestamp intersection / union+forward-fill for ragged multi-asset data)
- * and {@link com.quantfinlib.data.CorporateActions} (split/dividend
- * back-adjustment).
+ * {@link com.quantfinlib.data.CorporateActions} (split/dividend
+ * back-adjustment) and {@link com.quantfinlib.data.PointInTimeUniverse}
+ * (as-of membership + delisting/merger terminal events — the engine half of
+ * survivorship-bias-free backtesting, consumed by the universe-aware
+ * {@code PortfolioBacktester} overload and {@code StockScreener.membersAsOf})
+ * with {@link com.quantfinlib.data.UniverseCsvLoader} as its documented CSV
+ * interchange format for user-supplied membership/lifecycle data.
  */
 package com.quantfinlib.data;

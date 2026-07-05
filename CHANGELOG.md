@@ -1,5 +1,65 @@
 # Changelog
 
+## Unreleased
+
+- **Review fixes** (multi-angle code review of the v1.3.0 batch): dividends
+  now credit before same-bar lifecycle events (a name delisting on its own
+  ex-date still pays its holder); NDF fixings walk back in the restricted
+  currency's LOCAL business days, not joint (`CurrencyPair` gained
+  `baseCalendar()`/`quoteCalendar()` accessors); aged `FxSwap`s mark against
+  later curves — settled legs contribute zero instead of throwing;
+  `AutoHedger`'s cooldown uses a sentinel so startup hedges fire on clocks
+  starting at/below zero; `TickBacktester`'s banded price-level comparison
+  is total (clamped below the first band via
+  `TickSizeSchedule.tickForClamped`) and band-coherent (finer tick of the
+  print/limit pair, fixing cross-band trade-through misclassification);
+  `UniverseCsvLoader` applies the same whole-file epoch-seconds detection
+  as `CsvBarLoader`, and its row errors carry line numbers for all failures
+  including malformed dates.
+
+- **Alpha research pipeline** (`alpha`, new package): `AlphaContext`
+  (deterministic frozen symbol panel), `Factors` (MA crossover, MACD, 12-1
+  momentum, contrarian RSI, Bollinger reversion, mean reversion, value,
+  quality, low volatility — stateless, no-look-ahead contract),
+  `SignalEvaluator` (rank IC on non-overlapping windows, IR, t-stat, hit
+  rate, implied turnover, cross-factor exposure), `AlphaValidation`
+  (walk-forward with OOS efficiency, blocked k-fold, Monte Carlo
+  permutation p-values — conservative for time-invariant signals by
+  design, parameter sensitivity), `AlphaBacktester` (commission, spread,
+  slippage, square-root market impact with per-symbol ADV/vol; gross-vs-net
+  with per-component cost drag), `PortfolioConstruction` (winsorized
+  z-score sizing, caps, inverse-vol budgeting, exact sector/beta
+  neutrality, mean-variance tilt), `AlphaReport` (decay half-life, OLS
+  attribution, drawdowns, rolling Sharpe; ratio set shared with the
+  backtest engine).
+
+- **Survivorship-bias defense (engine half)**: `data.PointInTimeUniverse` —
+  point-in-time membership intervals (drop-and-re-add supported) plus
+  terminal events (delisting with delisting return incl. the Shumway −30%
+  involuntary-delisting constant; merger with cash and/or acquirer-share
+  terms). `PortfolioBacktester` gained a universe-aware overload: positions
+  terminate at `lastClose × (1 + delistingReturn)` on the event bar, mergers
+  convert at deal terms, index drops force liquidation, and explicit cash
+  dividends credit holders / debit shorts on the ex-date (feed unadjusted
+  prices). `StockScreener.membersAsOf` filters snapshot universes
+  point-in-time. Tests quantify the bias itself: the naive run overstates
+  final equity 2× against a wipe-out delisting. The data half (dead-ticker
+  histories, delisting returns) still requires a CRSP-style dataset — by
+  nature not solvable in code.
+- **Universe CSV interchange format**: `data.UniverseCsvLoader` — documented
+  `symbol,event,date,end_date,value,acquirer_shares,acquirer` rows
+  (MEMBER/DELIST/MERGER; ISO or epoch dates parsed exactly like bar files;
+  empty delisting return defaults to the Shumway −30%), row-numbered error
+  reporting for hand-curated files. Free constituent lists (e.g.
+  `datasets/s-and-p-500-companies`) load directly as open-ended memberships.
+- **Point-in-time cross-sectional momentum**:
+  `backtest.portfolio.CrossSectionalMomentum` — Jegadeesh-Titman 12-1
+  long/short factor that ranks only the universe members alive at each
+  rebalance timestamp; equal-weight dollar-neutral books with side-size
+  shrinking under scarce members. End-to-end test shows the naive
+  (no-universe) run overstating momentum P&L by keeping a delisted short
+  alive.
+
 ## v1.3.0 (2026-07-05)
 
 Release: https://github.com/AshJha0/Quant-Finance-Library/releases/tag/v1.3.0

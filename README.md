@@ -519,6 +519,46 @@ surface.price(OptionType.PUT, 100, 95, 0.02, 0, 0.5);  // surface-consistent pri
   idempotence, queue-position consistency), and all three ring buffers run 2M-item
   concurrent SPSC stress with randomized batching.
 
+## Alpha Research Pipeline
+
+`com.quantfinlib.alpha` is the systematic factor-research workflow, end to end,
+with each stage a separate composable step (scores flow as plain `double[]`
+aligned to a frozen symbol panel; NaN = no data at every stage):
+
+1. **Signal generation** (`Factors`) — nine standard factors: MA crossover, MACD,
+   12-1 momentum (trend); contrarian RSI, Bollinger reversion, mean reversion
+   (reversal); value (earnings+book yield), quality (ROE − leverage), low
+   volatility (defensive). Stateless, O(window), no-look-ahead by contract.
+2. **Signal evaluation** (`SignalEvaluator`) — rank IC (Spearman, monotone-invariant),
+   Grinold-Kahn IR, t-stat on non-overlapping windows, hit rate, implied turnover,
+   and cross-factor exposure (is your "new" factor just momentum in a hat).
+3. **Validation** (`AlphaValidation`) — walk-forward selection with OOS efficiency,
+   blocked k-fold consistency (no shuffled folds on time series), Monte Carlo
+   permutation p-values (deliberately conservative for time-invariant signals),
+   and parameter sensitivity (plateau vs lucky spike).
+4. **Execution-aware backtest** (`AlphaBacktester`) — commission, bid-ask spread,
+   slippage, and square-root market impact via `microstructure.MarketImpactModel`
+   with per-symbol ADV/vol estimation: gross vs net curves and a per-component
+   cost decomposition, so "which cost kills this signal" has a number.
+5. **Portfolio construction** (`PortfolioConstruction`) — winsorized z-score sizing
+   with caps, inverse-vol risk budgeting, exact sector and beta neutralization
+   (Σwβ = 0 by projection), and an unconstrained mean-variance tilt (Σ⁻¹α).
+6. **Reporting** (`AlphaReport`) — alpha decay profile with half-life, OLS factor
+   attribution (residual alpha + R²), drawdown curves, rolling Sharpe, and the
+   shared ratio set (Sharpe/Sortino/Calmar/CAGR/maxDD) from the backtest engine —
+   definitions never fork between research and backtests.
+
+```java
+AlphaContext ctx = AlphaContext.of(alignedSeries, fundamentals);
+AlphaFactor momo = Factors.momentum(252, 21);
+SignalEvaluator.Report ic = SignalEvaluator.evaluate(ctx, momo, 260, 21);
+AlphaValidation.RobustnessResult mc = AlphaValidation.monteCarloRobustness(ctx, momo, 21, 260, 500, 42);
+AlphaBacktester.Result bt = AlphaBacktester.run(ctx, momo, AlphaBacktester.Config.defaults(260),
+        (c, scores, t) -> PortfolioConstruction.betaNeutralize(
+                PortfolioConstruction.zScoreWeights(scores, 1.0, 0.05),
+                PortfolioConstruction.trailingBetas(c, t, 60)));
+```
+
 ## FX & Equities Instruments
 
 Beyond spot, the library speaks the market's own conventions per asset class:
@@ -554,6 +594,20 @@ Beyond spot, the library speaks the market's own conventions per asset class:
   rejects fills when the intra-bar move runs beyond a threshold in the taker's favor,
   so backtests chase the market the way live FX flow actually does; reject-rate TCA
   included.
+- **Survivorship-bias defense** (`data.PointInTimeUniverse`) — point-in-time universe
+  membership (intervals, drop-and-re-add) with terminal events: delistings terminate
+  positions at `lastClose × (1 + delistingReturn)` (Shumway −30% haircut constant for
+  unknown involuntary proceeds), mergers convert to cash and/or acquirer shares at deal
+  terms, index drops force liquidation. Wired into `PortfolioBacktester` (universe-aware
+  overload, plus explicit **cash dividends on the ex-date** — shorts pay) and the
+  screener (`StockScreener.membersAsOf`). Membership/event data loads from a documented
+  CSV format (`data.UniverseCsvLoader`: MEMBER/DELIST/MERGER rows, ISO or epoch dates —
+  free constituent lists like `datasets/s-and-p-500-companies` seed it, though only
+  point-in-time histories remove the bias), and
+  `backtest.portfolio.CrossSectionalMomentum` (12-1 Jegadeesh-Titman long/short) shows
+  the pattern: every rebalance ranks only the members alive at that bar. The engine half
+  is here and tested — the data half (dead-ticker histories, delisting returns;
+  CRSP-style datasets) cannot be solved by code, and the docs say so.
 
 ## Ultra-Low-Latency / HFT Path
 
@@ -636,6 +690,11 @@ workflow), and the kernel-bypass/off-heap/hardware frontier beyond a pure-JDK li
 com.quantfinlib
 ├── core          Bar, BarSeries (primitive-array OHLCV time series)
 ├── orderbook     OrderBook matching engine, BookAnalytics, Side, LimitOrder
+├── alpha         Factor research pipeline: Factors (9 signals), SignalEvaluator
+│                 (IC/IR/turnover), AlphaValidation (walk-forward, CV, Monte
+│                 Carlo, sensitivity), AlphaBacktester (cost-aware),
+│                 PortfolioConstruction (sizing, budgets, neutrality),
+│                 AlphaReport (decay, attribution, rolling metrics)
 ├── microstructure QueueModel, MarketImpactModel, TransactionCostAnalyzer,
 │                 TickSizeSchedule (MiFID II price bands), Auction (call uncross)
 ├── fx            CurrencyPair conventions, SwapPointsCurve, FxSwap, Ndf,
@@ -662,11 +721,15 @@ com.quantfinlib
 │   ├── strategies  SMA/EMA cross, RSI, MACD, Bollinger built-ins
 │   ├── validation  ParameterGrid, GridSearchOptimizer, WalkForwardAnalyzer,
 │   │               SharpeValidation (probabilistic + deflated Sharpe)
-│   ├── portfolio   PortfolioBacktester (multi-asset long/short), PositionSizing
+│   ├── portfolio   PortfolioBacktester (multi-asset long/short; survivorship-
+│   │               aware overload: delistings/mergers/index drops/cash divs),
+│   │               CrossSectionalMomentum (point-in-time 12-1), PositionSizing
 │   └── tick        TickBacktester (event-driven, queue-aware fills), TickStrategy
 ├── data          CsvBarLoader, HttpBarFetcher, TickFileWriter/Reader (QFLT format),
 │                 TickCapture (record the live bus for deterministic replay),
-│                 CorporateActions (split/dividend back-adjustment)
+│                 CorporateActions (split/dividend back-adjustment),
+│                 PointInTimeUniverse + UniverseCsvLoader (point-in-time
+│                 membership, delisting/merger events, CSV interchange format)
 ├── feed          WebSocketFeed (live exchange data -> HFT bus), BinanceTradeParser
 ├── rates         YieldCurve (bootstrap, forwards), BondPricer (duration, DV01)
 ├── volatility    EwmaVolatility, Garch11 (MLE fit + forecasts)

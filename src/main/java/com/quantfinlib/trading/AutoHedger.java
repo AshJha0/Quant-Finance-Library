@@ -35,7 +35,10 @@ public final class AutoHedger implements TickListener {
     private final long positionBand;
     private final long minHedgeIntervalNanos;
 
-    // Per-symbol cooldown clock, dense-id indexed.
+    /** Sentinel: no hedge sent yet — the cooldown must not apply. */
+    private static final long NEVER = Long.MIN_VALUE;
+
+    // Per-symbol cooldown clock, dense-id indexed; NEVER until the first hedge.
     private final long[] lastHedgeNanos;
 
     // Diagnostics.
@@ -57,6 +60,9 @@ public final class AutoHedger implements TickListener {
         this.positionBand = positionBand;
         this.minHedgeIntervalNanos = minHedgeIntervalNanos;
         this.lastHedgeNanos = new long[maxSymbols];
+        // Zero would silently suppress startup hedges on clocks that begin
+        // near 0 (replays) or negative (System.nanoTime's arbitrary origin).
+        java.util.Arrays.fill(lastHedgeNanos, NEVER);
     }
 
     /** The hot path: band check per tick; an order only on breach. */
@@ -67,7 +73,9 @@ public final class AutoHedger implements TickListener {
         if (excess <= 0) {
             return; // inside the band: nothing to do (the overwhelmingly common case)
         }
-        if (timestampNanos - lastHedgeNanos[symbolId] < minHedgeIntervalNanos) {
+        // Sentinel checked separately: subtracting NEVER would overflow.
+        if (lastHedgeNanos[symbolId] != NEVER
+                && timestampNanos - lastHedgeNanos[symbolId] < minHedgeIntervalNanos) {
             return; // a hedge is already working; wait for its fill
         }
         // Long inventory sells the excess, short buys it back.

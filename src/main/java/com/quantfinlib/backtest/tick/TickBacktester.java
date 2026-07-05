@@ -264,31 +264,37 @@ public final class TickBacktester implements TickFileReader.ReplayHandler, TickT
     // ------------------------------------------------------------------
 
     /**
-     * The tick in force for grid-snapping around a limit price: a banded
-     * schedule wins over the flat size. Uses the LIMIT price's band — the
-     * resting order defines the level being tested.
+     * The comparison tick for a print/limit pair: a banded schedule wins
+     * over the flat size, and the FINER of the two prices' bands decides —
+     * when a print and a limit straddle a band boundary, snapping the print
+     * onto the limit's coarser grid would misclassify a genuine
+     * trade-through as "same level" (and clamped lookup keeps this total
+     * for prices below the schedule's first band).
      */
-    private double tickAt(double limitPrice) {
+    private double comparisonTick(double a, double b) {
         if (config.tickSchedule() != null) {
-            return config.tickSchedule().tickFor(limitPrice);
+            return Math.min(config.tickSchedule().tickForClamped(a),
+                    config.tickSchedule().tickForClamped(b));
         }
         return config.tickSize();
     }
 
     private boolean samePriceLevel(double a, double b) {
-        double tick = tickAt(b);
+        double tick = comparisonTick(a, b);
         if (tick > 0) {
-            return Math.round(a / tick) == Math.round(b / tick);
+            // Distance-based level equality: within half a tick is one level.
+            return Math.abs(a - b) < tick / 2;
         }
         return Math.abs(a - b) <= PRICE_EPS;
     }
 
     private boolean tradesThrough(Side side, double printPrice, double limitPrice) {
-        double tick = tickAt(limitPrice);
+        double tick = comparisonTick(printPrice, limitPrice);
         if (tick > 0) {
-            long print = Math.round(printPrice / tick);
-            long limit = Math.round(limitPrice / tick);
-            return side == Side.BUY ? print < limit : print > limit;
+            // Through = beyond the limit by at least half the finer tick.
+            return side == Side.BUY
+                    ? printPrice < limitPrice - tick / 2
+                    : printPrice > limitPrice + tick / 2;
         }
         return side == Side.BUY
                 ? printPrice < limitPrice - PRICE_EPS

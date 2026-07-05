@@ -44,6 +44,22 @@ allocates**. For production-like runs:
 -XX:GuaranteedSafepointInterval=0  # diagnostic: disable periodic safepoints
 ```
 
+**Zero garbage collection, literally**: because the hot paths are proven
+allocation-free (the tests assert it with the JVM's per-thread allocation counter),
+the strongest configuration is the no-op collector —
+
+```
+-XX:+UnlockExperimentalVMOptions -XX:+UseEpsilonGC -Xms8g -Xmx8g
+```
+
+Epsilon never collects: GC pauses are zero **by construction**, and an unexpected
+allocation storm kills the process instead of stalling it — for a trading system,
+dying loudly beats trading slowly. The discipline it demands is exactly what this
+library provides: startup/setup allocation only, a sized-up heap as the allowance
+for the non-hot research/reporting code, and (in some shops) a scheduled daily
+restart inside the maintenance window. Run the benchmarks under Epsilon to verify:
+steady-state heap usage should be flat after warmup.
+
 Remaining JVM realities no flag removes: **safepoints** (all threads stop for some VM
 operations), **JIT deoptimization** (a hot method can be re-profiled mid-session — warm up
 every code path first, as the benchmarks do), and **no thread-to-core pinning from pure

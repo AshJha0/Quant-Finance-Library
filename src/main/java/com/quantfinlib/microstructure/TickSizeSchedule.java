@@ -106,6 +106,17 @@ public final class TickSizeSchedule {
     // Lookups (allocation-free)
     // ------------------------------------------------------------------
 
+    /**
+     * Like {@link #tickFor}, but prices below the first band floor take the
+     * first band's tick instead of throwing — for engines (backtesters,
+     * quoters) that must stay total over any positive price the market or a
+     * strategy can produce. Order-entry validation should keep using the
+     * strict {@link #tickFor}.
+     */
+    public double tickForClamped(double price) {
+        return price < bandFloors[0] ? ticks[0] : tickFor(price);
+    }
+
     /** The minimum increment in force at a price. */
     public double tickFor(double price) {
         if (price < bandFloors[0]) {

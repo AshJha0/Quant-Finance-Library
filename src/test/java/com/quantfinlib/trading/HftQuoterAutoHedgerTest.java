@@ -157,6 +157,53 @@ class HftQuoterAutoHedgerTest {
                 () -> HftQuoter.Config.of(100, 0.0001).withSkewPerUnit(-1));
     }
 
+    @Test
+    void quoterAndHedgerTickPathsAreAllocationFree() throws Exception {
+        HftRiskGate gate = openGate();
+        try (HftOrderGateway gateway = new HftOrderGateway(1 << 14, gate, false)) {
+            // Blackhole venue: keeps the ring drained without test-side allocation.
+            long[] blackhole = new long[1];
+            gateway.addOrderListener((id, sym, side, qty, px, ts) -> blackhole[0] += qty);
+            gateway.start();
+            // Full quoting config: skew + grid snap + conflation all exercised.
+            // Conflation interval far beyond the simulated clock: re-quotes are
+            // driven purely by the min-move gate, so BOTH branches (quote and
+            // suppress) run inside the measured loop.
+            HftQuoter quoter = new HftQuoter(gateway, 16, HftQuoter.Config
+                    .of(100_000, 0.0002)
+                    .withSkewPerUnit(1e-10)
+                    .withConflation(Long.MAX_VALUE / 4, 0.00005)
+                    .withTickSchedule(com.quantfinlib.microstructure.TickSizeSchedule
+                            .flat(0.00001)));
+            AutoHedger hedger = new AutoHedger(gateway, 16, Long.MAX_VALUE / 8, 0);
+            gate.onFill(0, Side.BUY, 1_000); // some inventory so skew is non-zero
+
+            // JIT warmup before the measured window.
+            for (int i = 0; i < 100_000; i++) {
+                long ts = i * 10_000L;
+                quoter.onTick(0, 1.0850 + (i % 100) * 1e-6, 1e6, ts);
+                hedger.onTick(0, 1.0850, 1e6, ts);
+            }
+            var mx = (com.sun.management.ThreadMXBean)
+                    java.lang.management.ManagementFactory.getThreadMXBean();
+            long tid = Thread.currentThread().threadId();
+            long before = mx.getThreadAllocatedBytes(tid);
+            for (int i = 0; i < 500_000; i++) {
+                long ts = 1_000_000_000L + i * 10_000L;
+                // Mixes conflated (small move) and quoted (larger move) ticks.
+                quoter.onTick(0, 1.0850 + (i % 100) * 1e-6, 1e6, ts);
+                hedger.onTick(0, 1.0850, 1e6, ts);
+            }
+            long allocated = mx.getThreadAllocatedBytes(tid) - before;
+            assertTrue(allocated < 100_000,
+                    "tick paths allocated " + allocated + " bytes (quotes="
+                            + quoter.quoteUpdates() + ", suppressed=" + quoter.suppressedUpdates()
+                            + ", blackhole=" + blackhole[0] + ")");
+            assertTrue(quoter.quoteUpdates() > 0 && quoter.suppressedUpdates() > 0,
+                    "both the quoting and conflation branches must have run");
+        }
+    }
+
     // ------------------------------------------------------------------
     // AutoHedger
     // ------------------------------------------------------------------
@@ -204,6 +251,26 @@ class HftQuoterAutoHedgerTest {
             assertEquals(1, hedger.hedgesSubmitted());
             hedger.onTick(0, 1.0850, 1e6, t0 + 2_000_000_000L); // cooldown expired
             assertEquals(2, hedger.hedgesSubmitted());
+        }
+    }
+
+    @Test
+    void firstHedgeFiresEvenWhenTheClockStartsAtZero() throws Exception {
+        // Replay clocks start near 0 (and System.nanoTime may be negative):
+        // a zero-initialized cooldown array would silently suppress startup
+        // hedges. The sentinel guarantees the first breach always hedges.
+        HftRiskGate gate = openGate();
+        try (HftOrderGateway gateway = new HftOrderGateway(1 << 10, gate, false)) {
+            gateway.start();
+            AutoHedger hedger = new AutoHedger(gateway, 16, 100_000, 1_000_000_000L);
+            gate.onFill(0, Side.BUY, 500_000);
+            hedger.onTick(0, 1.0850, 1e6, 0L);          // t = 0: must fire
+            assertEquals(1, hedger.hedgesSubmitted());
+            AutoHedger negative = new AutoHedger(gateway, 16, 100_000, 1_000_000_000L);
+            gate.onFill(1, Side.BUY, 500_000);
+            gate.setReferencePrice(1, 1.0850);
+            negative.onTick(1, 1.0850, 1e6, -5_000_000_000L); // negative nanoTime origin
+            assertEquals(1, negative.hedgesSubmitted());
         }
     }
 

@@ -159,6 +159,19 @@ public final class CurrencyPair {
     // Settlement-date arithmetic (pricing/booking layer, not the tick path)
     // ------------------------------------------------------------------
 
+    /** The base currency's own holiday calendar (single-center conventions). */
+    public BusinessCalendar baseCalendar() {
+        return baseCalendar;
+    }
+
+    /**
+     * The quote currency's own holiday calendar — e.g. the restricted
+     * currency's local calendar that NDF fixing conventions count in.
+     */
+    public BusinessCalendar quoteCalendar() {
+        return quoteCalendar;
+    }
+
     /** Business day in <em>both</em> currencies' calendars. */
     public boolean isJointBusinessDay(LocalDate date) {
         return baseCalendar.isBusinessDay(date) && quoteCalendar.isBusinessDay(date);

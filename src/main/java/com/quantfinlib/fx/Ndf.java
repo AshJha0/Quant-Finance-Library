@@ -66,8 +66,10 @@ public final class Ndf {
     /**
      * Books an NDF at a market tenor: settlement from the pair's tenor
      * arithmetic, fixing walked back by the restricted (quote) currency's
-     * lag using the quote calendar — pass real holiday calendars via
-     * {@link CurrencyPair#withCalendars} for production dates.
+     * lag counted in <b>local</b> (quote-calendar) business days — the
+     * market convention: an RBI/KFTC/PTAX fixing publishes on its local
+     * business days regardless of USD holidays. Pass real holiday calendars
+     * via {@link CurrencyPair#withCalendars} for production dates.
      */
     public static Ndf of(CurrencyPair pair, LocalDate tradeDate, String tenor,
                          double contractRate, double baseNotional) {
@@ -77,7 +79,7 @@ public final class Ndf {
         for (int i = 0; i < lag; i++) {
             do {
                 fixing = fixing.minusDays(1);
-            } while (!pair.isJointBusinessDay(fixing));
+            } while (!pair.quoteCalendar().isBusinessDay(fixing));
         }
         return new Ndf(pair, baseNotional, contractRate, fixing, settlement);
     }

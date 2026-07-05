@@ -1,5 +1,7 @@
 package com.quantfinlib.screener;
 
+import com.quantfinlib.data.PointInTimeUniverse;
+
 import java.io.IOException;
 import java.io.Writer;
 import java.nio.file.Files;
@@ -11,6 +13,13 @@ import java.util.Locale;
 /**
  * Professional Stock Screener: applies technical and fundamental filters to a
  * universe, optionally ranks matches, and exports results to CSV.
+ *
+ * <p><b>Survivorship caution</b>: the screener sees exactly the universe it
+ * is given. A universe built from <em>today's</em> constituents has already
+ * dropped every delisted or acquired name — the bias enters before any
+ * filter runs. For historical screens, construct the snapshot list
+ * point-in-time via {@link #membersAsOf} with a
+ * {@link PointInTimeUniverse} that includes dead tickers.</p>
  */
 public final class StockScreener {
 
@@ -18,6 +27,23 @@ public final class StockScreener {
 
     public StockScreener(List<StockSnapshot> universe) {
         this.universe = List.copyOf(universe);
+    }
+
+    /**
+     * Filters snapshots to the point-in-time members at {@code asOfTimestamp}
+     * — the survivorship-safe way to build a historical screening universe
+     * (assuming the snapshot list itself includes the dead tickers).
+     */
+    public static List<StockSnapshot> membersAsOf(List<StockSnapshot> snapshots,
+                                                  PointInTimeUniverse universe,
+                                                  long asOfTimestamp) {
+        List<StockSnapshot> members = new ArrayList<>();
+        for (StockSnapshot s : snapshots) {
+            if (universe.isMember(s.symbol(), asOfTimestamp)) {
+                members.add(s);
+            }
+        }
+        return members;
     }
 
     /** Returns stocks matching every supplied filter. */
