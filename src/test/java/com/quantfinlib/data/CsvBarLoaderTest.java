@@ -73,6 +73,21 @@ class CsvBarLoaderTest {
     }
 
     @Test
+    void handlesQuotedFieldsAndThousandsSeparators() {
+        // Vendor-style export: quoted name column with commas, quoted volume
+        // with thousands separators, escaped quote inside a quoted field.
+        BarSeries s = CsvBarLoader.parse(List.of(
+                "Date,Name,Open,High,Low,Close,Volume",
+                "2024-01-02,\"Acme, Inc. (\"\"ACME\"\")\",100.0,102.5,99.5,102.0,\"1,200,000\"",
+                "2024-01-03,\"Acme, Inc.\",102.0,104.0,101.0,103.5,\"950,000\""), "ACME");
+
+        assertEquals(2, s.size());
+        assertEquals(102.0, s.close(0), 0.0);
+        assertEquals(1_200_000, s.volume(0), 0.0);
+        assertEquals(950_000, s.volume(1), 0.0);
+    }
+
+    @Test
     void rejectsMalformedFiles() {
         assertThrows(IllegalArgumentException.class,
                 () -> CsvBarLoader.parse(List.of(), "X"));

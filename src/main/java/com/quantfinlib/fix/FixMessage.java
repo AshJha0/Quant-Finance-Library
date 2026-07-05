@@ -36,13 +36,16 @@ public final class FixMessage {
     public static final int ORDER_QTY = 38;
     public static final int ORD_STATUS = 39;
     public static final int ORD_TYPE = 40;
+    public static final int ORIG_CL_ORD_ID = 41;
     public static final int POSS_DUP_FLAG = 43;
     public static final int PRICE = 44;
+    public static final int REF_SEQ_NUM = 45;
     public static final int SENDER_COMP_ID = 49;
     public static final int SENDING_TIME = 52;
     public static final int SIDE = 54;
     public static final int SYMBOL = 55;
     public static final int TARGET_COMP_ID = 56;
+    public static final int TEXT = 58;
     public static final int TIME_IN_FORCE = 59;
     public static final int TRANSACT_TIME = 60;
     public static final int ENCRYPT_METHOD = 98;
@@ -52,16 +55,22 @@ public final class FixMessage {
     public static final int GAP_FILL_FLAG = 123;
     public static final int EXEC_TYPE = 150;
     public static final int LEAVES_QTY = 151;
+    public static final int SESSION_REJECT_REASON = 373;
+    public static final int USERNAME = 553;
+    public static final int PASSWORD = 554;
 
     // Message types.
     public static final String HEARTBEAT = "0";
     public static final String TEST_REQUEST = "1";
     public static final String RESEND_REQUEST = "2";
+    public static final String REJECT = "3";
     public static final String SEQUENCE_RESET = "4";
     public static final String LOGON = "A";
     public static final String LOGOUT = "5";
     public static final String NEW_ORDER_SINGLE = "D";
     public static final String EXECUTION_REPORT = "8";
+    public static final String ORDER_CANCEL_REQUEST = "F";
+    public static final String ORDER_CANCEL_REPLACE_REQUEST = "G";
 
     private final Map<Integer, String> fields;
 

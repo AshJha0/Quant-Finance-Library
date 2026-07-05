@@ -181,6 +181,40 @@ class TickBacktesterTest {
     }
 
     @Test
+    void tickSizeSnapsRealWorldPricesToTheGrid(@TempDir Path dir) throws Exception {
+        // Prints carry float noise: 100.0000001 and 99.9999999 are both the
+        // 100.00 level on a 0.01 grid; 99.99 is one tick through.
+        Path file = writeTicks(dir,
+                new double[]{100.0, 100.0000001, 99.9999999, 99.99},
+                new double[]{100, 300, 300, 500});
+        TickBacktester.Config cfg = TickBacktester.Config.defaults()
+                .withDefaultQueueAhead(500).withCommissionBps(0).withTickSize(0.01);
+
+        var result = TickBacktester.run(onTick((ctx, i, sym, px) -> {
+            if (i == 0) {
+                ctx.submitLimit(sym, Side.BUY, 100.00, 400);
+            }
+        }), file, cfg);
+
+        // Ticks 2+3 count as at-level volume (600 - 500 queue = 100 fills at
+        // our price); tick 4 trades through and fills the remaining 300.
+        assertEquals(2, result.fills().size());
+        assertEquals(100, result.fills().get(0).quantity());
+        assertEquals(100.00, result.fills().get(0).price(), 1e-9);
+        assertEquals(300, result.fills().get(1).quantity());
+
+        // Without a tick size the noisy prints are three different "levels":
+        // 99.9999999 counts as trading through instead.
+        var noGrid = TickBacktester.run(onTick((ctx, i, sym, px) -> {
+            if (i == 0) {
+                ctx.submitLimit(sym, Side.BUY, 100.00, 400);
+            }
+        }), file, TickBacktester.Config.defaults()
+                .withDefaultQueueAhead(500).withCommissionBps(0));
+        assertEquals(400, noGrid.fills().getFirst().quantity());   // full fill on "through"
+    }
+
+    @Test
     void marketOrderBeforeFirstPrintIsRejected(@TempDir Path dir) throws Exception {
         Path file = writeTicks(dir, fill(2, 100.0), fill(2, 100));
         boolean[] rejected = {false};

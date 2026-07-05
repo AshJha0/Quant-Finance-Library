@@ -39,27 +39,41 @@ import java.util.List;
  */
 public final class TickBacktester implements TickFileReader.ReplayHandler, TickTradingContext {
 
+    /**
+     * {@code tickSize > 0} snaps limit-order matching to the exchange price
+     * grid (prices within the same tick are one level); 0 falls back to
+     * epsilon equality — use a real tick size with real market data.
+     */
     public record Config(double initialCash, double spreadBps, double commissionBps,
-                         long defaultQueueAhead, int equitySampleEvery) {
+                         long defaultQueueAhead, int equitySampleEvery, double tickSize) {
 
         public static Config defaults() {
-            return new Config(1_000_000, 2.0, 0.2, 0, 1_000);
+            return new Config(1_000_000, 2.0, 0.2, 0, 1_000, 0);
         }
 
         public Config withSpreadBps(double bps) {
-            return new Config(initialCash, bps, commissionBps, defaultQueueAhead, equitySampleEvery);
+            return new Config(initialCash, bps, commissionBps, defaultQueueAhead,
+                    equitySampleEvery, tickSize);
         }
 
         public Config withCommissionBps(double bps) {
-            return new Config(initialCash, spreadBps, bps, defaultQueueAhead, equitySampleEvery);
+            return new Config(initialCash, spreadBps, bps, defaultQueueAhead,
+                    equitySampleEvery, tickSize);
         }
 
         public Config withDefaultQueueAhead(long qty) {
-            return new Config(initialCash, spreadBps, commissionBps, qty, equitySampleEvery);
+            return new Config(initialCash, spreadBps, commissionBps, qty,
+                    equitySampleEvery, tickSize);
         }
 
         public Config withEquitySampleEvery(int ticks) {
-            return new Config(initialCash, spreadBps, commissionBps, defaultQueueAhead, ticks);
+            return new Config(initialCash, spreadBps, commissionBps, defaultQueueAhead,
+                    ticks, tickSize);
+        }
+
+        public Config withTickSize(double size) {
+            return new Config(initialCash, spreadBps, commissionBps, defaultQueueAhead,
+                    equitySampleEvery, size);
         }
     }
 
@@ -151,14 +165,12 @@ public final class TickBacktester implements TickFileReader.ReplayHandler, TickT
             if (order.symbolId != symbolId) {
                 continue;
             }
-            boolean through = order.side == Side.BUY
-                    ? price < order.price - PRICE_EPS
-                    : price > order.price + PRICE_EPS;
+            boolean through = tradesThrough(order.side, price, order.price);
             if (through) {
                 // Traded through the level: we would have been filled at our price.
                 applyFill(order.symbolId, order.side, order.price, order.remaining, ts);
                 order.remaining = 0;
-            } else if (Math.abs(price - order.price) <= PRICE_EPS) {
+            } else if (samePriceLevel(price, order.price)) {
                 // Trading at our level: volume works off the queue ahead first.
                 order.volumeAtPrice += size;
                 long fillable = (long) Math.max(0, order.volumeAtPrice - order.queueAhead);
@@ -240,6 +252,24 @@ public final class TickBacktester implements TickFileReader.ReplayHandler, TickT
     }
 
     // ------------------------------------------------------------------
+
+    private boolean samePriceLevel(double a, double b) {
+        if (config.tickSize() > 0) {
+            return Math.round(a / config.tickSize()) == Math.round(b / config.tickSize());
+        }
+        return Math.abs(a - b) <= PRICE_EPS;
+    }
+
+    private boolean tradesThrough(Side side, double printPrice, double limitPrice) {
+        if (config.tickSize() > 0) {
+            long print = Math.round(printPrice / config.tickSize());
+            long limit = Math.round(limitPrice / config.tickSize());
+            return side == Side.BUY ? print < limit : print > limit;
+        }
+        return side == Side.BUY
+                ? printPrice < limitPrice - PRICE_EPS
+                : printPrice > limitPrice + PRICE_EPS;
+    }
 
     private void applyFill(int symbolId, Side side, double price, long quantity, long ts) {
         double notional = price * quantity;

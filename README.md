@@ -307,9 +307,11 @@ trade-off) shows up directly in the equity curve.
   `PaperTradingGateway`: market/limit orders, resting-order crosses, average-cost
   positions with realized P&L, commissions, and the `PreTradeLimitChecker` wired in as
   a pre-market risk gate — the research→production loop, closed.
-- **Data I/O** (`data`) — `CsvBarLoader` (flexible headers/date formats, file-level
-  epoch-seconds detection, round-trip save) and `HttpBarFetcher` (pure `java.net.http`)
-  bring real historical data into every module.
+- **Data I/O** (`data`) — `CsvBarLoader` (flexible headers/date formats, RFC-4180
+  quoted fields, thousands separators, file-level epoch-seconds detection, round-trip
+  save) and `HttpBarFetcher` (pure `java.net.http`) bring real historical data into
+  every module; `SeriesAligner` (timestamp intersection or union + forward-fill)
+  bridges ragged multi-asset files to the index-aligned `PortfolioBacktester`.
 - **Tick capture & replay** (`data`) — `TickCapture` records every tick flowing through
   the `HftMarketDataBus` into the compact QFLT binary format (28 bytes/tick, inline
   symbol definitions); `TickFileReader` replays sessions deterministically — as fast as
@@ -350,6 +352,10 @@ try (WebSocketFeed feed = new WebSocketFeed(
   **Persistent sessions**: pass a `FileSessionStore` to `initiate`/`accept` for
   sequence-number continuation across restarts — ResendRequests are then serviced
   from messages sent before the reconnect, as production counterparties expect.
+  Also: **order cancel/replace** (35=F/G with typed callbacks and
+  canceled/replaced ExecutionReports), **session Reject** (35=3 — malformed
+  application messages are auto-rejected instead of killing the session), and
+  **Username/Password** (553/554) on Logon via `Config.withCredentials`.
 
 ```java
 FixSession session = FixSession.initiate("broker.example.com", 9876,

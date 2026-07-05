@@ -50,6 +50,29 @@ class TradingDashboardTest {
     }
 
     @Test
+    void snapshotIsInternallyConsistentUnderConcurrentTrading() throws Exception {
+        PaperTradingGateway gateway = new PaperTradingGateway(1_000_000);
+        gateway.onQuote("X", 100, 100);   // zero spread: equity is invariant
+
+        Thread trader = new Thread(() -> {
+            for (int i = 0; i < 20_000; i++) {
+                gateway.submitMarket("X", (i & 1) == 0 ? Side.BUY : Side.SELL, 100);
+            }
+        });
+        trader.start();
+        // With zero spread and zero commission every snapshot must show
+        // exactly the initial equity — any torn read would break this.
+        for (int i = 0; i < 200; i++) {
+            PaperTradingGateway.AccountSnapshot snap = gateway.snapshot();
+            assertEquals(1_000_000, snap.equity(), 1e-6,
+                    "torn snapshot at poll " + i + ": " + snap);
+        }
+        trader.join(10_000);
+        assertEquals(0, gateway.position("X"), 1e-9);
+        assertEquals(1_000_000, gateway.snapshot().equity(), 1e-6);
+    }
+
+    @Test
     void positionsSnapshotOmitsFlatSymbols() {
         PaperTradingGateway gateway = new PaperTradingGateway(100_000);
         gateway.onQuote("A", 100, 100);

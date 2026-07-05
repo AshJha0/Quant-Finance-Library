@@ -21,8 +21,9 @@ import java.util.Map;
  *       realized/unrealized P&amp;L, commission, and mark-to-market equity.</li>
  * </ul>
  *
- * Single-threaded by design: drive quotes and orders from one thread (e.g.
- * the HFT bus consumer thread).
+ * Thread-safe: all operations synchronize on the gateway, and
+ * {@link #snapshot()} returns an internally consistent view of the account —
+ * safe to read from a dashboard thread while another thread trades.
  */
 public final class PaperTradingGateway implements OrderGateway {
 
@@ -83,7 +84,7 @@ public final class PaperTradingGateway implements OrderGateway {
     // ------------------------------------------------------------------
 
     /** Updates the top of book and fills any resting limit orders that now cross. */
-    public void onQuote(String symbol, double bid, double ask) {
+    public synchronized void onQuote(String symbol, double bid, double ask) {
         quotes.put(symbol, new Quote(bid, ask));
         resting.removeIf(order -> {
             if (!order.symbol.equals(symbol)) {
@@ -106,7 +107,7 @@ public final class PaperTradingGateway implements OrderGateway {
     // ------------------------------------------------------------------
 
     @Override
-    public long submitLimit(String symbol, Side side, long quantity, double price) {
+    public synchronized long submitLimit(String symbol, Side side, long quantity, double price) {
         WorkingOrder order = new WorkingOrder(nextId++, symbol, side, quantity, price);
         orders.put(order.id, order);
         if (!passesRiskGate(order, price)) {
@@ -122,7 +123,7 @@ public final class PaperTradingGateway implements OrderGateway {
     }
 
     @Override
-    public long submitMarket(String symbol, Side side, long quantity) {
+    public synchronized long submitMarket(String symbol, Side side, long quantity) {
         WorkingOrder order = new WorkingOrder(nextId++, symbol, side, quantity, Double.NaN);
         orders.put(order.id, order);
         Quote q = quotes.get(symbol);
@@ -140,7 +141,7 @@ public final class PaperTradingGateway implements OrderGateway {
     }
 
     @Override
-    public boolean cancel(long orderId) {
+    public synchronized boolean cancel(long orderId) {
         WorkingOrder order = orders.get(orderId);
         if (order == null || order.status != OrderStatus.NEW) {
             return false;
@@ -151,7 +152,7 @@ public final class PaperTradingGateway implements OrderGateway {
     }
 
     @Override
-    public OrderStatus status(long orderId) {
+    public synchronized OrderStatus status(long orderId) {
         WorkingOrder order = orders.get(orderId);
         if (order == null) {
             throw new IllegalArgumentException("unknown order " + orderId);
@@ -160,7 +161,7 @@ public final class PaperTradingGateway implements OrderGateway {
     }
 
     @Override
-    public void addExecutionListener(ExecutionListener listener) {
+    public synchronized void addExecutionListener(ExecutionListener listener) {
         listeners.add(listener);
     }
 
@@ -168,21 +169,21 @@ public final class PaperTradingGateway implements OrderGateway {
     // Account
     // ------------------------------------------------------------------
 
-    public double position(String symbol) {
+    public synchronized double position(String symbol) {
         Position p = positions.get(symbol);
         return p == null ? 0 : p.quantity;
     }
 
-    public double cash() {
+    public synchronized double cash() {
         return cash;
     }
 
-    public double realizedPnl() {
+    public synchronized double realizedPnl() {
         return realizedPnl;
     }
 
     /** Mark-to-market equity at current mids. */
-    public double equity() {
+    public synchronized double equity() {
         double value = cash;
         for (Map.Entry<String, Position> e : positions.entrySet()) {
             Quote q = quotes.get(e.getKey());
@@ -193,12 +194,12 @@ public final class PaperTradingGateway implements OrderGateway {
         return value;
     }
 
-    public List<String> rejectionLog() {
+    public synchronized List<String> rejectionLog() {
         return List.copyOf(rejectionLog);
     }
 
     /** Snapshot of non-zero positions by symbol (for dashboards/monitoring). */
-    public Map<String, Double> positionsSnapshot() {
+    public synchronized Map<String, Double> positionsSnapshot() {
         Map<String, Double> out = new java.util.LinkedHashMap<>();
         positions.forEach((symbol, p) -> {
             if (p.quantity != 0) {
@@ -206,6 +207,16 @@ public final class PaperTradingGateway implements OrderGateway {
             }
         });
         return out;
+    }
+
+    /** One internally consistent view of the whole account (single lock acquisition). */
+    public record AccountSnapshot(double cash, double equity, double realizedPnl,
+                                  int rejectionCount, Map<String, Double> positions) {
+    }
+
+    public synchronized AccountSnapshot snapshot() {
+        return new AccountSnapshot(cash, equity(), realizedPnl,
+                rejectionLog.size(), positionsSnapshot());
     }
 
     // ------------------------------------------------------------------

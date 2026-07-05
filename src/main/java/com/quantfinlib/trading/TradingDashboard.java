@@ -61,14 +61,15 @@ public final class TradingDashboard implements AutoCloseable {
     // ------------------------------------------------------------------
 
     private void serveStatus(HttpExchange exchange) throws IOException {
+        PaperTradingGateway.AccountSnapshot snapshot = gateway.snapshot();   // one consistent view
         StringBuilder json = new StringBuilder(512);
         json.append(String.format(Locale.ROOT,
                 "{\"cash\":%.2f,\"equity\":%.2f,\"realizedPnl\":%.2f,\"rejections\":%d,",
-                gateway.cash(), gateway.equity(), gateway.realizedPnl(),
-                gateway.rejectionLog().size()));
+                snapshot.cash(), snapshot.equity(), snapshot.realizedPnl(),
+                snapshot.rejectionCount()));
         json.append("\"positions\":{");
         boolean first = true;
-        for (Map.Entry<String, Double> p : gateway.positionsSnapshot().entrySet()) {
+        for (Map.Entry<String, Double> p : snapshot.positions().entrySet()) {
             if (!first) {
                 json.append(',');
             }

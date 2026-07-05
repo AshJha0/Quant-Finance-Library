@@ -38,12 +38,22 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public final class FixSession implements AutoCloseable {
 
-    public record Config(String senderCompId, String targetCompId, int heartbeatSeconds) {
+    public record Config(String senderCompId, String targetCompId, int heartbeatSeconds,
+                         String username, String password) {
 
         public Config {
             if (heartbeatSeconds < 1) {
                 throw new IllegalArgumentException("heartbeat must be >= 1s");
             }
+        }
+
+        public Config(String senderCompId, String targetCompId, int heartbeatSeconds) {
+            this(senderCompId, targetCompId, heartbeatSeconds, null, null);
+        }
+
+        /** Adds Username(553)/Password(554) to the initiator's Logon. */
+        public Config withCredentials(String username, String password) {
+            return new Config(senderCompId, targetCompId, heartbeatSeconds, username, password);
         }
     }
 
@@ -60,6 +70,16 @@ public final class FixSession implements AutoCloseable {
         }
 
         default void onNewOrderSingle(FixSession session, NewOrderSingle order) {
+        }
+
+        default void onOrderCancelRequest(FixSession session, OrderCancelRequest request) {
+        }
+
+        default void onOrderCancelReplace(FixSession session, OrderCancelReplaceRequest request) {
+        }
+
+        /** Session-level Reject (35=3) received from the peer. */
+        default void onReject(FixSession session, long refSeqNum, String text) {
         }
 
         /** Heartbeats, test requests and any unrecognized message types. */
@@ -82,7 +102,7 @@ public final class FixSession implements AutoCloseable {
     private static final long ESTABLISH_TIMEOUT_SECONDS = 10;
     private static final java.util.Set<String> ADMIN_TYPES = java.util.Set.of(
             FixMessage.HEARTBEAT, FixMessage.TEST_REQUEST, FixMessage.RESEND_REQUEST,
-            FixMessage.SEQUENCE_RESET, FixMessage.LOGOUT, FixMessage.LOGON);
+            FixMessage.REJECT, FixMessage.SEQUENCE_RESET, FixMessage.LOGOUT, FixMessage.LOGON);
 
 
     private final Socket socket;
@@ -145,9 +165,16 @@ public final class FixSession implements AutoCloseable {
         FixSession session = new FixSession(socket, config, listener, false, store);
         session.readerThread.start();
         session.heartbeatThread.start();
-        session.send(FixMessage.builder(FixMessage.LOGON)
+        FixMessage.Builder logon = FixMessage.builder(FixMessage.LOGON)
                 .field(FixMessage.ENCRYPT_METHOD, "0")
-                .field(FixMessage.HEART_BT_INT, config.heartbeatSeconds()));
+                .field(FixMessage.HEART_BT_INT, config.heartbeatSeconds());
+        if (config.username() != null) {
+            logon.field(FixMessage.USERNAME, config.username());
+        }
+        if (config.password() != null) {
+            logon.field(FixMessage.PASSWORD, config.password());
+        }
+        session.send(logon);
         session.awaitEstablished();
         return session;
     }
@@ -214,6 +241,53 @@ public final class FixSession implements AutoCloseable {
         requireEstablished();
         send(report.toBuilder()
                 .field(FixMessage.TRANSACT_TIME, UTC_TIMESTAMP.format(Instant.now())));
+    }
+
+    /** Sends an OrderCancelRequest (35=F) for a working order. */
+    public String sendOrderCancelRequest(String clOrdId, String origClOrdId, String symbol,
+                                         Side side, long quantity) {
+        requireEstablished();
+        send(FixMessage.builder(FixMessage.ORDER_CANCEL_REQUEST)
+                .field(FixMessage.ORIG_CL_ORD_ID, origClOrdId)
+                .field(FixMessage.CL_ORD_ID, clOrdId)
+                .field(FixMessage.SYMBOL, symbol)
+                .field(FixMessage.SIDE, side == Side.BUY ? '1' : '2')
+                .field(FixMessage.TRANSACT_TIME, UTC_TIMESTAMP.format(Instant.now()))
+                .field(FixMessage.ORDER_QTY, quantity));
+        return clOrdId;
+    }
+
+    /** Sends an OrderCancelReplaceRequest (35=G); {@code limitPrice = NaN} = market. */
+    public String sendOrderCancelReplace(String clOrdId, String origClOrdId, String symbol,
+                                         Side side, long quantity, double limitPrice,
+                                         char timeInForce) {
+        requireEstablished();
+        FixMessage.Builder b = FixMessage.builder(FixMessage.ORDER_CANCEL_REPLACE_REQUEST)
+                .field(FixMessage.ORIG_CL_ORD_ID, origClOrdId)
+                .field(FixMessage.CL_ORD_ID, clOrdId)
+                .field(FixMessage.SYMBOL, symbol)
+                .field(FixMessage.SIDE, side == Side.BUY ? '1' : '2')
+                .field(FixMessage.TRANSACT_TIME, UTC_TIMESTAMP.format(Instant.now()))
+                .field(FixMessage.ORDER_QTY, quantity);
+        if (Double.isNaN(limitPrice)) {
+            b.field(FixMessage.ORD_TYPE, NewOrderSingle.ORD_TYPE_MARKET);
+        } else {
+            b.field(FixMessage.ORD_TYPE, NewOrderSingle.ORD_TYPE_LIMIT)
+                    .field(FixMessage.PRICE, limitPrice);
+        }
+        b.field(FixMessage.TIME_IN_FORCE, timeInForce);
+        send(b);
+        return clOrdId;
+    }
+
+    /** Sends a session-level Reject (35=3) referring to an inbound message. */
+    public void sendReject(long refSeqNum, String text) {
+        FixMessage.Builder b = FixMessage.builder(FixMessage.REJECT)
+                .field(FixMessage.REF_SEQ_NUM, refSeqNum);
+        if (text != null && !text.isEmpty()) {
+            b.field(FixMessage.TEXT, text.replace(FixMessage.SOH, ' '));
+        }
+        send(b);
     }
 
     /** Initiates the Logout handshake and closes the session. */
@@ -370,6 +444,8 @@ public final class FixSession implements AutoCloseable {
                     }
                     established = true;
                     logonLatch.countDown();
+                    // Raw message too, so acceptors can inspect Username/Password (553/554).
+                    listener.onMessage(this, m);
                     listener.onLogon(this);
                 }
             }
@@ -397,11 +473,28 @@ public final class FixSession implements AutoCloseable {
                 }
             }
             case FixMessage.RESEND_REQUEST -> handleResendRequest(m);
-            case FixMessage.EXECUTION_REPORT ->
-                    listener.onExecutionReport(this, ExecutionReport.fromMessage(m));
-            case FixMessage.NEW_ORDER_SINGLE ->
-                    listener.onNewOrderSingle(this, NewOrderSingle.fromMessage(m));
+            case FixMessage.REJECT -> listener.onReject(this,
+                    m.has(FixMessage.REF_SEQ_NUM) ? m.getLong(FixMessage.REF_SEQ_NUM) : 0,
+                    m.getString(FixMessage.TEXT, ""));
+            case FixMessage.EXECUTION_REPORT -> dispatchApp(seq,
+                    () -> listener.onExecutionReport(this, ExecutionReport.fromMessage(m)));
+            case FixMessage.NEW_ORDER_SINGLE -> dispatchApp(seq,
+                    () -> listener.onNewOrderSingle(this, NewOrderSingle.fromMessage(m)));
+            case FixMessage.ORDER_CANCEL_REQUEST -> dispatchApp(seq,
+                    () -> listener.onOrderCancelRequest(this, OrderCancelRequest.fromMessage(m)));
+            case FixMessage.ORDER_CANCEL_REPLACE_REQUEST -> dispatchApp(seq,
+                    () -> listener.onOrderCancelReplace(this, OrderCancelReplaceRequest.fromMessage(m)));
             default -> listener.onMessage(this, m);
+        }
+    }
+
+    /** Dispatches an application message; failures answer with a session Reject. */
+    private void dispatchApp(long seq, Runnable dispatch) {
+        try {
+            dispatch.run();
+        } catch (RuntimeException e) {
+            String text = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+            sendReject(seq, text);
         }
     }
 

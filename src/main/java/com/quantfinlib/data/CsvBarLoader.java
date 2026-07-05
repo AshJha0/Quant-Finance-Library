@@ -43,7 +43,7 @@ public final class CsvBarLoader {
             throw new IllegalArgumentException("empty CSV");
         }
         String headerLine = lines.getFirst().replace("﻿", "");   // strip BOM
-        String[] headers = headerLine.split("[,;]");
+        String[] headers = splitCsv(headerLine);
         int tsCol = -1, oCol = -1, hCol = -1, lCol = -1, cCol = -1, vCol = -1;
         for (int i = 0; i < headers.length; i++) {
             String h = headers[i].trim().toLowerCase(Locale.ROOT);
@@ -70,18 +70,18 @@ public final class CsvBarLoader {
             if (line.isEmpty()) {
                 continue;
             }
-            String[] cells = line.split("[,;]");
+            String[] cells = splitCsv(line);
             String rawTs = cells[tsCol].trim();
             allNumeric &= rawTs.chars().allMatch(Character::isDigit);
             long ts = parseTimestamp(rawTs);
             minTs = Math.min(minTs, ts);
             maxTs = Math.max(maxTs, ts);
             bars.add(new Bar(ts,
-                    Double.parseDouble(cells[oCol].trim()),
-                    Double.parseDouble(cells[hCol].trim()),
-                    Double.parseDouble(cells[lCol].trim()),
-                    Double.parseDouble(cells[cCol].trim()),
-                    vCol >= 0 && vCol < cells.length ? Double.parseDouble(cells[vCol].trim()) : 0));
+                    parseNumber(cells[oCol]),
+                    parseNumber(cells[hCol]),
+                    parseNumber(cells[lCol]),
+                    parseNumber(cells[cCol]),
+                    vCol >= 0 && vCol < cells.length ? parseNumber(cells[vCol]) : 0));
         }
         if (bars.isEmpty()) {
             throw new IllegalArgumentException("CSV has a header but no data rows");
@@ -112,6 +112,46 @@ public final class CsvBarLoader {
                         series.low(i), series.close(i), series.volume(i)));
             }
         }
+    }
+
+    /**
+     * RFC-4180-style field split: comma/semicolon delimiters, double quotes
+     * protect embedded delimiters, {@code ""} escapes a quote inside a
+     * quoted field.
+     */
+    static String[] splitCsv(String line) {
+        List<String> out = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        boolean quoted = false;
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
+            if (quoted) {
+                if (c == '"') {
+                    if (i + 1 < line.length() && line.charAt(i + 1) == '"') {
+                        current.append('"');
+                        i++;
+                    } else {
+                        quoted = false;
+                    }
+                } else {
+                    current.append(c);
+                }
+            } else if (c == '"') {
+                quoted = true;
+            } else if (c == ',' || c == ';') {
+                out.add(current.toString());
+                current.setLength(0);
+            } else {
+                current.append(c);
+            }
+        }
+        out.add(current.toString());
+        return out.toArray(new String[0]);
+    }
+
+    /** Numeric parse tolerant of vendor thousands separators ("1,234.5"). */
+    static double parseNumber(String value) {
+        return Double.parseDouble(value.trim().replace(",", ""));
     }
 
     /**

@@ -12,11 +12,15 @@ public record ExecutionReport(String orderId, String execId, char execType, char
                               double cumQty, double leavesQty, double avgPrice) {
 
     public static final char EXEC_TYPE_NEW = '0';
+    public static final char EXEC_TYPE_CANCELED = '4';
+    public static final char EXEC_TYPE_REPLACED = '5';
     public static final char EXEC_TYPE_TRADE = 'F';
     public static final char EXEC_TYPE_REJECTED = '8';
     public static final char ORD_STATUS_NEW = '0';
     public static final char ORD_STATUS_PARTIALLY_FILLED = '1';
     public static final char ORD_STATUS_FILLED = '2';
+    public static final char ORD_STATUS_CANCELED = '4';
+    public static final char ORD_STATUS_REPLACED = '5';
     public static final char ORD_STATUS_REJECTED = '8';
 
     public boolean isFill() {
@@ -36,6 +40,22 @@ public record ExecutionReport(String orderId, String execId, char execType, char
         return new ExecutionReport(orderId, execId, EXEC_TYPE_TRADE, ORD_STATUS_FILLED,
                 order.clOrdId(), order.symbol(), order.side(),
                 order.quantity(), fillPrice, order.quantity(), 0, fillPrice);
+    }
+
+    /** Venue-side convenience: confirm a cancel ({@code cumQty} already executed). */
+    public static ExecutionReport canceled(OrderCancelRequest request, String orderId,
+                                           String execId, double cumQty) {
+        return new ExecutionReport(orderId, execId, EXEC_TYPE_CANCELED, ORD_STATUS_CANCELED,
+                request.clOrdId(), request.symbol(), request.side(),
+                0, 0, cumQty, 0, 0);
+    }
+
+    /** Venue-side convenience: confirm a cancel/replace with the new working quantity. */
+    public static ExecutionReport replaced(OrderCancelReplaceRequest request, String orderId,
+                                           String execId, double cumQty) {
+        return new ExecutionReport(orderId, execId, EXEC_TYPE_REPLACED, ORD_STATUS_REPLACED,
+                request.clOrdId(), request.symbol(), request.side(),
+                0, 0, cumQty, request.quantity() - cumQty, 0);
     }
 
     static ExecutionReport fromMessage(FixMessage m) {
