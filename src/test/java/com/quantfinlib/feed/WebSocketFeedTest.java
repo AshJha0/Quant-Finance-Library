@@ -81,7 +81,7 @@ class WebSocketFeedTest {
 
                 awaitTrue(() -> feed.tradesPublished() == 2, "trades not published");
                 awaitTrue(() -> bus.processedCount() == 2, "bus did not dispatch");
-                assertEquals(3, feed.messagesReceived());
+                awaitTrue(() -> feed.messagesReceived() == 3, "noise message not received");
                 assertEquals(50000.50, bus.latestPrice("BTCUSDT"), 0.0);
                 assertEquals(3000.25, bus.latestPrice("ETHUSDT"), 0.0);
             }
