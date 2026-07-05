@@ -41,18 +41,12 @@ jobs:
         with:
           path: _site
 
-  # Deployment requires GitHub Pages, which is unavailable on private repos
-  # under the free plan. The step is non-fatal: the site is always built and
-  # downloadable as an artifact, and publishing starts automatically the day
-  # the repository is made public (Settings -> Pages -> Source: Actions).
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    continue-on-error: true
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
-        continue-on-error: true

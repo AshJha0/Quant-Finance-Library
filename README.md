@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/AshJha0/Quant-Finance-Library/actions/workflows/ci.yml/badge.svg)](https://github.com/AshJha0/Quant-Finance-Library/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Docs](https://img.shields.io/badge/Docs-GitHub%20Pages-blue.svg)](https://ashjha0.github.io/Quant-Finance-Library/)
 
 **quantfinlib** is a production-ready quantitative finance platform for the JVM that unifies
 risk management, portfolio optimization, machine learning, technical analysis, strategy
@@ -509,9 +510,10 @@ surface.price(OptionType.PUT, 100, 95, 0.02, 0, 0.5);  // surface-consistent pri
   mvn test-compile exec:java -Dexec.mainClass=com.quantfinlib.bench.BenchRunner \
       -Dexec.classpathScope=test -Dexec.args=CoreBenchmarks
   ```
-- **Docs site** — the Docs workflow builds a landing page + full javadoc site on every
-  push to main (downloadable as the `github-pages` artifact; auto-publishes to GitHub
-  Pages once the repository is public).
+- **Docs site** — the Docs workflow builds and publishes a landing page + full javadoc
+  site to GitHub Pages on every push to main:
+  [ashjha0.github.io/Quant-Finance-Library](https://ashjha0.github.io/Quant-Finance-Library/)
+  (javadoc under [`/api/`](https://ashjha0.github.io/Quant-Finance-Library/api/)).
 - **Model-based fuzz tests** — the `OrderBook` is hammered with 100k random operations
   against an independent reference model (uncrossed book, depth conservation, cancel
   idempotence, queue-position consistency), and all three ring buffers run 2M-item
