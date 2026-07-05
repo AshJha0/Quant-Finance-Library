@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## v1.3.0 (2026-07-05)
+
+The FX & equities instruments release — every layer of an FX desk (spot
+conventions through NDFs and the delta-quoted smile) plus exchange mechanics
+for equities, with the market-making loop measured at sub-microsecond:
 
 - **FX asset class** (`fx`, new package): `CurrencyPair` market conventions
   (pips, precision, T+1/T+2 spot lags, dual-calendar tenor dates with
