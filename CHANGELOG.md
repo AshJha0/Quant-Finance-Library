@@ -2,6 +2,8 @@
 
 ## v1.3.0 (2026-07-05)
 
+Release: https://github.com/AshJha0/Quant-Finance-Library/releases/tag/v1.3.0
+
 The FX & equities instruments release — every layer of an FX desk (spot
 conventions through NDFs and the delta-quoted smile) plus exchange mechanics
 for equities, with the market-making loop measured at sub-microsecond:
