@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **License**: released under the MIT License (`LICENSE` file added; license
+  metadata in `pom.xml`, badge and section in the README, docs-site footer).
+
 ## v1.2.0 (2026-07-04)
 
 Everything since v1.1.0 — the trading-system release:

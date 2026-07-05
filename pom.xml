@@ -15,6 +15,30 @@
         portfolio optimization, machine learning, technical analysis, strategy development,
         market screening, Monte Carlo simulation, reporting, and algorithmic research.
     </description>
+    <url>https://github.com/AshJha0/Quant-Finance-Library</url>
+
+    <licenses>
+        <license>
+            <name>MIT License</name>
+            <url>https://opensource.org/licenses/MIT</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>AshJha0</id>
+            <name>Ashish Nath Jha</name>
+            <url>https://github.com/AshJha0</url>
+        </developer>
+    </developers>
+
+    <scm>
+        <url>https://github.com/AshJha0/Quant-Finance-Library</url>
+        <connection>scm:git:https://github.com/AshJha0/Quant-Finance-Library.git</connection>
+        <developerConnection>scm:git:https://github.com/AshJha0/Quant-Finance-Library.git</developerConnection>
+        <tag>HEAD</tag>
+    </scm>
 
     <properties>
         <maven.compiler.release>24</maven.compiler.release>

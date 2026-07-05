@@ -1,6 +1,7 @@
 # Quant-Finance-Library (quantfinlib)
 
 [![CI](https://github.com/AshJha0/Quant-Finance-Library/actions/workflows/ci.yml/badge.svg)](https://github.com/AshJha0/Quant-Finance-Library/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 **quantfinlib** is a production-ready quantitative finance platform for the JVM that unifies
 risk management, portfolio optimization, machine learning, technical analysis, strategy
@@ -630,3 +631,8 @@ com.quantfinlib
 ├── util          MathUtils, LatencyRecorder (nanosecond histogram)
 └── examples      QuickStartDemo (all 11 capabilities), HftLatencyBenchmark
 ```
+
+## License
+
+Released under the [MIT License](LICENSE) — free to use, modify, and distribute
+with attribution. See the [LICENSE](LICENSE) file for the full text.
