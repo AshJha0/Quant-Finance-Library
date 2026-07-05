@@ -78,6 +78,20 @@ class MarketDataTest {
     }
 
     @Test
+    void fullBufferDropsAreCounted() {
+        // Consumer never started: the ring fills and further publishes drop.
+        MarketDataProcessor mdp = new MarketDataProcessor(2);
+        int accepted = 0;
+        for (int i = 0; i < 10; i++) {
+            if (mdp.publish(new MarketDataEvent("X", 100 + i, 1, i))) {
+                accepted++;
+            }
+        }
+        assertTrue(accepted >= 2 && accepted < 10, "accepted=" + accepted);
+        assertEquals(10 - accepted, mdp.droppedCount());
+    }
+
+    @Test
     void historicalStoreRoundTrips() {
         HistoricalDataStore store = new HistoricalDataStore();
         store.addBar("SPY", new Bar(1, 100, 102, 99, 101, 5_000));

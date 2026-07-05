@@ -532,6 +532,8 @@ latency-critical trading:
 | `LatencyRecorder` | Zero-allocation log-linear nanosecond histogram (HdrHistogram-style) for measuring your own path |
 | `HftRiskGate` (`trading`) | Zero-allocation pre-trade risk gate over dense int symbol ids: order size, notional, position, price collar, halt — int reason codes, ~1 ns/check, positions updated on fills |
 | `HftOrderGateway` + `OrderRingBuffer` (`trading`) | The fast lane out: risk check → release-store publish into a preallocated primitive order ring → venue thread; zero allocation per order (proven by a per-thread allocation-counter test) |
+| `sbe` package | SBE-style binary flyweight codecs (`TradeFlyweight`, `OrderFlyweight`: fixed-offset primitives, zero parse/copy/alloc — proven by test) with channel adapters replacing the text edges: `BinaryMarketDataClient` → bus, gateway → `BinaryOrderPublisher`; fragmentation-safe decode loops |
+| `HiccupMonitor` (`util`) | jHiccup-style platform stall attribution: both benchmarks print a hiccup summary so tail outliers are correctly attributed to GC/safepoints/scheduler vs code (on the Windows dev box: benchmark max 541µs vs platform hiccups up to 1.6ms — the platform owns the tail) |
 
 ```java
 try (HftMarketDataBus bus = new HftMarketDataBus(1 << 16, 16, /*busySpin*/ true)) {
@@ -572,6 +574,13 @@ java -Xms512m -Xmx512m -XX:+AlwaysPreTouch -cp target/classes com.quantfinlib.ex
 Steady-state the hot path allocates nothing, so GC choice barely matters; for
 production-grade tail latency also consider `-XX:+UseZGC`, core pinning via OS affinity
 for the producer and consumer threads, and disabling CPU frequency scaling.
+
+**Going further**: [docs/ULTRA_LOW_LATENCY.md](docs/ULTRA_LOW_LATENCY.md) is the full
+latency-stack reference — what's implemented here, the JVM flags, the kernel/CPU tuning
+([scripts/linux-tune.sh](scripts/linux-tune.sh), plus a manual `Benchmarks (Linux)`
+workflow), and the kernel-bypass/off-heap/hardware frontier beyond a pure-JDK library.
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) maps every package (each also carries
+`package-info.java` javadoc) to its classes and tests.
 
 ## Project Layout
 

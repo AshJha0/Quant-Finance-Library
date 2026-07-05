@@ -2,6 +2,7 @@ package com.quantfinlib.examples;
 
 import com.quantfinlib.indicators.StreamingIndicators;
 import com.quantfinlib.marketdata.HftMarketDataBus;
+import com.quantfinlib.util.HiccupMonitor;
 import com.quantfinlib.util.LatencyRecorder;
 
 import java.util.SplittableRandom;
@@ -28,7 +29,10 @@ public final class HftLatencyBenchmark {
     private static final int LATENCY_TICKS = 1_000_000;
 
     public static void main(String[] args) throws Exception {
-        try (HftMarketDataBus bus = new HftMarketDataBus(1 << 16, 16, true)) {
+        // Platform stall monitor: correlate benchmark tail outliers with
+        // GC/safepoint/scheduler hiccups (see docs/ULTRA_LOW_LATENCY.md).
+        try (HiccupMonitor hiccups = new HiccupMonitor().start();
+             HftMarketDataBus bus = new HftMarketDataBus(1 << 16, 16, true)) {
             int eurusd = bus.registerSymbol("EURUSD");
 
             // Tick-to-signal strategy workload: EMA(12/26) cross + RSI(14).
@@ -83,6 +87,7 @@ public final class HftLatencyBenchmark {
             System.out.println("Publish-to-strategy latency: " + recorder.summary());
             System.out.printf("Strategy signals evaluated: %d (last EURUSD price %.5f)%n",
                     signals[0], bus.latestPrice(eurusd));
+            System.out.println(hiccups.summary());
         }
     }
 

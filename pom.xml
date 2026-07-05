@@ -85,6 +85,13 @@
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
                 <version>0.8.13</version>
+                <configuration>
+                    <!-- Demos/benchmarks are run manually, not unit-tested;
+                         excluding them keeps the coverage number honest. -->
+                    <excludes>
+                        <exclude>com/quantfinlib/examples/**</exclude>
+                    </excludes>
+                </configuration>
                 <executions>
                     <execution>
                         <id>prepare-agent</id>

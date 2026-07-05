@@ -1,0 +1,42 @@
+# Manual benchmark run on Linux (GitHub-hosted runner).
+#
+# HONESTY NOTE: shared runners are NOISY — no core isolation, unknown
+# neighbors, frequency scaling. These numbers establish "runs on Linux" and
+# rough magnitudes only. For real measurements use a dedicated box tuned per
+# scripts/linux-tune.sh and docs/ULTRA_LOW_LATENCY.md.
+name: Benchmarks (Linux)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 24
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '24'
+          cache: maven
+      - name: Compile
+        run: mvn -B --no-transfer-progress -DskipTests compile
+      - name: HFT market data benchmark
+        run: |
+          {
+            echo '## HFT market data benchmark (shared runner — indicative only)'
+            echo '```'
+            java -Xms1g -Xmx1g -XX:+AlwaysPreTouch -cp target/classes \
+              com.quantfinlib.examples.HftLatencyBenchmark
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: HFT order path benchmark
+        run: |
+          {
+            echo '## HFT order path benchmark (shared runner — indicative only)'
+            echo '```'
+            java -Xms1g -Xmx1g -XX:+AlwaysPreTouch -cp target/classes \
+              com.quantfinlib.examples.HftOrderBenchmark
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"

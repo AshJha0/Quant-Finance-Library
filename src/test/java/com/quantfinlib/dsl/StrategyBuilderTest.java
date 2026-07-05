@@ -45,6 +45,27 @@ class StrategyBuilderTest {
     }
 
     @Test
+    void everyRuleVariantBehaves() {
+        double[] down = {4, 3, 2, 1};
+        double[] up = {1, 2, 3, 4};
+        double[] flat = {2.5, 2.5, 2.5, 2.5};
+
+        assertTrue(Rules.crossBelow(down, flat).isSatisfied(2));      // 3>=2.5 then 2<2.5
+        assertTrue(!Rules.crossBelow(down, flat).isSatisfied(3));     // already below
+        assertTrue(Rules.crossAboveValue(up, 2.5).isSatisfied(2));
+        assertTrue(!Rules.crossAboveValue(up, 2.5).isSatisfied(3));
+        assertTrue(Rules.crossBelowValue(down, 2.5).isSatisfied(2));
+        assertTrue(Rules.above(up, down).isSatisfied(3));
+        assertTrue(Rules.below(down, up).isSatisfied(3));
+        assertTrue(Rules.falling(down, 3).isSatisfied(3));
+        assertTrue(!Rules.falling(up, 2).isSatisfied(3));
+        assertTrue(!Rules.rising(up, 4).isSatisfied(3));              // needs 4 prior moves
+        // Index 0 can never satisfy cross rules.
+        assertTrue(!Rules.crossAbove(up, flat).isSatisfied(0));
+        assertTrue(!Rules.crossBelowValue(down, 2.5).isSatisfied(0));
+    }
+
+    @Test
     void nanWarmupNeverTriggersRules() {
         double[] withNan = {Double.NaN, Double.NaN, 5, 6};
         double[] level = {4, 4, 4, 4};

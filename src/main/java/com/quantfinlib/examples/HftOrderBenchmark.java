@@ -5,6 +5,7 @@ import com.quantfinlib.marketdata.HftMarketDataBus;
 import com.quantfinlib.orderbook.Side;
 import com.quantfinlib.trading.HftOrderGateway;
 import com.quantfinlib.trading.HftRiskGate;
+import com.quantfinlib.util.HiccupMonitor;
 import com.quantfinlib.util.LatencyRecorder;
 
 import java.util.SplittableRandom;
@@ -35,10 +36,16 @@ public final class HftOrderBenchmark {
     private static final int THROUGHPUT_ORDERS = 20_000_000;
 
     public static void main(String[] args) throws Exception {
-        riskGateMicrobench();
-        submitToVenueLatency();
-        tickToOrderEndToEnd();
-        throughput();
+        // Hiccup monitor separates platform stalls (GC/safepoints/scheduler)
+        // from what the benchmark itself measures — if a max outlier below
+        // matches a hiccup here, the platform ate the tail, not the code.
+        try (HiccupMonitor hiccups = new HiccupMonitor().start()) {
+            riskGateMicrobench();
+            submitToVenueLatency();
+            tickToOrderEndToEnd();
+            throughput();
+            System.out.println(hiccups.summary());
+        }
     }
 
     private static HftRiskGate newGate() {
