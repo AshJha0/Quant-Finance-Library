@@ -48,7 +48,8 @@ footer{margin:3rem 0 2rem;color:var(--muted);font-size:.85rem;text-align:center}
     Market data publish-to-strategy&nbsp;&nbsp; p50 = 204 ns&nbsp; p99 &lt; 1 µs (9–12M ticks/s)<br>
     Pre-trade risk gate&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ≈ 1 ns per check, zero allocation (proven by test)<br>
     Tick-to-order end-to-end&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; p50 = 504 ns&nbsp; p99 = 1.0 µs (15M orders/s)<br>
-    Test suite&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ~300 tests, ~86% line coverage, CI on every push
+    Tick-to-two-sided-quote&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; p50 = 592 ns&nbsp; p99 &lt; 1 µs (market-making loop, both sides)<br>
+    Test suite&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 460+ tests, 93% line coverage, CI on every push
   </div>
 
   <h2>What's inside</h2>
@@ -56,9 +57,18 @@ footer{margin:3rem 0 2rem;color:var(--muted);font-size:.85rem;text-align:center}
     <div class="card"><h3>Research</h3>
       <p>21 technical indicators (batch + O(1) streaming), strategy DSL, screener,
          Monte Carlo, ML (GARCH, gradient boosting, 2-state regime HMM).</p></div>
+    <div class="card"><h3>Alpha pipeline</h3>
+      <p>Nine standard factors, rank IC/IR evaluation, walk-forward and permutation
+         validation, cost-aware factor backtests (spread, impact), sector/beta-neutral
+         construction, decay and attribution reports.</p></div>
+    <div class="card"><h3>FX instruments</h3>
+      <p>Pair conventions and dual-calendar dates, swap-points curves, FX swaps,
+         NDFs with local fixing calendars, delta-quoted vol surfaces, vanna-volga,
+         digitals/touches/barriers — Monte Carlo cross-checked.</p></div>
     <div class="card"><h3>Honest validation</h3>
       <p>Walk-forward analysis with stitched out-of-sample equity, deflated Sharpe,
-         VaR backtesting (Kupiec + Christoffersen).</p></div>
+         VaR backtesting (Kupiec + Christoffersen), point-in-time universes with
+         delisting returns for survivorship-honest backtests.</p></div>
     <div class="card"><h3>Execution</h3>
       <p>Smart order router, TWAP/VWAP, iceberg, dark pool, Almgren-Chriss optimal
          trajectories, execution-aware and tick-level backtesting with TCA.</p></div>
