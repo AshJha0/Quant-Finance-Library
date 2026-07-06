@@ -1,6 +1,20 @@
 # Changelog
 
-## v1.4.1 (2026-07-06)
+## Unreleased
+
+- **HftOrderBook** (`orderbook`): venue-grade matching engine — dense
+  integer-tick price ladder with per-side occupancy bitmaps, pooled
+  intrusive order nodes, primitive open-addressing id map with
+  backward-shift deletion, single primitive trade sink; zero allocation in
+  steady state (allocation-counter test) and correctness pinned by a
+  model-based equivalence test against the readable reference `OrderBook`
+  (identical random operation streams → identical books and traded volume).
+  Measured by the new `HftBookBenchmark`: ~204 ns/op (p99 504 ns) on a
+  70/20/10 add/cancel/aggress mix, 10M+ fills/sec, 7M+ add/cancel ops/sec
+  over a 20,001-level band; the full session also completes under Epsilon
+  GC. Prompted by an external reviewer correctly noting the reference
+  book's allocation profile — the participant/venue boundary is now both
+  documented AND covered on the venue side.
 
 The memory-model honesty patch: the pre-trade risk gate is now provably
 safe under the multi-threaded wiring it was always documented to serve,

@@ -39,7 +39,7 @@ javadoc form (rendered on the docs site under `api/`).
 | `fx` | FX conventions, curves, instruments, e-FX | `CurrencyPair`, `SwapPointsCurve`, `FxSwap`, `Ndf`, `FxVolSurface`, `FixingRisk`, `AggregatedBook`, `CrossRateEngine` | `CurrencyPairTest`, `SwapPointsCurveTest`, `FxVolSurfaceTest`, `FxSwapNdfTest`, `FixingRiskCrossRateTest`, `AggregatedBookTest` (incl. zero-alloc proof) |
 | `marketdata` | Market data transport | HFT lane: `HftMarketDataBus`, `TickRingBuffer`, `SymbolRegistry`; convenience: `MarketDataProcessor`, `RingBuffer`, `HistoricalDataStore` | `HftPathTest`, `MarketDataTest`, `RingBufferStressTest` |
 | `indicators` | Technical analysis | `Indicators` (21 batch), `StreamingIndicators` (O(1) live) | `IndicatorsTest`, `StreamingIndicatorsTest` (batch/stream parity) |
-| `orderbook` | Matching engine + book analytics | `OrderBook`, `BookAnalytics`, `Side` | `OrderBookTest`, `OrderBookInvariantTest` (model-based fuzz) |
+| `orderbook` | Matching engines (research + venue-grade) + book analytics | `OrderBook` (readable reference), `HftOrderBook` (tick ladder, pooled nodes, zero-alloc), `BookAnalytics`, `Side` | `OrderBookTest`, `OrderBookInvariantTest` (model-based fuzz), `HftOrderBookTest` (equivalence vs reference + zero-alloc proof) |
 | `alpha` | Factor research pipeline (signal → IC → validation → cost-aware backtest → construction → report) | `AlphaContext`, `AlphaFactor`, `Factors`, `SignalEvaluator`, `AlphaValidation`, `AlphaBacktester`, `PortfolioConstruction`, `AlphaReport` | `FactorsTest`, `SignalEvaluatorTest`, `AlphaValidationTest`, `PortfolioConstructionTest`, `AlphaBacktesterReportTest` |
 | `microstructure` | Impact, queues, TCA, optimal execution, exchange mechanics | `MarketImpactModel`, `QueueModel`, `TransactionCostAnalyzer`, `AlmgrenChriss`, `TickSizeSchedule`, `Auction` | `MicrostructureTest`, `AlmgrenChrissTest`, `TickSizeAuctionTest` |
 | `pricing` | Fair value & derivatives pricing | `BlackScholes`, `VolSurface`, `SabrModel`, `BinomialTree`, `FairValueEngine`, `TriangularArbitrage`, `ForwardCurve`, `VannaVolga`, `DigitalOption`, `TouchOption`, `BarrierOption`, `DividendSchedule`, `IncrementalGreeks` | `BlackScholesTest`, `VolSurfaceTest`, `AmericanAndSabrTest`, `PricingTest`, `ExoticOptionsTest` (MC cross-checked), `VannaVolgaTest`, `DividendScheduleTest`, `IncrementalGreeksTest` |
@@ -63,7 +63,7 @@ javadoc form (rendered on the docs site under `api/`).
 | `fix` | FIX 4.4 engine | `FixSession` (+persistence: `FileSessionStore`), `FixMessage`, typed app messages | `FixMessageTest`, `FixSessionTest`, `FixPersistenceTest`, `FixProtocolExtrasTest` |
 | `report` | Reporting | `ReportGenerator`, HTML/CSV/PDF/XLSX exporters, `SvgCharts` | `ReportTest`, `SvgChartsTest` |
 | `cli` | Command line | `Main` (backtest / walkforward / report) | `CliTest` |
-| `examples` | Runnable demos & benchmarks (coverage-excluded) | `QuickStartDemo`, `HftLatencyBenchmark`, `HftOrderBenchmark`, `HftQuoterBenchmark` | run manually / bench workflow |
+| `examples` | Runnable demos & benchmarks (coverage-excluded) | `QuickStartDemo`, `HftLatencyBenchmark`, `HftOrderBenchmark`, `HftQuoterBenchmark`, `HftBookBenchmark` | run manually / bench workflow |
 
 ## Design invariants worth knowing
 

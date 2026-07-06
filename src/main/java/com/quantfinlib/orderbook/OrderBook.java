@@ -23,11 +23,11 @@ import java.util.ArrayDeque;
  * order on the hot path ever touches this class. Internally it deliberately
  * favors clarity over allocation discipline ({@code TreeMap<Double,…>}
  * boxing, per-order objects, iterators) — adequate for simulation, and
- * exactly what a venue-grade core must NOT do. A venue-grade book (dense
- * integer-tick price ladder, pooled intrusive order nodes, primitive
- * open-addressing id map, zero iterators) is a documented non-goal today —
- * see {@code docs/ULTRA_LOW_LATENCY.md}, "where this repository deliberately
- * stops".</p>
+ * exactly what a venue-grade core must NOT do. The venue-grade sibling is
+ * {@link HftOrderBook} (dense integer-tick ladder, pooled intrusive nodes,
+ * primitive id map, zero allocation) — and its correctness is defined BY
+ * this class: a model-based equivalence test drives both books with
+ * identical random operation streams and demands identical state.</p>
  *
  * <p>Keeps message counters (orders, cancels, trades) for order-to-trade
  * ratio and surveillance analytics. Single-threaded by design: drive it from

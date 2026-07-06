@@ -49,3 +49,12 @@ jobs:
               com.quantfinlib.examples.HftQuoterBenchmark
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: HFT matching engine benchmark
+        run: |
+          {
+            echo '## HFT matching engine benchmark (shared runner — indicative only)'
+            echo '```'
+            java -Xms1g -Xmx1g -XX:+AlwaysPreTouch -cp target/classes \
+              com.quantfinlib.examples.HftBookBenchmark
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"

@@ -134,17 +134,24 @@ The frontier, in ascending order of commitment:
 
 ## Where this repository deliberately stops
 
-**The venue side.** The measured sub-microsecond numbers are all
+**The venue side — two books, two lanes.** The headline sub-microsecond numbers are
 *participant-side*: tick in → strategy/quoter decision → risk gate → order ring →
-venue adapter out. In that architecture, matching happens at the exchange — so the
-matching engine in `orderbook.OrderBook` is a *research-grade venue model* (fuzz
-tests, queue analytics, simulation), deliberately written for clarity
-(`TreeMap`, per-order objects, iterators) rather than allocation discipline, and it
-sits on no measured path. A venue-grade matching core is a different artifact with a
-known design — dense integer-tick price ladder, pooled intrusive order nodes,
-primitive open-addressing order-id map, zero iterators or boxing — and would be the
-natural next component if operating a venue (or an internalizing dark pool) ever
-became a goal here.
+venue adapter out; in that architecture matching happens at the exchange. The library
+ships both venue representations explicitly:
+
+- `orderbook.OrderBook` — the *research-grade* model (fuzz tests, queue analytics,
+  simulation): deliberately written for clarity (`TreeMap`, per-order objects,
+  iterators), and on no measured path;
+- `orderbook.HftOrderBook` — the *venue-grade* core: dense integer-tick price ladder
+  with per-side occupancy bitmaps, pooled intrusive order nodes, a primitive
+  open-addressing id map with backward-shift deletion, zero iterators/boxing, and
+  zero steady-state allocation (allocation-counter test, like every hot-path claim).
+  Correctness is pinned by a model-based equivalence test that drives both books
+  with identical random operation streams — the readable book is the executable
+  specification of the fast one. Measured (`HftBookBenchmark`, same Windows box):
+  ~204 ns median per operation, 10M+ fills/sec, 7M+ add/cancel ops/sec across a
+  20,001-level band; the full session also completes under Epsilon GC (5.6M orders,
+  5.3M trades, collector never ran).
 
 **The platform.** Zero runtime dependencies and pure JDK are design constraints of this
 library. Kernel bypass, affinity pinning, FFM-based NIC access, and hardware are all

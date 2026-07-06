@@ -635,7 +635,8 @@ latency-critical trading:
 | `AutoHedger` (`trading`) | Live position-band hedger: band breach on any tick fires a flattening order for the excess through the fast lane, with per-symbol cooldown while the hedge fill is in flight |
 | `AggregatedBook` + `CrossRateEngine` (`fx`) | Multi-venue composite BBO with venue attribution (primitive arrays, zero alloc per quote, crossed composites reported not hidden) and streaming synthetic crosses (EURJPY from EURUSD×USDJPY) chained on the bus consumer thread |
 | `IncrementalGreeks` (`pricing`) | Tick-fresh options risk without tick-frequency repricing: delta-gamma Taylor updates per tick (two multiplies, zero alloc), full Black-Scholes re-anchor off the hot path on drift |
-| `HiccupMonitor` (`util`) | jHiccup-style platform stall attribution: all three benchmarks print a hiccup summary so tail outliers are correctly attributed to GC/safepoints/scheduler vs code (on the Windows dev box: benchmark max 541µs vs platform hiccups up to 1.6ms — the platform owns the tail) |
+| `HftOrderBook` (`orderbook`) | Venue-grade matching engine: dense integer-tick price ladder with occupancy bitmaps, pooled intrusive order nodes, primitive open-addressing id map (backward-shift deletion), zero allocation — ~204ns/op, 10M+ fills/sec; a model-based equivalence test pins it to the readable reference `OrderBook` |
+| `HiccupMonitor` (`util`) | jHiccup-style platform stall attribution: all four benchmarks print a hiccup summary so tail outliers are correctly attributed to GC/safepoints/scheduler vs code (on the Windows dev box: benchmark max 541µs vs platform hiccups up to 1.6ms — the platform owns the tail) |
 
 ```java
 try (HftMarketDataBus bus = new HftMarketDataBus(1 << 16, 16, /*busySpin*/ true)) {
@@ -668,6 +669,11 @@ Order entry (HftOrderBenchmark):
 Market making (HftQuoterBenchmark):
   Tick-to-two-sided-quote:     p50=592ns  p99=912ns  p99.9=4.5us
                                (tick -> bus -> quoter: skew + grid snap -> risk gate x2 -> order ring -> venue, BOTH sides)
+
+Matching engine (HftBookBenchmark, venue side):
+  Per-operation latency:       p50=204ns  p99=504ns (70/20/10 add/cancel/aggress mix)
+  Matching:                    10M+ fills/sec;  Passive churn: 7M+ add/cancel ops/sec
+                               (also completes under Epsilon GC: 5.6M orders, GC never ran)
 ```
 
 Reproduce with:
@@ -676,6 +682,7 @@ Reproduce with:
 java -Xms512m -Xmx512m -XX:+AlwaysPreTouch -cp target/classes com.quantfinlib.examples.HftLatencyBenchmark
 java -Xms512m -Xmx512m -XX:+AlwaysPreTouch -cp target/classes com.quantfinlib.examples.HftOrderBenchmark
 java -Xms512m -Xmx512m -XX:+AlwaysPreTouch -cp target/classes com.quantfinlib.examples.HftQuoterBenchmark
+java -Xms1g -Xmx1g -XX:+AlwaysPreTouch -cp target/classes com.quantfinlib.examples.HftBookBenchmark
 ```
 
 Steady-state the hot path allocates nothing, so GC choice barely matters; for
@@ -694,7 +701,9 @@ workflow), and the kernel-bypass/off-heap/hardware frontier beyond a pure-JDK li
 ```
 com.quantfinlib
 ├── core          Bar, BarSeries (primitive-array OHLCV time series)
-├── orderbook     OrderBook matching engine, BookAnalytics, Side, LimitOrder
+├── orderbook     OrderBook (research matching model), HftOrderBook (venue-
+│                 grade: tick ladder + pooled nodes, zero-alloc, 10M+ fills/s),
+│                 BookAnalytics, Side, LimitOrder
 ├── alpha         Factor research pipeline: Factors (9 signals), SignalEvaluator
 │                 (IC/IR/turnover), AlphaValidation (walk-forward, CV, Monte
 │                 Carlo, sensitivity), AlphaBacktester (cost-aware),
