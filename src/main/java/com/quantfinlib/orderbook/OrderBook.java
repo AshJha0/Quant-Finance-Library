@@ -14,6 +14,21 @@ import java.util.ArrayDeque;
  * placement, cancellation and execution so microstructure effects — spread
  * dynamics, queue priority, book sweeps — can be studied directly.
  *
+ * <p><b>Which lane this is in</b>: this is the <em>research-grade venue
+ * model</em> — used by the microstructure fuzz tests, queue analytics and
+ * simulations — NOT part of the measured ultra-low-latency path. The
+ * library's sub-microsecond numbers are <em>participant-side</em>
+ * (tick → strategy/quoter → risk gate → order ring → venue adapter); in that
+ * architecture matching happens at the exchange, not in this process, so no
+ * order on the hot path ever touches this class. Internally it deliberately
+ * favors clarity over allocation discipline ({@code TreeMap<Double,…>}
+ * boxing, per-order objects, iterators) — adequate for simulation, and
+ * exactly what a venue-grade core must NOT do. A venue-grade book (dense
+ * integer-tick price ladder, pooled intrusive order nodes, primitive
+ * open-addressing id map, zero iterators) is a documented non-goal today —
+ * see {@code docs/ULTRA_LOW_LATENCY.md}, "where this repository deliberately
+ * stops".</p>
+ *
  * <p>Keeps message counters (orders, cancels, trades) for order-to-trade
  * ratio and surveillance analytics. Single-threaded by design: drive it from
  * one strategy/simulation thread (or the HFT bus consumer thread).</p>

@@ -134,10 +134,22 @@ The frontier, in ascending order of commitment:
 
 ## Where this repository deliberately stops
 
-Zero runtime dependencies and pure JDK are design constraints of this library. Kernel
-bypass, affinity pinning, FFM-based NIC access, and hardware are all incompatible with
-those constraints or with portability — they belong to a deployment, not to this
-codebase. The seams to attach them are already in place:
+**The venue side.** The measured sub-microsecond numbers are all
+*participant-side*: tick in → strategy/quoter decision → risk gate → order ring →
+venue adapter out. In that architecture, matching happens at the exchange — so the
+matching engine in `orderbook.OrderBook` is a *research-grade venue model* (fuzz
+tests, queue analytics, simulation), deliberately written for clarity
+(`TreeMap`, per-order objects, iterators) rather than allocation discipline, and it
+sits on no measured path. A venue-grade matching core is a different artifact with a
+known design — dense integer-tick price ladder, pooled intrusive order nodes,
+primitive open-addressing order-id map, zero iterators or boxing — and would be the
+natural next component if operating a venue (or an internalizing dark pool) ever
+became a goal here.
+
+**The platform.** Zero runtime dependencies and pure JDK are design constraints of this
+library. Kernel bypass, affinity pinning, FFM-based NIC access, and hardware are all
+incompatible with those constraints or with portability — they belong to a deployment,
+not to this codebase. The seams to attach them are already in place:
 
 - market data in: publish into `HftMarketDataBus` from any source (see `sbe.BinaryMarketDataClient`),
 - orders out: implement `trading.OrderListener` (see `sbe.BinaryOrderPublisher`),
