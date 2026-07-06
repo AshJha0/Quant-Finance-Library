@@ -59,6 +59,16 @@ public final class AlphaValidation {
      * candidate with the best training-window mean IC and scores it on the
      * next {@code testBars} unseen bars.
      *
+     * <p>Evaluation dates lie on ONE global grid ({@code startIndex},
+     * stepping by the horizon) shared by every fold: consecutive folds'
+     * training windows overlap by {@code trainBars − testBars}, so scoring
+     * per fold would recompute the same (candidate, date) work up to
+     * {@code trainBars/testBars} times — instead the whole IC matrix is
+     * computed once (forward returns shared across candidates, too) and
+     * folds average slices of it. Window containment still holds: a date
+     * contributes to a window only when its ENTIRE forward window fits
+     * inside it.</p>
+     *
      * @param candidates the factor variants competing (e.g. one factor
      *                   across a lookback grid)
      */
@@ -69,6 +79,9 @@ public final class AlphaValidation {
             throw new IllegalArgumentException(
                     "need candidates and train/test windows longer than the horizon");
         }
+        int[] dates = grid(ctx, startIndex, horizon);
+        double[][] ic = icMatrix(ctx, candidates, dates, horizon);
+
         List<Fold> folds = new ArrayList<>();
         double isSum = 0;
         double oosSum = 0;
@@ -77,16 +90,16 @@ public final class AlphaValidation {
              trainStart += testBars) {
             int testStart = trainStart + trainBars;
             int testEnd = testStart + testBars;
-            // Model selection happens STRICTLY inside the training window
-            // (meanIc keeps the whole forward window inside it, too).
+            // Model selection happens STRICTLY inside the training window:
+            // only dates whose forward window fits before testStart count.
             AlphaFactor best = null;
             double bestIc = Double.NEGATIVE_INFINITY;
-            for (AlphaFactor candidate : candidates) {
-                double ic = meanIc(ctx, candidate, trainStart, testStart, horizon);
+            for (int c = 0; c < candidates.size(); c++) {
+                double mean = windowMean(ic[c], dates, trainStart, testStart, horizon);
                 // NaN (factor entirely in warm-up over this window) never wins.
-                if (!Double.isNaN(ic) && ic > bestIc) {
-                    bestIc = ic;
-                    best = candidate;
+                if (!Double.isNaN(mean) && mean > bestIc) {
+                    bestIc = mean;
+                    best = candidates.get(c);
                 }
             }
             if (best == null) {
@@ -94,7 +107,8 @@ public final class AlphaValidation {
                         "no candidate produced a training IC in fold starting at " + trainStart
                                 + " — factor warm-up likely exceeds the training window");
             }
-            double oos = meanIc(ctx, best, testStart, testEnd, horizon);
+            double oos = windowMean(ic[candidates.indexOf(best)], dates,
+                    testStart, testEnd, horizon);
             folds.add(new Fold(trainStart, testStart, testEnd, best.name(), bestIc, oos));
             isSum += bestIc;
             oosSum += oos;
@@ -104,6 +118,50 @@ public final class AlphaValidation {
         }
         return new WalkForwardResult(List.copyOf(folds),
                 isSum / folds.size(), oosSum / folds.size());
+    }
+
+    /** Evaluation dates: startIndex, stepping by horizon, forward window in-sample. */
+    private static int[] grid(AlphaContext ctx, int startIndex, int horizon) {
+        int count = 0;
+        for (int t = startIndex; t + horizon < ctx.bars(); t += horizon) {
+            count++;
+        }
+        int[] dates = new int[count];
+        int i = 0;
+        for (int t = startIndex; t + horizon < ctx.bars(); t += horizon) {
+            dates[i++] = t;
+        }
+        return dates;
+    }
+
+    /**
+     * Per-candidate IC at every grid date, computed ONCE: forward returns
+     * are candidate-independent and shared across the whole sweep.
+     */
+    private static double[][] icMatrix(AlphaContext ctx, List<AlphaFactor> candidates,
+                                       int[] dates, int horizon) {
+        double[][] ic = new double[candidates.size()][dates.length];
+        for (int d = 0; d < dates.length; d++) {
+            double[] fwd = SignalEvaluator.forwardReturns(ctx, dates[d], horizon);
+            for (int c = 0; c < candidates.size(); c++) {
+                ic[c][d] = SignalEvaluator.spearman(candidates.get(c).scores(ctx, dates[d]), fwd);
+            }
+        }
+        return ic;
+    }
+
+    /** Mean IC over grid dates whose whole forward window fits in [from, to). */
+    private static double windowMean(double[] ic, int[] dates, int from, int to, int horizon) {
+        double sum = 0;
+        int n = 0;
+        for (int d = 0; d < dates.length; d++) {
+            int t = dates[d];
+            if (t >= from && t + horizon < to && !Double.isNaN(ic[d])) {
+                sum += ic[d];
+                n++;
+            }
+        }
+        return n == 0 ? Double.NaN : sum / n;
     }
 
     // ------------------------------------------------------------------
@@ -247,11 +305,15 @@ public final class AlphaValidation {
         if (sweep.size() < 2) {
             throw new IllegalArgumentException("a sweep needs at least 2 candidates");
         }
+        // Shared grid + shared forward returns across the sweep — the same
+        // caching walkForward uses: forward returns are candidate-free.
+        int[] dates = grid(ctx, startIndex, horizon);
+        double[][] icByCandidate = icMatrix(ctx, sweep, dates, horizon);
         String[] names = new String[sweep.size()];
         double[] ics = new double[sweep.size()];
         for (int i = 0; i < sweep.size(); i++) {
             names[i] = sweep.get(i).name();
-            ics[i] = meanIc(ctx, sweep.get(i), startIndex, ctx.bars(), horizon);
+            ics[i] = windowMean(icByCandidate[i], dates, startIndex, ctx.bars(), horizon);
         }
         double worstDrop = 0;
         for (int i = 1; i < ics.length; i++) {

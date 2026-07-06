@@ -94,36 +94,39 @@ public final class CrossSectionalMomentum implements PortfolioStrategy {
 
         // The point-in-time step: rank ONLY the names that are members at
         // this bar. Dead and dropped stocks never enter the cross-section.
-        List<String> candidates = new ArrayList<>();
-        List<Double> momentum = new ArrayList<>();
-        for (String symbol : symbols) {
+        // Primitive arrays + MathUtils.pairSort: no boxed Doubles/Integers
+        // through a comparator per rebalance.
+        int n = 0;
+        double[] momentum = new double[symbols.size()];
+        int[] candidate = new int[symbols.size()];   // indices into symbols
+        for (int i = 0; i < symbols.size(); i++) {
+            String symbol = symbols.get(i);
             if (universe != null && !universe.isMember(symbol, now)) {
                 continue;
             }
             BarSeries s = data.get(symbol);
             double past = s.close(index - config.lookbackBars());
             double recent = s.close(index - config.skipBars());
-            candidates.add(symbol);
-            momentum.add(recent / past - 1);
+            momentum[n] = recent / past - 1;
+            candidate[n] = i;
+            n++;
         }
         // Both sides need at least one name each without overlapping.
-        int side = Math.min(config.perSide(), candidates.size() / 2);
+        int side = Math.min(config.perSide(), n / 2);
         if (side == 0) {
             return Map.of();
         }
 
-        // Rank descending by momentum (indices into candidates).
-        Integer[] order = new Integer[candidates.size()];
-        for (int i = 0; i < order.length; i++) {
-            order[i] = i;
-        }
-        java.util.Arrays.sort(order, (a, b) -> Double.compare(momentum.get(b), momentum.get(a)));
+        // Ascending sort: losers at the front, winners at the back.
+        double[] keys = java.util.Arrays.copyOf(momentum, n);
+        int[] order = java.util.Arrays.copyOf(candidate, n);
+        com.quantfinlib.util.MathUtils.pairSort(keys, order);
 
         Map<String, Double> weights = new HashMap<>();
         double w = config.grossPerSide() / side;
         for (int i = 0; i < side; i++) {
-            weights.put(candidates.get(order[i]), w);                       // winners long
-            weights.put(candidates.get(order[order.length - 1 - i]), -w);   // losers short
+            weights.put(symbols.get(order[n - 1 - i]), w);   // winners long
+            weights.put(symbols.get(order[i]), -w);          // losers short
         }
         return weights;
     }

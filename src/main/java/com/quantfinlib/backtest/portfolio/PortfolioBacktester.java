@@ -2,6 +2,7 @@ package com.quantfinlib.backtest.portfolio;
 
 import com.quantfinlib.backtest.PerformanceAnalytics;
 import com.quantfinlib.backtest.PerformanceMetrics;
+import com.quantfinlib.backtest.TradeCostModel;
 import com.quantfinlib.core.BarSeries;
 import com.quantfinlib.data.CorporateActions;
 import com.quantfinlib.data.PointInTimeUniverse;
@@ -48,15 +49,36 @@ import java.util.Set;
  */
 public final class PortfolioBacktester {
 
+    /**
+     * {@code costModel}, when set, supersedes the flat {@code commissionRate}
+     * for every trade (rebalances and forced index-drop sales alike) — the
+     * shared {@link TradeCostModel} seam that makes a run simultaneously
+     * survivorship-aware AND execution-aware. Null keeps the legacy flat
+     * commission behavior exactly.
+     */
     public record Config(double initialCapital, double commissionRate,
-                         int rebalanceEveryBars, int periodsPerYear) {
+                         int rebalanceEveryBars, int periodsPerYear,
+                         TradeCostModel costModel) {
 
         public static Config defaults() {
-            return new Config(1_000_000, 0.001, 1, 252);
+            return new Config(1_000_000, 0.001, 1, 252, null);
         }
 
         public Config withRebalanceEvery(int bars) {
-            return new Config(initialCapital, commissionRate, bars, periodsPerYear);
+            return new Config(initialCapital, commissionRate, bars, periodsPerYear, costModel);
+        }
+
+        /** Pluggable per-trade costs (e.g. {@code TradeCostModel.institutional}). */
+        public Config withCostModel(TradeCostModel model) {
+            return new Config(initialCapital, commissionRate, rebalanceEveryBars,
+                    periodsPerYear, model);
+        }
+
+        /** One-way trade fee for {@code notional} of {@code series} at bar {@code index}. */
+        double fee(com.quantfinlib.core.BarSeries series, int index, double notional) {
+            return costModel != null
+                    ? notional * costModel.costBps(series, index, notional) / 1e4
+                    : notional * commissionRate;
         }
     }
 
@@ -214,7 +236,7 @@ public final class PortfolioBacktester {
                     if (qty != 0 && !dead.contains(symbol) && !universe.isMember(symbol, now)) {
                         double close = data.get(symbol).close(i);
                         double notional = Math.abs(qty) * close;
-                        double fee = notional * config.commissionRate();
+                        double fee = config.fee(data.get(symbol), i, notional);
                         cash += qty * close - fee;
                         totalCosts += fee;
                         totalTurnover += notional;
@@ -243,7 +265,7 @@ public final class PortfolioBacktester {
                         continue;
                     }
                     double notional = Math.abs(delta) * close;
-                    double fee = notional * config.commissionRate();
+                    double fee = config.fee(data.get(symbol), i, notional);
                     cash -= delta * close + fee;
                     totalCosts += fee;
                     totalTurnover += notional;

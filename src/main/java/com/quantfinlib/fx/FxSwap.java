@@ -72,16 +72,9 @@ public final class FxSwap {
 
     private static LocalDate dateOf(SwapPointsCurve curve, String tenor) {
         // Anchor tenor dates at the curve's own spot (same convention the
-        // curve builder used), by resolving through the pair from a trade
-        // date that maps to this spot.
+        // curve builder used) via the pair's spot inversion.
         CurrencyPair pair = curve.pair();
-        LocalDate trade = curve.spotDate();
-        for (int i = 0; i < pair.spotLagDays(); i++) {
-            do {
-                trade = trade.minusDays(1);
-            } while (!pair.isJointBusinessDay(trade));
-        }
-        return pair.tenorDate(trade, tenor);
+        return pair.tenorDate(pair.tradeDateForSpot(curve.spotDate()), tenor);
     }
 
     // ------------------------------------------------------------------

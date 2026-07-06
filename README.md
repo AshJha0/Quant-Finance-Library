@@ -35,8 +35,24 @@ java -cp target/classes com.quantfinlib.examples.QuickStartDemo # end-to-end tou
 mvn package && java -jar target/quant-finance-library-*.jar help   # runnable CLI jar
 ```
 
-Tagged releases publish the library, sources and javadoc jars automatically
-(GitHub Actions → Releases); see [CHANGELOG.md](CHANGELOG.md).
+**See it trade in five minutes** (live Binance data → streaming strategy → paper
+venue → browser dashboard, no keys or accounts needed):
+
+```bash
+mvn package -DskipTests
+java -cp target/classes com.quantfinlib.examples.LiveTradingDemo
+# → open http://localhost:8080
+```
+
+**Learn by task, not by API**: [docs/COOKBOOK.md](docs/COOKBOOK.md) — nine complete
+recipes under 20 lines each, from "backtest your CSV" through survivorship-honest
+factor research to nanosecond market making.
+
+**Getting the library**: tagged releases publish runnable/sources/javadoc jars
+automatically (GitHub Actions → Releases); JitPack works today
+(`com.github.AshJha0:Quant-Finance-Library:v1.5.0`); Maven Central publishing is
+wired and one account-setup away — see [docs/PUBLISHING.md](docs/PUBLISHING.md).
+See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ## The 11 Capabilities
 
@@ -605,7 +621,10 @@ Beyond spot, the library speaks the market's own conventions per asset class:
   unknown involuntary proceeds), mergers convert to cash and/or acquirer shares at deal
   terms, index drops force liquidation. Wired into `PortfolioBacktester` (universe-aware
   overload, plus explicit **cash dividends on the ex-date** — shorts pay) and the
-  screener (`StockScreener.membersAsOf`). Membership/event data loads from a documented
+  screener (`StockScreener.membersAsOf`). With
+  `Config.withCostModel(TradeCostModel.institutional(...))` the same run also charges
+  commission + spread + slippage + square-root market impact — survivorship-aware and
+  execution-aware in one backtest. Membership/event data loads from a documented
   CSV format (`data.UniverseCsvLoader`: MEMBER/DELIST/MERGER rows, ISO or epoch dates —
   free constituent lists like `datasets/s-and-p-500-companies` seed it, though only
   point-in-time histories remove the bias), and
@@ -694,7 +713,11 @@ latency-stack reference — what's implemented here, the JVM flags, the kernel/C
 ([scripts/linux-tune.sh](scripts/linux-tune.sh), plus a manual `Benchmarks (Linux)`
 workflow), and the kernel-bypass/off-heap/hardware frontier beyond a pure-JDK library.
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) maps every package (each also carries
-`package-info.java` javadoc) to its classes and tests.
+`package-info.java` javadoc) to its classes and tests, and
+[docs/DIAGRAMS.md](docs/DIAGRAMS.md) renders the architecture visually — the two-lane
+design, the measured hot path end to end, the alpha pipeline, per-bar survivorship event
+ordering, the matching engine's internals, and the FX instrument map (Mermaid, renders
+directly on GitHub).
 
 ## Project Layout
 

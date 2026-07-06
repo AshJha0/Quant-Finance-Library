@@ -4,7 +4,6 @@ import com.quantfinlib.backtest.PerformanceAnalytics;
 import com.quantfinlib.backtest.PerformanceMetrics;
 import com.quantfinlib.core.BarSeries;
 import com.quantfinlib.microstructure.MarketImpactModel;
-import com.quantfinlib.util.MathUtils;
 
 import java.util.List;
 
@@ -30,8 +29,12 @@ import java.util.List;
  * compound multiplicatively from 1.0): simpler and adequate for factor
  * research. For share-level accounting with lifecycle events, feed the
  * constructed weights into {@code backtest.portfolio.PortfolioBacktester}'s
- * survivorship-aware overload instead — the two engines are complementary,
- * not duplicates.</p>
+ * survivorship-aware overload with
+ * {@code Config.withCostModel(TradeCostModel.institutional(...))} — since
+ * both engines share the same impact estimator
+ * ({@code MarketImpactModel.estimate}) and cost decomposition, a run over
+ * there is execution-aware AND survivorship-aware at once; this engine's
+ * added value is the per-component cost drag breakdown.</p>
  *
  * <p>Both gross and net curves are tracked, plus the cumulative drag of
  * each cost component — "which cost kills this signal" is the actionable
@@ -200,28 +203,21 @@ public final class AlphaBacktester {
     }
 
     /**
-     * Square-root-law impact for one name's trade: estimate ADV and daily
-     * vol from the trailing window, convert the traded equity fraction to
-     * shares, and ask {@code MarketImpactModel}. Names without volume data
-     * contribute zero impact (documented: impact needs ADV; absence of
-     * volume is a data gap, not free liquidity — flat costs still apply).
+     * Square-root-law impact for one name's trade, via the shared
+     * {@link MarketImpactModel#estimate} bridge (the same estimator
+     * {@code backtest.TradeCostModel.institutional} uses, so the alpha and
+     * portfolio engines can never disagree on impact). Names without volume
+     * data contribute zero impact — a data gap, not free liquidity; the
+     * flat costs still apply.
      */
     private static double impactBps(AlphaContext ctx, int symbol, int index, double tradedFraction,
                                     Config config) {
         BarSeries s = ctx.series(symbol);
-        int window = config.impactWindow();
-        double advSum = 0;
-        double[] returns = new double[window];
-        for (int j = 0; j < window; j++) {
-            advSum += s.volume(index - window + j + 1);
-            returns[j] = ctx.returnOver(symbol, index - window + j, index - window + j + 1);
-        }
-        double adv = advSum / window;
-        if (adv <= 0) {
+        MarketImpactModel impact = MarketImpactModel.estimate(s, index, config.impactWindow());
+        if (impact == null) {
             return 0;
         }
-        double dailyVol = MathUtils.stdDev(returns);
         double shares = tradedFraction * config.capital() / s.close(index);
-        return new MarketImpactModel(adv, dailyVol).squareRootImpactBps(shares);
+        return impact.squareRootImpactBps(shares);
     }
 }

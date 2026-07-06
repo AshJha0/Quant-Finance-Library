@@ -1,7 +1,103 @@
 # Changelog
 
-## Unreleased
+## v1.5.0 (2026-07-06)
 
+The scale-and-usability release: the venue-grade matching engine, horizontal
+sharding with firm-wide risk, the garbage-free FIX round trip, unified trade
+costs across engines, CI-enforced performance floors, architecture diagrams,
+a task-shaped cookbook, and a five-minute live trading demo — plus two full
+review rounds' worth of fixes with every finding regression-tested.
+
+- **Real-world usability**: `docs/COOKBOOK.md` (nine task-shaped recipes,
+  each complete and under ~20 lines — CSV backtests, screening, factor IC
+  + overfitting defenses, survivorship-honest portfolios, FX derivatives,
+  live paper trading, the nanosecond hot path, capture/replay, venue
+  matching); `examples.LiveTradingDemo` (live Binance trades → streaming
+  EMA crossover → paper venue → browser dashboard, one command, no keys);
+  Maven Central publishing wired as an inert `central-release` profile
+  (gpg + central-publishing plugins) with the owner's one-time setup steps
+  in `docs/PUBLISHING.md`; README gains the five-minute demo, cookbook
+  pointer and getting-the-library section (JitPack usable today).
+- **Load & performance test layer** (`trading.LoadAndSoakTest` + promoted
+  benchmarks): CI-enforced throughput FLOORS as regression tripwires
+  (~20× below desktop-measured, so shared runners never flake but an
+  accidental lock/allocation/O(n) slip on a hot path fails the build:
+  bus ≥ 500k ticks/s, gateway ≥ 1M orders/s, matching engine ≥ 500k ops/s,
+  full quoting pipeline ≥ 100k ticks/s with ZERO dropped quotes); a 5M-op
+  soak test asserting the heap ends where it started (the leak/drip
+  detector complementing the allocation-counter proofs); and an overload
+  test with deliberately tiny rings proving the degrade-and-count contract
+  (publish false / submit 0 / counters tick, nothing throws, full recovery
+  after the burst). The scale probes are promoted to committed benchmarks:
+  `examples.ScaleBenchmark` (N crosses / conflation sweep) and
+  `examples.ShardScaleBenchmark` (shard-count sweep).
+- **Horizontal scaling machinery** ("how scalable is this", answered with
+  code + measurements): `trading.ShardedTradingEngine` — N shared-nothing
+  bus→gate→gateway stacks behind one zero-alloc symbol-routing facade,
+  with multi-shard symbol registration for cross-leg co-location;
+  `HftRiskGate.kill()` gate-wide kill switch (`REJECT_KILLED`, one acquire
+  read on the check path) + `referencePrice`/`symbolCapacity` accessors;
+  `trading.GlobalRiskAggregator` — the firm-wide gross-notional circuit
+  breaker across every shard's gate (poll-based monitor over the gates'
+  already-acquire-readable state, hysteretic resume). Probed on a
+  12-core desktop: 1→2 shards +46% aggregate throughput with zero
+  cross-shard contention; the 4-shard plateau is core count + single
+  producer, documented as such.
+- **Hot-lane completeness audit** ("make every part ULL", answered
+  honestly): every package now has a DECLARED lane in the ULL doc's new
+  lane map — hot (proven zero-alloc), edge (buffered I/O adapters), or
+  research (clarity first, off any tick path by construction). The audit
+  found two components that genuinely belonged in the hot lane and weren't:
+  - **`fix.FixOrderEncoder`** — garbage-free FIX 4.4 NewOrderSingle
+    encoding for venues that only speak FIX: reusable byte buffer with the
+    BodyLength prefix written backwards, ASCII digit writers, prices as
+    scaled longs, per-day cached timestamp prefix, symbols pre-registered
+    as bytes. Round-trip-verified against the validated `FixMessage.parse`
+    (BodyLength + CheckSum checked) and allocation-proof tested.
+  - **`fix.FixExecReportView`** — the inbound half of the garbage-free FIX
+    round trip: a flyweight ExecutionReport reader over the framed bytes
+    (one pass, primitive getters, LastPx as a scaled long, symbol compared
+    in place) so fills feed `HftRiskGate.onFill` without a String or a
+    double anywhere. Proven field-identical to messages built by the
+    validated `FixMessage.Builder`, with a loud failure on truly fractional
+    quantities and the allocation-counter test.
+  - **`data.AsyncTickCapture`** — tick recording with file I/O moved off
+    the bus consumer thread through a private `TickRingBuffer` and writer
+    thread; backpressure drops-and-counts (`droppedTicks`) instead of ever
+    stalling the trading loop. `TickCapture`'s javadoc now states its
+    consumer-thread I/O trade-off and points here for trading sessions.
+- **`HftQuoter.Config.withMinMove`**: purely move-gated conflation (interval
+  gate set effectively infinite) — the fan-out control for dense synthetic
+  cross books. Scale-probed: 10,000 crosses over 200 direct pairs on one
+  shard run at ~410k inbound ticks/sec with a 2-pip gate (~99% of cross
+  updates suppressed, zero drops) vs ~50k ticks/sec quote-everything.
+  `withConflation`'s javadoc now warns about the pitfall this solves:
+  interval 0 disables conflation entirely (BOTH gates must pass to
+  suppress), it does not mean "suppress on move alone".
+- **Backlog burn-down** (the four deferred quality items, closed):
+  `BusinessCalendar.union` + `subtractBusinessDays` — the FX joint-calendar
+  rule lives in ONE place, with `CurrencyPair` delegating every roll
+  convention (and the triplicated walk-back loops in Ndf/FxSwap/
+  SwapPointsCurve replaced by `CurrencyPair.tradeDateForSpot`);
+  `HftQuoter.configureSymbol` — per-instrument half-spreads/skews/grids so
+  one quoter serves a mixed EURUSD/USDJPY book; `MathUtils.pairSort`
+  (primitive dual-array quicksort) replaces the boxed `Integer[]` sorts in
+  `CrossSectionalMomentum`, and `SignalEvaluator.ranks` computes midranks
+  via sorted-copy binary search — no boxing anywhere in the rank path;
+  `AlphaValidation.walkForward`/`parameterSensitivity` compute the IC
+  matrix once on a global date grid (scores per candidate-date evaluated
+  once, forward returns shared across candidates) instead of recomputing
+  per overlapping fold — up to ~trainBars/testBars× less factor work in
+  sweeps, with window containment (no train/test leakage) preserved.
+- **Unified trade costs** (`backtest.TradeCostModel`): one pluggable
+  per-trade cost definition shared by the engines — `flat(bps)` reproduces
+  the legacy commission exactly; `institutional(commission, halfSpread,
+  slippage, impactWindow)` adds square-root market impact from the shared
+  `MarketImpactModel.estimate` bar-data bridge (extracted from
+  AlphaBacktester, so the two engines can never disagree on impact).
+  `PortfolioBacktester.Config.withCostModel(...)` closes the review's
+  known gap: a single run is now survivorship-aware AND execution-aware —
+  lifecycle events and size-dependent costs together, proven by test.
 - **HftOrderBook** (`orderbook`): venue-grade matching engine — dense
   integer-tick price ladder with per-side occupancy bitmaps, pooled
   intrusive order nodes, primitive open-addressing id map with

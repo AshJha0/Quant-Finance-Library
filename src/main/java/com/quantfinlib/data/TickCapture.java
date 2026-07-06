@@ -14,7 +14,11 @@ import java.nio.file.Path;
  *
  * <p>Writing happens on the bus consumer thread through a 1 MB buffer
  * (~28 bytes/tick), which is comfortably below the bus's throughput; a disk
- * error surfaces as {@link UncheckedIOException} on that thread.</p>
+ * error surfaces as {@link UncheckedIOException} on that thread.
+ * <b>Latency note</b>: a page-cache writeback or disk hiccup therefore
+ * stalls the consumer thread. Fine for capture-only or research sessions;
+ * when the same bus is TRADING, use {@link AsyncTickCapture}, which moves
+ * the file I/O to a dedicated writer thread behind a ring.</p>
  */
 public final class TickCapture implements TickListener, AutoCloseable {
 

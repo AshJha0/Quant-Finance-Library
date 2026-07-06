@@ -127,6 +127,25 @@ class SignalEvaluatorTest {
     }
 
     @Test
+    void midranksHandleTiesExactly() {
+        // Ties in the scores: {5,1,1,3} → midranks {4, 1.5, 1.5, 3}. Against
+        // perfectly aligned returns the rank correlation is a known value —
+        // pins the primitive binary-search midrank rewrite to the exact
+        // classical formula.
+        double[] scores = {5, 1, 1, 3};
+        double[] fwd = {0.04, 0.01, 0.01, 0.03};   // same tie structure
+        assertEquals(1.0, SignalEvaluator.spearman(scores, fwd), 1e-12);
+        // Break the alignment: swap the return ranks of the tied pair's
+        // neighbors and the correlation must drop below 1 but stay exact.
+        double[] fwd2 = {0.03, 0.01, 0.01, 0.04};  // top two swapped
+        double rho = SignalEvaluator.spearman(scores, fwd2);
+        assertTrue(rho < 1.0 && rho > 0.5, "rho=" + rho);
+        // All-tied side: zero variance in ranks → MathUtils.correlation's
+        // zero-variance guard yields 0 (no information), not a fabricated sign.
+        assertEquals(0.0, SignalEvaluator.spearman(new double[]{2, 2, 2, 2}, fwd), 1e-12);
+    }
+
+    @Test
     void nanScoresAreDroppedPairwiseNotFabricated() {
         // Only two scored symbols → fewer than 3 complete pairs → no IC
         // observations → evaluation refuses rather than reporting noise.

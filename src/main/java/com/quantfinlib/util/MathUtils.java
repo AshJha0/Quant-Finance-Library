@@ -220,6 +220,82 @@ public final class MathUtils {
         return m2 == 0 ? 0 : m4 / (m2 * m2);
     }
 
+    /**
+     * Sorts {@code keys} ascending while permuting {@code values}
+     * identically — the primitive replacement for boxing an {@code Integer[]}
+     * index array through a comparator sort (no allocation beyond the
+     * caller's arrays, no boxed compares). Quicksort with median-of-three
+     * pivots and an insertion cutoff; NaN keys are not supported (callers
+     * filter NaN before ranking/selecting).
+     */
+    public static void pairSort(double[] keys, int[] values) {
+        if (keys.length != values.length) {
+            throw new IllegalArgumentException("keys and values must align");
+        }
+        pairSort(keys, values, 0, keys.length - 1);
+    }
+
+    private static void pairSort(double[] k, int[] v, int lo, int hi) {
+        while (hi - lo > 12) {
+            // Median-of-three pivot guards against sorted-input worst cases.
+            int mid = (lo + hi) >>> 1;
+            if (k[mid] < k[lo]) {
+                swap(k, v, lo, mid);
+            }
+            if (k[hi] < k[lo]) {
+                swap(k, v, lo, hi);
+            }
+            if (k[hi] < k[mid]) {
+                swap(k, v, mid, hi);
+            }
+            double pivot = k[mid];
+            int i = lo;
+            int j = hi;
+            while (i <= j) {
+                while (k[i] < pivot) {
+                    i++;
+                }
+                while (k[j] > pivot) {
+                    j--;
+                }
+                if (i <= j) {
+                    swap(k, v, i, j);
+                    i++;
+                    j--;
+                }
+            }
+            // Recurse into the smaller half, loop on the larger: O(log n) stack.
+            if (j - lo < hi - i) {
+                pairSort(k, v, lo, j);
+                lo = i;
+            } else {
+                pairSort(k, v, i, hi);
+                hi = j;
+            }
+        }
+        for (int i = lo + 1; i <= hi; i++) {   // insertion sort for small runs
+            double key = k[i];
+            int val = v[i];
+            int j = i - 1;
+            while (j >= lo && k[j] > key) {
+                k[j + 1] = k[j];
+                v[j + 1] = v[j];
+                j--;
+            }
+            k[j + 1] = key;
+            v[j + 1] = val;
+        }
+    }
+
+    private static void swap(double[] k, int[] v, int a, int b) {
+        double tk = k[a];
+        k[a] = k[b];
+        k[b] = tk;
+        int tv = v[a];
+        v[a] = v[b];
+        v[b] = tv;
+    }
+
     /** Standard normal density. */
     public static double normPdf(double x) {
         return Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI);

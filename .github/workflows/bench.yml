@@ -58,3 +58,16 @@ jobs:
               com.quantfinlib.examples.HftBookBenchmark
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Scale benchmarks (symbols, crosses, shards)
+        run: |
+          {
+            echo '## Scale benchmarks (shared runner — indicative only)'
+            echo '```'
+            java -Xms2g -Xmx2g -XX:+AlwaysPreTouch -cp target/classes \
+              com.quantfinlib.examples.ScaleBenchmark 100 2000000 0
+            java -Xms2g -Xmx2g -XX:+AlwaysPreTouch -cp target/classes \
+              com.quantfinlib.examples.ScaleBenchmark 10000 1000000 0.0002
+            java -Xms1g -Xmx1g -XX:+AlwaysPreTouch -cp target/classes \
+              com.quantfinlib.examples.ShardScaleBenchmark 2
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"

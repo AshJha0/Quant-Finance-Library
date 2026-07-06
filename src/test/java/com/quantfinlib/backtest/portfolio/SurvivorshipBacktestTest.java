@@ -53,7 +53,7 @@ class SurvivorshipBacktestTest {
 
     /** Rebalance once at bar 0 only; zero commission so arithmetic is exact. */
     private static PortfolioBacktester.Config config() {
-        return new PortfolioBacktester.Config(1_000_000, 0, BARS, 252);
+        return new PortfolioBacktester.Config(1_000_000, 0, BARS, 252, null);
     }
 
     @Test

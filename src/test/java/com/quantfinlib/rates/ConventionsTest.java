@@ -109,4 +109,30 @@ class ConventionsTest {
         assertEquals(LocalDate.of(2026, 7, 7),
                 BondPricer.settlementDate(LocalDate.of(2026, 7, 3), 2, cal));
     }
+
+    @Test
+    void unionCalendarBlocksEitherCentersHoliday() {
+        // The FX settlement rule as ONE calendar: a holiday in either center
+        // makes the day a non-business day of the union.
+        BusinessCalendar london = BusinessCalendar.withHolidays(LocalDate.of(2026, 8, 31));
+        BusinessCalendar newYork = BusinessCalendar.withHolidays(LocalDate.of(2026, 9, 7));
+        BusinessCalendar joint = london.union(newYork);
+        assertFalse(joint.isBusinessDay(LocalDate.of(2026, 8, 31))); // UK bank holiday
+        assertFalse(joint.isBusinessDay(LocalDate.of(2026, 9, 7)));  // US Labor Day
+        assertTrue(joint.isBusinessDay(LocalDate.of(2026, 9, 1)));   // open in both
+        // All conventions work unchanged on the union.
+        assertEquals(LocalDate.of(2026, 9, 1),
+                joint.roll(LocalDate.of(2026, 8, 30), BusinessCalendar.Roll.FOLLOWING));
+    }
+
+    @Test
+    void subtractBusinessDaysWalksBackOverHolidaysAndWeekends() {
+        BusinessCalendar cal = BusinessCalendar.withHolidays(LocalDate.of(2026, 7, 6)); // Monday
+        // From Wednesday 2026-07-08, 2 business days back: Tue 07-07, then
+        // (skipping the Monday holiday and the weekend) Friday 07-03.
+        assertEquals(LocalDate.of(2026, 7, 3),
+                cal.subtractBusinessDays(LocalDate.of(2026, 7, 8), 2));
+        assertEquals(LocalDate.of(2026, 7, 8),
+                cal.subtractBusinessDays(LocalDate.of(2026, 7, 8), 0));
+    }
 }

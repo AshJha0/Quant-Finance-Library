@@ -34,7 +34,8 @@ public final class HftRiskGate {
     public static final int REJECT_POSITION = 3;
     public static final int REJECT_PRICE_COLLAR = 4;
     public static final int REJECT_HALTED = 5;
-    private static final int REASONS = 6;
+    public static final int REJECT_KILLED = 6;
+    private static final int REASONS = 7;
 
     // Per-element VarHandles: cross-thread visibility without object
     // wrappers or boxing — the arrays stay primitive and cache-friendly.
@@ -49,6 +50,10 @@ public final class HftRiskGate {
     private final double[] referencePrices;  // NaN = no collar check
     private final boolean[] halted;
     private final long[] rejections = new long[REASONS];
+    // Gate-wide kill switch: flipped by a firm-level risk aggregator across
+    // shards; read with acquire semantics (a plain load on x86) as the very
+    // first check. One element so the VarHandle machinery is reused.
+    private final boolean[] killed = new boolean[1];
     private long maxOrderQuantity = Long.MAX_VALUE;
     private double maxOrderNotional = Double.MAX_VALUE;
     private long maxPositionQuantity = Long.MAX_VALUE;
@@ -91,6 +96,31 @@ public final class HftRiskGate {
         BOOLEANS.setRelease(halted, symbolId, isHalted);
     }
 
+    /**
+     * Gate-wide kill switch: every check rejects with {@link #REJECT_KILLED}
+     * until cleared. Callable from any thread — this is the lever a
+     * cross-shard {@link GlobalRiskAggregator} pulls when firm-wide
+     * exposure breaches its cap.
+     */
+    public void kill(boolean isKilled) {
+        BOOLEANS.setRelease(killed, 0, isKilled);
+    }
+
+    /** Whether the gate-wide kill switch is currently engaged. */
+    public boolean isKilled() {
+        return (boolean) BOOLEANS.getAcquire(killed, 0);
+    }
+
+    /** The collar reference for a symbol (NaN = unset) — readable anywhere. */
+    public double referencePrice(int symbolId) {
+        return (double) DOUBLES.getAcquire(referencePrices, symbolId);
+    }
+
+    /** Symbol capacity this gate was sized for (aggregators iterate to it). */
+    public int symbolCapacity() {
+        return positions.length;
+    }
+
     /** Updates the collar reference (e.g. from the market data bus). */
     public void setReferencePrice(int symbolId, double price) {
         DOUBLES.setRelease(referencePrices, symbolId, price);
@@ -105,6 +135,10 @@ public final class HftRiskGate {
      * Zero allocation; acquire loads only (free on x86).
      */
     public int check(int symbolId, Side side, long quantity, double price) {
+        if ((boolean) BOOLEANS.getAcquire(killed, 0)) {
+            bumpRejection(REJECT_KILLED);
+            return REJECT_KILLED;
+        }
         if ((boolean) BOOLEANS.getAcquire(halted, symbolId)) {
             bumpRejection(REJECT_HALTED);
             return REJECT_HALTED;
@@ -168,6 +202,7 @@ public final class HftRiskGate {
             case REJECT_POSITION -> "MAX_POSITION";
             case REJECT_PRICE_COLLAR -> "PRICE_COLLAR";
             case REJECT_HALTED -> "HALTED";
+            case REJECT_KILLED -> "KILLED";
             default -> "UNKNOWN(" + code + ")";
         };
     }

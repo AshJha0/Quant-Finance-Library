@@ -74,13 +74,8 @@ public final class Ndf {
     public static Ndf of(CurrencyPair pair, LocalDate tradeDate, String tenor,
                          double contractRate, double baseNotional) {
         LocalDate settlement = pair.tenorDate(tradeDate, tenor);
-        LocalDate fixing = settlement;
-        int lag = FIXING_LAG.getOrDefault(pair.quote(), 2);
-        for (int i = 0; i < lag; i++) {
-            do {
-                fixing = fixing.minusDays(1);
-            } while (!pair.quoteCalendar().isBusinessDay(fixing));
-        }
+        LocalDate fixing = pair.quoteCalendar().subtractBusinessDays(settlement,
+                FIXING_LAG.getOrDefault(pair.quote(), 2));
         return new Ndf(pair, baseNotional, contractRate, fixing, settlement);
     }
 

@@ -2,7 +2,10 @@
 
 One page per question: where does a capability live, what are its key classes, and where
 are its tests. Every package also carries a `package-info.java` with the same summary in
-javadoc form (rendered on the docs site under `api/`).
+javadoc form (rendered on the docs site under `api/`). For rendered visual versions of
+the flows below — the two-lane architecture, the measured hot path, the alpha pipeline,
+per-bar survivorship ordering, matching-engine internals, and the FX instrument map —
+see **[DIAGRAMS.md](DIAGRAMS.md)** (Mermaid, renders on GitHub).
 
 ## Data flow at a glance
 
@@ -49,7 +52,7 @@ javadoc form (rendered on the docs site under `api/`).
 | `hedging` | Hedging algorithms | `DeltaHedger`, `HedgingSimulator`, `GreekHedger`, `OptionsBook`, `MinimumVarianceHedge`, `FxHedger`, `PairsHedger`, `CointegrationTest` | `HedgingTest`, `HedgingSimulatorTest`, `OptionsBookTest`, `CointegrationTestTest` |
 | `optimization` | Portfolio construction | `PortfolioOptimizer`, `RiskParityOptimizer`, `BlackLitterman`, `ConstrainedPortfolioOptimizer` | `PortfolioOptimizerTest`, `PortfolioConstructionTest` |
 | `ml` | Statistical learning | `GradientBoostedRegressor`, `VolatilityForecaster`, `RegimeDetector`, `MarketImpactPredictor`, `IntradayLiquidityForecaster`, `AnomalyDetector` | `MlForecastingTest`, `MarketMlTest`, `RegimeDetectorTest` |
-| `backtest` | Bar backtesting + execution models | `Backtester`, `ExecutionAwareBacktester`, `Instant/Sor/Iceberg/LastLookExecution` | `BacktesterTest`, `ExecutionAwareBacktesterTest`, `LastLookExecutionTest` |
+| `backtest` | Bar backtesting + execution/cost models | `Backtester`, `ExecutionAwareBacktester`, `Instant/Sor/Iceberg/LastLookExecution`, `TradeCostModel` (flat + institutional w/ sqrt impact, shared across engines) | `BacktesterTest`, `ExecutionAwareBacktesterTest`, `LastLookExecutionTest`, `TradeCostModelTest` |
 | `backtest.strategies` | Built-in strategies | SMA/EMA cross, RSI, MACD, Bollinger | (covered by backtest/CLI tests) |
 | `backtest.validation` | Overfitting defense | `WalkForwardAnalyzer`, `GridSearchOptimizer`, `SharpeValidation`, `ParameterGrid` | `ValidationTest` |
 | `backtest.portfolio` | Multi-asset backtesting | `PortfolioBacktester` (survivorship-aware overload: delistings, mergers, index drops, ex-date cash dividends), `CrossSectionalMomentum` (point-in-time 12-1 long/short), `PositionSizing` | `PortfolioBacktestTest`, `SurvivorshipBacktestTest`, `CrossSectionalMomentumTest` |

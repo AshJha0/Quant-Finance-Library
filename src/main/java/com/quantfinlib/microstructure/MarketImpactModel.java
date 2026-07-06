@@ -44,6 +44,40 @@ public final class MarketImpactModel {
         return new MarketImpactModel(adv, dailyVolatility, y, etaBps, gamma);
     }
 
+    /**
+     * Estimates a model from a series' trailing window: ADV as the mean
+     * volume, daily vol as the stdev of close-to-close returns — the one
+     * canonical bar-data → impact-model bridge, shared by the alpha and
+     * portfolio backtesters so their impact numbers can never diverge.
+     * Returns {@code null} when the window has no volume (impact needs ADV;
+     * absent volume is a data gap, not free liquidity — callers charge
+     * their flat costs and skip impact).
+     */
+    public static MarketImpactModel estimate(com.quantfinlib.core.BarSeries series,
+                                             int index, int window) {
+        if (index < window) {
+            throw new IllegalArgumentException(
+                    "index " + index + " < estimation window " + window);
+        }
+        double advSum = 0;
+        double mean = 0;
+        for (int j = 0; j < window; j++) {
+            advSum += series.volume(index - window + j + 1);
+            mean += series.close(index - window + j + 1) / series.close(index - window + j) - 1;
+        }
+        double adv = advSum / window;
+        if (adv <= 0) {
+            return null;
+        }
+        mean /= window;
+        double var = 0;
+        for (int j = 0; j < window; j++) {
+            double r = series.close(index - window + j + 1) / series.close(index - window + j) - 1;
+            var += (r - mean) * (r - mean);
+        }
+        return new MarketImpactModel(adv, Math.sqrt(var / window));
+    }
+
     /** Square-root-law total impact for an order of {@code quantity}. */
     public double squareRootImpactBps(double quantity) {
         return y * dailyVolatility * Math.sqrt(quantity / adv) * 1e4;

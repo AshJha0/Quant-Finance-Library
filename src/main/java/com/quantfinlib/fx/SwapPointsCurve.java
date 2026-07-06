@@ -208,15 +208,8 @@ public final class SwapPointsCurve {
 
     /** Resolves a tenor to a date using this curve's spot as the anchor. */
     private LocalDate tenorDateFromSpot(String tenor) {
-        // CurrencyPair.tenorDate anchors at spotDate(tradeDate); feeding a
-        // trade date whose spot equals our spot keeps the anchors aligned.
-        // Walking back spotLag joint business days from spot achieves that.
-        LocalDate trade = spotDate;
-        for (int i = 0; i < pair.spotLagDays(); i++) {
-            do {
-                trade = trade.minusDays(1);
-            } while (!pair.isJointBusinessDay(trade));
-        }
-        return pair.tenorDate(trade, tenor);
+        // CurrencyPair.tenorDate anchors at spotDate(tradeDate); the pair's
+        // spot inversion keeps the anchors aligned.
+        return pair.tenorDate(pair.tradeDateForSpot(spotDate), tenor);
     }
 }

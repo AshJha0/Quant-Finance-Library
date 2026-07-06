@@ -43,6 +43,19 @@ public final class BusinessCalendar {
         return new BusinessCalendar(Set.of(holidays));
     }
 
+    /**
+     * The joint calendar of two trading centers: a day is a business day
+     * only when it is one in BOTH (holiday sets union). This is the FX
+     * settlement rule — one calendar object, so every roll convention and
+     * schedule helper works unchanged on the pair, instead of each caller
+     * re-implementing dual-calendar walks.
+     */
+    public BusinessCalendar union(BusinessCalendar other) {
+        java.util.Set<LocalDate> combined = new java.util.HashSet<>(holidays);
+        combined.addAll(other.holidays);
+        return new BusinessCalendar(combined);
+    }
+
     public boolean isBusinessDay(LocalDate date) {
         DayOfWeek dow = date.getDayOfWeek();
         return dow != DayOfWeek.SATURDAY && dow != DayOfWeek.SUNDAY && !holidays.contains(date);
@@ -72,6 +85,18 @@ public final class BusinessCalendar {
         LocalDate d = date;
         for (int i = 0; i < n; i++) {
             d = nextBusinessDay(d);
+        }
+        return d;
+    }
+
+    /** Walks back {@code n >= 0} business days — e.g. a fixing lag before settlement. */
+    public LocalDate subtractBusinessDays(LocalDate date, int n) {
+        if (n < 0) {
+            throw new IllegalArgumentException("n must be >= 0");
+        }
+        LocalDate d = date;
+        for (int i = 0; i < n; i++) {
+            d = previousBusinessDay(d);
         }
         return d;
     }

@@ -189,27 +189,52 @@ public final class SignalEvaluator {
         return MathUtils.correlation(ranks(xs), ranks(ys));
     }
 
-    /** Midrank transform (average rank for ties), 1-based — values only feed Pearson. */
+    /**
+     * Midrank transform (average rank for ties), 1-based — values only feed
+     * Pearson. Primitive throughout: sort a copy, then each value's midrank
+     * is the average of its first/last positions in the sorted array via
+     * binary search — no boxed index sort, no comparator dispatch.
+     */
     private static double[] ranks(double[] v) {
         int n = v.length;
-        Integer[] order = new Integer[n];
-        for (int i = 0; i < n; i++) {
-            order[i] = i;
-        }
-        java.util.Arrays.sort(order, (a, b) -> Double.compare(v[a], v[b]));
+        double[] sorted = v.clone();
+        java.util.Arrays.sort(sorted);
         double[] rank = new double[n];
-        int i = 0;
-        while (i < n) {
-            int j = i;
-            while (j + 1 < n && v[order[j + 1]] == v[order[i]]) {
-                j++;
-            }
-            double mid = (i + j) / 2.0 + 1; // average rank across the tie run
-            for (int t = i; t <= j; t++) {
-                rank[order[t]] = mid;
-            }
-            i = j + 1;
+        for (int i = 0; i < n; i++) {
+            int lo = lowerBound(sorted, v[i]);
+            int hi = upperBound(sorted, v[i]);
+            rank[i] = (lo + hi - 1) / 2.0 + 1; // midrank across the tie run
         }
         return rank;
+    }
+
+    /** First index with {@code sorted[idx] >= key}. */
+    private static int lowerBound(double[] sorted, double key) {
+        int lo = 0;
+        int hi = sorted.length;
+        while (lo < hi) {
+            int mid = (lo + hi) >>> 1;
+            if (sorted[mid] < key) {
+                lo = mid + 1;
+            } else {
+                hi = mid;
+            }
+        }
+        return lo;
+    }
+
+    /** First index with {@code sorted[idx] > key}. */
+    private static int upperBound(double[] sorted, double key) {
+        int lo = 0;
+        int hi = sorted.length;
+        while (lo < hi) {
+            int mid = (lo + hi) >>> 1;
+            if (sorted[mid] <= key) {
+                lo = mid + 1;
+            } else {
+                hi = mid;
+            }
+        }
+        return lo;
     }
 }

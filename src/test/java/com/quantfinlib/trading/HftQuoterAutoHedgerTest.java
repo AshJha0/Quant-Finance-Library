@@ -174,11 +174,68 @@ class HftQuoterAutoHedgerTest {
     }
 
     @Test
+    void perSymbolConfigServesAMixedBookFromOneQuoter() throws Exception {
+        // EURUSD-style and USDJPY-style instruments on the same quoter:
+        // per-symbol half-spreads and grids, one dispatch path.
+        HftRiskGate gate = openGate();
+        gate.setReferencePrice(1, 155.00);
+        try (HftOrderGateway gateway = new HftOrderGateway(1 << 10, gate, false)) {
+            List<Captured> orders = capture(gateway);
+            gateway.start();
+            HftQuoter quoter = new HftQuoter(gateway, 16,
+                    HftQuoter.Config.of(100_000, 0.0002)   // default: FX-major style
+                            .withTickSchedule(com.quantfinlib.microstructure.TickSizeSchedule
+                                    .flat(0.00001)))
+                    .configureSymbol(1, HftQuoter.Config.of(50_000, 0.02) // JPY-style
+                            .withTickSchedule(com.quantfinlib.microstructure.TickSizeSchedule
+                                    .flat(0.001)));
+
+            quoter.onTick(0, 1.0850, 1e6, System.nanoTime());
+            quoter.onTick(1, 155.00, 1e6, System.nanoTime());
+            awaitCount(orders, 4);
+
+            // Symbol 0: default config (2-pip half-spread, 100k size).
+            assertEquals(1.0850 - 0.0002, orders.get(0).price(), 1e-9);
+            assertEquals(100_000, orders.get(0).qty());
+            // Symbol 1: overridden config (2-yen-pip half-spread, 50k size).
+            assertEquals(155.00 - 0.02, orders.get(2).price(), 1e-9);
+            assertEquals(155.00 + 0.02, orders.get(3).price(), 1e-9);
+            assertEquals(50_000, orders.get(2).qty());
+        }
+    }
+
+    @Test
     void configValidation() {
         assertThrows(IllegalArgumentException.class, () -> HftQuoter.Config.of(0, 0.0001));
         assertThrows(IllegalArgumentException.class, () -> HftQuoter.Config.of(100, 0));
         assertThrows(IllegalArgumentException.class,
                 () -> HftQuoter.Config.of(100, 0.0001).withSkewPerUnit(-1));
+    }
+
+    @Test
+    void withMinMoveIsPurelyMoveGated() throws Exception {
+        // The pitfall this API exists for: withConflation(0, move) disables
+        // conflation entirely (both gates must pass to suppress; nothing is
+        // younger than 0ns). withMinMove suppresses on move alone.
+        try (HftOrderGateway gateway = new HftOrderGateway(1 << 10, openGate(), false)) {
+            gateway.start();
+            HftQuoter moveGated = new HftQuoter(gateway, 16,
+                    HftQuoter.Config.of(100_000, 0.0002).withMinMove(0.0005));
+            long t0 = 1_000L;
+            moveGated.onTick(0, 1.0850, 1e6, t0);                       // first: quotes
+            moveGated.onTick(0, 1.08501, 1e6, t0 + 100_000_000_000L);   // tiny move, OLD: still suppressed
+            moveGated.onTick(0, 1.0860, 1e6, t0 + 200_000_000_000L);    // big move: quotes
+            assertEquals(2, moveGated.quoteUpdates());
+            assertEquals(1, moveGated.suppressedUpdates());
+
+            // Contrast: interval 0 never suppresses, whatever the move.
+            HftQuoter disabled = new HftQuoter(gateway, 16,
+                    HftQuoter.Config.of(100_000, 0.0002).withConflation(0, 0.0005));
+            disabled.onTick(1, 1.0850, 1e6, t0);
+            disabled.onTick(1, 1.08501, 1e6, t0 + 1);
+            assertEquals(2, disabled.quoteUpdates());
+            assertEquals(0, disabled.suppressedUpdates());
+        }
     }
 
     @Test

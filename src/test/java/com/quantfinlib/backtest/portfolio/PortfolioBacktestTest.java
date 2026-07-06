@@ -53,7 +53,7 @@ class PortfolioBacktestTest {
         // Deterministic decline from 100 to ~40 so the direction is guaranteed.
         Map<String, BarSeries> data = Map.of(
                 "DOWN", BarSeries.of("DOWN", TestData.sineTrend(400, 100, -0.15, 2, 40)));
-        PortfolioBacktester.Config noCosts = new PortfolioBacktester.Config(1_000_000, 0, 1, 252);
+        PortfolioBacktester.Config noCosts = new PortfolioBacktester.Config(1_000_000, 0, 1, 252, null);
 
         PortfolioBacktester.Result longDown = PortfolioBacktester.run(
                 constantWeights(Map.of("DOWN", 1.0)), data, noCosts);

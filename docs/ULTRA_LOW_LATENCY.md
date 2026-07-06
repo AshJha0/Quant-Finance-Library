@@ -153,6 +153,50 @@ ships both venue representations explicitly:
   20,001-level band; the full session also completes under Epsilon GC (5.6M orders,
   5.3M trades, collector never ran).
 
+**"Why not make EVERYTHING ultra-low-latency?"** Because for most of the library that
+question doesn't parse: a PDF exporter, a Monte Carlo engine or a walk-forward
+validator is never on a tick's critical path — rewriting them allocation-free would
+cost clarity and buy nothing. What matters is that every component has a DECLARED
+lane, the hot lane is proven (allocation-counter tests, benchmarks, Epsilon GC runs),
+and nothing latency-relevant hides in the research lane. The lane map:
+
+| Lane | Packages / components | Contract |
+|---|---|---|
+| **Hot** (zero-alloc, proven) | `marketdata` HFT path, `trading` fast lane (gate, gateway, quoter, hedger), `orderbook.HftOrderBook`, `sbe.*`, `fx.AggregatedBook`/`CrossRateEngine`, `pricing.IncrementalGreeks`, `microstructure.TickSizeSchedule` lookups, `fix.FixOrderEncoder` + `fix.FixExecReportView`, `data.AsyncTickCapture` (ring handoff), `util.LatencyRecorder` | no allocation, no locks, no String/boxing per event |
+| **Edge** (I/O-bound adapters) | `fix.FixSession` session management, `feed.WebSocketFeed`, `data.TickFileWriter/Reader` | buffered, off the decision loop or explicitly documented when not |
+| **Research** (clarity first) | `alpha`, `backtest.*`, `pricing`/`fx` analytics, `rates`, `volatility`, `risk`, `ml`, `optimization`, `screener`, `simulation`, `hedging`, `report`, `cli`, `dsl`, `orderbook.OrderBook` | correctness + readability; allocation is fine because no tick waits on it |
+
+Three components graduated to the hot lane when auditing this boundary:
+`fix.FixOrderEncoder` (garbage-free NewOrderSingle out — for venues that only speak
+FIX, order entry IS the FIX edge; scaled-long prices, cached date prefix,
+backwards-written BodyLength, round-trip-verified against the validated parser),
+`fix.FixExecReportView` (garbage-free ExecutionReport in — the fill leg of the same
+round trip: a flyweight over the framed bytes, primitive getters, scaled-long prices,
+in-place symbol comparison, so orders out AND fills in never allocate or touch a
+double), and `data.AsyncTickCapture` (file I/O moved off the bus consumer thread
+through a private ring — a disk stall now hits the writer thread, and backpressure
+drops-and-counts rather than ever blocking the trading loop).
+
+## Scaling out — sharding as shipped machinery
+
+Horizontal scale is shared-nothing sharding: `trading.ShardedTradingEngine` runs N
+independent bus→gate→gateway stacks behind one symbol-routing facade (symbols may be
+registered on multiple shards — the cross co-location tool: duplicating a leg's feed
+costs one extra ring publish). `trading.GlobalRiskAggregator` supplies the one thing
+sharding can't: a firm-wide gross-notional circuit breaker across every shard's gate
+(monitor thread over the gates' acquire-readable positions; breach flips each gate's
+kill switch — a single released boolean the hot path reads as one acquire load; hysteretic
+resume so the firm doesn't flap at the limit).
+
+Measured on a 12-logical-core desktop, 300 symbols all quoted two-sided per tick:
+1 shard = 4.3M ticks/s; 2 shards = 6.2M (+46%); 4 shards plateau at 6.7M — the plateau
+is core oversubscription (8 spinning threads + producer) and the single producer, not
+contention: cross-shard drops stayed ≈ 0. On a tuned box with a pinned core pair per
+shard (Tier 3 below), scaling approaches k×. One measurement war story worth keeping:
+the first version of this probe put ONE synchronized counter across all shards'
+venue threads and measured sharding as a slowdown — the instrumentation itself was the
+shared state sharding exists to eliminate. Shared-nothing means nothing.
+
 **The platform.** Zero runtime dependencies and pure JDK are design constraints of this
 library. Kernel bypass, affinity pinning, FFM-based NIC access, and hardware are all
 incompatible with those constraints or with portability — they belong to a deployment,

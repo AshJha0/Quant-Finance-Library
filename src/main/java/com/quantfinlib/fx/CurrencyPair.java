@@ -43,6 +43,10 @@ public final class CurrencyPair {
     private final int spotLagDays;
     private final BusinessCalendar baseCalendar;
     private final BusinessCalendar quoteCalendar;
+    // Both centers as ONE calendar (holiday union): every roll convention
+    // below delegates to rates.BusinessCalendar, so the market rules live
+    // in exactly one place instead of drifting between two packages.
+    private final BusinessCalendar jointCalendar;
 
     private CurrencyPair(String base, String quote, double pipSize, int pricePrecision,
                          int spotLagDays, BusinessCalendar baseCalendar,
@@ -54,6 +58,7 @@ public final class CurrencyPair {
         this.spotLagDays = spotLagDays;
         this.baseCalendar = baseCalendar;
         this.quoteCalendar = quoteCalendar;
+        this.jointCalendar = baseCalendar.union(quoteCalendar);
     }
 
     /**
@@ -174,7 +179,7 @@ public final class CurrencyPair {
 
     /** Business day in <em>both</em> currencies' calendars. */
     public boolean isJointBusinessDay(LocalDate date) {
-        return baseCalendar.isBusinessDay(date) && quoteCalendar.isBusinessDay(date);
+        return jointCalendar.isBusinessDay(date);
     }
 
     /**
@@ -183,6 +188,16 @@ public final class CurrencyPair {
      */
     public LocalDate spotDate(LocalDate tradeDate) {
         return addJointBusinessDays(tradeDate, spotLagDays);
+    }
+
+    /**
+     * The inverse of {@link #spotDate}: the trade date whose spot is
+     * {@code spotDate} (which must be a joint business day) — the anchor
+     * inversion curve/instrument builders need to resolve tenors from a
+     * curve's own spot.
+     */
+    public LocalDate tradeDateForSpot(LocalDate spotDate) {
+        return jointCalendar.subtractBusinessDays(spotDate, spotLagDays);
     }
 
     /**
@@ -237,43 +252,19 @@ public final class CurrencyPair {
 
     /** Adds {@code n} joint business days (n >= 0). */
     public LocalDate addJointBusinessDays(LocalDate date, int n) {
-        LocalDate d = date;
-        for (int added = 0; added < n; ) {
-            d = d.plusDays(1);
-            if (isJointBusinessDay(d)) {
-                added++;
-            }
-        }
-        return d;
+        return jointCalendar.addBusinessDays(date, n);
     }
 
     private LocalDate rollFollowing(LocalDate date) {
-        LocalDate d = date;
-        while (!isJointBusinessDay(d)) {
-            d = d.plusDays(1);
-        }
-        return d;
+        return jointCalendar.roll(date, BusinessCalendar.Roll.FOLLOWING);
     }
 
     private LocalDate rollModifiedFollowing(LocalDate date) {
-        LocalDate rolled = rollFollowing(date);
-        // Forward roll crossing month-end flips to backward (market standard).
-        if (rolled.getMonth() != date.getMonth()) {
-            LocalDate d = date;
-            while (!isJointBusinessDay(d)) {
-                d = d.minusDays(1);
-            }
-            return d;
-        }
-        return rolled;
+        return jointCalendar.roll(date, BusinessCalendar.Roll.MODIFIED_FOLLOWING);
     }
 
     private LocalDate lastJointBusinessDayOf(YearMonth month) {
-        LocalDate d = month.atEndOfMonth();
-        while (!isJointBusinessDay(d)) {
-            d = d.minusDays(1);
-        }
-        return d;
+        return jointCalendar.roll(month.atEndOfMonth(), BusinessCalendar.Roll.PRECEDING);
     }
 
     @Override

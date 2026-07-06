@@ -114,7 +114,7 @@ class CrossSectionalMomentumTest {
     void endToEndMomentumProfitsAndTheNaiveUniverseOverstatesIt() {
         Map<String, BarSeries> data = market();
         // Rebalance every 5 bars, zero commission for clean arithmetic.
-        PortfolioBacktester.Config config = new PortfolioBacktester.Config(1_000_000, 0, 5, 252);
+        PortfolioBacktester.Config config = new PortfolioBacktester.Config(1_000_000, 0, 5, 252, null);
         CrossSectionalMomentum.Config momo = new CrossSectionalMomentum.Config(10, 2, 1, 0.5);
 
         // Point-in-time run: LOSE (the short) delists at t=12 at its last price
