@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## v1.4.0 (2026-07-06)
+
+The alpha research release: a full factor pipeline (signals → IC evaluation →
+overfitting defenses → cost-aware backtests → neutral construction →
+attribution reports), survivorship-honest end to end — plus the
+survivorship engine itself (point-in-time universes, delisting returns,
+merger conversions, ex-date dividends) and two hardening review rounds
+with every finding fixed and regression-tested.
 
 - **Second review round** (7-angle review of the survivorship+alpha batch):
   fixed walk-forward **train/test leakage** (forward-return windows spilled
