@@ -663,7 +663,7 @@ Order entry (HftOrderBenchmark):
   Submit-to-venue latency:     p50=102ns  p99=296ns  p99.9=1.4us
   Tick-to-order END-TO-END:    p50=504ns  p99=1.0us  p99.9=4.0us
                                (tick -> bus -> 2xEMA strategy -> risk gate -> order ring -> venue)
-  Throughput:                  15.3 million orders/sec sustained
+  Throughput:                  21.2 million orders/sec sustained (v1.4.1 run; 15-21M across runs)
 
 Market making (HftQuoterBenchmark):
   Tick-to-two-sided-quote:     p50=592ns  p99=912ns  p99.9=4.5us
