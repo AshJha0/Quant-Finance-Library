@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## v1.4.1 (2026-07-06)
+
+The memory-model honesty patch: the pre-trade risk gate is now provably
+safe under the multi-threaded wiring it was always documented to serve,
+and every latency claim was re-measured and corrected accordingly.
 
 - **HftRiskGate cross-thread safety**: positions/halts/reference prices now
   use per-element VarHandle acquire/release (fills via atomic add) — the
