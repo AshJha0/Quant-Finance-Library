@@ -17,6 +17,37 @@ class HftOrderPathTest {
     // ---- Risk gate --------------------------------------------------------
 
     @Test
+    void riskGatePositionsAreSafeAcrossThreads() throws Exception {
+        // The production wiring is multi-threaded (fills from the venue-ack
+        // thread, reads from the quoter on the bus consumer thread): fills
+        // must be atomic and visible. A plain long[] += would both lose
+        // updates under contention and let the JIT serve stale positions.
+        HftRiskGate gate = new HftRiskGate(4);
+        int fillsPerThread = 100_000;
+        Thread buyer = new Thread(() -> {
+            for (int i = 0; i < fillsPerThread; i++) {
+                gate.onFill(0, Side.BUY, 3);
+            }
+        });
+        Thread anotherBuyer = new Thread(() -> {
+            for (int i = 0; i < fillsPerThread; i++) {
+                gate.onFill(0, Side.BUY, 2);
+            }
+        });
+        buyer.start();
+        anotherBuyer.start();
+        buyer.join();
+        anotherBuyer.join();
+        // Lost updates would land anywhere below the exact sum.
+        assertEquals(fillsPerThread * 5L, gate.position(0));
+        // Cross-thread halt is visible to the checking side.
+        Thread ops = new Thread(() -> gate.halt(1, true));
+        ops.start();
+        ops.join();
+        assertEquals(HftRiskGate.REJECT_HALTED, gate.check(1, Side.BUY, 1, 100));
+    }
+
+    @Test
     void riskGateEnforcesEveryLimitWithReasonCodes() {
         HftRiskGate gate = new HftRiskGate(4)
                 .maxOrderQuantity(1_000)

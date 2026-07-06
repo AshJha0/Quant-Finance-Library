@@ -628,7 +628,7 @@ latency-critical trading:
 | `HftMarketDataBus` | Array-indexed listener dispatch and last-price cache (no map lookups), optional busy-spin consumer (`Thread.onSpinWait()`) for minimum hand-off latency |
 | `StreamingIndicators` | O(1)-per-tick SMA / EMA / RSI / MACD / VWAP, verified value-for-value identical to the batch engine — backtest results transfer to live execution exactly |
 | `LatencyRecorder` | Zero-allocation log-linear nanosecond histogram (HdrHistogram-style) for measuring your own path |
-| `HftRiskGate` (`trading`) | Zero-allocation pre-trade risk gate over dense int symbol ids: order size, notional, position, price collar, halt — int reason codes, ~1 ns/check, positions updated on fills |
+| `HftRiskGate` (`trading`) | Zero-allocation pre-trade risk gate over dense int symbol ids: order size, notional, position, price collar, halt — int reason codes, ~3 ns/check with correct cross-thread visibility (VarHandle acquire/release: fills, halts and reference prices land from other threads and readers are guaranteed fresh, untorn values) |
 | `HftOrderGateway` + `OrderRingBuffer` (`trading`) | The fast lane out: risk check → release-store publish into a preallocated primitive order ring → venue thread; zero allocation per order (proven by a per-thread allocation-counter test) |
 | `sbe` package | SBE-style binary flyweight codecs (`TradeFlyweight`, `OrderFlyweight`, `QuoteFlyweight`: fixed-offset primitives, zero parse/copy/alloc — proven by test) with channel adapters replacing the text edges: `BinaryMarketDataClient` → bus, gateway → `BinaryOrderPublisher`; fragmentation-safe decode loops |
 | `HftQuoter` (`trading`) | Streaming market maker on the fast lane: mid + inventory skew (read live from the risk gate) + tick-grid snap → two-sided quote through the gate and order ring, with conflation (min-move / min-interval) — zero allocation per tick |
@@ -659,7 +659,7 @@ Market data (HftLatencyBenchmark):
   Publish-to-strategy latency: p50=204ns  p99=300-800ns  p99.9=~2.4us
 
 Order entry (HftOrderBenchmark):
-  Risk gate:                   ~1 ns per pre-trade check
+  Risk gate:                   ~3 ns per pre-trade check (cross-thread safe)
   Submit-to-venue latency:     p50=102ns  p99=296ns  p99.9=1.4us
   Tick-to-order END-TO-END:    p50=504ns  p99=1.0us  p99.9=4.0us
                                (tick -> bus -> 2xEMA strategy -> risk gate -> order ring -> venue)

@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- **HftRiskGate cross-thread safety**: positions/halts/reference prices now
+  use per-element VarHandle acquire/release (fills via atomic add) — the
+  production wiring reads positions on the bus consumer thread while fills
+  land from the venue-ack thread, and the previous plain arrays were a data
+  race (stale skew/limits, potential lost fills under concurrent sources).
+  Honest cost: the risk-check microbenchmark moves from ≈1 ns to ≈3 ns,
+  because the ≈1 ns figure relied on the JIT hoisting loads a concurrent
+  gate must re-read; end-to-end tick-to-order and throughput are unchanged
+  (p50 408 ns, 21M orders/s on the same box). All latency claims updated.
+- `FxVolSurface.vol()` does one bracket search instead of two;
+  `atmVol()` no longer scans the expiry list twice.
+
 ## v1.4.0 (2026-07-06)
 
 The alpha research release: a full factor pipeline (signals → IC evaluation →

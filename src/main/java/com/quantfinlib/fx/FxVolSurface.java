@@ -240,40 +240,39 @@ public final class FxVolSurface {
         if (strike <= 0) {
             throw new IllegalArgumentException("strike must be > 0: " + strike);
         }
-        double x = Math.log(strike / forwardAt(expiryYears));
         int n = expiries.length;
+        // Boundary expiries: flat in the edge smile, at that pillar's forward.
         if (expiryYears <= expiries[0]) {
-            return smileVol(0, x);
+            return smileVol(0, Math.log(strike / forwards[0]));
         }
         if (expiryYears >= expiries[n - 1]) {
-            return smileVol(n - 1, x);
+            return smileVol(n - 1, Math.log(strike / forwards[n - 1]));
         }
-        int lo = 0;
-        int hi = n - 1;
-        while (hi - lo > 1) {
-            int mid = (lo + hi) >>> 1;
-            if (expiries[mid] <= expiryYears) {
-                lo = mid;
-            } else {
-                hi = mid;
-            }
-        }
+        // ONE bracket search serves both the forward interpolation and the
+        // variance interpolation — this is the documented hot lookup.
+        int lo = bracket(expiryYears);
+        int hi = lo + 1;
+        double w = (expiryYears - expiries[lo]) / (expiries[hi] - expiries[lo]);
+        double forward = Math.exp(Math.log(forwards[lo])
+                + w * (Math.log(forwards[hi]) - Math.log(forwards[lo])));
+        double x = Math.log(strike / forward);
         // Total-variance interpolation keeps calendar arbitrage at bay when
         // the smiles are themselves arbitrage-free.
         double vLo = smileVol(lo, x);
         double vHi = smileVol(hi, x);
         double wLo = vLo * vLo * expiries[lo];
         double wHi = vHi * vHi * expiries[hi];
-        double w = wLo + (wHi - wLo) * (expiryYears - expiries[lo]) / (expiries[hi] - expiries[lo]);
-        return Math.sqrt(w / expiryYears);
+        double totalVar = wLo + (wHi - wLo) * w;
+        return Math.sqrt(totalVar / expiryYears);
     }
 
     /** ATM (delta-neutral straddle) vol at an expiry: the smile at zero skew. */
     public double atmVol(double expiryYears) {
-        return vol(expiryYears, dnsStrike(forwardAt(expiryYears),
-                // Seed with the mid-pillar vol; one fixpoint pass is ample for ATM.
-                vols[nearestExpiry(expiryYears)][vols[nearestExpiry(expiryYears)].length / 2],
-                expiryYears, premiumAdjusted));
+        // Seed with the mid-pillar vol; one fixpoint pass is ample for ATM.
+        int nearest = nearestExpiry(expiryYears);
+        double seed = vols[nearest][vols[nearest].length / 2];
+        return vol(expiryYears,
+                dnsStrike(forwardAt(expiryYears), seed, expiryYears, premiumAdjusted));
     }
 
     /** Log-linear interpolated forward at an expiry, flat outside pillars. */
@@ -285,18 +284,25 @@ public final class FxVolSurface {
         if (expiryYears >= expiries[n - 1]) {
             return forwards[n - 1];
         }
+        int lo = bracket(expiryYears);
+        double w = (expiryYears - expiries[lo]) / (expiries[lo + 1] - expiries[lo]);
+        return Math.exp(Math.log(forwards[lo])
+                + w * (Math.log(forwards[lo + 1]) - Math.log(forwards[lo])));
+    }
+
+    /** Binary search: largest pillar index with expiry <= t (interior t only). */
+    private int bracket(double t) {
         int lo = 0;
-        int hi = n - 1;
+        int hi = expiries.length - 1;
         while (hi - lo > 1) {
             int mid = (lo + hi) >>> 1;
-            if (expiries[mid] <= expiryYears) {
+            if (expiries[mid] <= t) {
                 lo = mid;
             } else {
                 hi = mid;
             }
         }
-        double w = (expiryYears - expiries[lo]) / (expiries[hi] - expiries[lo]);
-        return Math.exp(Math.log(forwards[lo]) + w * (Math.log(forwards[hi]) - Math.log(forwards[lo])));
+        return lo;
     }
 
     /** The solved pillar smile at index {@code i} (reporting, VannaVolga inputs). */

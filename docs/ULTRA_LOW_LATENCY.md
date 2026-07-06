@@ -24,7 +24,9 @@ they are documented here so the path beyond is clear.
 | Deterministic replay | `data.TickCapture` / `TickFileReader` | Identical input across experiments removes market noise from performance comparisons. |
 
 **Measured on a Windows desktop, stock JVM** (reproduce with `HftLatencyBenchmark` /
-`HftOrderBenchmark` / `HftQuoterBenchmark`): publish→strategy p50 204 ns; risk check ≈1 ns;
+`HftOrderBenchmark` / `HftQuoterBenchmark`): publish→strategy p50 204 ns; risk check ≈3 ns
+(with VarHandle acquire/release cross-thread visibility — the honest 2 ns: a plain-array
+gate benchmarks at ≈1 ns only because the JIT hoists loads a concurrent gate must not);
 tick→order end-to-end p50 504 ns, p99 1 µs; tick→two-sided-quote p50 592 ns, p99 912 ns
 (skew + grid snap + 2× risk gate + both sides at the venue); 15M orders/s.
 

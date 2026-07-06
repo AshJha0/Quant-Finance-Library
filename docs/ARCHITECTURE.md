@@ -20,7 +20,7 @@ javadoc form (rendered on the docs site under `api/`).
    ▼                            strategy decision
    Backtester / walk-forward          │
    / portfolio backtests              ▼
-   │                            HftRiskGate (~1ns) ─► HftOrderGateway ─► OrderListener
+   │                            HftRiskGate (~3ns) ─► HftOrderGateway ─► OrderListener
    ▼                                                    (504ns tick→order)     │
    reports (HTML/PDF/XLSX/CSV,                    ┌─────────────┬──────────────┤
    SVG charts), CLI, dashboard              FixSession    PaperTrading   sbe.BinaryOrder

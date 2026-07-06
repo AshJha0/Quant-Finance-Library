@@ -2,7 +2,8 @@
  * Order entry, two lanes (mirroring {@code marketdata}):
  *
  * <p><b>HFT fast lane</b> — {@link com.quantfinlib.trading.HftRiskGate}
- * (zero-allocation pre-trade checks over int ids, ≈1 ns),
+ * (zero-allocation pre-trade checks over int ids, ≈3 ns, cross-thread
+ * safe via VarHandle acquire/release),
  * {@link com.quantfinlib.trading.OrderRingBuffer} (SPSC primitive ring) and
  * {@link com.quantfinlib.trading.HftOrderGateway} (submit = risk check +
  * release-store publish; measured tick-to-order p50 ≈ 504 ns). On top of

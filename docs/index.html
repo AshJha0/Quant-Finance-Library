@@ -46,7 +46,7 @@ footer{margin:3rem 0 2rem;color:var(--muted);font-size:.85rem;text-align:center}
   <h2>Measured, not claimed</h2>
   <div class="numbers">
     Market data publish-to-strategy&nbsp;&nbsp; p50 = 204 ns&nbsp; p99 &lt; 1 µs (9–12M ticks/s)<br>
-    Pre-trade risk gate&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ≈ 1 ns per check, zero allocation (proven by test)<br>
+    Pre-trade risk gate&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ≈ 3 ns per check, zero allocation, cross-thread safe (proven by test)<br>
     Tick-to-order end-to-end&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; p50 = 504 ns&nbsp; p99 = 1.0 µs (15M orders/s)<br>
     Tick-to-two-sided-quote&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; p50 = 592 ns&nbsp; p99 &lt; 1 µs (market-making loop, both sides)<br>
     Test suite&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 460+ tests, 93% line coverage, CI on every push
