@@ -116,6 +116,44 @@ class AlphaBacktesterReportTest {
     }
 
     @Test
+    void impactPreconditionAndOversizedBooksFailLoud() {
+        AlphaContext ctx = noisyPanel();
+        // startIndex < impactWindow with capital > 0: the impact estimator
+        // would read before bar 0 — rejected with the constraint named.
+        IllegalArgumentException e1 = assertThrows(IllegalArgumentException.class,
+                () -> AlphaBacktester.run(ctx, Factors.momentum(5, 0),
+                        AlphaBacktester.Config.defaults(10)));
+        assertTrue(e1.getMessage().contains("impactWindow"), e1.getMessage());
+        // A book absurdly larger than the universe's liquidity: cost >= 100%
+        // of equity at the first rebalance must throw the capacity error,
+        // never compound a negative equity curve silently.
+        IllegalArgumentException e2 = assertThrows(IllegalArgumentException.class,
+                () -> AlphaBacktester.run(ctx, Factors.momentum(20, 0),
+                        new AlphaBacktester.Config(30, 21, 1, 2, 1, 1e18, 20, 252)));
+        assertTrue(e2.getMessage().contains("liquidity"), e2.getMessage());
+    }
+
+    @Test
+    void attributionRejectsNaNInputsAndSharpesAgree() {
+        // NaN = missing everywhere in this package: attribution fails with
+        // the offending stream and index instead of returning all-NaN betas.
+        double[] y = {0.01, 0.02, -0.01, 0.005, 0.0, 0.01};
+        double[] f = {0.01, Double.NaN, -0.01, 0.005, 0.0, 0.01};
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> AlphaReport.attribute(y, new double[][]{f}, List.of("MOM")));
+        assertTrue(e.getMessage().contains("MOM") && e.getMessage().contains("1"),
+                e.getMessage());
+
+        // One Sharpe definition per report: the full-sample rolling window
+        // must reproduce summarize()'s headline Sharpe (sample stdDev).
+        double[] equity = {1.0, 1.02, 1.01, 1.05, 1.04, 1.08, 1.07, 1.12};
+        double[] returns = AlphaReport.returnsOf(equity);
+        double[] rolling = AlphaReport.rollingSharpe(returns, returns.length, 252);
+        assertEquals(AlphaReport.summarize(equity, 252).sharpeRatio(),
+                rolling[rolling.length - 1], 1e-9);
+    }
+
+    @Test
     void customConstructionPipelinePlugsIn() {
         AlphaContext ctx = noisyPanel();
         // Full pipeline: z-score → beta-neutralize → inverse-vol budget.

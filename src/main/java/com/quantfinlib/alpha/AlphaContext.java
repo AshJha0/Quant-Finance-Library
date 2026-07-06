@@ -1,6 +1,7 @@
 package com.quantfinlib.alpha;
 
 import com.quantfinlib.core.BarSeries;
+import com.quantfinlib.data.PointInTimeUniverse;
 import com.quantfinlib.screener.Fundamentals;
 
 import java.util.ArrayList;
@@ -25,19 +26,37 @@ import java.util.Map;
  * ({@code Factors.value()}, {@code Factors.quality()}) return NaN for
  * symbols without entries. A point-in-time fundamentals history is data
  * this library cannot invent — the snapshot is honest about that.</p>
+ *
+ * <p><b>Survivorship</b>: alpha research is the stage survivorship bias
+ * flatters most — the delisted losers a short book would have held are the
+ * exact names a today's-constituents panel lacks. Attach a
+ * {@link PointInTimeUniverse} via {@link #withUniverse} and every built-in
+ * factor scores non-members/dead names as NaN at each bar
+ * ({@link #isActive}), so ICs, validation and constructed weights only ever
+ * see the point-in-time cross-section. Without a universe the panel is
+ * survivorship-blind — fine for methodology work, dishonest for
+ * performance claims. Custom {@link AlphaFactor}s should honor
+ * {@code isActive} the same way. Note the weight-based
+ * {@code AlphaBacktester} still earns ghost returns on a name that dies
+ * <em>mid-hold</em> (weights only change at rebalances); for
+ * lifecycle-exact accounting feed the weights into
+ * {@code backtest.portfolio.PortfolioBacktester}'s survivorship-aware
+ * overload.</p>
  */
 public final class AlphaContext {
 
     private final List<String> symbols;      // frozen order: the panel's axis
     private final BarSeries[] series;        // aligned with symbols
     private final Fundamentals[] fundamentals; // aligned; null entry = unknown
+    private final PointInTimeUniverse universe; // null = everything always active
     private final int bars;
 
     private AlphaContext(List<String> symbols, BarSeries[] series,
-                         Fundamentals[] fundamentals, int bars) {
+                         Fundamentals[] fundamentals, PointInTimeUniverse universe, int bars) {
         this.symbols = symbols;
         this.series = series;
         this.fundamentals = fundamentals;
+        this.universe = universe;
         this.bars = bars;
     }
 
@@ -69,7 +88,25 @@ public final class AlphaContext {
             series[i] = s;
             funda[i] = fundamentals.get(symbols.get(i));
         }
-        return new AlphaContext(List.copyOf(symbols), series, funda, n);
+        return new AlphaContext(List.copyOf(symbols), series, funda, null, n);
+    }
+
+    /**
+     * The same panel with a point-in-time universe attached: built-in
+     * factors then score non-members as NaN per bar (see the class doc).
+     * Universe timestamps must be in the same units as the bar timestamps.
+     */
+    public AlphaContext withUniverse(PointInTimeUniverse universe) {
+        return new AlphaContext(symbols, series, fundamentals, universe, bars);
+    }
+
+    /**
+     * Whether symbol {@code i} is in the tradeable cross-section at
+     * {@code barIndex}: always true without a universe, otherwise
+     * point-in-time membership (dead and dropped names excluded).
+     */
+    public boolean isActive(int i, int barIndex) {
+        return universe == null || universe.isMember(symbols.get(i), timestamp(barIndex));
     }
 
     /** The frozen symbol order every score/weight array aligns with. */

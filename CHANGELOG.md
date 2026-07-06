@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+- **Second review round** (7-angle review of the survivorship+alpha batch):
+  fixed walk-forward **train/test leakage** (forward-return windows spilled
+  past the training boundary — in-sample selection was reading up to
+  horizon−1 bars of test returns), walk-forward NPE when every candidate's
+  training IC is NaN, `HftQuoter` throwing on the bus consumer thread when
+  inventory skew pushed a quote below a banded schedule's first band (new
+  `TickSizeSchedule.roundDown/UpClamped`), `TickBacktester` restored to
+  total bucket semantics on the finer clamped tick (the distance form had a
+  dead zone at half-tick boundaries where midpoint prints neither filled
+  nor accrued queue), `AlphaBacktester` failing loud on cost ≥ 100% of
+  equity (capacity answer, not negative-equity garbage) and validating
+  `startIndex ≥ impactWindow`, MACD factor rewritten as one incremental
+  pass (~50× fewer reads, and no zero-bias from pre-history bars),
+  `SignalEvaluator` turnover sharing the IC series' date denominator,
+  `AlphaReport` NaN-guarding attribution, using sample-stdDev rolling
+  Sharpe (matches `summarize()` exactly) and the `peak > 0` drawdown guard,
+  `PortfolioConstruction.trailingBetas` delegating to `RiskMetrics.beta`,
+  a `sectorNeutralize(ctx, weights, map)` overload that cannot misalign
+  with the sorted panel, deterministic same-bar lifecycle ordering in
+  `PortfolioBacktester` (mergers before delistings, sorted symbols), and
+  the epoch-seconds heuristic shared from `CsvBarLoader` with line-tagged
+  errors in both loader passes.
+- **Survivorship-aware alpha research**: `AlphaContext.withUniverse` gates
+  every built-in factor through point-in-time membership (`isActive`) —
+  the alpha pipeline and the survivorship engine now compose.
+
 - **Review fixes** (multi-angle code review of the v1.3.0 batch): dividends
   now credit before same-bar lifecycle events (a name delisting on its own
   ex-date still pays its holder); NDF fixings walk back in the restricted

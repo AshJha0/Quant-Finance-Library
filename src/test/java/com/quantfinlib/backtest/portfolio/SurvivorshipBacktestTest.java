@@ -167,6 +167,29 @@ class SurvivorshipBacktestTest {
     }
 
     @Test
+    void sameBarMergerIntoDyingAcquirerIsDeterministic() {
+        // TGT merges into ACQ and ACQ delists with the SAME effective bar:
+        // mergers process before delistings, so the converted shares settle
+        // at the acquirer's terms — independent of map iteration order.
+        Map<String, BarSeries> data = Map.of(
+                "TGT", flat("TGT", 40),
+                "ACQ", flat("ACQ", 100));
+        PointInTimeUniverse universe = new PointInTimeUniverse()
+                .addMembership("TGT", 0)
+                .addMembership("ACQ", 0)
+                .recordMerger("TGT", 5, 10, 0.5, "ACQ")
+                .recordDelisting("ACQ", 5, 0.0); // orderly exit at last close
+        PortfolioBacktester.Result r = PortfolioBacktester.run(
+                buyAndHold(Map.of("TGT", 1.0)), data, config(), universe, Map.of());
+        double tgtShares = 1_000_000.0 / 40;
+        // Cash leg + converted shares paid out at ACQ's last close (100).
+        assertEquals(tgtShares * 10 + tgtShares * 0.5 * 100,
+                r.equityCurve()[BARS - 1], 1e-6);
+        assertEquals(2, r.lifecycleEventsApplied());
+        assertTrue(r.finalPositions().isEmpty());
+    }
+
+    @Test
     void dividendOnTheDelistingBarStillPaysTheHolder() {
         // The ex-date entitlement belongs to whoever held through the prior
         // close — even when the name delists on its own ex-date. Dividends

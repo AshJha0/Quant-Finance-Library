@@ -88,7 +88,7 @@ public final class CsvBarLoader {
         }
         // Whole-file epoch-seconds detection: if every numeric timestamp sits in the
         // plausible seconds range (years 1973..5138), the file is in seconds.
-        if (allNumeric && minTs >= 100_000_000L && maxTs < 100_000_000_000L) {
+        if (isEpochSecondsFile(allNumeric, minTs, maxTs)) {
             List<Bar> scaled = new ArrayList<>(bars.size());
             for (Bar b : bars) {
                 scaled.add(new Bar(b.timestamp() * 1000, b.open(), b.high(), b.low(), b.close(), b.volume()));
@@ -152,6 +152,16 @@ public final class CsvBarLoader {
     /** Numeric parse tolerant of vendor thousands separators ("1,234.5"). */
     static double parseNumber(String value) {
         return Double.parseDouble(value.trim().replace(",", ""));
+    }
+
+    /**
+     * The whole-file epoch-seconds heuristic, shared with
+     * {@code UniverseCsvLoader} so bar files and universe files can never
+     * disagree on the scale: all-numeric timestamps sitting entirely in the
+     * plausible seconds range (years 1973..5138) are seconds, ×1000.
+     */
+    static boolean isEpochSecondsFile(boolean allNumeric, long minTs, long maxTs) {
+        return allNumeric && minTs >= 100_000_000L && maxTs < 100_000_000_000L;
     }
 
     /**

@@ -526,9 +526,14 @@ with each stage a separate composable step (scores flow as plain `double[]`
 aligned to a frozen symbol panel; NaN = no data at every stage):
 
 1. **Signal generation** (`Factors`) — nine standard factors: MA crossover, MACD,
-   12-1 momentum (trend); contrarian RSI, Bollinger reversion, mean reversion
-   (reversal); value (earnings+book yield), quality (ROE − leverage), low
-   volatility (defensive). Stateless, O(window), no-look-ahead by contract.
+   12-1 momentum (trend); contrarian RSI (Cutler's — named so, because it is NOT
+   Wilder's `Indicators.rsi`), Bollinger reversion, mean reversion (reversal);
+   value (earnings+book yield), quality (ROE − leverage), low volatility
+   (defensive). Stateless, O(window), no-look-ahead by contract — and
+   survivorship-aware: attach a `PointInTimeUniverse` via
+   `AlphaContext.withUniverse` and every factor scores dead/non-member names
+   NaN per bar, so ICs and weights only ever see the point-in-time
+   cross-section.
 2. **Signal evaluation** (`SignalEvaluator`) — rank IC (Spearman, monotone-invariant),
    Grinold-Kahn IR, t-stat on non-overlapping windows, hit rate, implied turnover,
    and cross-factor exposure (is your "new" factor just momentum in a hat).

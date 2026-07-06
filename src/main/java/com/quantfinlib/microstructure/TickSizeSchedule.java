@@ -149,6 +149,23 @@ public final class TickSizeSchedule {
         return Math.ceil(price / tick - 1e-9) * tick;
     }
 
+    /**
+     * {@link #roundDown} with the clamped tick — total over any price, for
+     * hot paths (a quoter's skewed bid can drift below the first band, and
+     * throwing inside a bus listener would kill the consumer thread; the
+     * risk gate downstream is the right place to refuse bad prices).
+     */
+    public double roundDownClamped(double price) {
+        double tick = tickForClamped(price);
+        return Math.floor(price / tick + 1e-9) * tick;
+    }
+
+    /** {@link #roundUp} with the clamped tick — see {@link #roundDownClamped}. */
+    public double roundUpClamped(double price) {
+        double tick = tickForClamped(price);
+        return Math.ceil(price / tick - 1e-9) * tick;
+    }
+
     /** Rounds to the nearest grid point (marks, reference prices). */
     public double roundNearest(double price) {
         double tick = tickFor(price);

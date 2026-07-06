@@ -3,8 +3,6 @@ package com.quantfinlib.alpha;
 import com.quantfinlib.core.BarSeries;
 import com.quantfinlib.screener.Fundamentals;
 
-import java.util.function.BiFunction;
-
 /**
  * The standard alpha factor library — nine signal generators covering the
  * classic technical, factor-investing and defensive families. Each returns
@@ -66,21 +64,31 @@ public final class Factors {
         // the sub-0.04% truncation tail — not worth NaN-ing early scores.
         int warmup = slow + signal;
         return named("MACD(" + fast + "," + slow + "," + signal + ")", warmup, (s, i) -> {
-            // Signal line is an EMA over the MACD line; rebuild the last
-            // 4×signal MACD points (each O(window)) — stateless but exact
-            // to truncation error.
-            int points = 4 * signal;
+            // Single forward pass carrying both price EMAs and the signal
+            // EMA together: O(4·slow) per score instead of rebuilding each
+            // EMA per MACD point, and the start clamp at bar 0 means the
+            // seeds are real prices, never fabricated zeros.
+            int start = Math.max(0, i - 4 * slow + 1);
+            double kFast = 2.0 / (fast + 1);
+            double kSlow = 2.0 / (slow + 1);
+            double kSignal = 2.0 / (signal + 1);
+            double emaFast = s.close(start);
+            double emaSlow = s.close(start);
             double signalLine = Double.NaN;
-            double k = 2.0 / (signal + 1);
-            double macdAtI = Double.NaN;
-            for (int j = i - points + 1; j <= i; j++) {
-                double m = ema(s, j, fast) - ema(s, j, slow);
-                signalLine = Double.isNaN(signalLine) ? m : signalLine + k * (m - signalLine);
-                if (j == i) {
-                    macdAtI = m;
+            double macdLine = 0;
+            for (int j = start; j <= i; j++) {
+                if (j > start) {
+                    double close = s.close(j);
+                    emaFast += kFast * (close - emaFast);
+                    emaSlow += kSlow * (close - emaSlow);
                 }
+                macdLine = emaFast - emaSlow;
+                // The signal EMA seeds from the first MACD value in the pass.
+                signalLine = Double.isNaN(signalLine)
+                        ? macdLine
+                        : signalLine + kSignal * (macdLine - signalLine);
             }
-            return (macdAtI - signalLine) / s.close(i);
+            return (macdLine - signalLine) / s.close(i);
         });
     }
 
@@ -102,12 +110,18 @@ public final class Factors {
 
     /**
      * Contrarian RSI: {@code (50 − RSI) / 50}, in [−1, +1]. Oversold names
-     * (RSI 30 → +0.4) score positively. Cutler's simple-average RSI is used
-     * (arithmetic gains/losses over the window) so the factor is stateless.
+     * (RSI 30 → +0.4) score positively.
+     *
+     * <p><b>Definition note</b>: this is <em>Cutler's</em> RSI (arithmetic
+     * average of gains/losses over the window), chosen because it is
+     * stateless and exactly recomputable at any bar. It is NOT the same
+     * number as {@code indicators.Indicators#rsi}, which uses Wilder
+     * smoothing — after a trend the two can disagree near the 30/70
+     * thresholds. The factor name says so to keep reports unambiguous.</p>
      */
     public static AlphaFactor rsi(int period) {
         requireWindow(period > 0, "need period > 0");
-        return named("RSI_REV(" + period + ")", period + 1, (s, i) -> {
+        return named("RSI_CUTLER_REV(" + period + ")", period + 1, (s, i) -> {
             double gain = 0;
             double loss = 0;
             for (int j = i - period + 1; j <= i; j++) {
@@ -223,17 +237,29 @@ public final class Factors {
     // Plumbing
     // ------------------------------------------------------------------
 
+    /** Per-symbol window math, unboxed — the score kernel of every technical factor. */
+    @FunctionalInterface
+    private interface ScoreFn {
+        double score(BarSeries series, int index);
+    }
+
     /** Wraps per-symbol window math into the cross-sectional contract. */
-    private static AlphaFactor named(String name, int minBars,
-                                     BiFunction<BarSeries, Integer, Double> perSymbol) {
+    private static AlphaFactor named(String name, int minBars, ScoreFn perSymbol) {
         return new AlphaFactor() {
             @Override
             public double[] scores(AlphaContext ctx, int index) {
                 double[] out = new double[ctx.symbolCount()];
                 for (int i = 0; i < out.length; i++) {
-                    // NaN below the warm-up: downstream steps skip it.
-                    out[i] = index < minBars ? Double.NaN
-                            : perSymbol.apply(ctx.series(i), index);
+                    if (index < minBars) {
+                        // NaN below the warm-up: downstream steps skip it.
+                        out[i] = Double.NaN;
+                    } else if (!ctx.isActive(i, index)) {
+                        // Point-in-time universe gate: dead/non-member names
+                        // never enter the cross-section (see AlphaContext).
+                        out[i] = Double.NaN;
+                    } else {
+                        out[i] = perSymbol.score(ctx.series(i), index);
+                    }
                 }
                 return out;
             }
@@ -254,7 +280,8 @@ public final class Factors {
                 double[] out = new double[ctx.symbolCount()];
                 for (int i = 0; i < out.length; i++) {
                     Fundamentals fu = ctx.fundamentals(i);
-                    out[i] = fu == null ? Double.NaN : f.applyAsDouble(fu);
+                    out[i] = fu == null || !ctx.isActive(i, index)
+                            ? Double.NaN : f.applyAsDouble(fu);
                 }
                 return out;
             }
@@ -272,17 +299,6 @@ public final class Factors {
             sum += s.close(j);
         }
         return sum / period;
-    }
-
-    /** Truncated EMA: seeded 4 periods back (dropped weight < 0.04%). */
-    private static double ema(BarSeries s, int index, int period) {
-        int start = Math.max(0, index - 4 * period + 1);
-        double k = 2.0 / (period + 1);
-        double ema = s.close(start);
-        for (int j = start + 1; j <= index; j++) {
-            ema += k * (s.close(j) - ema);
-        }
-        return ema;
     }
 
     private static void requireWindow(boolean ok, String message) {

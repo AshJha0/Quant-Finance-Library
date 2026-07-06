@@ -103,9 +103,16 @@ public final class UniverseCsvLoader {
                     continue;
                 }
                 if (raw.chars().allMatch(Character::isDigit)) {
-                    long v = Long.parseLong(raw);
-                    minTs = Math.min(minTs, v);
-                    maxTs = Math.max(maxTs, v);
+                    try {
+                        long v = Long.parseLong(raw);
+                        minTs = Math.min(minTs, v);
+                        maxTs = Math.max(maxTs, v);
+                    } catch (NumberFormatException e) {
+                        // >19-digit corruption: line-tag it here too — pass 1
+                        // fires before pass 2's wrapping would.
+                        throw new IllegalArgumentException(
+                                "line " + (lineNo + 1) + ": unparseable timestamp '" + raw + "'", e);
+                    }
                 } else {
                     allNumeric = false; // ISO dates present: values are millis
                 }
@@ -116,9 +123,9 @@ public final class UniverseCsvLoader {
         if (!headerSeen) {
             throw new IllegalArgumentException("empty universe file (no header)");
         }
-        // Same heuristic and bounds as CsvBarLoader: all-numeric files whose
-        // values fit the plausible seconds range (years 1973..5138) scale.
-        long scale = allNumeric && minTs >= 100_000_000L && maxTs < 100_000_000_000L ? 1000 : 1;
+        // THE seconds-vs-millis heuristic, owned by CsvBarLoader so bar and
+        // universe files can never diverge on timestamp scale.
+        long scale = CsvBarLoader.isEpochSecondsFile(allNumeric, minTs, maxTs) ? 1000 : 1;
 
         PointInTimeUniverse universe = new PointInTimeUniverse();
         for (int r = 0; r < rows.size(); r++) {

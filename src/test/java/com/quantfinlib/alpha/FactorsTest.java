@@ -164,6 +164,30 @@ class FactorsTest {
     }
 
     @Test
+    void universeGateExcludesDeadNamesFromTheCrossSection() {
+        // Attach a point-in-time universe: after DOWN's delisting bar every
+        // built-in factor must score it NaN — dead names never enter ICs,
+        // validation, or constructed weights.
+        com.quantfinlib.data.PointInTimeUniverse universe =
+                new com.quantfinlib.data.PointInTimeUniverse()
+                        .addMembership("UP", 0)
+                        .addMembership("FLAT", 0)
+                        .addMembership("DOWN", 0)
+                        .recordDelisting("DOWN", 80, -1.0);
+        AlphaContext ctx = panel().withUniverse(universe);
+        int down = idx(ctx, "DOWN");
+        // Alive before the event...
+        assertTrue(!Double.isNaN(Factors.momentum(20, 0).scores(ctx, 60)[down]));
+        assertTrue(ctx.isActive(down, 60));
+        // ...NaN at and after it, across factor families.
+        assertTrue(Double.isNaN(Factors.momentum(20, 0).scores(ctx, 90)[down]));
+        assertTrue(Double.isNaN(Factors.rsi(14).scores(ctx, 90)[down]));
+        assertTrue(!ctx.isActive(down, 90));
+        // Survivors keep scoring.
+        assertTrue(!Double.isNaN(Factors.momentum(20, 0).scores(ctx, 90)[idx(ctx, "UP")]));
+    }
+
+    @Test
     void parameterValidation() {
         assertThrows(IllegalArgumentException.class, () -> Factors.movingAverageCrossover(30, 10));
         assertThrows(IllegalArgumentException.class, () -> Factors.momentum(10, 10));

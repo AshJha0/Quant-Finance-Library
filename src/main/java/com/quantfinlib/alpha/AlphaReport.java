@@ -130,6 +130,21 @@ public final class AlphaReport {
         if (n <= k + 1) {
             throw new IllegalArgumentException("more factors than observations");
         }
+        // NaN = missing everywhere in this package; one NaN bar would poison
+        // the normal equations into all-NaN betas silently. Fail with the
+        // index instead: trim factor warm-up bars before attributing.
+        for (int t = 0; t < n; t++) {
+            if (Double.isNaN(portfolioReturns[t])) {
+                throw new IllegalArgumentException("NaN portfolio return at index " + t);
+            }
+            for (int j = 0; j < k; j++) {
+                if (Double.isNaN(factorReturns[j][t])) {
+                    throw new IllegalArgumentException("NaN in factor stream '"
+                            + factorNames.get(j) + "' at index " + t
+                            + " — trim warm-up bars before attribution");
+                }
+            }
+        }
         // Design matrix X = [1 | factors]; solve (XᵀX) b = Xᵀy.
         int p = k + 1;
         double[][] xtx = new double[p][p];
@@ -182,13 +197,18 @@ public final class AlphaReport {
         return r;
     }
 
-    /** Drawdown series: fraction below the running peak (0 at new highs). */
+    /**
+     * Drawdown series: fraction below the running peak (0 at new highs).
+     * Guards {@code peak > 0} exactly like {@code risk.RiskMetrics.maxDrawdown}
+     * so {@code min(drawdownCurve)} and the headline max-drawdown metric can
+     * never disagree on a curve that touches zero.
+     */
     public static double[] drawdownCurve(double[] equity) {
         double[] dd = new double[equity.length];
         double peak = equity[0];
         for (int i = 0; i < equity.length; i++) {
             peak = Math.max(peak, equity[i]);
-            dd[i] = equity[i] / peak - 1;
+            dd[i] = peak > 0 ? equity[i] / peak - 1 : 0;
         }
         return dd;
     }
@@ -197,6 +217,11 @@ public final class AlphaReport {
      * Rolling annualized Sharpe over a trailing window of per-bar returns;
      * NaN until the window fills. The steadiness plot: a flat positive line
      * is a strategy, a single spike is an anecdote.
+     *
+     * <p>Uses the SAMPLE standard deviation (n−1) — the same definition as
+     * {@code risk.RiskMetrics.sharpeRatio} behind {@link #summarize} — so a
+     * full-sample rolling window reproduces the headline Sharpe exactly
+     * rather than differing by {@code √(n/(n−1))}.</p>
      */
     public static double[] rollingSharpe(double[] returns, int window, int periodsPerYear) {
         if (window < 2 || window > returns.length) {
@@ -206,7 +231,7 @@ public final class AlphaReport {
         java.util.Arrays.fill(out, 0, window - 1, Double.NaN);
         for (int i = window - 1; i < returns.length; i++) {
             double mean = MathUtils.mean(returns, i - window + 1, i + 1);
-            double sd = MathUtils.stdDevP(returns, i - window + 1, i + 1);
+            double sd = MathUtils.stdDevSample(returns, i - window + 1, i + 1);
             out[i] = sd == 0 ? 0 : mean / sd * Math.sqrt(periodsPerYear);
         }
         return out;

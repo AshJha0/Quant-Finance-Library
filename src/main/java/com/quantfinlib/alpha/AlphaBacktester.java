@@ -106,6 +106,15 @@ public final class AlphaBacktester {
         if (config.startIndex() >= n - 1) {
             throw new IllegalArgumentException("startIndex leaves no bars to trade");
         }
+        if (config.capital() > 0 && config.startIndex() < config.impactWindow()) {
+            // The impact model reads impactWindow bars of ADV/vol history
+            // before the first rebalance; enforcing it here beats an
+            // uncontextualized ArrayIndexOutOfBounds deep in the loop.
+            throw new IllegalArgumentException(
+                    "startIndex " + config.startIndex() + " < impactWindow "
+                            + config.impactWindow() + " — impact estimation needs that history"
+                            + " (or set capital to 0 to disable impact)");
+        }
         double[] weights = new double[m];       // current holdings (fractions of equity)
         double[] netEquity = new double[n - config.startIndex()];
         double[] grossEquity = new double[netEquity.length];
@@ -120,9 +129,10 @@ public final class AlphaBacktester {
 
         for (int t = config.startIndex(); t < n - 1; t++) {
             int outIdx = t - config.startIndex();
+            double costFactor = 1.0;
 
             // Rebalance at the bar close, before earning the next bar's return.
-            if ((t - config.startIndex()) % config.rebalanceEveryBars() == 0) {
+            if (outIdx % config.rebalanceEveryBars() == 0) {
                 double[] target = builder.weights(ctx, factor.scores(ctx, t), t);
                 if (target.length != m) {
                     throw new IllegalArgumentException("weight builder returned misaligned array");
@@ -148,8 +158,18 @@ public final class AlphaBacktester {
                     }
                 }
                 double cost = commission + spread + slip + impact;
-                // Costs come straight out of net equity at the rebalance.
-                netEquity[outIdx] *= 1 - cost;
+                if (cost >= 1) {
+                    // The square-root law is unbounded: a book too big for
+                    // its liquidity can cost more than the equity. Negative
+                    // equity compounds into sign-inverted garbage, so fail
+                    // loudly — this IS the capacity answer.
+                    throw new IllegalArgumentException(String.format(java.util.Locale.ROOT,
+                            "execution cost %.1f%% of equity at bar %d (impact %.1f%%) — "
+                                    + "the book is too large for this universe's liquidity; "
+                                    + "reduce capital or the rebalance size",
+                            cost * 100, t, impact * 100));
+                }
+                costFactor = 1 - cost;
                 commissionDrag += commission;
                 spreadDrag += spread;
                 slippageDrag += slip;
@@ -166,7 +186,9 @@ public final class AlphaBacktester {
                     portfolioReturn += weights[i] * ctx.returnOver(i, t, t + 1);
                 }
             }
-            netEquity[outIdx + 1] = netEquity[outIdx] * (1 + portfolioReturn);
+            // Cost folds into the compounding step: each equity slot is
+            // written exactly once and netEquity[0] stays 1.0 by contract.
+            netEquity[outIdx + 1] = netEquity[outIdx] * costFactor * (1 + portfolioReturn);
             grossEquity[outIdx + 1] = grossEquity[outIdx] * (1 + portfolioReturn);
         }
 

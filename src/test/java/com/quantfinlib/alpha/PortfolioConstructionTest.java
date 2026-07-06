@@ -62,6 +62,40 @@ class PortfolioConstructionTest {
     }
 
     @Test
+    void contextSectorOverloadCannotMisalign() {
+        // AlphaContext SORTS symbols; a hand-built sectors[] in insertion
+        // order would demean against permuted labels. The map overload
+        // resolves labels against the frozen panel order by construction.
+        Map<String, BarSeries> data = new java.util.LinkedHashMap<>();
+        data.put("ZZZ", flatSeries("ZZZ"));  // insertion order: ZZZ first...
+        data.put("AAA", flatSeries("AAA"));
+        data.put("MMM", flatSeries("MMM"));
+        AlphaContext ctx = AlphaContext.of(data); // ...panel order: AAA,MMM,ZZZ
+        double[] w = {0.4, -0.1, 0.2};            // aligned with AAA,MMM,ZZZ
+        double[] out = PortfolioConstruction.sectorNeutralize(ctx, w, Map.of(
+                "AAA", "TECH", "ZZZ", "TECH", "MMM", "FIN"));
+        // TECH = AAA(0.4) + ZZZ(0.2) → demeaned to ±0.1; FIN singleton → 0.
+        assertEquals(0.0, out[0] + out[2], 1e-12);
+        assertEquals(0.1, out[0], 1e-12);
+        assertEquals(0.0, out[1], 1e-12);
+        // A symbol missing from the map demeans against itself, not a sector.
+        double[] partial = PortfolioConstruction.sectorNeutralize(ctx, w,
+                Map.of("AAA", "TECH", "ZZZ", "TECH"));
+        assertEquals(0.0, partial[1], 1e-12);
+        // The uncapped two-arg zScoreWeights overload mirrors the sentinel form.
+        double[] scores = {2.0, -2.0, 0.0};
+        assertEquals(1.0, gross(PortfolioConstruction.zScoreWeights(scores, 1.0)), 1e-12);
+    }
+
+    private static BarSeries flatSeries(String symbol) {
+        BarSeries.Builder b = BarSeries.builder(symbol);
+        for (int i = 0; i < 10; i++) {
+            b.add(i, 100, 101, 99, 100, 1_000);
+        }
+        return b.build();
+    }
+
+    @Test
     void sectorNeutralizationZeroesEverySectorNet() {
         double[] w = {0.30, 0.10, -0.05, 0.20, -0.40, 0.0};
         String[] sectors = {"TECH", "TECH", "TECH", "FIN", "FIN", "FIN"};

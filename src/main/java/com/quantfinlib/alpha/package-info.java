@@ -34,6 +34,10 @@
  * <p>All scores/weights flow as {@code double[]} aligned with the frozen
  * {@code AlphaContext.symbols()} order; NaN marks "no data" at every
  * stage. Factors must never read past their evaluation index — the
- * no-look-ahead contract on {@link com.quantfinlib.alpha.AlphaFactor}.</p>
+ * no-look-ahead contract on {@link com.quantfinlib.alpha.AlphaFactor}.
+ * Attach a {@code data.PointInTimeUniverse} via
+ * {@link com.quantfinlib.alpha.AlphaContext#withUniverse} to make the whole
+ * pipeline survivorship-honest: dead and non-member names score NaN per bar
+ * and never enter ICs, validation, or constructed weights.</p>
  */
 package com.quantfinlib.alpha;

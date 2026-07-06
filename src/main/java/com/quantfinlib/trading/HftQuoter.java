@@ -117,10 +117,13 @@ public final class HftQuoter implements TickListener {
         double ask = price + config.halfSpread() + skew;
 
         // Grid snap toward passivity: bid down, ask up — never through mid.
+        // CLAMPED rounding: a heavily skewed bid can fall below the grid's
+        // first band, and this runs on the bus consumer thread — throwing
+        // here would kill every listener. Bad prices die at the risk gate.
         TickSizeSchedule grid = config.tickSchedule();
         if (grid != null) {
-            bid = grid.roundDown(bid);
-            ask = grid.roundUp(ask);
+            bid = grid.roundDownClamped(bid);
+            ask = grid.roundUpClamped(ask);
         }
 
         // Two sides through the risk gate. A rejected side is counted and

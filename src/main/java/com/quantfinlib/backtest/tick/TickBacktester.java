@@ -282,8 +282,11 @@ public final class TickBacktester implements TickFileReader.ReplayHandler, TickT
     private boolean samePriceLevel(double a, double b) {
         double tick = comparisonTick(a, b);
         if (tick > 0) {
-            // Distance-based level equality: within half a tick is one level.
-            return Math.abs(a - b) < tick / 2;
+            // Bucket equality on the finer tick: a TOTAL partition — every
+            // print is either same-level, through, or behind, with no dead
+            // zone at half-tick boundaries (midpoint/sub-penny prints must
+            // either fill or accrue queue, never vanish).
+            return Math.round(a / tick) == Math.round(b / tick);
         }
         return Math.abs(a - b) <= PRICE_EPS;
     }
@@ -291,10 +294,10 @@ public final class TickBacktester implements TickFileReader.ReplayHandler, TickT
     private boolean tradesThrough(Side side, double printPrice, double limitPrice) {
         double tick = comparisonTick(printPrice, limitPrice);
         if (tick > 0) {
-            // Through = beyond the limit by at least half the finer tick.
-            return side == Side.BUY
-                    ? printPrice < limitPrice - tick / 2
-                    : printPrice > limitPrice + tick / 2;
+            // Through = strictly better bucket on the finer tick.
+            long print = Math.round(printPrice / tick);
+            long limit = Math.round(limitPrice / tick);
+            return side == Side.BUY ? print < limit : print > limit;
         }
         return side == Side.BUY
                 ? printPrice < limitPrice - PRICE_EPS

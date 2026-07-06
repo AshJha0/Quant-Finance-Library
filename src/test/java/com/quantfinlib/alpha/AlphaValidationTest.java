@@ -138,6 +138,40 @@ class AlphaValidationTest {
     }
 
     @Test
+    void trainingWindowsNeverReadTestReturns() {
+        // The leakage regression: meanIc over [from, to) must only evaluate
+        // dates whose ENTIRE forward window (t, t+h] fits inside the range —
+        // otherwise walk-forward selection peeks at test-window returns.
+        java.util.List<Integer> asked = new java.util.ArrayList<>();
+        AlphaFactor recording = new AlphaFactor() {
+            @Override
+            public double[] scores(AlphaContext ctx, int index) {
+                asked.add(index);
+                return Factors.momentum(20, 0).scores(ctx, index);
+            }
+        };
+        int from = 30;
+        int to = 90;
+        int horizon = 25;
+        AlphaValidation.meanIc(panel(), recording, from, to, horizon);
+        assertTrue(!asked.isEmpty());
+        for (int t : asked) {
+            assertTrue(t + horizon < to,
+                    "date " + t + " forward window crosses the boundary " + to);
+        }
+    }
+
+    @Test
+    void walkForwardRefusesWhenNoCandidateScoresInTraining() {
+        // Warm-up (200 bars) exceeds the training window: every training IC
+        // is NaN, and the fold must fail with a diagnostic, not an NPE.
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> AlphaValidation.walkForward(panel(),
+                        List.of(Factors.momentum(250, 0)), 5, 0, 80, 40));
+        assertTrue(e.getMessage().contains("warm-up"), e.getMessage());
+    }
+
+    @Test
     void sensitivitySweepShowsAPlateauNotASpike() {
         List<AlphaFactor> sweep = List.of(
                 Factors.momentum(15, 0), Factors.momentum(20, 0),

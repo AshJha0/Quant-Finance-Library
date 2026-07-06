@@ -79,9 +79,14 @@ public final class SignalEvaluator {
 
             // Pairwise-complete: a NaN on either side drops the pair.
             double ic = spearman(scores, fwd);
-            if (!Double.isNaN(ic)) {
-                ics.add(ic);
+            if (Double.isNaN(ic)) {
+                // Warm-up / unscored date: it is in NO metric's denominator.
+                // Counting its all-zero weight vector as a zero-turnover
+                // observation would understate turnover against the same
+                // dates the IC series excludes.
+                continue;
             }
+            ics.add(ic);
             for (int i = 0; i < scores.length; i++) {
                 if (!Double.isNaN(scores[i]) && scores[i] != 0 && !Double.isNaN(fwd[i])) {
                     hitPairs++;
@@ -90,8 +95,10 @@ public final class SignalEvaluator {
                     }
                 }
             }
-            // Turnover on the normalized (gross = 1) weights the scores imply.
-            double[] w = PortfolioConstruction.zScoreWeights(scores, 1.0, Double.MAX_VALUE);
+            // Turnover on the normalized (gross = 1) weights the scores
+            // imply, between consecutive SCORED dates — one denominator
+            // shared with the IC series.
+            double[] w = PortfolioConstruction.zScoreWeights(scores, 1.0);
             if (prevWeights != null) {
                 double l1 = 0;
                 for (int i = 0; i < w.length; i++) {

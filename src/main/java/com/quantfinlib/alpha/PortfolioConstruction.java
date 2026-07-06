@@ -30,6 +30,11 @@ public final class PortfolioConstruction {
     // Position sizing
     // ------------------------------------------------------------------
 
+    /** {@link #zScoreWeights(double[], double, double)} without a per-name cap. */
+    public static double[] zScoreWeights(double[] scores, double grossTarget) {
+        return zScoreWeights(scores, grossTarget, Double.MAX_VALUE);
+    }
+
     /**
      * Z-score sizing, the workhorse: demean scores cross-sectionally,
      * scale by their dispersion, clamp at ±3σ (a single outlier must not
@@ -120,6 +125,13 @@ public final class PortfolioConstruction {
      * volatile names dominating — the first-order version of equal risk
      * contribution, exact when correlations are equal. Re-normalized to
      * {@code grossTarget}.
+     *
+     * <p>Related but different: {@code backtest.portfolio.PositionSizing.
+     * inverseVolatilityWeights} builds long-only weights FROM vols alone and
+     * silently equal-weights on a degenerate vol; this method rescales an
+     * existing signed book and <b>throws</b> on unusable vols — a flat
+     * (σ = 0) name inside a signal-weighted book is a data problem to
+     * surface, not to paper over.</p>
      */
     public static double[] inverseVolBudget(double[] weights, double[] vols, double grossTarget) {
         if (weights.length != vols.length) {
@@ -164,13 +176,41 @@ public final class PortfolioConstruction {
     // ------------------------------------------------------------------
 
     /**
+     * {@link #sectorNeutralize(double[], String[])} with alignment by
+     * construction: sector labels come as a map keyed by symbol and are
+     * resolved against the context's frozen (sorted!) symbol order —
+     * {@code AlphaContext.of} re-sorts symbols, so a hand-built array in the
+     * caller's insertion order would silently demean against permuted
+     * labels. Symbols missing from the map keep their own singleton sector
+     * (i.e. they demean to zero).
+     */
+    public static double[] sectorNeutralize(AlphaContext ctx, double[] weights,
+                                            java.util.Map<String, String> sectorBySymbol) {
+        if (weights.length != ctx.symbolCount()) {
+            throw new IllegalArgumentException("weights must align with the context panel");
+        }
+        String[] sectors = new String[weights.length];
+        for (int i = 0; i < sectors.length; i++) {
+            // Unknown sector → unique label → the name demeans against
+            // itself (to zero) instead of polluting a real sector's offset.
+            sectors[i] = sectorBySymbol.getOrDefault(ctx.symbols().get(i),
+                    " UNKNOWN:" + ctx.symbols().get(i));
+        }
+        return sectorNeutralize(weights, sectors);
+    }
+
+    /**
      * Sector neutrality: demeans weights within each sector, so every
      * sector's net weight is exactly zero and the book carries stock
      * selection, not sector bets. Names with weight 0 stay 0 (they are not
      * dragged in to fund their sector's offset). Gross exposure changes —
      * re-target gross afterwards if it matters.
      *
-     * @param sectors sector label per symbol, aligned with the weights
+     * @param sectors sector label per symbol, aligned with the weights —
+     *                which follow {@code AlphaContext.symbols()} order
+     *                (SORTED, not your input map's order); prefer the
+     *                {@link #sectorNeutralize(AlphaContext, double[], java.util.Map)}
+     *                overload, which cannot misalign
      */
     public static double[] sectorNeutralize(double[] weights, String[] sectors) {
         if (weights.length != sectors.length) {
@@ -246,10 +286,11 @@ public final class PortfolioConstruction {
             }
             market[j] = sum / n;
         }
-        double marketVar = MathUtils.variance(market);
         double[] betas = new double[n];
         for (int i = 0; i < n; i++) {
-            betas[i] = marketVar == 0 ? 0 : MathUtils.covariance(returns[i], market) / marketVar;
+            // One beta definition library-wide: risk.RiskMetrics owns it
+            // (including the zero-variance-benchmark policy).
+            betas[i] = com.quantfinlib.risk.RiskMetrics.beta(returns[i], market);
         }
         return betas;
     }
@@ -296,7 +337,17 @@ public final class PortfolioConstruction {
                 cov[i][j] = covariance[map[i]][map[j]];
             }
         }
-        double[] solved = MathUtils.solveLinear(cov, a);
+        double[] solved;
+        try {
+            solved = MathUtils.solveLinear(cov, a);
+        } catch (IllegalArgumentException e) {
+            // The solver reports compacted-matrix columns, which mislead when
+            // NaN alphas were squeezed out — re-throw in the caller's terms.
+            throw new IllegalArgumentException(
+                    "covariance is singular (a flat/duplicated/forward-filled series has zero "
+                            + "or dependent variance) — shrink or regularize it, e.g. add λI ("
+                            + e.getMessage() + ")", e);
+        }
         double[] w = new double[n];
         for (int i = 0; i < m; i++) {
             w[map[i]] = solved[i];

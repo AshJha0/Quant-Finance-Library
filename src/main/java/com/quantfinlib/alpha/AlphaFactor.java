@@ -19,7 +19,11 @@ package com.quantfinlib.alpha;
  *   <li>implementations must only read bars {@code <= index}: a factor that
  *       peeks forward invalidates every evaluation built on it. The
  *       validation suite cannot detect look-ahead mechanically — this
- *       contract is the guard.</li>
+ *       contract is the guard;</li>
+ *   <li>custom factors should honor {@link AlphaContext#isActive} (return
+ *       NaN for inactive names) the way the built-ins do, so an attached
+ *       point-in-time universe removes dead/non-member names from the
+ *       cross-section everywhere, not just in {@code Factors}.</li>
  * </ul>
  */
 @FunctionalInterface

@@ -70,6 +70,20 @@ public final class PortfolioBacktester {
                          double dividendCashCredited, int lifecycleEventsApplied) {
     }
 
+    /** Same-bar processing order for terminal events (see the run loop). */
+    private static final PointInTimeUniverse.EventType[] TERMINAL_ORDER = {
+            PointInTimeUniverse.EventType.MERGER, PointInTimeUniverse.EventType.DELISTING};
+
+    /** A symbol's date-sorted dividends plus the replay cursor, in one place. */
+    private static final class DividendStream {
+        final List<CorporateActions.CorporateAction> sorted;
+        int cursor;
+
+        DividendStream(List<CorporateActions.CorporateAction> sorted) {
+            this.sorted = sorted;
+        }
+    }
+
     private PortfolioBacktester() {
     }
 
@@ -94,7 +108,11 @@ public final class PortfolioBacktester {
         if (data.isEmpty()) {
             throw new IllegalArgumentException("no series supplied");
         }
+        // Sorted for determinism: with a caller-supplied HashMap, iteration
+        // order would otherwise decide within-bar processing order (and
+        // with it the outcome of same-bar lifecycle interactions).
         List<String> symbols = new ArrayList<>(data.keySet());
+        symbols.sort(String::compareTo);
         int n = data.get(symbols.getFirst()).size();
         for (String s : symbols) {
             if (data.get(s).size() != n) {
@@ -111,15 +129,14 @@ public final class PortfolioBacktester {
         int eventsApplied = 0;
         // Dead = terminal event processed: never traded or valued again.
         Set<String> dead = new HashSet<>();
-        // Per-symbol cursor into its date-sorted dividend list.
-        Map<String, Integer> divCursor = new HashMap<>();
-        Map<String, List<CorporateActions.CorporateAction>> divs = new HashMap<>();
+        // Per-symbol date-sorted dividends with their cursor in ONE holder:
+        // impossible to desynchronize, and no boxed-Integer churn per bar.
+        Map<String, DividendStream> divs = new HashMap<>();
         for (Map.Entry<String, List<CorporateActions.CorporateAction>> e : cashDividends.entrySet()) {
             List<CorporateActions.CorporateAction> sorted = new ArrayList<>(e.getValue());
             sorted.sort(java.util.Comparator.comparingLong(
                     CorporateActions.CorporateAction::exTimestamp));
-            divs.put(e.getKey(), sorted);
-            divCursor.put(e.getKey(), 0);
+            divs.put(e.getKey(), new DividendStream(sorted));
         }
         // Any symbol's timeline works for bar timestamps: series are aligned.
         BarSeries clock = data.get(symbols.getFirst());
@@ -132,12 +149,12 @@ public final class PortfolioBacktester {
             //    belongs to whoever held through the prior close, so a name
             //    that delists (or drops from the index) on its own ex-date
             //    still pays its holder before the position terminates.
-            for (Map.Entry<String, List<CorporateActions.CorporateAction>> e : divs.entrySet()) {
+            for (Map.Entry<String, DividendStream> e : divs.entrySet()) {
                 String symbol = e.getKey();
-                List<CorporateActions.CorporateAction> list = e.getValue();
-                int cursor = divCursor.get(symbol);
-                while (cursor < list.size() && list.get(cursor).exTimestamp() <= now) {
-                    CorporateActions.CorporateAction action = list.get(cursor);
+                DividendStream stream = e.getValue();
+                while (stream.cursor < stream.sorted.size()
+                        && stream.sorted.get(stream.cursor).exTimestamp() <= now) {
+                    CorporateActions.CorporateAction action = stream.sorted.get(stream.cursor);
                     if (action.type() == CorporateActions.Type.CASH_DIVIDEND) {
                         // Symbols dead from earlier bars hold 0: credit is 0.
                         double qty = positions.getOrDefault(symbol, 0.0);
@@ -145,46 +162,50 @@ public final class PortfolioBacktester {
                         cash += credit;
                         dividendCash += credit;
                     }
-                    cursor++;
+                    stream.cursor++;
                 }
-                divCursor.put(symbol, cursor);
             }
 
             if (universe != null) {
-                // 2) Terminal events reaching their effective bar.
-                for (String symbol : symbols) {
-                    if (dead.contains(symbol)) {
-                        continue;
-                    }
-                    PointInTimeUniverse.TerminalEvent event = universe.terminalEvent(symbol);
-                    if (event == null || now < event.timestamp()) {
-                        continue;
-                    }
-                    double qty = positions.getOrDefault(symbol, 0.0);
-                    if (qty != 0) {
-                        // Proceeds anchor on the last close BEFORE the event —
-                        // the event bar's own (possibly forward-filled) price
-                        // is exactly what must not be trusted.
-                        double lastClose = data.get(symbol).close(Math.max(0, i - 1));
-                        if (event.type() == PointInTimeUniverse.EventType.DELISTING) {
-                            cash += qty * lastClose * (1 + event.delistingReturn());
-                        } else {
-                            cash += qty * event.cashPerShare();
-                            if (event.acquirerSharesPerShare() > 0) {
-                                String acquirer = event.acquirer();
-                                if (!data.containsKey(acquirer) || dead.contains(acquirer)) {
-                                    throw new IllegalArgumentException(
-                                            "merger of " + symbol + " pays shares of " + acquirer
-                                                    + ", which is not a live series in the backtest");
-                                }
-                                positions.merge(acquirer,
-                                        qty * event.acquirerSharesPerShare(), Double::sum);
-                            }
+                // 2) Terminal events reaching their effective bar — MERGERS
+                //    first, then DELISTINGS, so a target's shares flow into
+                //    an acquirer that dies on the same bar and settle at the
+                //    acquirer's terms, independent of symbol ordering.
+                for (PointInTimeUniverse.EventType phase : TERMINAL_ORDER) {
+                    for (String symbol : symbols) {
+                        if (dead.contains(symbol)) {
+                            continue;
                         }
-                        positions.put(symbol, 0.0);
+                        PointInTimeUniverse.TerminalEvent event = universe.terminalEvent(symbol);
+                        if (event == null || event.type() != phase || now < event.timestamp()) {
+                            continue;
+                        }
+                        double qty = positions.getOrDefault(symbol, 0.0);
+                        if (qty != 0) {
+                            // Proceeds anchor on the last close BEFORE the event —
+                            // the event bar's own (possibly forward-filled) price
+                            // is exactly what must not be trusted.
+                            double lastClose = data.get(symbol).close(Math.max(0, i - 1));
+                            if (event.type() == PointInTimeUniverse.EventType.DELISTING) {
+                                cash += qty * lastClose * (1 + event.delistingReturn());
+                            } else {
+                                cash += qty * event.cashPerShare();
+                                if (event.acquirerSharesPerShare() > 0) {
+                                    String acquirer = event.acquirer();
+                                    if (!data.containsKey(acquirer) || dead.contains(acquirer)) {
+                                        throw new IllegalArgumentException(
+                                                "merger of " + symbol + " pays shares of " + acquirer
+                                                        + ", which is not a live series in the backtest");
+                                    }
+                                    positions.merge(acquirer,
+                                            qty * event.acquirerSharesPerShare(), Double::sum);
+                                }
+                            }
+                            positions.put(symbol, 0.0);
+                        }
+                        dead.add(symbol);
+                        eventsApplied++;
                     }
-                    dead.add(symbol);
-                    eventsApplied++;
                 }
                 // 3) Index drops: alive but no longer a member → forced sale
                 //    at this bar's close (commission charged like any trade).

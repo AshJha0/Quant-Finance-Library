@@ -150,6 +150,30 @@ class HftQuoterAutoHedgerTest {
     }
 
     @Test
+    void skewedQuotesBelowTheFirstBandNeverThrowOnTheConsumerThread() throws Exception {
+        // A banded schedule whose first floor is 1.0: heavy long inventory
+        // skews the bid to ~0.88, BELOW the band. Clamped rounding must keep
+        // quoting (the risk gate is where bad prices die), because a throw
+        // here would kill the bus consumer thread and every listener on it.
+        HftRiskGate gate = openGate();
+        try (HftOrderGateway gateway = new HftOrderGateway(1 << 10, gate, false)) {
+            List<Captured> orders = capture(gateway);
+            gateway.start();
+            HftQuoter quoter = new HftQuoter(gateway, 16, HftQuoter.Config
+                    .of(100_000, 0.0002)
+                    .withSkewPerUnit(2e-7)
+                    .withTickSchedule(com.quantfinlib.microstructure.TickSizeSchedule
+                            .builder().addBand(1.0, 0.0001).build()));
+            gate.onFill(0, Side.BUY, 1_000_000); // skew = −0.2
+            quoter.onTick(0, 1.0850, 1e6, System.nanoTime());
+            awaitCount(orders, 2);
+            assertEquals(1, quoter.quoteUpdates());
+            assertTrue(orders.get(0).price() < 1.0, "bid must sit below the band floor");
+            assertTrue(orders.get(0).price() > 0.88 - 1e-9);
+        }
+    }
+
+    @Test
     void configValidation() {
         assertThrows(IllegalArgumentException.class, () -> HftQuoter.Config.of(0, 0.0001));
         assertThrows(IllegalArgumentException.class, () -> HftQuoter.Config.of(100, 0));

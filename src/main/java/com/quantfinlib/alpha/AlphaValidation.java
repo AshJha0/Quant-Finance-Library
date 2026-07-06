@@ -77,15 +77,22 @@ public final class AlphaValidation {
              trainStart += testBars) {
             int testStart = trainStart + trainBars;
             int testEnd = testStart + testBars;
-            // Model selection happens STRICTLY inside the training window.
+            // Model selection happens STRICTLY inside the training window
+            // (meanIc keeps the whole forward window inside it, too).
             AlphaFactor best = null;
             double bestIc = Double.NEGATIVE_INFINITY;
             for (AlphaFactor candidate : candidates) {
                 double ic = meanIc(ctx, candidate, trainStart, testStart, horizon);
-                if (ic > bestIc) {
+                // NaN (factor entirely in warm-up over this window) never wins.
+                if (!Double.isNaN(ic) && ic > bestIc) {
                     bestIc = ic;
                     best = candidate;
                 }
+            }
+            if (best == null) {
+                throw new IllegalArgumentException(
+                        "no candidate produced a training IC in fold starting at " + trainStart
+                                + " — factor warm-up likely exceeds the training window");
             }
             double oos = meanIc(ctx, best, testStart, testEnd, horizon);
             folds.add(new Fold(trainStart, testStart, testEnd, best.name(), bestIc, oos));
@@ -257,13 +264,19 @@ public final class AlphaValidation {
     // Shared IC arithmetic
     // ------------------------------------------------------------------
 
-    /** Mean rank IC over {@code [from, toExclusive)}, stepping by the horizon. */
+    /**
+     * Mean rank IC over {@code [from, toExclusive)}, stepping by the horizon.
+     * The ENTIRE forward window {@code (t, t+horizon]} must fit inside the
+     * range: letting it spill past {@code toExclusive} would leak test-window
+     * returns into training-window ICs — the walk-forward selection would
+     * peek at exactly the data it claims not to see.
+     */
     static double meanIc(AlphaContext ctx, AlphaFactor factor, int from, int toExclusive,
                          int horizon) {
         double sum = 0;
         int n = 0;
-        for (int t = from; t + horizon < Math.min(toExclusive + horizon, ctx.bars())
-                && t < toExclusive; t += horizon) {
+        int end = Math.min(toExclusive, ctx.bars());
+        for (int t = from; t + horizon < end; t += horizon) {
             double ic = SignalEvaluator.spearman(factor.scores(ctx, t),
                     SignalEvaluator.forwardReturns(ctx, t, horizon));
             if (!Double.isNaN(ic)) {
