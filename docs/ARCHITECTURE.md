@@ -36,15 +36,15 @@ see **[DIAGRAMS.md](DIAGRAMS.md)** (Mermaid, renders on GitHub).
 |---|---|---|---|
 | `core` | Primitive-array OHLCV time series | `Bar`, `BarSeries` | (covered via all consumers) |
 | `util` | Numerics + measurement | `MathUtils`, `LatencyRecorder`, `HiccupMonitor` | `LatencyRecorderTest`, `HiccupMonitorTest` |
-| `data` | Data in/out and preparation | `CsvBarLoader`, `HttpBarFetcher`, `TickFileWriter/Reader`, `TickCapture`, `SeriesAligner`, `CorporateActions`, `PointInTimeUniverse` + `UniverseCsvLoader` (membership + delisting/merger events, CSV interchange format) | `CsvBarLoaderTest`, `HttpBarFetcherTest`, `TickFileTest`, `SeriesAlignerTest`, `CorporateActionsTest`, `PointInTimeUniverseTest`, `UniverseCsvLoaderTest` |
+| `data` | Data in/out and preparation | `CsvBarLoader`, `HttpBarFetcher`, `TickFileWriter/Reader`, `TickCapture` + `AsyncTickCapture` (off-thread QFLT capture), `SeriesAligner`, `CorporateActions`, `PointInTimeUniverse` + `UniverseCsvLoader` (membership + delisting/merger events, CSV interchange format) | `CsvBarLoaderTest`, `HttpBarFetcherTest`, `TickFileTest`, `AsyncTickCaptureTest`, `SeriesAlignerTest`, `CorporateActionsTest`, `PointInTimeUniverseTest`, `UniverseCsvLoaderTest` |
 | `feed` | Live WebSocket market data | `WebSocketFeed`, `BinanceTradeParser` | `WebSocketFeedTest` (loopback RFC6455 server) |
 | `sbe` | Binary flyweight codecs + channel adapters | `TradeFlyweight`, `OrderFlyweight`, `QuoteFlyweight`, `BinaryMarketDataClient`, `BinaryOrderPublisher/Receiver` | `SbeCodecTest`, `QuoteFlyweightTest` (incl. zero-alloc proofs) |
-| `fx` | FX conventions, curves, instruments, e-FX | `CurrencyPair`, `SwapPointsCurve`, `FxSwap`, `Ndf`, `FxVolSurface`, `FixingRisk`, `AggregatedBook`, `CrossRateEngine` | `CurrencyPairTest`, `SwapPointsCurveTest`, `FxVolSurfaceTest`, `FxSwapNdfTest`, `FixingRiskCrossRateTest`, `AggregatedBookTest` (incl. zero-alloc proof) |
-| `marketdata` | Market data transport | HFT lane: `HftMarketDataBus`, `TickRingBuffer`, `SymbolRegistry`; convenience: `MarketDataProcessor`, `RingBuffer`, `HistoricalDataStore` | `HftPathTest`, `MarketDataTest`, `RingBufferStressTest` |
+| `fx` | FX conventions, curves, instruments, e-FX market structure | `CurrencyPair`, `SwapPointsCurve`, `FxSwap`, `Ndf`, `FxVolSurface`, `FixingRisk`, `AggregatedBook`, `CrossRateEngine`, `FxTierBook` (per-LP tier ladders: sweep + full-amount), `LpScorecard` (last-look analytics), `LpRouter` (expected-all-in routing), `SyntheticCross` (direct vs legs) | `CurrencyPairTest`, `SwapPointsCurveTest`, `FxVolSurfaceTest`, `FxSwapNdfTest`, `FixingRiskCrossRateTest`, `AggregatedBookTest`, `FxTierBookTest`, `LpScorecardAndRouterTest`, `SyntheticCrossTest` (all incl. zero-alloc proofs) |
+| `marketdata` | Market data transport + equities L3 | HFT lane: `HftMarketDataBus`, `TickRingBuffer`, `SymbolRegistry`; equities: `ItchCodec` (ITCH 5.0-style flyweight), `L3BookBuilder` (full depth + own-order queue position), `Nbbo` (consolidated inside); convenience: `MarketDataProcessor`, `RingBuffer`, `HistoricalDataStore` | `HftPathTest`, `MarketDataTest`, `RingBufferStressTest`, `ItchCodecTest`, `L3BookBuilderTest`, `NbboTest` (incl. zero-alloc + differential proofs) |
 | `indicators` | Technical analysis | `Indicators` (21 batch), `StreamingIndicators` (O(1) live) | `IndicatorsTest`, `StreamingIndicatorsTest` (batch/stream parity) |
-| `orderbook` | Matching engines (research + venue-grade) + book analytics | `OrderBook` (readable reference), `HftOrderBook` (tick ladder, pooled nodes, zero-alloc), `BookAnalytics`, `Side` | `OrderBookTest`, `OrderBookInvariantTest` (model-based fuzz), `HftOrderBookTest` (equivalence vs reference + zero-alloc proof) |
+| `orderbook` | Matching engines (research + venue-grade) + book analytics | `OrderBook` (readable reference), `HftOrderBook` (tick ladder, pooled nodes, zero-alloc, limit/market/IOC/FOK/post-only), `BookPrimitives` (shared bitmap scans + open-addressing map), `BookAnalytics`, `Side` | `OrderBookTest`, `OrderBookInvariantTest` (model-based fuzz), `HftOrderBookTest` (equivalence vs reference + zero-alloc proof), `HftOrderBookTifTest` (incl. FOK-atomicity property test) |
 | `alpha` | Factor research pipeline (signal → IC → validation → cost-aware backtest → construction → report) | `AlphaContext`, `AlphaFactor`, `Factors`, `SignalEvaluator`, `AlphaValidation`, `AlphaBacktester`, `PortfolioConstruction`, `AlphaReport` | `FactorsTest`, `SignalEvaluatorTest`, `AlphaValidationTest`, `PortfolioConstructionTest`, `AlphaBacktesterReportTest` |
-| `microstructure` | Impact, queues, TCA, optimal execution, exchange mechanics | `MarketImpactModel`, `QueueModel`, `TransactionCostAnalyzer`, `AlmgrenChriss`, `TickSizeSchedule`, `Auction` | `MicrostructureTest`, `AlmgrenChrissTest`, `TickSizeAuctionTest` |
+| `microstructure` | Impact, queues, TCA, optimal execution, exchange mechanics | `MarketImpactModel`, `QueueModel`, `TransactionCostAnalyzer`, `AlmgrenChriss`, `TickSizeSchedule`, `Auction`, `FlowSignals` (OFI + imbalances), `CircuitBreakers` (LULD + market-wide) | `MicrostructureTest`, `AlmgrenChrissTest`, `TickSizeAuctionTest`, `FlowSignalsTest`, `CircuitBreakersTest` |
 | `pricing` | Fair value & derivatives pricing | `BlackScholes`, `VolSurface`, `SabrModel`, `BinomialTree`, `FairValueEngine`, `TriangularArbitrage`, `ForwardCurve`, `VannaVolga`, `DigitalOption`, `TouchOption`, `BarrierOption`, `DividendSchedule`, `IncrementalGreeks` | `BlackScholesTest`, `VolSurfaceTest`, `AmericanAndSabrTest`, `PricingTest`, `ExoticOptionsTest` (MC cross-checked), `VannaVolgaTest`, `DividendScheduleTest`, `IncrementalGreeksTest` |
 | `rates` | Fixed income | `YieldCurve`, `BondPricer`, `DayCount`, `BusinessCalendar` | `RatesTest`, `ConventionsTest` |
 | `volatility` | Vol models | `EwmaVolatility`, `Garch11` | `VolatilityModelsTest` |
@@ -60,13 +60,13 @@ see **[DIAGRAMS.md](DIAGRAMS.md)** (Mermaid, renders on GitHub).
 | `dsl` | Strategy builder | `StrategyBuilder`, `Rules`, `Rule` | `StrategyBuilderTest` |
 | `screener` | Stock screening | `StockScreener`, `TechnicalFilters`, `FundamentalFilters`, `RankingEngine` | `ScreenerTest` |
 | `simulation` | Monte Carlo | `MonteCarloSimulator`, `SimulationResult` | `MonteCarloTest` |
-| `execution` | Execution algos & venues | `SmartOrderRouter`, `Twap/VwapScheduler`, `IcebergOrder`, `DarkPoolSimulator`, `MidPegTracker`, `VenueBenchmark` | `ExecutionTest` |
+| `execution` | Execution algos & venues | `SmartOrderRouter` + `HftSor` (zero-alloc), `Twap/VwapScheduler`, `PovTracker`, `ImplementationShortfallScheduler` (Almgren-Chriss), `WmrFixingScheduler` (benchmark window), `IcebergOrder`, `DarkPoolSimulator`, `MidPegTracker`, `VenueBenchmark` | `ExecutionTest`, `HftSorTest`, `PovAndIsSchedulerTest`, `WmrFixingSchedulerTest` |
 | `regulatory` | Surveillance & best-ex | `FixAnalyzer`, `BestExecutionAnalyzer`, `MarketQualityMetrics` | `RegulatoryTest` |
-| `trading` | Order entry (paper + HFT lane) | `OrderGateway`, `PaperTradingGateway`, `TradingDashboard`; fast lane: `HftRiskGate`, `OrderRingBuffer`, `HftOrderGateway`, `HftQuoter`, `AutoHedger` | `PaperTradingTest`, `TradingDashboardTest`, `HftOrderPathTest`, `HftQuoterAutoHedgerTest` |
-| `fix` | FIX 4.4 engine | `FixSession` (+persistence: `FileSessionStore`), `FixMessage`, typed app messages | `FixMessageTest`, `FixSessionTest`, `FixPersistenceTest`, `FixProtocolExtrasTest` |
+| `trading` | Order entry (paper + HFT lane) + scale-out | `OrderGateway`, `PaperTradingGateway`, `TradingDashboard`; fast lane: `HftRiskGate`, `OrderRingBuffer`, `HftOrderGateway`, `HftQuoter`, `AutoHedger`, `OrderThrottle` (message-rate token bucket), `LastLookGate` (symmetric maker-side check); scale-out: `ShardedTradingEngine`, `GlobalRiskAggregator` | `PaperTradingTest`, `TradingDashboardTest`, `HftOrderPathTest`, `HftQuoterAutoHedgerTest`, `OrderThrottleTest`, `LastLookGateTest`, `ShardedTradingTest`, `LoadAndSoakTest` |
+| `fix` | FIX 4.4 engine + garbage-free hot path | `FixSession` (+persistence: `FileSessionStore`), `FixMessage`, typed app messages; hot path: `FixOrderEncoder` (orders out), `FixExecReportView` (fills in), `FixMarketDataView` (35=W/X quotes in), shared `FixParse` | `FixMessageTest`, `FixSessionTest`, `FixPersistenceTest`, `FixProtocolExtrasTest`, `FixOrderEncoderTest`, `FixExecReportViewTest`, `FixMarketDataViewTest` |
 | `report` | Reporting | `ReportGenerator`, HTML/CSV/PDF/XLSX exporters, `SvgCharts` | `ReportTest`, `SvgChartsTest` |
 | `cli` | Command line | `Main` (backtest / walkforward / report) | `CliTest` |
-| `examples` | Runnable demos & benchmarks (coverage-excluded) | `QuickStartDemo`, `HftLatencyBenchmark`, `HftOrderBenchmark`, `HftQuoterBenchmark`, `HftBookBenchmark` | run manually / bench workflow |
+| `examples` | Runnable demos & benchmarks (coverage-excluded) | `QuickStartDemo`, `LiveTradingDemo` (Binance → paper venue → dashboard), `HftLatencyBenchmark`, `HftOrderBenchmark`, `HftQuoterBenchmark`, `HftBookBenchmark`, `ScaleBenchmark`, `ShardScaleBenchmark` | run manually / bench workflow |
 
 ## Design invariants worth knowing
 
@@ -83,6 +83,9 @@ see **[DIAGRAMS.md](DIAGRAMS.md)** (Mermaid, renders on GitHub).
 
 ## Further reading
 
+- [LEARN.md](LEARN.md) — the from-zero tutorial: every concept above explained for
+  beginners, with a guided reading path through these packages.
+- [COOKBOOK.md](COOKBOOK.md) — nine runnable recipes across the capabilities.
 - `docs/ULTRA_LOW_LATENCY.md` — the latency stack: in-library techniques, JVM flags,
   kernel/CPU tuning (`scripts/linux-tune.sh`), and the kernel-bypass/hardware frontier.
 - `CHANGELOG.md` — release history; `README.md` — capability tour with examples.

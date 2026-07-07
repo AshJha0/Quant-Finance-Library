@@ -194,8 +194,137 @@ flowchart TD
 
 ---
 
+## 7. The equities participant stack — L3 feed in, routed orders out
+
+The consumer's side of an exchange: rebuild the venue's book from its raw
+event stream, know exactly where your own order queues, read the pressure,
+route. Every stage is hot-lane (zero allocation, proven by test).
+
+```mermaid
+flowchart TD
+    WIRE["ITCH-style wire bytes<br/>A/F add · E execute · X cancel ·<br/>D delete · U replace · P trade"] --> CODEC["ItchCodec.View<br/>flyweight: no parse step,<br/>packed-long symbols, tick ints"]
+    CODEC --> L3["L3BookBuilder<br/>tick ladder + bitmaps + pooled nodes<br/>(BookPrimitives, shared with HftOrderBook)"]
+    L3 -->|"per-venue top of book"| NBBO["Nbbo<br/>inside price/size + venue bitmask,<br/>fires only on inside changes"]
+    L3 -->|"track(myRef)"| QPOS["sharesAhead(ref)<br/>exact queue position:<br/>1 walk to init, O(1)/event"]
+    QPOS --> QM["QueueModel<br/>position → fill probability"]
+    NBBO --> SIG["FlowSignals<br/>OFI · queue imbalance ·<br/>trade imbalance (time-decayed)"]
+    NBBO --> LULD["CircuitBreakers.Luld<br/>bands → limit state →<br/>5-min pause (pollable)"]
+    SIG & QM --> DECIDE{"strategy decision"}
+    LULD -.->|"PAUSED: stand down"| DECIDE
+    DECIDE --> SOR["HftSor<br/>all-in price sweep, fees in ticks,<br/>zero allocation"]
+    SOR --> THR["OrderThrottle<br/>token bucket vs venue<br/>message-rate limits"]
+    THR --> GATE7["HftRiskGate → OrderRingBuffer<br/>(the shared fast lane out)"]
+```
+
+Own-order queue tracking rests on two price-time facts: executions always
+consume the queue head, and a cancel is ahead of you iff it entered the
+queue before you — which is what makes O(1) maintenance sound.
+
+---
+
+## 8. The FX participant stack — quotes, last look, and routing around it
+
+FX is the mirror image: no tape, no central book. Liquidity is private
+quotes subject to last look, so the stack measures LP *behavior* and routes
+on expected all-in cost, not displayed price.
+
+```mermaid
+flowchart TD
+    MD["FIX 35=W / 35=X<br/>(bank streams, ECNs)"] --> MDV["FixMarketDataView<br/>garbage-free flyweight,<br/>scaled-long prices,<br/>entry position = tier"]
+    MDV --> TIER["FxTierBook<br/>per-LP size-tier ladders:<br/>sweep cost · full-amount price"]
+    MDV --> AGG8["AggregatedBook<br/>composite BBO + mid"]
+
+    subgraph LOOP["The last-look loop (per clip)"]
+        ROUTE["LpRouter.route(buy, size)<br/>expected = quoted +<br/>rejectRate × adverse markout<br/>(+ reject-rate veto)"]
+        REQ["deal request → LP"]
+        HOLD{"LP holds,<br/>price-checks"}
+        FILL["fill"]
+        REJ["reject"]
+    end
+
+    TIER --> ROUTE --> REQ --> HOLD
+    HOLD -->|within tolerance| FILL
+    HOLD -->|moved| REJ
+    FILL -->|"onFill: eff. spread, hold"| CARD["LpScorecard<br/>EWMA reject rate · hold time ·<br/>post-reject markout (4-slot ring)"]
+    REJ -->|"onReject: starts markout clock"| CARD
+    AGG8 -->|"onMid: matures markouts"| CARD
+    CARD -->|"behavior feeds the next decision"| ROUTE
+
+    AGG8 --> SYN["SyntheticCross<br/>direct vs legs, both spreads<br/>composed, unpriced never wins"]
+    SYN -.->|"cheaper route"| ROUTE
+    GATE8["LastLookGate (maker side)<br/>SYMMETRIC per FX Global Code:<br/>rejects both directions 50/50"] -.->|"the mechanism being measured"| HOLD
+```
+
+The feedback loop is the point: an LP's tight display means nothing if its
+rejects cluster on the flow that was about to pay you — the scorecard
+measures exactly that, and the router prices it in.
+
+---
+
+## 9. Scaling out — shared-nothing shards under one risk umbrella
+
+Throughput scales by running independent engine stacks; safety stays global
+through a slow observer that only ever asks the hot path to read one
+boolean.
+
+```mermaid
+flowchart TD
+    PROD["market data producer(s)"] --> S1 & S2 & SN
+
+    subgraph S1["Shard 0 (own thread pair)"]
+        B1["bus"] --> G1["gate"] --> W1["gateway → venue"]
+    end
+    subgraph S2["Shard 1"]
+        B2["bus"] --> G2["gate"] --> W2["gateway → venue"]
+    end
+    subgraph SN["Shard N-1"]
+        BN["bus"] --> GN["gate"] --> WN["gateway → venue"]
+    end
+
+    ENG["ShardedTradingEngine<br/>symbol → shard routing (frozen at start);<br/>a symbol may live on several shards<br/>(cross co-location)"] --- S1 & S2 & SN
+
+    AGGR["GlobalRiskAggregator (monitor thread, ~ms)<br/>Σ |position| × refPrice across ALL gates"] -->|"breach: kill(true) on every gate<br/>resume below cap × resumeFraction"| G1 & G2 & GN
+    G1 & G2 & GN -.->|"hot path reads ONE<br/>acquire-loaded boolean"| KILL(["kill switch"])
+```
+
+Measured on a 12-core desktop, 300 symbols quoted two-sided: 1 shard =
+4.3M ticks/s → 2 shards = 6.2M (+46%) → 4 shards plateau at 6.7M (core
+oversubscription + single producer, not contention). War story in
+[ULTRA_LOW_LATENCY.md](ULTRA_LOW_LATENCY.md): one shared synchronized
+counter across shards made sharding measure as a *slowdown*.
+
+---
+
+## 10. Choosing an execution algorithm — the decision map
+
+The parent-order question is "what am I being measured against?" — the
+benchmark picks the algorithm, and TCA closes the loop.
+
+```mermaid
+flowchart TD
+    PARENT(["parent order"]) --> Q{"benchmark?"}
+    Q -->|"the WMR 4pm fix"| WMR["WmrFixingScheduler<br/>TWAP across the 5-min window<br/>(pre-hedging deliberately absent)"]
+    Q -->|"arrival price /<br/>decision price"| IS["ImplementationShortfallScheduler<br/>Almgren-Chriss: front-load by urgency;<br/>λ→0 degrades to TWAP"]
+    Q -->|"the day's VWAP"| VWAP["VwapScheduler<br/>slice along the volume curve"]
+    Q -->|"'don't be seen':<br/>track the market"| POV["PovTracker<br/>be p% of OTHERS' volume<br/>(never chases its own fills)"]
+    Q -->|"none / simple"| TWAP["TwapScheduler<br/>equal slices ± anti-gaming jitter"]
+
+    WMR & IS & VWAP & POV & TWAP --> CHILD["child orders"]
+    CHILD --> WHERE{"venue choice"}
+    WHERE -->|research lane| SOR10["SmartOrderRouter<br/>(readable, dark-first option)"]
+    WHERE -->|tick path| HSOR["HftSor (zero-alloc)"]
+    WHERE -->|FX| LPR["LpRouter<br/>(last-look-aware, full-amount)"]
+    SOR10 & HSOR & LPR --> FILLS["fills"]
+    FILLS --> TCA["TransactionCostAnalyzer<br/>slippage vs arrival/VWAP ·<br/>venue quality · markouts"]
+    TCA -.->|"recalibrate impact params,<br/>LP scorecards, participation"| Q
+```
+
+---
+
 ## Where to go next
 
+- [LEARN.md](LEARN.md) — the from-zero tutorial: every concept in these diagrams, explained for beginners
 - [ARCHITECTURE.md](ARCHITECTURE.md) — the package → classes → tests map and design invariants
 - [ULTRA_LOW_LATENCY.md](ULTRA_LOW_LATENCY.md) — the four-tier latency stack, honestly bounded
+- [COOKBOOK.md](COOKBOOK.md) — nine runnable recipes across these flows
 - `README.md` — capability tour with runnable examples and all measured numbers

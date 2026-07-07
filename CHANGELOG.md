@@ -1,5 +1,93 @@
 # Changelog
 
+## v1.7.0 (2026-07-07)
+
+The FX market-structure layer: the mirror image of the equities stack —
+quotes, not orders; last look, not price-time priority. Plus a from-zero
+learning guide for students and juniors, four new architecture diagrams,
+and two full review rounds with every finding fixed and regression-tested.
+
+- **`docs/LEARN.md`** — a beginner's tutorial covering every concept in the
+  library in plain language: the finance (two-sided prices, order books and
+  price-time priority, L1/L2/L3 and book building, equities-vs-FX market
+  structure, last look, market making and adverse selection, TWAP/VWAP/POV/
+  implementation-shortfall, tape signals, factor research and its
+  self-deceptions, risk gates, derivatives, honest backtesting) and the
+  technology (the latency ladder, GC and why zero allocation, rings and
+  single-writer discipline, primitive maps/bitmaps/flyweights, the memory
+  model in plain words, percentile-honest measurement, FIX and binary
+  protocols, sharding, and this repo's testing philosophy) — each section
+  tied to the class that implements it, with a guided reading path,
+  exercises, and a glossary. Linked from the README, the docs site nav and
+  the cookbook.
+
+- **FIX market data in**: `fix.FixMarketDataView` — garbage-free 35=W
+  (snapshot) / 35=X (incremental) decoding in the `FixExecReportView`
+  mold: one-pass flyweight, preallocated entry arrays, scaled-long
+  prices, entry position preserved (for tiered LP streams position IS
+  the tier), bounded entries with drop counting.
+- **Tiered LP book**: `fx.FxTierBook` — per-LP size-tier ladders under
+  the `AggregatedBook` composite; sweep cost across LPs (NaN when the
+  book cannot fill the size — a partial sweep is not a price), sweep
+  plans with per-LP attribution, and best single-LP full-amount quotes
+  (the no-signaling convention). Zero allocation.
+- **Last-look analytics**: `fx.LpScorecard` — streaming per-LP EWMA
+  reject rate, hold time, effective spread, and post-reject markout
+  (the market's move after a decline = the realized cost of that LP's
+  last look).
+- **Last-look-aware routing**: `fx.LpRouter` — expected-all-in routing:
+  quoted price + rejectRate × adverse markout, reject-rate veto,
+  full-amount only (deliberate: multi-LP sweeps leak intent; use
+  `FxTierBook.sweepPlan` and own it).
+- **Maker side**: `trading.LastLookGate` — symmetric price check per FX
+  Global Code Principle 17, with disclosure statistics split by who the
+  reject protected; a randomized test asserts the 50/50 split symmetric
+  handling produces.
+- **Benchmark fixings**: `execution.WmrFixingScheduler` — TWAP across
+  the WMR calculation window as neutral benchmark replication;
+  pre-hedging deliberately not implemented, reason documented.
+- **Cross execution**: `fx.SyntheticCross` — direct-vs-legs all-in
+  comparison with correct spread composition (a synthetic crosses two
+  spreads), NaN-safe so unquoted routes never win.
+- **8-angle review round on the layer** (every fix regression-tested):
+  `FxTierBook.tier` now bounds-checks (an unchecked tier overflowed into
+  the NEXT LP's ladder silently); sweeps rewritten on per-LP frontier
+  cursors — NaN tiers can no longer poison selection, and picks scan
+  O(lpCount) instead of every tier; `LpScorecard` ignores NaN mids (one
+  poisoned the markout EWMA forever, permanently capturing the router)
+  and matures markouts from a 4-slot ring per LP so reject bursts are
+  sampled, not overwritten (single-slot markout was anticorrelated with
+  reject rate — underpenalizing exactly the bursty rejectors); router
+  candidates with non-finite expected prices never win; `SyntheticCross`
+  treats zero/negative legs as unpriced (a zero divide produced +∞
+  "savings"); negative FIX prices parse correctly and negative quantities
+  fail loudly (shared `FixParse`, also fixing the committed
+  `FixExecReportView`); `FixMarketDataView` zeroes entries on open (35=X
+  deletes no longer expose a prior message's stale price) and gains a
+  per-entry-decimals-safe `price()` getter; `WmrFixingScheduler`
+  delegates to `TwapScheduler` (the neutral-replication claim is now true
+  by construction) and rejects zero-quantity children and overflowing
+  windows; `LpScorecard.maturedMarkouts()` exposes the router-degradation
+  canary; four package-infos updated; `SyntheticCross` allocation test
+  added.
+- **Second review pass (fixes-of-the-fixes + docs)**: counterparty-format
+  ClOrdIDs (unsolicited venue reports) map to the -1 "not ours" sentinel
+  instead of throwing mid-`wrap` (the quantity-hardening had made tag 11
+  brittle); a NaN reference mid on `onReject` can no longer start a
+  markout (the second NaN door into the router); `FxTierBook.bestBid/Ask`
+  read each LP's frontier tier so a malformed tier 0 can't mask a live
+  deeper quote or NaN the composite mid; dealable = strictly positive
+  everywhere in the tier book (a 0.0 decoded price could win every buy
+  sweep); `FixMarketDataView.price()` clamps absurd decimal counts;
+  zero-size clips are not quote requests. Docs: `docs/DIAGRAMS.md` gains
+  four diagrams (equities participant stack, FX last-look loop, shard
+  topology, execution-algorithm decision map); `docs/ARCHITECTURE.md`
+  package map brought fully current (~30 classes across two layers);
+  README layout tree gains `sbe`/`cli` and the full examples list;
+  LEARN.md fact-check fixes (BookPrimitives attribution, exercise 3,
+  GC-pause and CPU-speed calibration, tape/dark-venue definitions);
+  benchmark-count and orders/s claims made exact.
+
 ## v1.6.0 (2026-07-07)
 
 The equities market-structure release: the participant side of the market —

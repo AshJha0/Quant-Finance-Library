@@ -44,13 +44,20 @@ java -cp target/classes com.quantfinlib.examples.LiveTradingDemo
 # → open http://localhost:8080
 ```
 
+**New to finance or low-latency engineering?** Start with
+[docs/LEARN.md](docs/LEARN.md) — a from-zero tutorial that teaches every
+concept in this library in plain language (order books, market making,
+execution algos, last look, options, garbage collection, ring buffers, the
+memory model, honest benchmarking…), each tied to the class that implements
+it, with a guided reading path and exercises.
+
 **Learn by task, not by API**: [docs/COOKBOOK.md](docs/COOKBOOK.md) — nine complete
 recipes under 20 lines each, from "backtest your CSV" through survivorship-honest
 factor research to nanosecond market making.
 
 **Getting the library**: tagged releases publish runnable/sources/javadoc jars
 automatically (GitHub Actions → Releases); JitPack works today
-(`com.github.AshJha0:Quant-Finance-Library:v1.6.0`); Maven Central publishing is
+(`com.github.AshJha0:Quant-Finance-Library:v1.7.0`); Maven Central publishing is
 wired and one account-setup away — see [docs/PUBLISHING.md](docs/PUBLISHING.md).
 See [CHANGELOG.md](CHANGELOG.md) for release history.
 
@@ -661,7 +668,9 @@ latency-critical trading:
 | `HftSor` (`execution`) | Zero-allocation smart order router: greedy all-in-price sweep (fees/rebates in ticks) over parallel venue arrays, splits at displayed size into a caller-owned array — the tick-path sibling of the readable `SmartOrderRouter` |
 | `OrderThrottle` (`trading`) + `CircuitBreakers` (`microstructure`) | Venue self-protection: nanosecond token-bucket message-rate throttle (deterministic, caller-clocked); LULD price bands with the 15s-limit-state→5-min-pause machine and market-wide 7/13/20% halt levels (styled after the SEC plan, not certified) |
 | `PovTracker` + `ImplementationShortfallScheduler` (`execution`) | The two execution algos TWAP/VWAP can't cover: streaming percentage-of-volume participation ledger (measures against others' flow, so the algo never chases itself), and Almgren-Chriss-optimal IS slicing with a trader-friendly front-load→risk-aversion calibrator |
-| `HiccupMonitor` (`util`) | jHiccup-style platform stall attribution: all four benchmarks print a hiccup summary so tail outliers are correctly attributed to GC/safepoints/scheduler vs code (on the Windows dev box: benchmark max 541µs vs platform hiccups up to 1.6ms — the platform owns the tail) |
+| `FxTierBook` + `LpScorecard` + `LpRouter` (`fx`) | The FX participant stack — quotes, not orders: per-LP size-tier ladders with sweep-cost and full-amount queries, streaming last-look analytics (EWMA reject rate, hold time, post-reject markout), and expected-all-in routing that prices rejects into the decision — all zero allocation |
+| `FixMarketDataView` (`fix`) + `LastLookGate` (`trading`) | Garbage-free FIX 35=W/X market-data decoding (entry position = tier, scaled-long prices) completing the FIX hot path: feed in, orders out, fills in — plus the maker-side symmetric last-look gate per the FX Global Code, with a randomized test asserting its rejects split 50/50 by direction |
+| `HiccupMonitor` (`util`) | jHiccup-style platform stall attribution: every benchmark prints a hiccup summary so tail outliers are correctly attributed to GC/safepoints/scheduler vs code (on the Windows dev box: benchmark max 541µs vs platform hiccups up to 1.6ms — the platform owns the tail) |
 
 ```java
 try (HftMarketDataBus bus = new HftMarketDataBus(1 << 16, 16, /*busySpin*/ true)) {
@@ -745,7 +754,10 @@ com.quantfinlib
 │                 (LULD bands + limit-state machine, market-wide halts)
 ├── fx            CurrencyPair conventions, SwapPointsCurve, FxSwap, Ndf,
 │                 FxVolSurface (delta-quoted smile), FixingRisk,
-│                 AggregatedBook (multi-venue BBO), CrossRateEngine (streaming)
+│                 AggregatedBook (multi-venue BBO), CrossRateEngine (streaming),
+│                 FxTierBook (per-LP tier ladders, sweep/full-amount),
+│                 LpScorecard + LpRouter (last-look-aware routing),
+│                 SyntheticCross (direct-vs-legs execution arithmetic)
 ├── pricing       FairValueEngine, TriangularArbitrage, ForwardCurve, BlackScholes,
 │                 VolSurface, BinomialTree (American), SabrModel, VannaVolga,
 │                 DigitalOption, TouchOption, BarrierOption, DividendSchedule,
@@ -754,6 +766,7 @@ com.quantfinlib
 │                 PairsHedger, HedgingSimulator (Monte Carlo hedging error)
 ├── execution     TWAP/VWAP schedulers, SmartOrderRouter + HftSor (zero-alloc),
 │                 PovTracker, ImplementationShortfallScheduler (Almgren-Chriss),
+│                 WmrFixingScheduler (benchmark-window replication),
 │                 IcebergOrder, DarkPoolSimulator, MidPegTracker, VenueBenchmark
 ├── regulatory    FixAnalyzer, BestExecutionAnalyzer, MarketQualityMetrics
 ├── indicators    21-indicator batch engine + O(1) StreamingIndicators for live/HFT
@@ -784,9 +797,12 @@ com.quantfinlib
 │                 fast lane: HftRiskGate, OrderRingBuffer, HftOrderGateway,
 │                 HftQuoter (streaming market maker), AutoHedger (band hedging),
 │                 OrderThrottle (venue message-rate token bucket),
+│                 LastLookGate (symmetric maker-side price check),
 │                 ShardedTradingEngine + GlobalRiskAggregator (scale-out)
 ├── fix           FIX 4.4 engine: FixMessage codec, FixSession (initiator/acceptor,
-│                 logon/heartbeat/logout), NewOrderSingle, ExecutionReport
+│                 logon/heartbeat/logout), NewOrderSingle, ExecutionReport,
+│                 garbage-free hot path: FixOrderEncoder, FixExecReportView,
+│                 FixMarketDataView (35=W/X tiered quotes)
 ├── dsl           Rule, Rules, StrategyBuilder
 ├── screener      Technical + fundamental filters, ranking, CSV export
 ├── simulation    MonteCarloSimulator, SimulationResult
@@ -796,8 +812,14 @@ com.quantfinlib
 │                 convenience path: RingBuffer, MarketDataProcessor, HistoricalDataStore
 ├── report        Report model + HTML/CSV/PDF/XLSX exporters, ReportGenerator,
 │                 SvgCharts (inline equity/drawdown charts in HTML reports)
-├── util          MathUtils, LatencyRecorder (nanosecond histogram)
-└── examples      QuickStartDemo (all 11 capabilities), HftLatencyBenchmark
+├── sbe           SBE-style binary flyweights (Trade/Order/QuoteFlyweight) +
+│                 BinaryMarketDataClient / BinaryOrderPublisher / Receiver
+├── cli           Main (backtest / walkforward / report commands, runnable jar)
+├── util          MathUtils, LatencyRecorder (nanosecond histogram),
+│                 HiccupMonitor (platform-stall attribution)
+└── examples      QuickStartDemo, LiveTradingDemo, HftLatencyBenchmark,
+                  HftOrderBenchmark, HftQuoterBenchmark, HftBookBenchmark,
+                  ScaleBenchmark, ShardScaleBenchmark
 ```
 
 ## License

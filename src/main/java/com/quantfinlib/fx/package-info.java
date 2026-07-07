@@ -12,7 +12,13 @@
  * {@link com.quantfinlib.fx.FixingRisk} (WM/R-window TWAP/VWAP tracking
  * error and participation), and the hot-path pieces:
  * {@link com.quantfinlib.fx.AggregatedBook} (zero-alloc multi-venue BBO
- * with venue attribution) and {@link com.quantfinlib.fx.CrossRateEngine}
- * (streaming synthetic crosses chained on the bus consumer thread).
+ * with venue attribution), {@link com.quantfinlib.fx.CrossRateEngine}
+ * (streaming synthetic crosses chained on the bus consumer thread),
+ * {@link com.quantfinlib.fx.FxTierBook} (per-LP size-tier ladders:
+ * sweep cost and full-amount quotes), {@link com.quantfinlib.fx.LpScorecard}
+ * (streaming last-look analytics: reject rate, hold, post-reject markout),
+ * {@link com.quantfinlib.fx.LpRouter} (expected-all-in routing that prices
+ * rejects into the decision) and {@link com.quantfinlib.fx.SyntheticCross}
+ * (direct-vs-legs execution arithmetic with spread composition).
  */
 package com.quantfinlib.fx;

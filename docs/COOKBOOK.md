@@ -2,8 +2,10 @@
 
 Task-shaped recipes: each is complete, copy-pasteable, and under ~20 lines.
 Reference docs live in [ARCHITECTURE.md](ARCHITECTURE.md); the visual map in
-[DIAGRAMS.md](DIAGRAMS.md). All recipes assume the library on your classpath
-(`mvn package`, or the release jar).
+[DIAGRAMS.md](DIAGRAMS.md). New to the concepts themselves (order books,
+market making, backtesting honestly, zero-allocation Java)? Start with the
+beginner tutorial in [LEARN.md](LEARN.md). All recipes assume the library on
+your classpath (`mvn package`, or the release jar).
 
 ---
 

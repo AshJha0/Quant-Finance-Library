@@ -53,7 +53,7 @@ Maven Central search within a few hours. Consumers then use:
 <dependency>
   <groupId>com.quantfinlib</groupId>
   <artifactId>quant-finance-library</artifactId>
-  <version>1.6.0</version>
+  <version><!-- the latest release tag, e.g. --> 1.7.0</version>
 </dependency>
 ```
 
@@ -70,4 +70,5 @@ continue to work regardless and remain the fallback distribution channel.
 
 Every `v*` tag already publishes runnable/sources/javadoc jars on GitHub
 Releases — usable today by dropping the jar on a classpath or via JitPack
-(`com.github.AshJha0:Quant-Finance-Library:v1.6.0`) with zero setup.
+(`com.github.AshJha0:Quant-Finance-Library:<latest tag, e.g. v1.7.0>`)
+with zero setup.

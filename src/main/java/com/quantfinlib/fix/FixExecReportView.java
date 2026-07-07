@@ -86,7 +86,12 @@ public final class FixExecReportView {
                         return false; // not ours: stop scanning immediately
                     }
                 }
-                case FixMessage.CL_ORD_ID -> clOrdId = parseLong(valueStart, valueEnd);
+                // ClOrdID is free-format FIX: numeric when WE issued it
+                // (FixOrderEncoder), counterparty-format on unsolicited
+                // reports — those map to the existing -1 "not ours"
+                // sentinel instead of throwing mid-wrap.
+                case FixMessage.CL_ORD_ID ->
+                        clOrdId = FixParse.parseLongOrElse(buf, valueStart, valueEnd, -1);
                 case FixMessage.EXEC_TYPE -> execType = buffer[valueStart];
                 case FixMessage.ORD_STATUS -> ordStatus = buffer[valueStart];
                 case FixMessage.SIDE -> side = buffer[valueStart];
@@ -173,42 +178,12 @@ public final class FixExecReportView {
     // ------------------------------------------------------------------
 
     private long parseLong(int from, int to) {
-        long v = 0;
-        for (int i = from; i < to; i++) {
-            byte b = buf[i];
-            if (b == '.') {
-                // Quantities occasionally arrive as "100.0": ignore a zero
-                // fraction, reject a real one loudly rather than truncate.
-                for (int j = i + 1; j < to; j++) {
-                    if (buf[j] != '0') {
-                        throw new IllegalArgumentException(
-                                "fractional quantity not representable as long");
-                    }
-                }
-                return v;
-            }
-            v = v * 10 + (b - '0');
-        }
-        return v;
+        return FixParse.parseLong(buf, from, to);
     }
 
-    /** Decimal → (mantissa, decimals): "1.08505" → (108505, 5); "99" → (99, 0). */
+    /** Decimal → (mantissa, decimals) via the shared {@link FixParse} rules. */
     private void parsePrice(int from, int to) {
-        long mantissa = 0;
-        int decimals = 0;
-        boolean seenDot = false;
-        for (int i = from; i < to; i++) {
-            byte b = buf[i];
-            if (b == '.') {
-                seenDot = true;
-            } else {
-                mantissa = mantissa * 10 + (b - '0');
-                if (seenDot) {
-                    decimals++;
-                }
-            }
-        }
-        this.lastPxMantissa = mantissa;
-        this.lastPxDecimals = decimals;
+        this.lastPxMantissa = FixParse.priceMantissa(buf, from, to);
+        this.lastPxDecimals = FixParse.priceDecimals(buf, from, to);
     }
 }

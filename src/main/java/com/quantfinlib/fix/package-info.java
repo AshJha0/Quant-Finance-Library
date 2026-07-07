@@ -9,5 +9,11 @@
  * {@link com.quantfinlib.fix.FileSessionStore} for seqnum continuation
  * across restarts. Application flow: NewOrderSingle, cancel/replace (35=F/G)
  * and typed {@link com.quantfinlib.fix.ExecutionReport}s.
+ *
+ * <p>Garbage-free hot path (flyweights over framed bytes, scaled-long
+ * prices): {@link com.quantfinlib.fix.FixOrderEncoder} (orders out),
+ * {@link com.quantfinlib.fix.FixExecReportView} (fills in) and
+ * {@link com.quantfinlib.fix.FixMarketDataView} (35=W/X tiered quotes in)
+ * — feed to order without touching a String or a double.</p>
  */
 package com.quantfinlib.fix;

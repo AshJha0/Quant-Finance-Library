@@ -11,9 +11,15 @@
  * market maker with inventory skew, tick-grid snap and conflation —
  * measured tick-to-two-sided-quote p50 ≈ 592 ns) and
  * {@link com.quantfinlib.trading.AutoHedger} (live position-band hedging
- * with in-flight cooldown). Venue adapters implement
+ * with in-flight cooldown), {@link com.quantfinlib.trading.OrderThrottle}
+ * (venue message-rate token bucket) and
+ * {@link com.quantfinlib.trading.LastLookGate} (maker-side symmetric
+ * last-look price check per the FX Global Code). Venue adapters implement
  * {@link com.quantfinlib.trading.OrderListener} — see
- * {@code sbe.BinaryOrderPublisher} and the FIX engine.</p>
+ * {@code sbe.BinaryOrderPublisher} and the FIX engine. Scale-out:
+ * {@link com.quantfinlib.trading.ShardedTradingEngine} (shared-nothing
+ * shards) under {@link com.quantfinlib.trading.GlobalRiskAggregator}
+ * (firm-wide gross-notional circuit breaker).</p>
  *
  * <p><b>Simulation lane</b> —
  * {@link com.quantfinlib.trading.PaperTradingGateway} (quote-driven fills,

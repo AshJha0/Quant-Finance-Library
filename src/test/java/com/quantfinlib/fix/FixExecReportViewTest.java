@@ -37,6 +37,33 @@ class FixExecReportViewTest {
     }
 
     @Test
+    void counterpartyFormattedClOrdIdMapsToNotOursInsteadOfThrowing() {
+        // ClOrdID is free-format FIX: unsolicited venue reports (expires,
+        // restatements, drop-copy) carry THEIR formats. A foreign id must
+        // never kill the message pump — it reads as the -1 "not ours"
+        // sentinel and the rest of the report still parses.
+        for (String foreign : new String[] {"ORD-2024-17", "abc", "NONE",
+                "550e8400-e29b-41d4"}) {
+            byte[] bytes = fill(foreign, "EURUSD", '1', 100, "1.08505", 100, 0);
+            FixExecReportView view = new FixExecReportView();
+            assertTrue(view.wrap(bytes, 0, bytes.length), foreign);
+            assertEquals(-1, view.clOrdId(), foreign);
+            assertEquals(100, view.lastQty(), foreign);
+            assertEquals(108505, view.lastPxMantissa(), foreign);
+        }
+    }
+
+    @Test
+    void negativePricesRoundTripThroughTheView() {
+        // Forward points / negative rates: '-' must parse, not garble.
+        byte[] bytes = fill("42", "EURUSD", '1', 100, "-0.00035", 100, 0);
+        FixExecReportView view = new FixExecReportView();
+        assertTrue(view.wrap(bytes, 0, bytes.length));
+        assertEquals(-35, view.lastPxMantissa());
+        assertEquals(5, view.lastPxDecimals());
+    }
+
+    @Test
     void readsAFillFieldIdenticalToTheStringCodec() {
         byte[] bytes = fill("987654321", "EURUSD", '1', 250_000, "1.08505", 750_000, 250_000);
         FixExecReportView view = new FixExecReportView();

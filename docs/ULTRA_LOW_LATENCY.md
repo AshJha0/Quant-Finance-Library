@@ -19,7 +19,7 @@ they are documented here so the path beyond is clear.
 | Multi-venue aggregation without objects | `fx.AggregatedBook` (composite BBO), `fx.CrossRateEngine` (synthetic crosses) | e-FX structures as primitive arrays with linear rescan: zero allocation per quote, venue attribution preserved, crossed composites reported to the strategy rather than hidden. |
 | Tick-fresh Greeks without tick repricing | `pricing.IncrementalGreeks` | Delta-gamma Taylor updates per tick (two multiplies); the full Black-Scholes re-anchor runs off the hot path when spot drifts — how live options risk actually stays current. |
 | Busy-spin wait strategy (`Thread.onSpinWait`) | bus and gateway consumer threads (optional) | Sub-µs hand-off instead of park/unpark scheduling latency; trades a core for latency. |
-| Platform stall attribution | `util.HiccupMonitor` (jHiccup-style) | Separates GC/safepoint/scheduler pauses from code latency; all three benchmarks print a hiccup summary so tail outliers can be attributed correctly. |
+| Platform stall attribution | `util.HiccupMonitor` (jHiccup-style) | Separates GC/safepoint/scheduler pauses from code latency; every benchmark prints a hiccup summary so tail outliers can be attributed correctly. |
 | Zero-allocation histograms | `util.LatencyRecorder` | Measurement that doesn't perturb the measured. |
 | Deterministic replay | `data.TickCapture` / `TickFileReader` | Identical input across experiments removes market noise from performance comparisons. |
 
@@ -162,7 +162,7 @@ and nothing latency-relevant hides in the research lane. The lane map:
 
 | Lane | Packages / components | Contract |
 |---|---|---|
-| **Hot** (zero-alloc, proven) | `marketdata` HFT path incl. `ItchCodec`/`L3BookBuilder`/`Nbbo`, `trading` fast lane (gate, gateway, quoter, hedger, `OrderThrottle`), `orderbook.HftOrderBook` (limit/market/IOC/FOK/post-only), `execution.HftSor`, `microstructure.FlowSignals` + `CircuitBreakers.Luld`, `sbe.*`, `fx.AggregatedBook`/`CrossRateEngine`, `pricing.IncrementalGreeks`, `microstructure.TickSizeSchedule` lookups, `fix.FixOrderEncoder` + `fix.FixExecReportView`, `data.AsyncTickCapture` (ring handoff), `util.LatencyRecorder` | no allocation, no locks, no String/boxing per event |
+| **Hot** (zero-alloc, proven) | `marketdata` HFT path incl. `ItchCodec`/`L3BookBuilder`/`Nbbo`, `trading` fast lane (gate, gateway, quoter, hedger, `OrderThrottle`, `LastLookGate`), `orderbook.HftOrderBook` (limit/market/IOC/FOK/post-only), `execution.HftSor`, `microstructure.FlowSignals` + `CircuitBreakers.Luld`, `sbe.*`, `fx.AggregatedBook`/`CrossRateEngine`/`FxTierBook`/`LpScorecard`/`LpRouter`/`SyntheticCross`, `pricing.IncrementalGreeks`, `microstructure.TickSizeSchedule` lookups, `fix.FixOrderEncoder` + `fix.FixExecReportView` + `fix.FixMarketDataView`, `data.AsyncTickCapture` (ring handoff), `util.LatencyRecorder` | no allocation, no locks, no String/boxing per event |
 | **Edge** (I/O-bound adapters) | `fix.FixSession` session management, `feed.WebSocketFeed`, `data.TickFileWriter/Reader` | buffered, off the decision loop or explicitly documented when not |
 | **Research** (clarity first) | `alpha`, `backtest.*`, `pricing`/`fx` analytics, `rates`, `volatility`, `risk`, `ml`, `optimization`, `screener`, `simulation`, `hedging`, `report`, `cli`, `dsl`, `orderbook.OrderBook` | correctness + readability; allocation is fine because no tick waits on it |
 
@@ -214,6 +214,38 @@ venue's raw feed</em>. That path is hot-lane end to end:
 `HftOrderBook` itself gained the equities time-in-force set — `submitIoc`,
 `submitFok` (bitmap-walk liquidity probe, kill emits nothing), `submitPostOnly`
 (`REJECT_WOULD_CROSS`) — so simulators can exercise real order-type behavior.
+
+## The FX participant stack — quotes, not orders
+
+FX market structure is the equities stack's mirror image: no consolidated
+tape, no central book — liquidity is <em>quotes</em> streamed privately by
+providers, subject to last look. The hot-lane pieces map accordingly:
+
+- **`fix.FixMarketDataView`** — garbage-free 35=W/35=X decoding (FIX is the
+  lingua franca of e-FX feeds): a flyweight in the `FixExecReportView` mold,
+  preallocated entry arrays, scaled-long prices, entry order preserved
+  because for tiered LP streams position IS the tier.
+- **`fx.FxTierBook`** — the depth structure FX actually has: per-LP size-tier
+  ladders under the `AggregatedBook` composite. Answers the per-clip
+  questions — sweep cost across LPs (NaN when the book can't fill the size:
+  a partial sweep is not a price) and the best single-LP <em>full-amount</em>
+  quote (one ticket, no signaling).
+- **`fx.LpScorecard`** — the taker-side answer to last look: EWMA reject
+  rate, hold time, effective spread, and post-reject markout (the market's
+  move right after an LP declines is the realized cost of its last look).
+- **`fx.LpRouter`** — routes by <em>expected all-in</em> price: quoted price
+  plus rejectRate × adverse markout, with a reject-rate veto — encoding the
+  FX truth that a tight quote from a 20%-rejecting LP is expensive.
+- **`trading.LastLookGate`** — the maker side, implemented the way the FX
+  Global Code requires: symmetric price checks (rejects both directions
+  beyond tolerance), with disclosure statistics split by who the reject
+  protected — a randomized test asserts the 50/50 split.
+- **`fx.SyntheticCross`** — direct-vs-legs execution arithmetic with spread
+  composition done right (a synthetic crosses two spreads), NaN-safe so an
+  unquoted route can never look attractive; `execution.WmrFixingScheduler`
+  covers benchmark fixings (TWAP inside the window IS neutral replication —
+  pre-hedging ahead of it is deliberately not implemented, with the reason
+  documented).
 
 ## Scaling out — sharding as shipped machinery
 

@@ -24,8 +24,14 @@ import java.util.List;
  *       {@code spreadBps} half-spread (all-in price).</li>
  * </ul>
  *
- * <p>The asymmetry is the point of last look: benign or LP-favorable moves
- * always fill. Rejection statistics are exposed for TCA — a live desk
+ * <p>The asymmetry here is deliberate <em>as a taker's worst-case model</em>:
+ * it simulates the adverse LP behavior the FX Global Code prohibits but a
+ * taker must still budget for. The Code-compliant maker-side mechanism —
+ * symmetric rejection in both directions — is
+ * {@code com.quantfinlib.trading.LastLookGate}; when calibrating this
+ * model's threshold from an LP's published (symmetric) disclosures, note
+ * those statistics count rejects in both directions while this model
+ * rejects only one. Rejection statistics are exposed for TCA — a live desk
  * watches its reject rate per LP for exactly this pattern.</p>
  */
 public final class LastLookExecution implements ExecutionModel {
