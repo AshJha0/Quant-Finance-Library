@@ -178,6 +178,77 @@ class CheckpointTest {
                 "pending (intraday) markouts do not cross the overnight");
     }
 
+    @Test
+    void covarianceMatrixSurvivesTheOvernight() throws IOException {
+        var cov = new com.quantfinlib.microstructure.EwmaCovariance(2, 0.94);
+        cov.onReturns(new double[]{1e-4, 1e-4});
+        cov.onReturns(new double[]{-1e-4, -2e-4});
+        Path file = dir.resolve("cov.qflc");
+        try (var w = Checkpoint.writer(file)) {
+            w.section("basket", cov::writeState);
+        }
+        var restored = new com.quantfinlib.microstructure.EwmaCovariance(2, 0.94);
+        assertTrue(Checkpoint.reader(file).section("basket", restored::readState));
+        assertEquals(cov.covariance(0, 1), restored.covariance(0, 1), 0.0);
+        assertEquals(cov.samples(), restored.samples());
+        var wrongSize = new com.quantfinlib.microstructure.EwmaCovariance(3, 0.94);
+        assertThrows(IOException.class,
+                () -> Checkpoint.reader(file).section("basket", wrongSize::readState));
+    }
+
+    @Test
+    void lpScorecardStillReadsItsPreSeedingV1Format() throws IOException {
+        // A v1.8.0-era LpScorecard checkpoint has no per-LP markout counts;
+        // a restored nonzero markout EWMA must count as already-seeded so
+        // the next matured markout BLENDS instead of re-seeding over it.
+        Path file = dir.resolve("v1lps.qflc");
+        try (var w = Checkpoint.writer(file)) {
+            w.section("lps", out -> {
+                out.writeByte(1);
+                Checkpoint.writeLongs(out, new long[]{10, 0});    // attempts
+                Checkpoint.writeLongs(out, new long[]{8, 0});     // fills
+                Checkpoint.writeLongs(out, new long[]{2, 0});     // rejects
+                Checkpoint.writeDoubles(out, new double[]{0.2, 0});
+                Checkpoint.writeDoubles(out, new double[]{5e7, 0});
+                Checkpoint.writeDoubles(out, new double[]{1e-5, 0});
+                Checkpoint.writeDoubles(out, new double[]{0.0004, 0}); // markout
+                out.writeLong(2);                                 // matured
+            });
+        }
+        LpScorecard card = new LpScorecard(2, 0.5, 100);
+        assertTrue(Checkpoint.reader(file).section("lps", card::readState));
+        assertEquals(0.0004, card.postRejectMarkout(0), 0.0, "v1 markout restored");
+        // A new matured markout must blend at alpha, not stomp the history.
+        card.onReject(0, true, 1.0000, 0, 10);
+        card.onMid(1.0010, 1_000);                    // move +0.0010
+        assertEquals(0.0004 + 0.5 * (0.0010 - 0.0004), card.postRejectMarkout(0), 1e-12,
+                "restored EWMA counts as seeded");
+    }
+
+    @Test
+    void venueScorecardStillReadsItsPreMarkoutV1Format() throws IOException {
+        // A v1.8.0-era checkpoint has no markout fields; restoring it must
+        // recover everything it holds and leave the markout state cold.
+        Path file = dir.resolve("v1card.qflc");
+        try (var w = Checkpoint.writer(file)) {
+            w.section("venues", out -> {
+                out.writeByte(1);                          // the old format version
+                Checkpoint.writeLongs(out, new long[]{10, 0});   // sent
+                Checkpoint.writeLongs(out, new long[]{9, 0});    // filled
+                Checkpoint.writeLongs(out, new long[]{3, 0});    // probes
+                Checkpoint.writeDoubles(out, new double[]{0.9, 0});   // fillRate
+                Checkpoint.writeDoubles(out, new double[]{50_000, 0}); // latency
+                Checkpoint.writeDoubles(out, new double[]{4_000, 0}); // hidden
+            });
+        }
+        VenueScorecard card = new VenueScorecard(2, 0.05, 0.95);
+        assertTrue(Checkpoint.reader(file).section("venues", card::readState));
+        assertEquals(0.9, card.fillRate(0), 0.0, "v1 fields restored");
+        assertEquals(10, card.sent(0));
+        assertEquals(0, card.postFillMarkout(0), 0.0, "markout starts cold from v1");
+        assertEquals(0, card.maturedFillMarkouts());
+    }
+
     // ------------------------------------------------------------------
     // Safety properties
     // ------------------------------------------------------------------

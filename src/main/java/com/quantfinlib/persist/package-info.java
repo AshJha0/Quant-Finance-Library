@@ -10,8 +10,12 @@
  * {@code VolatilityCurve}, {@code SpreadForecaster}),
  * {@code microstructure.OnlineAlphaLearner} (weights AND the out-of-sample
  * IC evidence — restored trust must be earned trust),
- * {@code microstructure.LeadLagEstimator}, and the venue-quality cards
- * ({@code execution.VenueScorecard}, {@code fx.LpScorecard}).
+ * {@code microstructure.LeadLagEstimator},
+ * {@code microstructure.EwmaCovariance} (the basket risk matrix),
+ * {@code microstructure.KylesLambda} (learned depth),
+ * {@code microstructure.ClosingAuctionModel} (learned auction share), and the
+ * venue-quality cards ({@code execution.VenueScorecard} — format v2 with
+ * fill markouts, still reads v1 — and {@code fx.LpScorecard}).
  * Intraday state resets on read; configuration (bucket/venue counts) must
  * match or the read throws. {@code HiddenLiquidityDetector} is deliberately
  * NOT persistable: its state is keyed by price level, and overnight the

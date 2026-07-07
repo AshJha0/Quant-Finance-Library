@@ -113,6 +113,65 @@ class AdaptiveSorTest {
     }
 
     // ------------------------------------------------------------------
+    // Adverse selection (post-fill markout)
+    // ------------------------------------------------------------------
+
+    @Test
+    void postFillMarkoutMeasuresAdverseSelectionPerVenue() {
+        VenueScorecard card = new VenueScorecard(2, 0.5, 0.95, 100 * US);
+        // Venue 0: buy at mid 100.00, mid then REVERTS to 99.90 — adverse.
+        card.onFill(0, 50 * US, true, 100.00, 0);
+        card.onMid(99.90, 200 * US);
+        assertEquals(-0.10, card.postFillMarkout(0), 1e-12,
+                "seeded from the first matured markout, not ramped from 0");
+        // Venue 1: sell at 100.00, mid falls — the move went OUR way.
+        card.onFill(1, 50 * US, false, 100.00, 300 * US);
+        card.onMid(99.90, 500 * US);
+        assertEquals(+0.10, card.postFillMarkout(1), 1e-12, "favorable continuation");
+        assertEquals(2, card.maturedFillMarkouts(), "the wiring canary counts both");
+
+        // Non-finite discipline: NaN/Inf fill mids never arm, NaN/Inf mid
+        // updates never mature — one Inf sentinel would seed the EWMA at
+        // ±Inf and NaN it forever on the next blend.
+        card.onFill(0, 50 * US, true, Double.NaN, 600 * US);
+        card.onFill(0, 50 * US, true, Double.POSITIVE_INFINITY, 700 * US);
+        card.onMid(Double.NaN, 900 * US);
+        card.onMid(Double.POSITIVE_INFINITY, 950 * US);
+        assertEquals(2, card.maturedFillMarkouts());
+        assertEquals(-0.10, card.postFillMarkout(0), 1e-12, "EWMA untouched by sentinels");
+    }
+
+    @Test
+    void adverseSelectionSplitsOtherwiseIdenticalVenues() {
+        VenueScorecard card = new VenueScorecard(2, 0.5, 0.95, 100 * US);
+        AdaptiveSor sor = new AdaptiveSor(card, new AdaptiveSor.Config(
+                0, 0, 0.3, 5_000, 0.5));    // isolate the markout term
+        sor.register("CLEAN", 0);
+        sor.register("TOXIC", 1);
+        // Same fill rate history for both; only TOXIC's fills fade.
+        for (int i = 0; i < 10; i++) {
+            long t = i * 1000L * US;
+            card.onFill(0, 50 * US, true, 100.00, t);
+            card.onFill(1, 50 * US, true, 100.00, t);
+            card.onMid(99.95, t + 200 * US);             // both mature adverse here
+        }
+        // Re-arm: CLEAN's fills are followed by continuation instead.
+        for (int i = 0; i < 10; i++) {
+            long t = (100 + i) * 1000L * US;
+            card.onFill(0, 50 * US, true, 100.00, t);
+            card.onMid(100.05, t + 200 * US);            // CLEAN recovers to positive
+        }
+        assertTrue(card.postFillMarkout(0) > card.postFillMarkout(1));
+        assertTrue(card.postFillMarkout(1) < 0, "TOXIC's fills revert");
+
+        List<VenueQuote> venues = List.of(
+                new VenueQuote("TOXIC", 0, 0, 100.00, 5_000, 0, 100 * US, false),
+                new VenueQuote("CLEAN", 0, 0, 100.00, 5_000, 0, 100 * US, false));
+        assertEquals("CLEAN", sor.route(Side.BUY, 1_000, venues).lit().get(0).venue(),
+                "two identical quotes are not equal when one venue's fills fade");
+    }
+
+    // ------------------------------------------------------------------
     // Hidden liquidity learning
     // ------------------------------------------------------------------
 
@@ -258,15 +317,19 @@ class AdaptiveSorTest {
 
     private static long scoreStep(VenueScorecard card, int i) {
         int v = i & 15;
+        long t = i * 1000L * US;
         if ((i & 3) == 0) {
             card.onMiss(v, 100 * US + (i % 50));
         } else {
-            card.onFill(v, 90 * US + (i % 40));
+            // The markout-armed fill path + maturation both stay hot.
+            card.onFill(v, 90 * US + (i % 40), (i & 1) == 0, 100.0 + (i % 9) * 0.01, t);
+            card.onMid(100.0 + (i % 7) * 0.01, t + 200 * US);
         }
         if ((i & 7) == 0) {
             card.onDarkProbe(v, 1_000 + (i % 500));
         }
-        return (long) (card.fillRate(v) * 1000) + (long) card.measuredLatencyNanos(v);
+        return (long) (card.fillRate(v) * 1000) + (long) card.measuredLatencyNanos(v)
+                + (long) (card.postFillMarkout(v) * 1e6);
     }
 
     @Test

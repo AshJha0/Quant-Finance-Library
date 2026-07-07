@@ -1,5 +1,106 @@
 # Changelog
 
+## v1.9.0 (2026-07-08)
+
+- **Review round over rounds 4-5** (5 finder angles, verified then fixed):
+  - `JumpRobustVolatility` originally normalized the bipower product by
+    the current Δt only — on an alternating 10s/0.1s clock a pure
+    diffusion read `jumpFraction ≈ 0.74` (confirmed by simulation); now
+    `√(Δtₜ·Δtₜ₋₁)`, regression-tested on exactly that clock.
+  - `fx.LpScorecard` backported the markout fix its equities twin shipped
+    with: the post-reject markout EWMA now seeds from its first matured
+    observation instead of ramping from 0 (a toxic LP was under-penalized
+    for its first ~1/α rejects — during the burst that revealed it), and
+    all mid/price gates strengthened from NaN-only to full non-finite.
+    State format v2, still reads v1 (a restored nonzero markout counts as
+    seeded).
+  - `VenueScorecard`: non-finite (not just NaN) fill-mid and mid-update
+    guards — one +Inf sentinel would have seeded the markout EWMA at ±Inf
+    and NaN-poisoned it on the next blend; documented that the markout
+    leg makes the card SINGLE-SYMBOL (onMid matures every pending fill
+    against one mid in absolute price units).
+  - `KylesLambda.impactBps` now ignores the SIGN of the quantity (a
+    signed sell size read as zero impact — sells were free to the
+    executor) and gates infinite quantities.
+  - `AvellanedaStoikov`: `log1p` keeps the liquidity floor exact for
+    arbitrarily small γ (plain `log(1+x)` quoted a zero-width spread
+    below γ/κ ~ 1e-16); the units contract now pins inventory to the
+    instrument the mid prices — passing lots instead of shares silently
+    gutted the skew.
+  - `EwmaCovariance`: constructor refuses basket sizes whose triangle
+    index leaves int range; `marginalContribution` returns the portfolio
+    variance so `PortfolioExecutor` gates and computes in one O(n²) pass.
+  - The overnight simulator now ASSERTS routing abandons the toxic venue
+    (zero day-5 flow), not just that its markout reads adverse; docs
+    corrected (cookbook recipe 10's undefined `childSize`, index.html
+    cards, diagram 11/12 staleness, LEARN §6 model list, lane-map row for
+    `ClosingAuctionModel`).
+- **Quant models, round 5 — the last live producers + the loop test**:
+  - `microstructure.KylesLambda` — **impact learned from the tape**
+    (Kyle 1985): streaming through-origin regression of mid change on
+    signed flow, `λ = E[q·Δp]/E[q²]` on decayed moments. `impactBps()` is
+    the live producer for `MarketState.impactBps` — the last executor
+    input that lacked one; a noisy negative λ is clamped there (the
+    executor is never "paid to trade") while `lambda()` stays raw for
+    diagnostics. Persistable — depth moves slowly enough to carry
+    overnight.
+  - `microstructure.JumpRobustVolatility` — **bipower variation**
+    (Barndorff-Nielsen & Shephard 2004): `(π/2)·|rₜ||rₜ₋₁|` beside the
+    classic r², so one headline print reads as a jump, not a volatility
+    regime. The two-return product is normalized by `√(Δtₜ·Δtₜ₋₁)`, so
+    irregular event-time sampling is handled exactly (a cadence burst is
+    not a jump). Exposes robust and raw vols plus `jumpFraction()`; a
+    feed gap breaks the consecutive-return pairing rather than inventing
+    neighbors. Feed its robust vol to `VolatilityCurve` for cleaner
+    baselines.
+  - `microstructure.ClosingAuctionModel` — **closing-auction reserve**,
+    shipped honestly as a documented-contract structure: the library has
+    no venue imbalance feed, so the NOII/imbalance field mapping and the
+    `imbalanceSensitivity` calibration are the user's to validate (the
+    javadoc says so). Learns the auction's share of daily volume across
+    days (persisted); today's imbalance tilts the reserve — opposite-side
+    imbalance means the auction wants your shares.
+  - `integration.OvernightLearningLoopTest` — **the multi-day session
+    simulator**: five synthetic days flow through models → executor →
+    router → scorecards, and each night the learned state crosses into
+    FRESH instances through a real `Checkpoint` file. Asserts the loop,
+    not the pieces: U-shaped curves converge, the alpha learner's IC gate
+    opens on planted signal (and a noise-fed control learner earns
+    nothing), Kyle's λ recovers the planted depth through four restores,
+    the toxic venue's fills read adverse and routing abandons it.
+- **Quant models, round 4 — closing the self-documented seams**
+  (cross-asset, streaming, allocation-free):
+  - `microstructure.EwmaCovariance` — **streaming RiskMetrics-style
+    covariance matrix** (flat lower triangle, full-vector rank-1 updates so
+    the matrix stays PSD; a sample with any non-finite return is dropped
+    whole; pairs seed from first observation). Exposes correlations,
+    `portfolioVariance`, `marginalContribution` (sums to 1; a natural
+    hedge contributes negatively) and `minVarianceHedgeRatio` — the live
+    hedge beta. Persistable via `Checkpoint`.
+    `execution.PortfolioExecutor.useRiskModel(EwmaCovariance)` upgrades
+    the capacity allocation from the diagonal approximation its javadoc
+    always disclosed to true basket marginal risk: two correlated legs
+    read as one concentrated risk, a natural hedge earns no urgency, and
+    an unlearned matrix falls back to the vol-regime weights.
+  - `trading.AvellanedaStoikov` — **closed-form optimal market-making
+    quotes** (2008): inventory-shaded reservation price
+    `mid − q·γ·σ²·τ` and optimal spread `γσ²τ + (2/γ)ln(1+γ/κ)`, the
+    principled version of `HftQuoter`'s heuristic skew. Explicit units
+    contract (PRICE variance per second from
+    `(mid × SignalEngine.volPerSqrtSecond)²`; τ = risk horizon for 24/5
+    FX); NaN/negative variance is neutral (reservation = mid, spread at
+    the liquidity floor — never an infinite quote); pure primitive math,
+    hot-lane safe.
+  - `execution.VenueScorecard` — **post-fill markout (adverse
+    selection)**: the `fx.LpScorecard` pending-ring mechanism pointed at
+    fills — arm via the extended `onFill(venue, latency, buy, midAtFill,
+    ts)`, mature via `onMid`; positive = the price kept going your way,
+    negative = your fills fade. `AdaptiveSor` now charges that reversion
+    per share in its expected cost (`+ adverseSelection` term), so two
+    identical quotes split when one venue's fills systematically revert.
+    Scorecard checkpoint format bumped to v2; v1 files (pre-markout) are
+    still read, restoring what they hold and leaving markout state cold.
+
 ## v1.8.0 (2026-07-07)
 
 - **Full review round over the whole uncommitted batch** (8 independent

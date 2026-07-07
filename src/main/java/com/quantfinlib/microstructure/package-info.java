@@ -51,6 +51,17 @@
  * cash — with a regression prediction at the best lag) and
  * {@link com.quantfinlib.microstructure.DayTypeProfiles} (per-day-type
  * seasonality: expiry days, half days and FX fixing days each learn their
- * own volume/vol/spread curves).</p>
+ * own volume/vol/spread curves) and
+ * {@link com.quantfinlib.microstructure.EwmaCovariance} (streaming
+ * RiskMetrics-style covariance matrix — marginal basket risk for
+ * {@code execution.PortfolioExecutor}, live min-variance hedge ratios),
+ * {@link com.quantfinlib.microstructure.KylesLambda} (impact LEARNED from
+ * the tape: streaming Δp-on-signed-flow regression, the live producer for
+ * {@code MarketState.impactBps}),
+ * {@link com.quantfinlib.microstructure.JumpRobustVolatility} (bipower
+ * variation: a headline print is a jump, not a volatility regime) and
+ * {@link com.quantfinlib.microstructure.ClosingAuctionModel}
+ * (auction share + imbalance-tilted reserve — shipped as a
+ * documented-contract structure, see its javadoc caveat).</p>
  */
 package com.quantfinlib.microstructure;

@@ -312,6 +312,7 @@ flowchart TD
         SE["SignalEngine<br/>vol · alpha"]
         HLD["HiddenLiquidityDetector<br/>true depth"]
         OAL["OnlineAlphaLearner<br/>learned alpha (IC-gated)"]
+        KL["KylesLambda<br/>learned impact (bps)"]
     end
     DTP["DayTypeProfiles<br/>expiry · half day · fixing day"] -.->|"selects today's curves"| MODELS
     MODELS --> BE
@@ -354,7 +355,7 @@ flowchart TD
     end
     PE -->|"1 — each child's own dueQuantity"| CHILDREN
     CHILDREN --> OV1["2 — leg-balance band:<br/>projected net notional inside maxNet?<br/>ahead leg throttles, lagging leg never pushed"]
-    OV1 --> OV2["3 — interval budget:<br/>total notional over the cap?<br/>capacity goes risk-weighted:<br/>(1 + vol regime) × due notional"]
+    OV1 --> OV2["3 — interval budget:<br/>total notional over the cap?<br/>capacity goes risk-weighted:<br/>(1 + vol regime) × due notional — or with<br/>useRiskModel, (1 + marginal basket risk)<br/>from the streaming EwmaCovariance"]
     OV2 --> OV3["4 — band re-checked<br/>(asymmetric risk cuts can re-tilt the legs)"]
     OV3 --> ROUTE["dues → venue choice<br/>AdaptiveSor (equities) · LpRouter (FX)"]
     ROUTE --> FILLS["fills"]
@@ -378,7 +379,7 @@ does not).
 ```mermaid
 flowchart LR
     subgraph SESSION["trading session (in memory)"]
-        MODELS["learned state<br/>VolumeCurve · VolatilityCurve · SpreadForecaster<br/>OnlineAlphaLearner (weights + IC evidence)<br/>LeadLagEstimator · VenueScorecard · LpScorecard"]
+        MODELS["learned state<br/>VolumeCurve · VolatilityCurve · SpreadForecaster<br/>OnlineAlphaLearner (weights + IC evidence)<br/>LeadLagEstimator · EwmaCovariance · KylesLambda<br/>ClosingAuctionModel · VenueScorecard · LpScorecard"]
     end
 
     MODELS -->|"end of day:<br/>writeState per model"| W["Checkpoint.Writer<br/>named sections, buffered in memory;<br/>a throwing section commits NOTHING"]

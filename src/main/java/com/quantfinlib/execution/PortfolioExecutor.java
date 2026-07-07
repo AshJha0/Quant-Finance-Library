@@ -1,5 +1,6 @@
 package com.quantfinlib.execution;
 
+import com.quantfinlib.microstructure.EwmaCovariance;
 import com.quantfinlib.orderbook.Side;
 import com.quantfinlib.util.MathUtils;
 
@@ -23,11 +24,13 @@ import com.quantfinlib.util.MathUtils;
  *   <li><b>Capacity allocation</b> — {@code maxIntervalNotional} caps the
  *       basket's total demand per interval (participation budget, cash
  *       constraint). When it binds, capacity goes to the symbols carrying
- *       the most residual risk — weight ∝ (1 + volatility regime) ×
- *       due notional — the diagonal approximation of multi-asset
- *       Almgren-Chriss ("spend scarce liquidity where the remaining
- *       timing risk is largest"; the full treatment needs a covariance
- *       matrix, which a streaming layer should not pretend to have).</li>
+ *       the most residual risk. By default that is the diagonal
+ *       approximation of multi-asset Almgren-Chriss — weight ∝
+ *       (1 + volatility regime) × due notional. Plug in a streaming
+ *       {@link EwmaCovariance} via {@link #useRiskModel} and it becomes
+ *       the real thing: weight ∝ (1 + marginal contribution to BASKET
+ *       variance) × due notional, so two correlated legs are recognized
+ *       as one concentrated risk and a natural hedge earns no urgency.</li>
  * </ol>
  *
  * <p>Both overlays only ever <em>reduce</em> a child's own due quantity,
@@ -73,7 +76,11 @@ public final class PortfolioExecutor {
     private final BenchmarkExecutor[] children;
     private final double[] lastMid;        // last finite price seen per symbol
     private final double[] dueNotional;    // scratch, valid within decide()
+    private final double[] signedRemaining;// scratch: signed remaining notional
+    private final double[] riskFactor;     // scratch: capacity weight multiplier
     private int count;
+
+    private EwmaCovariance riskModel;      // optional: upgrades the risk weights
 
     private double buyFilledNotional;
     private double sellFilledNotional;
@@ -86,6 +93,28 @@ public final class PortfolioExecutor {
         this.children = new BenchmarkExecutor[maxSymbols];
         this.lastMid = new double[maxSymbols];
         this.dueNotional = new double[maxSymbols];
+        this.signedRemaining = new double[maxSymbols];
+        this.riskFactor = new double[maxSymbols];
+    }
+
+    /**
+     * Upgrades the capacity allocation from the diagonal approximation to
+     * true basket risk: with a covariance model, a binding
+     * {@code maxIntervalNotional} flows to the symbols whose REMAINING
+     * position contributes most to portfolio variance
+     * ({@link EwmaCovariance#marginalContribution}) — two correlated buys
+     * carry more joint timing risk than their individual vols admit, and a
+     * natural hedge carries less. Handle {@code i} maps to covariance
+     * symbol {@code i}; feed the model one return vector per interval on
+     * your own clock. Without a model (or before it has learned), the
+     * weight falls back to the per-symbol volatility regime.
+     */
+    public void useRiskModel(EwmaCovariance model) {
+        if (model.symbols() != children.length) {
+            throw new IllegalArgumentException("risk model covers " + model.symbols()
+                    + " symbols; this portfolio was sized for " + children.length);
+        }
+        this.riskModel = model;
     }
 
     /** Registers a child parent order; returns its handle for decide/onFill. */
@@ -131,22 +160,21 @@ public final class PortfolioExecutor {
         // 3. Capacity: when total demand exceeds the interval budget,
         //    allocate it risk-weighted and cut each symbol to its share.
         if (config.maxIntervalNotional() < Double.POSITIVE_INFINITY) {
+            fillRiskFactors(states);
             double total = 0;
             double sumWeight = 0;
             for (int i = 0; i < count; i++) {
                 double notional = dueOut[i] * lastMid[i];
                 dueNotional[i] = notional;
                 total += notional;
-                double vol = states[i].volatility();
-                sumWeight += (1 + (vol > 0 ? vol : 0)) * notional;   // NaN -> 0
+                sumWeight += riskFactor[i] * notional;
             }
             if (total > config.maxIntervalNotional() && sumWeight > 0) {
                 for (int i = 0; i < count; i++) {
                     if (dueNotional[i] <= 0) {
                         continue;
                     }
-                    double vol = states[i].volatility();
-                    double weight = (1 + (vol > 0 ? vol : 0)) * dueNotional[i];
+                    double weight = riskFactor[i] * dueNotional[i];
                     double allocation = config.maxIntervalNotional() * weight / sumWeight;
                     if (dueNotional[i] > allocation) {
                         dueOut[i] = (long) Math.floor(dueOut[i] * allocation / dueNotional[i]);
@@ -158,6 +186,40 @@ public final class PortfolioExecutor {
                 //    reduces dues, so it can never re-violate the budget,
                 //    and the sequence terminates here by construction.
                 applyLegBand(dueOut);
+            }
+        }
+    }
+
+    /**
+     * The capacity weight multiplier per symbol. With a covariance model
+     * that has a live risk picture: {@code 1 + clamp(MRC, 0, 1)} where MRC
+     * is the remaining position's marginal contribution to basket variance
+     * — a natural hedge (negative MRC) earns no extra capacity, because
+     * executing it INCREASES the risk left behind. Otherwise the diagonal
+     * fallback {@code 1 + volatilityRegime}. Same bounded [1, 2] shape
+     * either way, so the two modes are interchangeable mid-flight.
+     */
+    private void fillRiskFactors(BenchmarkExecutor.MarketState[] states) {
+        boolean modeled = false;
+        if (riskModel != null) {
+            // Tail entries stay zero for good: nothing else writes
+            // signedRemaining and count never shrinks, so unadded handles
+            // carry no risk without re-zeroing.
+            for (int i = 0; i < count; i++) {
+                double sign = children[i].side() == Side.BUY ? 1 : -1;
+                signedRemaining[i] = sign * children[i].remaining() * lastMid[i];
+            }
+            if (riskModel.marginalContribution(signedRemaining, riskFactor) > 0) {
+                for (int i = 0; i < count; i++) {
+                    riskFactor[i] = 1 + MathUtils.clamp(riskFactor[i], 0, 1);
+                }
+                modeled = true;
+            }
+        }
+        if (!modeled) {
+            for (int i = 0; i < count; i++) {
+                double vol = states[i].volatility();
+                riskFactor[i] = 1 + (vol > 0 ? vol : 0);   // NaN -> 0
             }
         }
     }

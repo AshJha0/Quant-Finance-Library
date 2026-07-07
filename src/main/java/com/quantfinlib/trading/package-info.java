@@ -9,9 +9,13 @@
  * release-store publish; measured tick-to-order p50 ≈ 504 ns). On top of
  * the lane: {@link com.quantfinlib.trading.HftQuoter} (streaming two-sided
  * market maker with inventory skew, tick-grid snap and conflation —
- * measured tick-to-two-sided-quote p50 ≈ 592 ns) and
- * {@link com.quantfinlib.trading.AutoHedger} (live position-band hedging
- * with in-flight cooldown), {@link com.quantfinlib.trading.OrderThrottle}
+ * measured tick-to-two-sided-quote p50 ≈ 592 ns) with
+ * {@link com.quantfinlib.trading.AvellanedaStoikov} (the principled
+ * quoting model behind the quoter's heuristic skew: closed-form
+ * reservation price and optimal spread from risk aversion, variance and
+ * fill intensity), {@link com.quantfinlib.trading.AutoHedger} (live
+ * position-band hedging with in-flight cooldown),
+ * {@link com.quantfinlib.trading.OrderThrottle}
  * (venue message-rate token bucket) and
  * {@link com.quantfinlib.trading.LastLookGate} (maker-side symmetric
  * last-look price check per the FX Global Code). Venue adapters implement

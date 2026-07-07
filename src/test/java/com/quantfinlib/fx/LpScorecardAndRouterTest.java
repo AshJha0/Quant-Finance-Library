@@ -196,6 +196,22 @@ class LpScorecardAndRouterTest {
     }
 
     @Test
+    void firstMarkoutSeedsAtFullStrengthNotFivePercent() {
+        // Regression: ramping the markout EWMA from 0 under-penalized a
+        // toxic LP for its first ~1/alpha rejects — exactly during the
+        // burst that revealed it. The first matured markout now seeds.
+        LpScorecard c = new LpScorecard(2, 0.05, 100 * MS);
+        c.onReject(0, true, 1.08500, 0, MS);
+        c.onMid(1.08530, 200 * MS);                      // +30 pips against us
+        assertEquals(0.00030, c.postRejectMarkout(0), 1e-12,
+                "full strength on observation one, not 5% of it");
+        // And the second one blends at alpha as before.
+        c.onReject(0, true, 1.08530, 300 * MS, MS);
+        c.onMid(1.08540, 500 * MS);                      // +10 pips
+        assertEquals(0.00030 + 0.05 * (0.00010 - 0.00030), c.postRejectMarkout(0), 1e-12);
+    }
+
+    @Test
     void routerRespectsClipSizeAgainstTiers() {
         FxTierBook b = twoLpBook();
         LpScorecard c = new LpScorecard(2);

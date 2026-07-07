@@ -27,6 +27,10 @@ import java.util.Map;
  *       moving market, microseconds of delay are adverse selection. The
  *       scorecard's <em>measured</em> latency overrides the advertised
  *       {@link VenueQuote#latencyNanos} once observed;</li>
+ *   <li><b>Adverse selection</b> — a venue whose fills are followed by
+ *       reversion ({@link VenueScorecard#postFillMarkout} negative) charges
+ *       that reversion as a per-share cost: two identical quotes are NOT
+ *       equal when one venue's fills systematically fade;</li>
  *   <li><b>Hidden liquidity</b> — dark pools are probed with sizes learned
  *       from realized probe fills ({@link VenueScorecard#onDarkProbe}),
  *       seeded by a configurable default when a pool is still unknown;</li>
@@ -126,8 +130,13 @@ public final class AdaptiveSor {
      * Routes a marketable parent of {@code quantity}. Lit venues are ranked
      * by expected cost per share:
      *
-     * <pre>  allIn × [1 + (1−fillRate)×missPenalty + latency×urgency]  (buys;
+     * <pre>  allIn × [1 + (1−fillRate)×missPenalty + latency×urgency
+     *          + adverseSelection]                                (buys;
      *  the adjustments subtract for sells)</pre>
+     *
+     * where adverseSelection is the venue's negative post-fill markout as
+     * a fraction of price (a venue with favorable or unknown markout pays
+     * nothing extra).
      *
      * and swept best-first at displayed size. Every quoting dark venue gets
      * a contingent probe leg at its midpoint, sized by learned hidden
@@ -165,7 +174,16 @@ public final class AdaptiveSor {
             double allIn = px * (1 + (buy ? 1 : -1) * v.feeBps() / 1e4);
             double missAdj = (1 - fillRate) * config.missPenaltyBps() / 1e4;
             double latAdj = latencyNanos / 1e6 * config.urgencyBpsPerMs() / 1e4;
-            double expected = allIn * (1 + (buy ? 1 : -1) * (missAdj + latAdj));
+            // A venue whose fills revert charges that reversion per share;
+            // favorable/unknown markout adds nothing (no bonus for luck).
+            double adverseAdj = 0;
+            if (id != null) {
+                double markout = scorecard.postFillMarkout(id);
+                if (markout < 0) {
+                    adverseAdj = -markout / px;
+                }
+            }
+            double expected = allIn * (1 + (buy ? 1 : -1) * (missAdj + latAdj + adverseAdj));
             candidates.add(new Scored(v.venue(), px, expected, size));
         }
 

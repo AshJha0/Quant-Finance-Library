@@ -186,7 +186,9 @@ impact and an alpha signal. TCA is
 routing — which venue gets each child — is `execution/SmartOrderRouter.java`
 (readable), `execution/HftSor.java` (fast), and
 `execution/AdaptiveSor.java` (full-checklist: lit + dark, learned fill rate,
-latency, hidden liquidity).
+latency, hidden liquidity, and adverse selection — a venue whose fills are
+systematically followed by reversion is charged that reversion per share,
+because two identical quotes are not equal when one venue's fills fade).
 
 **Where do those "live inputs" come from?** A dynamic algo is only as good
 as the numbers you feed it, and each one is a small model:
@@ -212,6 +214,23 @@ as the numbers you feed it, and each one is a small model:
 - *"Is there more size than I can see?"* `HiddenLiquidityDetector` flags
   icebergs the honest way: a single print bigger than what was displayed
   means hidden size was there.
+- *"How much will MY order move the price?"* Instead of assuming a formula,
+  `KylesLambda` learns it from the tape: regress price changes on signed
+  flow and the slope IS the market's depth (Kyle, 1985). One caveat done
+  right: a noisy negative estimate is clamped to zero cost — the model
+  must never tell the algo it gets *paid* to trade.
+- *"Was that a jump or a regime?"* A single headline print enters a squared-
+  return estimator as r² and reads as high volatility for minutes.
+  `JumpRobustVolatility` uses the product of *consecutive* returns
+  (bipower variation) — a lone jump inflates only one factor, so the
+  diffusion estimate barely moves and `jumpFraction()` tells you what
+  share of the noise was jumps.
+- *"How much should I leave for the closing auction?"* For liquid names
+  the close is the deepest liquidity event of the day.
+  `ClosingAuctionModel` learns the auction's typical share and tilts it by
+  today's imbalance feed — with an honest caveat in its javadoc: the
+  library ships the structure and the tests, but the imbalance-feed
+  mapping must be validated against your venue's data.
 
 **Executing a whole basket.** A pension fund rarely trades one stock — it
 transitions a *portfolio* (sell the old holdings, buy the new ones). Run N

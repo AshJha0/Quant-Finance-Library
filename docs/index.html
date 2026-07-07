@@ -53,7 +53,7 @@ footer{margin:3rem 0 2rem;color:var(--muted);font-size:.85rem;text-align:center}
     Tick-to-order end-to-end&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; p50 = 504 ns&nbsp; p99 = 1.0 µs (15–21M orders/s across runs)<br>
     Tick-to-two-sided-quote&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; p50 = 592 ns&nbsp; p99 &lt; 1 µs (market-making loop, both sides)<br>
     Venue-grade matching engine&nbsp;&nbsp;&nbsp;&nbsp; ≈ 204 ns/op, 10M+ fills/s, zero allocation<br>
-    Test suite&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 760+ tests, ~94% line coverage, CI on every push
+    Test suite&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 790+ tests, ~94% line coverage, CI on every push
   </div>
 
   <h2>What's inside</h2>
@@ -76,16 +76,21 @@ footer{margin:3rem 0 2rem;color:var(--muted);font-size:.85rem;text-align:center}
     <div class="card"><h3>Execution</h3>
       <p>Dynamic benchmark algos (VWAP/TWAP/Arrival/IS/Close/Open/POV that
          re-decide on live spread, depth, vol, volume curve, impact and alpha),
-         portfolio-level basket scheduling (leg balance + risk-weighted capacity),
-         smart order routing (readable, zero-alloc, and full-checklist adaptive
-         with lit + dark venues), iceberg, dark pool, tick-level backtesting with TCA.</p></div>
+         portfolio-level basket scheduling (leg balance + capacity by marginal
+         basket risk from a streaming covariance matrix), smart order routing
+         (readable, zero-alloc, and full-checklist adaptive with lit + dark
+         venues and learned adverse selection), iceberg, dark pool, tick-level
+         backtesting with TCA.</p></div>
     <div class="card"><h3>Signals &amp; quant models</h3>
       <p>Unified streaming SignalEngine (imbalance, microprice, volatility,
          liquidity, momentum, composite — equity + FX) plus the models feeding
          execution: intraday volume/vol/spread seasonality (day-type aware),
          L2 queue position, iceberg detection, Lee-Ready trade classification,
          passive-fill probability, prequential-IC-gated online alpha learning,
-         cross-asset lead-lag — with learned state persisted across sessions.</p></div>
+         cross-asset lead-lag, Kyle-lambda learned impact, jump-robust
+         (bipower) volatility, Avellaneda-Stoikov optimal quoting, closing
+         auction reserve — with learned state persisted across sessions and
+         the whole loop proven by a five-day overnight simulator.</p></div>
     <div class="card"><h3>Equities market structure</h3>
       <p>ITCH-style L3 feed decoding into a full-depth book with exact own-order
          queue position, consolidated NBBO, order-flow imbalance signals, LULD +

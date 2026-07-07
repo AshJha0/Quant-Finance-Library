@@ -175,6 +175,9 @@ SignalEngine sig   = new SignalEngine(nSymbols);         // vol, alpha, imbalanc
 VolumeCurve  vol   = new VolumeCurve(78, 0.1);           // live VWAP curve
 SpreadForecaster spread = new SpreadForecaster();        // time-of-day spread
 VolatilityCurve volCurve = new VolatilityCurve(78, 0.1); // vol seasonality
+KylesLambda kyle = new KylesLambda();                    // impact from the tape
+long clipSize = 2_000;         // the contemplated child size to price impact
+                               // for (a typical slice, e.g. parent/intervals)
 
 BenchmarkExecutor exec = BenchmarkExecutor.of(Side.BUY, 100_000, Benchmark.VWAP);
 
@@ -186,7 +189,7 @@ var m = new BenchmarkExecutor.MarketState(
         book.bestAskSize(),                              // displayed depth (take-now)
         vol.expectedFractionElapsed(bucket, fracIn),     // VWAP curve
         sig.alpha(sym),                                  // alpha, already in [-1,1]
-        0);                                              // impact (optional)
+        kyle.impactBps(clipSize, sig.microprice(sym)));  // impact, learned live
 long child = exec.dueQuantity(scheduleFraction, m);      // how much, right now
 if (child > 0) {
     var plan = sor.route(Side.BUY, child, venueQuotes);  // AdaptiveSor: where
@@ -253,9 +256,21 @@ The overlays only ever *reduce* a child's own due — the ahead leg throttles,
 the lagging leg is never pushed past its own benchmark — so each symbol's
 benchmark integrity holds by construction, and anything deferred reappears
 through that child's behind-schedule catch-up. When the budget binds,
-capacity goes to weight ∝ (1 + vol regime) × due notional: the diagonal
-approximation of multi-asset Almgren-Chriss (the full version needs a
-covariance matrix; this layer doesn't pretend to have one).
+capacity goes to weight ∝ (1 + vol regime) × due notional by default — the
+diagonal approximation of multi-asset Almgren-Chriss. To make it the real
+thing, feed a streaming covariance matrix one return vector per interval
+and plug it in:
+
+```java
+var cov = new EwmaCovariance(basketSize, 0.97);
+cov.onReturns(intervalReturns);            // per interval, on your clock
+pe.useRiskModel(cov);                      // budget now flows by marginal
+                                           // contribution to BASKET risk
+```
+
+Two correlated legs then read as one concentrated risk, and a natural
+hedge earns no extra urgency; while the matrix is unlearned the executor
+falls back to the vol-regime weights.
 
 ---
 

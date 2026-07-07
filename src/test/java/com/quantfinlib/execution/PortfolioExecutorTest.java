@@ -131,6 +131,53 @@ class PortfolioExecutorTest {
     }
 
     @Test
+    void covarianceUpgradesCapacityFromDiagonalToBasketRisk() {
+        // Three equal buys; A and B move together, C is independent. Under
+        // the diagonal fallback (all vols equal) the budget splits evenly —
+        // but A+B are ONE concentrated risk, and the covariance model sees
+        // it: the correlated pair carries MRC 0.4 each vs C's 0.2, so it
+        // gets more of the binding budget.
+        var cov = new com.quantfinlib.microstructure.EwmaCovariance(3, 0.97);
+        var rnd = new java.util.Random(7);
+        double[] r = new double[3];
+        for (int i = 0; i < 2_000; i++) {
+            double g = 1e-4 * rnd.nextGaussian();
+            r[0] = g;
+            r[1] = g;
+            r[2] = 1e-4 * rnd.nextGaussian();
+            cov.onReturns(r);
+        }
+
+        var pe = new PortfolioExecutor(3,
+                new PortfolioExecutor.Config(Double.POSITIVE_INFINITY, 750_000));
+        int a = pe.add(BenchmarkExecutor.of(Side.BUY, 10_000, Benchmark.TWAP));
+        int b = pe.add(BenchmarkExecutor.of(Side.BUY, 10_000, Benchmark.TWAP));
+        int c = pe.add(BenchmarkExecutor.of(Side.BUY, 10_000, Benchmark.TWAP));
+        pe.useRiskModel(cov);
+
+        var s = MarketState.neutral(100, 0.5);              // vols all neutral:
+        long[] due = new long[3];                           // only the matrix differs
+        pe.decide(0.5, new MarketState[]{s, s, s}, due);
+
+        assertEquals(due[a], due[b], "symmetric legs get symmetric capacity");
+        assertTrue(due[a] > due[c],
+                "the correlated pair carries more basket risk: " + due[a] + " vs " + due[c]);
+        assertTrue((due[a] + due[b] + due[c]) * 100.0 <= 750_000, "budget holds");
+
+        // A model with no risk picture yet falls back to the diagonal form.
+        var pe2 = new PortfolioExecutor(1,
+                new PortfolioExecutor.Config(Double.POSITIVE_INFINITY, 100_000));
+        pe2.add(BenchmarkExecutor.of(Side.BUY, 10_000, Benchmark.TWAP));
+        pe2.useRiskModel(new com.quantfinlib.microstructure.EwmaCovariance(1));
+        long[] one = new long[1];
+        pe2.decide(0.5, new MarketState[]{MarketState.neutral(100, 0.5)}, one);
+        assertEquals(1_000, one[0], "unlearned model: plain budget cut still applies");
+
+        assertThrows(IllegalArgumentException.class, () -> pe.useRiskModel(
+                new com.quantfinlib.microstructure.EwmaCovariance(2)));
+    }
+
+    @Test
     void overlaysOnlyEverReduceAChildsOwnDue() {
         var config = new PortfolioExecutor.Config(50_000, 100_000);
         var pe = new PortfolioExecutor(3, config);

@@ -47,6 +47,7 @@ public final class LpScorecard {
     private final double[] holdNanosEwma;
     private final double[] effSpreadEwma;     // price units, fills only
     private final double[] markoutEwma;       // price units, rejects only
+    private final long[] markoutCount;        // matured markouts per LP (seeding)
 
     // Pending markout ring [lp * PENDING_RING + k]: side 0 = empty, +1 buy, -1 sell.
     private final byte[] pendingSide;
@@ -77,6 +78,7 @@ public final class LpScorecard {
         this.holdNanosEwma = new double[lpCount];
         this.effSpreadEwma = new double[lpCount];
         this.markoutEwma = new double[lpCount];
+        this.markoutCount = new long[lpCount];
         this.pendingSide = new byte[lpCount * PENDING_RING];
         this.pendingMid = new double[lpCount * PENDING_RING];
         this.pendingTs = new long[lpCount * PENDING_RING];
@@ -107,8 +109,8 @@ public final class LpScorecard {
         rejectRate[lp] += alpha * (0 - rejectRate[lp]);
         holdNanosEwma[lp] += alpha * (holdNanos - holdNanosEwma[lp]);
         double eff = buy ? price - midAtRequest : midAtRequest - price;
-        if (!Double.isNaN(eff)) {
-            // A NaN price/mid must not poison the EWMA permanently.
+        if (Double.isFinite(eff)) {
+            // A NaN/Inf price or mid must not poison the EWMA permanently.
             effSpreadEwma[lp] += alpha * (eff - effSpreadEwma[lp]);
         }
     }
@@ -124,10 +126,10 @@ public final class LpScorecard {
         rejects[lp]++;
         rejectRate[lp] += alpha * (1 - rejectRate[lp]);
         holdNanosEwma[lp] += alpha * (holdNanos - holdNanosEwma[lp]);
-        if (Double.isNaN(midAtRequest)) {
-            // The reject still counts against the rate, but a NaN reference
-            // mid can never start a markout: maturing against it would set
-            // the EWMA to NaN forever and silently de-route this LP.
+        if (!Double.isFinite(midAtRequest)) {
+            // The reject still counts against the rate, but a NaN/Inf
+            // reference mid can never start a markout: maturing against it
+            // would poison the EWMA forever and silently de-route this LP.
             return;
         }
         int slot = lp * PENDING_RING + pendingCursor[lp];
@@ -148,7 +150,7 @@ public final class LpScorecard {
      * common no-pending case is a single compare.
      */
     public void onMid(double mid, long timestampNanos) {
-        if (pendingCount == 0 || Double.isNaN(mid)) {
+        if (pendingCount == 0 || !Double.isFinite(mid)) {
             return;
         }
         int n = lpCount * PENDING_RING;
@@ -157,7 +159,14 @@ public final class LpScorecard {
                     && timestampNanos - pendingTs[slot] >= markoutHorizonNanos) {
                 int lp = slot / PENDING_RING;
                 double move = pendingSide[slot] * (mid - pendingMid[slot]);
-                markoutEwma[lp] += alpha * (move - markoutEwma[lp]);
+                // Seed from the first matured markout — ramping from 0
+                // under-penalized a toxic LP for its first ~1/alpha rejects,
+                // exactly during the burst that revealed it (the equities
+                // twin, VenueScorecard, seeds the same way).
+                markoutEwma[lp] = markoutCount[lp] == 0
+                        ? move
+                        : markoutEwma[lp] + alpha * (move - markoutEwma[lp]);
+                markoutCount[lp]++;
                 pendingSide[slot] = 0;
                 pendingCount--;
                 maturedMarkouts++;
@@ -227,10 +236,11 @@ public final class LpScorecard {
      * Persists the learned LP behavior — reject rates, hold times,
      * effective spreads and post-reject markouts. The pending-markout ring
      * is intraday (a reject awaiting its horizon) and is not persisted.
+     * Format version 2 (v1, from before markout seeding, is still read).
      * See {@code persist.Checkpoint}.
      */
     public void writeState(DataOutput out) throws IOException {
-        out.writeByte(1);
+        out.writeByte(2);
         Checkpoint.writeLongs(out, attempts);
         Checkpoint.writeLongs(out, fills);
         Checkpoint.writeLongs(out, rejects);
@@ -238,15 +248,23 @@ public final class LpScorecard {
         Checkpoint.writeDoubles(out, holdNanosEwma);
         Checkpoint.writeDoubles(out, effSpreadEwma);
         Checkpoint.writeDoubles(out, markoutEwma);
+        Checkpoint.writeLongs(out, markoutCount);
         out.writeLong(maturedMarkouts);
     }
 
     /**
      * Restores the card; pending markouts reset (restore at session
-     * start). Throws on an LP-count or version mismatch.
+     * start). Reads both format versions — a v1 checkpoint carries no
+     * per-LP markout counts, so a restored nonzero markout EWMA counts as
+     * already-seeded (it is). Throws on an LP-count mismatch or an
+     * unknown version.
      */
     public void readState(DataInput in) throws IOException {
-        Checkpoint.requireVersion(in, 1, "LpScorecard");
+        int v = in.readByte();
+        if (v != 1 && v != 2) {
+            throw new IOException("LpScorecard state version " + v
+                    + " not supported (this build reads versions 1-2)");
+        }
         Checkpoint.readLongsInto(in, attempts);
         Checkpoint.readLongsInto(in, fills);
         Checkpoint.readLongsInto(in, rejects);
@@ -254,6 +272,13 @@ public final class LpScorecard {
         Checkpoint.readDoublesInto(in, holdNanosEwma);
         Checkpoint.readDoublesInto(in, effSpreadEwma);
         Checkpoint.readDoublesInto(in, markoutEwma);
+        if (v >= 2) {
+            Checkpoint.readLongsInto(in, markoutCount);
+        } else {
+            for (int lp = 0; lp < lpCount; lp++) {
+                markoutCount[lp] = markoutEwma[lp] != 0 ? 1 : 0;
+            }
+        }
         maturedMarkouts = in.readLong();
         Arrays.fill(pendingSide, (byte) 0);
         Arrays.fill(pendingCursor, (byte) 0);
