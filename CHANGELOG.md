@@ -1,5 +1,245 @@
 # Changelog
 
+## v1.8.0 (2026-07-07)
+
+- **Full review round over the whole uncommitted batch** (8 independent
+  finder angles, every finding verified then fixed):
+  - `OnlineAlphaLearner.trainFrom` had **lookahead leakage** — it paired the
+    engine's current (post-return) ingredients with the just-realized
+    return, so the "out-of-sample" IC could be earned by a momentum echo.
+    Now trains on the ingredients snapshotted at the previous call;
+    `normalizedPrediction` additionally requires a track record of at least
+    one IC memory, and its scale seeds from the first observation instead
+    of ramping from 0 (which rail-pinned early signals at ±1).
+  - `PortfolioExecutor`: the risk-weighted capacity cut could push |net|
+    back over the leg-balance band it had just enforced — the band is now
+    re-applied after the capacity pass (band only reduces, so the sequence
+    terminates); removed a dead store; clamps via `MathUtils.clamp`.
+  - `LeadLagEstimator`: post-restore samples paired real follower returns
+    with the zeroed ring for the first `maxLag` updates, diluting the
+    persisted correlations every morning — lag updates now gate on the
+    ring's actual fill, not the lifetime sample count. Gap javadoc now
+    states honestly that lag alignment is in valid samples, not wall-clock
+    intervals.
+  - `VolatilityCurve`/`SpreadForecaster`: baseline seeding is now **per
+    bucket** — a bucket first observed after day 1 (mid-session feed start,
+    half day) seeds from its own first session instead of EWMA-ramping from
+    0, which read as a false "extreme vol" regime / injected a spread-sized
+    deviation shock for weeks. `VolumeCurve.rollDay` documents why volume
+    cannot make the same distinction (zero volume is a real observation).
+  - `FlowSignals` gap gate strengthened to full dealable-price semantics
+    (zero/infinite prices with positive sizes were booking phantom OFI and
+    latching sentinel sizes into queue imbalance) — now identical to
+    `SignalEngine`'s gate.
+  - `BenchmarkExecutor.MarketState.impactBps` was documented but never
+    read; it now damps aggression alongside the spread (both are the cost
+    of trading now), pinned by test.
+  - Hot-path polish: `SignalEngine` hoists a constant `sqrt` and the
+    composite weight sum out of the per-event path; the `LpRouter`
+    allocation proof now covers the hold-urgency branch; hand-rolled
+    `finite()` helpers replaced with `Double.isFinite`; the seven
+    `readState` version checks share `Checkpoint.requireVersion`;
+    `DayTypeProfiles`' duplicate constructor now delegates.
+  - Docs: recipe count corrected (twelve, not nine) in four files; recipe
+    10's router snippet now uses `AdaptiveSor`'s actual `RoutingDecision`
+    return; recipe 12 guards the first-morning missing checkpoint file and
+    the lead-lag "extra alpha input" suggestion now states the rescaling
+    and validation it actually requires; the `ULTRA_LOW_LATENCY.md` lane
+    map classifies the whole batch (new Warm lane for interval-cadence
+    zero-alloc components; `Checkpoint` declared Edge); `ARCHITECTURE.md`
+    invariant 5 (recovery over reset) now names the persistence contract;
+    `Checkpoint`'s durability javadoc discloses the non-atomic-rename
+    fallback; `PortfolioExecutor` docs forbid the `child(h).onFill()`
+    ledger bypass explicitly.
+- **Two new subsystems** — the pieces beyond the model layer:
+  - `persist.Checkpoint` — **multi-day persistence of learned state**: one
+    binary file of named, length-prefixed sections written at end of day
+    (buffered, then temp-file + atomic rename — a crash mid-save never
+    corrupts yesterday's checkpoint; a section writer that throws commits
+    nothing) and restored at session start. The models that learn across
+    days gained `writeState`/`readState` pairs: `VolumeCurve`,
+    `VolatilityCurve`, `SpreadForecaster` (baselines), `OnlineAlphaLearner`
+    (weights AND the prequential IC evidence — a learner restored without
+    its track record would rightly be silent again), `LeadLagEstimator`
+    (correlations; the ring resets so post-restore samples never span the
+    overnight gap), `VenueScorecard` and `fx.LpScorecard` (venue/LP quality
+    is exactly what a router should not relearn every morning). Intraday
+    state resets on read; configuration mismatches, unknown versions,
+    unconsumed payload bytes and non-checkpoint files all throw instead of
+    misaligning. `HiddenLiquidityDetector` is deliberately NOT persistable
+    (price-level-keyed state is stale overnight).
+  - `execution.PortfolioExecutor` — **true multi-symbol portfolio-level
+    scheduling**: a basket executed as one coordinated schedule over
+    per-symbol `BenchmarkExecutor` children (each keeps its own benchmark
+    and shaping). The two overlays that only exist at basket level: a
+    leg-balance band (projected |buys − sells| notional stays inside
+    `maxNetNotional`; the ahead leg throttles, the lagging leg is never
+    accelerated past its own benchmark) and a per-interval notional budget
+    (`maxIntervalNotional`) allocated risk-weighted — weight ∝
+    (1 + volatility regime) × due notional, the honest diagonal
+    approximation of multi-asset Almgren-Chriss (the full treatment needs a
+    covariance matrix a streaming layer should not pretend to have).
+    Overlays only ever reduce a child's own due, so per-symbol benchmark
+    integrity holds by construction; deferred quantity reappears via each
+    child's behind-schedule catch-up. Zero allocation per decide.
+- **Quant models, round 3 — the adaptive layer** (cross-asset, streaming,
+  allocation-free):
+  - `microstructure.OnlineAlphaLearner` — **online alpha-weight learning**:
+    upgrades `SignalEngine.alpha()`'s fixed composite weights to an online
+    ridge regression (SGD + L2) from the four dimensionless signal
+    ingredients to next-interval returns. The honesty mechanism is
+    **prequential evaluation**: every prediction is recorded with the
+    current weights *before* the realized return updates them, and the
+    rolling out-of-sample IC is computed on those predictions — the learner
+    cannot grade its own homework. `trainFrom` closes the other leakage
+    door: it fits each return against the ingredients **snapshotted at the
+    previous call** (the current ones already contain the move — training
+    on them would be a nowcast the IC scores as skill).
+    `normalizedPrediction()` (the `MarketState.alpha`-ready form) emits 0
+    until the IC is positive AND the track record spans at least one IC
+    memory, so an unvalidated learner is silent by construction; full
+    validation still belongs to the `alpha` package's walk-forward
+    machinery.
+  - `microstructure.LeadLagEstimator` — **streaming cross-asset lead-lag**
+    (EURUSD leads EURJPY; futures lead cash): per-lag time-decayed
+    correlations over a small lag grid from one `onSample(leaderReturn,
+    followerReturn)` per interval, with `bestLag()`/`bestCorrelation()`
+    detection against the contemporaneous baseline and
+    `expectedFollowerReturn()` (regression beta at the best lag) for cross
+    hedging/pricing. Gap-disciplined: a non-finite return drops the sample
+    entirely — no moment updates, ring untouched. (Alignment is in valid
+    samples: across a gap, lag k spans more than k wall-clock intervals —
+    documented rather than papered over.)
+  - `microstructure.DayTypeProfiles` — **day-type awareness** for the
+    seasonality trio: expiry days trade 2-3× with a violent close, half
+    days compress the U-curve, FX fixing days concentrate flow at the fix
+    — one independently learned `VolumeCurve`/`VolatilityCurve`/
+    `SpreadForecaster` per day type, selected once at session start
+    (allocation-free selection); the `IntFunction` factory lets rare types
+    seed from the regular-day shape instead of ramping cold.
+- **Quant models, round 2** (cross-asset, streaming, allocation-free):
+  - `microstructure.VolatilityCurve` — intraday **volatility seasonality**,
+    completing the seasonality trio beside `VolumeCurve` and
+    `SpreadForecaster`: per-bucket baseline learned across sessions, and
+    `regime(bucket, currentVol)` producing exactly the normalized 0..1
+    volatility signal `BenchmarkExecutor.MarketState` documents — elevated
+    *for this time of day*, so the always-wild open doesn't read as
+    urgency but a genuinely wild lunchtime does. Closes the units seam the
+    review round exposed with a shipped producer (cookbook recipe 10 now
+    wires it).
+  - `microstructure.TradeClassifier` — **Lee-Ready aggressor inference**
+    (quote rule, then tick test with the zero-tick convention) for feeds
+    that print trades without saying who initiated — the missing glue for
+    `FlowSignals`/`SignalEngine.onTrade`; documented ~85% accuracy per the
+    literature, which is why the imbalances it feeds are decayed averages.
+  - `microstructure.FillProbabilityModel` — **passive-fill probability
+    away from the touch**: reflection-principle touch probability
+    (`2·Φ(−d/σ√T)`, reusing `MathUtils.normCdf`) × `QueueModel`'s
+    queue-clear probability, documented as a mildly conservative
+    independence approximation — the placement score for passive children.
+- **Quant model layer for the benchmark algos** — the eight models that
+  feed `execution.BenchmarkExecutor.MarketState`, completing the set
+  (several already existed; these fill the gaps and make the schedule
+  dynamic):
+  - `microstructure.VolumeCurve` — **intraday volume prediction**: a
+    learned per-bucket profile (EWMA across days) rescaled by today's
+    realized-vs-expected ratio, shrunk toward 1 early when the ratio is
+    noise. This is the live VWAP curve (`expectedFractionElapsed`), the
+    dynamic sibling of the static `ml.IntradayLiquidityForecaster`.
+  - `microstructure.QueuePositionEstimator` — **queue position from L2**
+    (no L3 needed): join-at-back, trades consume the front, and cancels
+    are attributed **pro-rata** to the fraction of the queue ahead — an
+    unbiased shares-ahead estimate, fed to `QueueModel` for fill
+    probability. (Exact L3 tracking remains `marketdata.L3BookBuilder`.)
+  - `microstructure.HiddenLiquidityDetector` — **iceberg / hidden-liquidity
+    detection** from the lit tape: a level that trades more than it ever
+    displayed and keeps quoting is refilling; the per-level refill-ratio
+    EWMA yields `hiddenMultiplier` and `estimatedTrueDepth`. Complements
+    `execution.VenueScorecard`'s probe-based dark-venue learning.
+  - `microstructure.SpreadForecaster` — **spread prediction**: a
+    time-of-day baseline (EWMA per bucket) plus a mean-reverting live
+    deviation, so an algo damps aggression *before* a known-wide window
+    (the close) rather than reacting after.
+  - Already present, mapped for completeness: **volatility forecasting**
+    (`ml.VolatilityForecaster` batch, `microstructure.SignalEngine.volPerSqrtSecond`
+    streaming), **market-impact estimation** (`microstructure.MarketImpactModel`
+    square-root/AC + `ml.MarketImpactPredictor`), **venue fill probability**
+    (`execution.VenueScorecard` / `fx.LpScorecard`), **short-term alpha**
+    (`pricing.FairValueEngine` microprice + `SignalEngine.alpha`).
+- **8-angle review round on the signal/execution/model layer** (every fix
+  regression-tested): `VenueScorecard` EWMAs seed from the prior/first
+  observation (a venue's first successful fill no longer scored 0.05 and got
+  it vetoed); `SignalEngine` rejects zero/infinite prices as gaps (a
+  placeholder quote could NaN-poison volatility forever) and re-seeds every
+  estimator symmetrically after a gap; `SpreadForecaster` genuinely folds
+  days into the baseline via `rollDay` (the cross-day learning the docs
+  promised but never did), with a separate deviation-blend weight and
+  Inf-safe input; `HiddenLiquidityDetector` flags on a single print larger
+  than the display (the cumulative-run form false-flagged ordinary
+  fragmented flow); `QueuePositionEstimator.queueProgress` measures against
+  the join baseline (was pinned at 0.5); `BenchmarkExecutor` treats NaN
+  `MarketState` inputs as neutral (was a silent stall), documents the
+  normalized units contract so `SignalEngine.alpha`/vol plug in directly,
+  and names the spread-sensitivity and default-urgency constants; shared
+  `MathUtils.decayFactor`/`clamp`/`nanArray` replace re-spelled copies;
+  `VolumeCurve` volume/prefix sums are O(1); a new cookbook recipe wires the
+  models → executor → router pipeline end to end; VenueScorecard allocation
+  test added; README/index/LEARN/DIAGRAMS refreshed.
+- **`execution.BenchmarkExecutor`** — the dynamic benchmark execution
+  algorithm: one stateful, cross-asset executor that works a parent toward
+  any standard benchmark — **VWAP, TWAP, Arrival Price, Implementation
+  Shortfall, Closing Price, Opening Price, Participation (POV)** — and,
+  unlike the precomputed slice lists (`TwapScheduler`, `VwapScheduler`,
+  `ImplementationShortfallScheduler`), re-decides each interval from live
+  `MarketState`. Two layers: a per-benchmark completion curve (TWAP linear,
+  Arrival/IS front-loaded, Close back-loaded `f²`, Open aggressively
+  front-loaded `√f`, VWAP on the expected volume profile, POV on realized
+  volume) and a dynamic adjustment consuming the real-time inputs a
+  production algo watches — bid/ask spread (cost damping), volatility (the
+  timing-risk trade-off: raises IS/Arrival urgency, lowers passive
+  aggression), alpha (accelerate into an adverse move, ease on a favorable
+  one), and a liquidity cap (each child bounded by displayed depth) — with
+  `onFill`/`onMarketVolume` feedback so schedule drift self-corrects.
+  Allocation-free decisions.
+- **`execution.AdaptiveSor` + `execution.VenueScorecard`** — the
+  full-checklist smart order router, completing the routing family beside
+  `SmartOrderRouter` (readable) and `HftSor` (zero-alloc tick path). It
+  ranks lit venues by *expected cost per share* — all-in price (fees/
+  rebates) discounted by `(1−fillRate)×missPenalty` and `latency×urgency` —
+  vetoes venues below a reliability floor, and emits contingent dark-pool
+  probes sized by *learned* hidden liquidity (default until known). All the
+  per-venue inputs — fill rate, measured response latency, realized
+  dark-probe fills — stream from `VenueScorecard` (the equities counterpart
+  of `fx.LpScorecard`), and the passive-leg queue-position probability
+  delegates to `QueueModel`. Worked example (A: 10k@120µs, B: 8k@80µs same
+  price, dark unknown) routes 8k→B, 2k→A and probes dark, as expected.
+  Cross-asset by construction (raw double prices): a pinning test routes FX
+  ECN venues with a mid-match pool through the identical path. And
+  `fx.LpRouter` gained the missing latency dimension for the LP-stream
+  side: an optional hold-time urgency (bps per ms held) prices an LP's
+  last-look deliberation into the expected cost, so a slow holder loses
+  ties exactly like a high-latency venue (non-breaking overload).
+- **`microstructure.SignalEngine`** — the unified streaming signal engine:
+  one multi-symbol, hot-lane component (dense int symbol ids, zero
+  allocation per event, single writer) computing the five signal families
+  for equities and FX alike: **imbalance** (Cont-Kukanov OFI, inside queue
+  imbalance, signed trade flow — via a per-symbol `FlowSignals`),
+  **fair value** (size-weighted microprice), **volatility** (streaming
+  EWMA realized-variance rate over irregular tick arrivals, exposed per
+  √second), **liquidity** (time-decayed spread/spread-bps, displayed
+  depth, quote arrival intensity), **momentum** (time-aware fast/slow
+  EMAs — decay by elapsed time, not update count) and a weighted
+  **composite** of dimensionless ingredients (OFI normalized by displayed
+  depth, momentum scaled by horizon volatility, both clamped) —
+  documented as a research scaffold to be validated through the `alpha`
+  package, not a tradable signal. Gap discipline throughout: one-sided or
+  NaN quotes update nothing and poison nothing, and the move across a gap
+  is never counted as a return.
+- **`FlowSignals` generalized to double prices** (non-breaking): the
+  tick-based API remains and delegates — integer ticks are exact in a
+  double — so one implementation serves equity ticks and raw FX rates; an
+  exact-agreement test pins the two entry points together.
+
 ## v1.7.0 (2026-07-07)
 
 The FX market-structure layer: the mirror image of the equities stack —

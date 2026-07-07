@@ -105,6 +105,27 @@ class FlowSignalsTest {
     }
 
     @Test
+    void zeroOrInfinitePriceSentinelsAreGapsEvenWithSizes() {
+        // Regression: a placeholder quote with dead prices but POSITIVE
+        // sizes (bid 0 reads as "price collapsed below prevBid") must be a
+        // gap, not a phantom sell sweep — the same dealable-price gate
+        // SignalEngine applies.
+        FlowSignals f = new FlowSignals(Long.MAX_VALUE / 2);
+        f.onQuote(100.0, 500, 101.0, 400, T0);
+        f.onQuote(100.0, 700, 101.0, 400, T0 + 1);             // OFI = +200
+        f.onQuote(0.0, 600, 0.0, 600, T0 + 2);                 // zero-price sentinel
+        assertEquals(200, f.ofi(), 1e-9, "no phantom flow off a zero-price sentinel");
+        assertEquals(0, f.queueImbalance(), 1e-12, "sentinel sizes are not an imbalance");
+        // Recovery re-seeds — no diff across the gap either.
+        f.onQuote(100.0, 900, 101.0, 300, T0 + 3);
+        assertEquals(200, f.ofi(), 1e-9, "re-seed, not a diff against the pre-gap book");
+        // Infinite ask mirrors.
+        f.onQuote(100.0, 900, Double.POSITIVE_INFINITY, 300, T0 + 4);
+        assertEquals(0, f.queueImbalance(), 1e-12);
+        assertEquals(200, f.ofi(), 1e-9);
+    }
+
+    @Test
     void steadyStateSignalsAreAllocationFree() {
         FlowSignals f = new FlowSignals();
         for (int i = 0; i < 200_000; i++) {                    // warm-up

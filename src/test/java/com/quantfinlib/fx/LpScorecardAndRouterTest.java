@@ -174,6 +174,28 @@ class LpScorecardAndRouterTest {
     }
 
     @Test
+    void holdTimeIsPricedLikeLatencyWhenUrgencyIsSet() {
+        // Two LPs, identical quotes and zero rejects; LP0 holds requests
+        // 50ms, LP1 decides in 1ms. With hold urgency, the slow holder
+        // loses the tie — FX's latency dimension, priced.
+        FxTierBook b = new FxTierBook(2, 1);
+        for (int lp = 0; lp < 2; lp++) {
+            b.tier(lp, false, 0, 1.08502, 5_000_000);
+            b.tierCount(lp, false, 1);
+        }
+        LpScorecard c = new LpScorecard(2, 1.0, 100 * MS);
+        c.onFill(0, true, 1.08502, 1.08501, 50 * MS);
+        c.onFill(1, true, 1.08502, 1.08501, MS);
+        // Without urgency: a pure price tie (first candidate wins).
+        assertEquals(0, new LpRouter(b, c, 1.0).route(true, 1_000_000));
+        // With urgency: the fast decider wins.
+        LpRouter urgent = new LpRouter(b, c, 1.0, 1.0);   // 1 bp per ms held
+        assertEquals(1, urgent.route(true, 1_000_000));
+        assertTrue(urgent.lastExpectedPrice() > urgent.lastQuotedPrice(),
+                "the hold penalty must be visible in the expected price");
+    }
+
+    @Test
     void routerRespectsClipSizeAgainstTiers() {
         FxTierBook b = twoLpBook();
         LpScorecard c = new LpScorecard(2);
@@ -186,7 +208,9 @@ class LpScorecardAndRouterTest {
     void scorecardAndRoutingAreAllocationFree() {
         FxTierBook b = twoLpBook();
         LpScorecard c = new LpScorecard(2);
-        LpRouter r = new LpRouter(b, c, 0.9);
+        // Positive hold urgency so the proof covers the hold-penalty branch
+        // of the routing loop, not just the urgency-disabled configuration.
+        LpRouter r = new LpRouter(b, c, 0.9, 1.0);
         long blackhole = 0;
         for (int i = 0; i < 200_000; i++) {                  // warm-up
             blackhole += step(b, c, r, i);

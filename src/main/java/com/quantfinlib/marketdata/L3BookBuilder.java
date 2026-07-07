@@ -382,6 +382,9 @@ public final class L3BookBuilder {
     /**
      * Shares queued ahead of a tracked order right now; -1 when the ref is
      * not tracked (never was, or it filled / was deleted / was replaced).
+     * This is the <em>exact</em> position from the L3 feed; when only L2
+     * (aggregated level sizes) is available, use the probabilistic
+     * {@code microstructure.QueuePositionEstimator} instead.
      */
     public long sharesAhead(long ref) {
         for (int i = 0; i < trackedCount; i++) {

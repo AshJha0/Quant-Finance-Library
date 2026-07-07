@@ -207,7 +207,7 @@ flowchart TD
     L3 -->|"per-venue top of book"| NBBO["Nbbo<br/>inside price/size + venue bitmask,<br/>fires only on inside changes"]
     L3 -->|"track(myRef)"| QPOS["sharesAhead(ref)<br/>exact queue position:<br/>1 walk to init, O(1)/event"]
     QPOS --> QM["QueueModel<br/>position → fill probability"]
-    NBBO --> SIG["FlowSignals<br/>OFI · queue imbalance ·<br/>trade imbalance (time-decayed)"]
+    NBBO --> SIG["SignalEngine / FlowSignals<br/>OFI · queue &amp; trade imbalance ·<br/>vol · liquidity · momentum · alpha"]
     NBBO --> LULD["CircuitBreakers.Luld<br/>bands → limit state →<br/>5-min pause (pollable)"]
     SIG & QM --> DECIDE{"strategy decision"}
     LULD -.->|"PAUSED: stand down"| DECIDE
@@ -303,21 +303,93 @@ benchmark picks the algorithm, and TCA closes the loop.
 ```mermaid
 flowchart TD
     PARENT(["parent order"]) --> Q{"benchmark?"}
-    Q -->|"the WMR 4pm fix"| WMR["WmrFixingScheduler<br/>TWAP across the 5-min window<br/>(pre-hedging deliberately absent)"]
-    Q -->|"arrival price /<br/>decision price"| IS["ImplementationShortfallScheduler<br/>Almgren-Chriss: front-load by urgency;<br/>λ→0 degrades to TWAP"]
-    Q -->|"the day's VWAP"| VWAP["VwapScheduler<br/>slice along the volume curve"]
-    Q -->|"'don't be seen':<br/>track the market"| POV["PovTracker<br/>be p% of OTHERS' volume<br/>(never chases its own fills)"]
-    Q -->|"none / simple"| TWAP["TwapScheduler<br/>equal slices ± anti-gaming jitter"]
+    Q -->|"one dynamic executor<br/>for all 7 benchmarks"| BE["BenchmarkExecutor<br/>VWAP·TWAP·Arrival·IS·Close·Open·POV<br/>completion curve + live shaping;<br/>re-decides every interval"]
+    Q -.->|"or a fixed slice list<br/>(precompute, no live state)"| STATIC["TwapScheduler · VwapScheduler ·<br/>ImplementationShortfallScheduler ·<br/>PovTracker · WmrFixingScheduler"]
 
-    WMR & IS & VWAP & POV & TWAP --> CHILD["child orders"]
+    subgraph MODELS["live inputs → MarketState (normalized)"]
+        VC["VolumeCurve<br/>live VWAP curve"]
+        SF["SpreadForecaster<br/>spread (cost)"]
+        SE["SignalEngine<br/>vol · alpha"]
+        HLD["HiddenLiquidityDetector<br/>true depth"]
+        OAL["OnlineAlphaLearner<br/>learned alpha (IC-gated)"]
+    end
+    DTP["DayTypeProfiles<br/>expiry · half day · fixing day"] -.->|"selects today's curves"| MODELS
+    MODELS --> BE
+
+    BE & STATIC --> CHILD["child orders"]
     CHILD --> WHERE{"venue choice"}
+    WHERE -->|"full checklist<br/>(lit + dark, learned)"| ASOR["AdaptiveSor + VenueScorecard<br/>expected cost: fill rate ·<br/>latency · hidden liquidity"]
     WHERE -->|research lane| SOR10["SmartOrderRouter<br/>(readable, dark-first option)"]
     WHERE -->|tick path| HSOR["HftSor (zero-alloc)"]
     WHERE -->|FX| LPR["LpRouter<br/>(last-look-aware, full-amount)"]
-    SOR10 & HSOR & LPR --> FILLS["fills"]
+    ASOR & SOR10 & HSOR & LPR --> FILLS["fills"]
+    FILLS -->|"onFill: schedule self-corrects"| BE
     FILLS --> TCA["TransactionCostAnalyzer<br/>slippage vs arrival/VWAP ·<br/>venue quality · markouts"]
-    TCA -.->|"recalibrate impact params,<br/>LP scorecards, participation"| Q
+    TCA -.->|"recalibrate impact params,<br/>scorecards, participation"| Q
 ```
+
+The two lanes coexist by design: **`BenchmarkExecutor`** when you re-decide
+on live state (the usual case), the **static schedulers** when you want a
+fixed slice list computed once up front.
+
+---
+
+## 11. Portfolio-level execution — one basket, one schedule
+
+A two-sided transition run as N independent algos carries a risk none of
+them can see: the filled legs drift apart and the basket holds an
+unintended net market bet mid-flight. `PortfolioExecutor` layers the two
+basket-level rules over untouched per-symbol executors — and both rules
+only ever *reduce* a child's own due, so per-symbol benchmark integrity
+holds by construction.
+
+```mermaid
+flowchart TD
+    BASKET(["transition basket<br/>sell the old book · buy the new one"]) --> PE["PortfolioExecutor.decide<br/>(every interval, zero-alloc)"]
+
+    subgraph CHILDREN["per-symbol children — own benchmark, own curve"]
+        C1["BenchmarkExecutor<br/>SELL 80k · VWAP"]
+        C2["BenchmarkExecutor<br/>BUY 60k · VWAP"]
+        C3["BenchmarkExecutor<br/>BUY 40k · IS"]
+    end
+    PE -->|"1 — each child's own dueQuantity"| CHILDREN
+    CHILDREN --> OV1["2 — leg-balance band:<br/>projected net notional inside maxNet?<br/>ahead leg throttles, lagging leg never pushed"]
+    OV1 --> OV2["3 — interval budget:<br/>total notional over the cap?<br/>capacity goes risk-weighted:<br/>(1 + vol regime) × due notional"]
+    OV2 --> OV3["4 — band re-checked<br/>(asymmetric risk cuts can re-tilt the legs)"]
+    OV3 --> ROUTE["dues → venue choice<br/>AdaptiveSor (equities) · LpRouter (FX)"]
+    ROUTE --> FILLS["fills"]
+    FILLS -->|"PortfolioExecutor.onFill:<br/>child schedule + net ledger together"| PE
+```
+
+The fills edge is the one discipline to keep: report fills through
+`PortfolioExecutor.onFill` only — going straight to a child advances its
+schedule but blinds the net-exposure ledger the band reads.
+
+---
+
+## 12. Surviving the overnight — the checkpoint lifecycle
+
+Everything the models learn lives in memory; `persist.Checkpoint` is how
+it outlives the session. Two properties carry the design: the save is
+atomic (a crash mid-save cannot corrupt yesterday's file), and the restore
+is honest about time (learned state returns, intraday state deliberately
+does not).
+
+```mermaid
+flowchart LR
+    subgraph SESSION["trading session (in memory)"]
+        MODELS["learned state<br/>VolumeCurve · VolatilityCurve · SpreadForecaster<br/>OnlineAlphaLearner (weights + IC evidence)<br/>LeadLagEstimator · VenueScorecard · LpScorecard"]
+    end
+
+    MODELS -->|"end of day:<br/>writeState per model"| W["Checkpoint.Writer<br/>named sections, buffered in memory;<br/>a throwing section commits NOTHING"]
+    W -->|"temp file, then<br/>atomic rename"| FILE[("eod.qflc<br/>one binary file,<br/>versioned sections")]
+    FILE -->|"session start:<br/>readState per model"| R["Checkpoint.Reader<br/>missing section = cold start ·<br/>config mismatch / format drift = throws ·<br/>unknown sections skipped (forward compat)"]
+    R -->|"learned state restored,<br/>intraday state reset"| MODELS
+```
+
+Deliberately NOT persisted: `HiddenLiquidityDetector` (its state is keyed
+by price level, and overnight the ladder moves — restoring it would pin
+yesterday's icebergs onto today's unrelated prices).
 
 ---
 
@@ -326,5 +398,5 @@ flowchart TD
 - [LEARN.md](LEARN.md) — the from-zero tutorial: every concept in these diagrams, explained for beginners
 - [ARCHITECTURE.md](ARCHITECTURE.md) — the package → classes → tests map and design invariants
 - [ULTRA_LOW_LATENCY.md](ULTRA_LOW_LATENCY.md) — the four-tier latency stack, honestly bounded
-- [COOKBOOK.md](COOKBOOK.md) — nine runnable recipes across these flows
+- [COOKBOOK.md](COOKBOOK.md) — twelve runnable recipes across these flows
 - `README.md` — capability tour with runnable examples and all measured numbers

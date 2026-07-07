@@ -1,6 +1,6 @@
 # Cookbook
 
-Task-shaped recipes: each is complete, copy-pasteable, and under ~20 lines.
+Task-shaped recipes: each is complete, copy-pasteable, and roughly ~20 lines.
 Reference docs live in [ARCHITECTURE.md](ARCHITECTURE.md); the visual map in
 [DIAGRAMS.md](DIAGRAMS.md). New to the concepts themselves (order books,
 market making, backtesting honestly, zero-allocation Java)? Start with the
@@ -161,6 +161,136 @@ book.cancel(bid);
 // 204 ns/op, 10M+ fills/s, zero allocation — equivalence-tested against
 // the readable OrderBook.
 ```
+
+## 10. Work a benchmark order with live signals (models → executor → router)
+
+The full execution pipeline: quant models feed a normalized `MarketState`,
+the dynamic `BenchmarkExecutor` decides how much to send this interval, and
+the router places it. Works identically for equities and FX (prices are
+doubles). One instance each, per parent order.
+
+```java
+// Models (learn/update from the live feed on your feed thread).
+SignalEngine sig   = new SignalEngine(nSymbols);         // vol, alpha, imbalance
+VolumeCurve  vol   = new VolumeCurve(78, 0.1);           // live VWAP curve
+SpreadForecaster spread = new SpreadForecaster();        // time-of-day spread
+VolatilityCurve volCurve = new VolatilityCurve(78, 0.1); // vol seasonality
+
+BenchmarkExecutor exec = BenchmarkExecutor.of(Side.BUY, 100_000, Benchmark.VWAP);
+
+// Each interval: assemble the normalized MarketState from the models.
+var m = new BenchmarkExecutor.MarketState(
+        sig.microprice(sym),                             // mid
+        spread.forecast(bucket, now),                    // spread (cost)
+        volCurve.regime(bucket, sig.volPerSqrtSecond(sym)), // vol regime ~0..1
+        book.bestAskSize(),                              // displayed depth (take-now)
+        vol.expectedFractionElapsed(bucket, fracIn),     // VWAP curve
+        sig.alpha(sym),                                  // alpha, already in [-1,1]
+        0);                                              // impact (optional)
+long child = exec.dueQuantity(scheduleFraction, m);      // how much, right now
+if (child > 0) {
+    var plan = sor.route(Side.BUY, child, venueQuotes);  // AdaptiveSor: where
+    // ...send plan.lit() legs and plan.probes(), then feed fills back:
+    exec.onFill(filled);                                 // schedule self-corrects
+}
+```
+
+The units contract is the one thing to get right: `volatility` and `alpha`
+are **normalized** — `SignalEngine.alpha()` is already `[-1,1]`, and
+`VolatilityCurve.regime()` produces exactly the 0..1 vol signal (elevated
+*for this time of day*, so the always-wild open doesn't read as urgency) —
+and `displayedDepth` is take-now size; see `MarketState`'s javadoc.
+`MarketState.neutral(mid, f)` disables every input (VWAP degrades to TWAP)
+if you want to add signals one at a time. For passive child placement,
+`FillProbabilityModel.passiveFillProbability` scores a level (touch × queue)
+and `TradeClassifier` infers the aggressor side your feed doesn't carry.
+
+Three adaptive upgrades slot in without changing the pipeline (recipe 12
+persists what they learn):
+`OnlineAlphaLearner` replaces the fixed-weight `sig.alpha(sym)` with learned
+weights — feed `trainFrom(sig, sym, realizedReturn)` each interval and pass
+`normalizedPrediction(...)` as the alpha input; it emits 0 until its rolling
+*out-of-sample* IC is positive, so an unproven learner can't steer the
+schedule. On days with a different shape (expiry, half day, FX fixing day),
+pick the curves from a `DayTypeProfiles<VolumeCurve>` (and vol/spread
+siblings) at session start instead of the single averaged curve. And when
+the traded instrument follows a leader (EURJPY behind EURUSD, cash behind
+futures), `LeadLagEstimator` measures the lead across instruments — note
+its `expectedFollowerReturn()` is a RAW return forecast, so it cannot go
+into `MarketState.alpha` (a normalized [-1,1] input) or into the learner
+(closed over the four SignalEngine ingredients by design) without your own
+rescaling and, more importantly, your own validation through the `alpha`
+package — a cross-asset signal gets no free pass on the IC gate.
+
+---
+
+## 11. Execute a basket as one schedule (portfolio-level execution)
+
+A two-sided transition (sell the old book, buy the new one) is not N
+independent parent orders: the legs must stay in step or the basket carries
+unintended net market exposure mid-flight. `PortfolioExecutor` coordinates
+per-symbol `BenchmarkExecutor` children with the two overlays that only
+exist at basket level — a leg-balance band and a per-interval notional
+budget allocated to the riskiest names first.
+
+```java
+var pe = new PortfolioExecutor(basketSize, new PortfolioExecutor.Config(
+        1_000_000,     // |buys − sells| filled notional stays inside $1M
+        5_000_000));   // total basket demand per interval
+
+int aapl = pe.add(BenchmarkExecutor.of(Side.SELL, 80_000, Benchmark.VWAP));
+int msft = pe.add(BenchmarkExecutor.of(Side.BUY, 60_000, Benchmark.VWAP));
+// ... one child per symbol, buys and sells mixed freely.
+
+// Each interval: per-symbol MarketStates (recipe 10), one portfolio decision.
+long[] due = new long[basketSize];
+pe.decide(scheduleFraction, states, due);      // zero-alloc
+// route due[h] per symbol; report fills:
+pe.onFill(msft, filledQty, fillPrice);         // maintains the net ledger
+```
+
+The overlays only ever *reduce* a child's own due — the ahead leg throttles,
+the lagging leg is never pushed past its own benchmark — so each symbol's
+benchmark integrity holds by construction, and anything deferred reappears
+through that child's behind-schedule catch-up. When the budget binds,
+capacity goes to weight ∝ (1 + vol regime) × due notional: the diagonal
+approximation of multi-asset Almgren-Chriss (the full version needs a
+covariance matrix; this layer doesn't pretend to have one).
+
+---
+
+## 12. Survive the overnight (persist learned state)
+
+Everything the models learn — volume/vol/spread baselines, alpha weights
+and their out-of-sample IC evidence, venue and LP scorecards — should not
+be relearned from zero every morning. One checkpoint file, written at end
+of day, restored at session start:
+
+```java
+// End of day: one atomic file of named sections.
+try (var w = Checkpoint.writer(Path.of("eod.qflc"))) {
+    w.section("volume.AAPL", volumeCurve::writeState)
+     .section("vol.AAPL", volCurve::writeState)
+     .section("alpha.AAPL", learner::writeState)
+     .section("venues", scorecard::writeState);
+}
+
+// Next session start: restore. A missing SECTION is a cold start for that
+// model; a missing FILE (the very first morning) throws from reader() —
+// guard it.
+if (Files.exists(Path.of("eod.qflc"))) {
+    var r = Checkpoint.reader(Path.of("eod.qflc"));
+    r.section("volume.AAPL", volumeCurve::readState);
+    r.section("alpha.AAPL", learner::readState); // weights + IC evidence travel together
+}
+```
+
+The instance must be constructed with the same configuration (bucket/venue
+counts) — a mismatch throws rather than misaligning arrays. Intraday state
+deliberately resets on restore: you restore at session start, not
+mid-stream. The commit is temp-file + atomic rename, so a crash mid-save
+leaves yesterday's checkpoint intact. For `DayTypeProfiles`, write one
+section per day type (`"volume.AAPL.day0"`, `"volume.AAPL.day1"`, …).
 
 ---
 

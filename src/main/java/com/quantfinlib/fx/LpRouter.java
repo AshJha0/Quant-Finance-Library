@@ -27,6 +27,7 @@ public final class LpRouter {
     private final FxTierBook book;
     private final LpScorecard card;
     private final double maxRejectRate;
+    private final double holdUrgencyBpsPerMs;
 
     private double lastQuotedPrice = Double.NaN;
     private double lastExpectedPrice = Double.NaN;
@@ -45,15 +46,32 @@ public final class LpRouter {
      *                      vetoed regardless of price (e.g. 0.25)
      */
     public LpRouter(FxTierBook book, LpScorecard card, double maxRejectRate) {
+        this(book, card, maxRejectRate, 0);
+    }
+
+    /**
+     * With a hold-time urgency: an LP's last-look hold is FX's latency
+     * dimension — while it deliberates, the market drifts against you. A
+     * positive {@code holdUrgencyBpsPerMs} charges each LP's EWMA hold
+     * time against its quote (bps of price per millisecond held), so a
+     * slow-holding LP loses ties exactly like a high-latency venue does in
+     * {@code execution.AdaptiveSor}.
+     */
+    public LpRouter(FxTierBook book, LpScorecard card, double maxRejectRate,
+                    double holdUrgencyBpsPerMs) {
         if (book.lpCount() != card.lpCount()) {
             throw new IllegalArgumentException("book and scorecard LP counts differ");
         }
         if (maxRejectRate <= 0 || maxRejectRate > 1) {
             throw new IllegalArgumentException("maxRejectRate must be in (0,1]");
         }
+        if (holdUrgencyBpsPerMs < 0) {
+            throw new IllegalArgumentException("holdUrgencyBpsPerMs must be >= 0");
+        }
         this.book = book;
         this.card = card;
         this.maxRejectRate = maxRejectRate;
+        this.holdUrgencyBpsPerMs = holdUrgencyBpsPerMs;
     }
 
     /**
@@ -79,6 +97,11 @@ public final class LpRouter {
             }
             double quoted = book.fullAmountPrice(lp, buy, size);
             double penalty = rate * Math.max(card.postRejectMarkout(lp), 0);
+            if (holdUrgencyBpsPerMs > 0) {
+                // Hold time is priced like venue latency: bps/ms of quote.
+                penalty += quoted * (card.avgHoldNanos(lp) / 1e6)
+                        * holdUrgencyBpsPerMs / 1e4;
+            }
             double expected = buy ? quoted + penalty : quoted - penalty;
             if (!Double.isFinite(expected)) {
                 continue;    // unquoted LP, or a poisoned stat: never routable

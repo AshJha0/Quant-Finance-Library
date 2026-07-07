@@ -174,12 +174,56 @@ algorithms slice the parent order into small children over time:
 After the fact, **TCA** (transaction cost analysis) grades the execution:
 slippage vs arrival, vs VWAP, fill rates, venue quality, markouts.
 
-*In this library:* `execution/TwapScheduler.java`, `VwapScheduler.java`,
-`PovTracker.java`, `ImplementationShortfallScheduler.java` (with
-`microstructure/AlmgrenChriss.java` for the math),
-`microstructure/TransactionCostAnalyzer.java`. Smart order routing — which
-venue gets each child — is `execution/SmartOrderRouter.java` (readable) and
-`execution/HftSor.java` (fast).
+*In this library:* the static schedulers `execution/TwapScheduler.java`,
+`VwapScheduler.java`, `PovTracker.java`,
+`ImplementationShortfallScheduler.java` (with
+`microstructure/AlmgrenChriss.java` for the math) emit a fixed slice list;
+`execution/BenchmarkExecutor.java` is the **dynamic** version — one executor
+covering all of VWAP/TWAP/Arrival/IS/Close/Open/POV that re-decides each
+interval from live spread, depth, volatility, the volume curve, estimated
+impact and an alpha signal. TCA is
+`microstructure/TransactionCostAnalyzer.java`. Smart order
+routing — which venue gets each child — is `execution/SmartOrderRouter.java`
+(readable), `execution/HftSor.java` (fast), and
+`execution/AdaptiveSor.java` (full-checklist: lit + dark, learned fill rate,
+latency, hidden liquidity).
+
+**Where do those "live inputs" come from?** A dynamic algo is only as good
+as the numbers you feed it, and each one is a small model:
+
+- *"How much volume is left today?"* Markets trade in a U-shape — heavy at
+  the open, quiet at lunch, heavy at the close. `VolumeCurve` learns that
+  shape day after day and rescales it live ("today is running 2× normal").
+- *"Is the market volatile right now?"* is the wrong question — the open is
+  ALWAYS wild. The right question is "volatile *for this time of day*?",
+  and `VolatilityCurve.regime()` answers exactly that (0 = normal for this
+  hour, 1 = genuinely extreme).
+- *"What will the spread cost me in a minute?"* `SpreadForecaster` knows
+  the time-of-day baseline and how fast a spread spike decays back to it —
+  so the algo slows down *before* the known-wide close, not after.
+- *"If I queue at this price, will I ever get filled?"*
+  `QueuePositionEstimator` tracks how many shares are ahead of you (from
+  L2 alone), and `FillProbabilityModel` multiplies "does the price come to
+  me?" by "does the queue ahead of me clear?".
+- *"Who started that trade?"* Many feeds don't say. `TradeClassifier` is
+  the classic Lee-Ready inference: at the ask = buyer was aggressive, at
+  the bid = seller, in between = look at the tick direction (~85% right,
+  which is why everything downstream uses decayed averages).
+- *"Is there more size than I can see?"* `HiddenLiquidityDetector` flags
+  icebergs the honest way: a single print bigger than what was displayed
+  means hidden size was there.
+
+**Executing a whole basket.** A pension fund rarely trades one stock — it
+transitions a *portfolio* (sell the old holdings, buy the new ones). Run N
+independent algos and a new risk appears that none of them can see: if the
+buys fill fast and the sells lag, the fund is carrying a large unintended
+market bet mid-flight. `execution/PortfolioExecutor.java` coordinates
+per-symbol executors with the two rules that only exist at basket level: a
+**leg-balance band** (the ahead leg slows down until the lagging leg
+catches up — never the reverse, since pushing a child past its own
+schedule would break its benchmark) and a **per-interval budget** that
+goes to the riskiest names first when it binds. Both rules only ever
+*reduce* what a child sends, so each symbol's own schedule stays honest.
 
 ### 7. Signals: reading the tape
 
@@ -200,7 +244,41 @@ Short-horizon traders read pressure in the book itself:
 
 *In this library:* `pricing/FairValueEngine.java` (microprice + drift),
 `microstructure/FlowSignals.java` (OFI, queue and trade imbalance, decayed
-over time so the signal reflects the last few seconds, not the whole day).
+over time so the signal reflects the last few seconds, not the whole day),
+and `microstructure/SignalEngine.java` — the unified multi-symbol engine
+that computes all of these plus streaming volatility, liquidity and
+momentum in one place, for equities and FX alike.
+
+**Can the weights be learned instead of guessed?** `SignalEngine.alpha()`
+blends its ingredients with fixed weights you configure.
+`microstructure/OnlineAlphaLearner.java` learns them instead — a small
+online regression from the signals to the next interval's return. The
+interesting part is not the regression; it is the **honesty mechanism**.
+Any self-updating signal faces the same trap: it grades its own homework.
+Two safeguards close that trap here:
+
+1. Every prediction is recorded *before* the outcome updates the weights,
+   and the rolling **out-of-sample IC** is computed on those predictions —
+   so the learner is always scored on what it genuinely didn't know.
+2. Timing: at 10:00:01 the signals already *contain* the 10:00:00→10:00:01
+   move (momentum IS the move). Fitting current signals to the return that
+   just happened is a "nowcast" that looks brilliantly predictive and
+   predicts nothing. The learner therefore trains each return against the
+   signals **snapshotted one interval earlier**.
+
+Even then, the learned alpha stays silent (emits 0) until its live IC is
+positive over a meaningful window — and "meaningful" is enforced, not
+hoped: a lucky first hour doesn't count. This is the same discipline as §8's
+walk-forward validation, shrunk to streaming scale.
+
+**Two more signal ideas worth knowing.** Related instruments don't move
+simultaneously: EURUSD leads EURJPY, index futures lead the cash basket —
+the liquid instrument moves first and the follower echoes it a moment
+later. `LeadLagEstimator` measures that lead live (which lag, how strong)
+for cross-hedging and pricing. And not all days share a shape: option-expiry
+days trade 2-3× normal volume with a violent close, half days compress the
+U-curve, FX fixing days spike at the fix — `DayTypeProfiles` gives each
+day type its own independently learned curves instead of one wrong average.
 
 ### 8. Alpha research: signals over days, not milliseconds
 
@@ -480,6 +558,20 @@ and flips per-gate **kill switches** on breach. The hot path only ever
 *In this library:* `trading/ShardedTradingEngine.java`,
 `trading/GlobalRiskAggregator.java`.
 
+**Surviving the overnight.** Everything the models *learn* — volume
+curves, venue fill rates, alpha weights — lives in memory, and a desk
+that relearns it from zero every morning trades half-blind until lunch.
+The fix is a **checkpoint**: at end of day, write every model's learned
+state into one file; at the next session start, restore it. The two
+details that make this production-grade rather than a toy: the save is
+**atomic** (written to a temp file, then renamed over the old one — a
+crash mid-save can corrupt nothing, yesterday's file survives), and the
+restore is **honest about time** (learned state comes back; intraday
+state — today's running totals, a pending spread spike — deliberately does
+not, because it belonged to yesterday). *In this library:*
+`persist/Checkpoint.java`, with `writeState`/`readState` on every model
+that learns across days.
+
 ### 19. How this codebase tests itself
 
 Worth studying as a checklist for your own projects:
@@ -523,7 +615,12 @@ java -cp target/classes com.quantfinlib.examples.LiveTradingDemo   # live Binanc
 6. `marketdata/L3BookBuilder.java` + `fx/FxTierBook.java` — the two market
    structures side by side (§3, §4).
 7. `backtest/Backtester.java` → the `alpha` package (§8, §11).
-8. `docs/COOKBOOK.md` — nine end-to-end recipes to modify and re-run.
+8. `microstructure/VolumeCurve.java` → `SignalEngine.java` →
+   `OnlineAlphaLearner.java` → `execution/BenchmarkExecutor.java` →
+   `PortfolioExecutor.java` → `persist/Checkpoint.java` — the execution
+   intelligence stack from live inputs to basket schedule to overnight
+   (§6, §7, §18).
+9. `docs/COOKBOOK.md` — twelve end-to-end recipes to modify and re-run.
 
 **Exercises** (in rough order of difficulty):
 
@@ -544,7 +641,10 @@ bid/ask/spread/mid (§1), limit/market/IOC/FOK/post-only (§2), L1/L2/L3,
 ITCH, book building, queue position (§3), NBBO, tape, dark venue, LULD,
 OTC, LP, last look, tiers, WMR fix (§4), inventory, skew, adverse selection, markout (§5),
 TWAP/VWAP/POV, implementation shortfall, arrival price, market impact, TCA,
-slippage (§6), microprice, imbalance, OFI (§7), factor, IC, walk-forward,
+slippage, volume curve, volatility regime, spread forecast, fill
+probability, Lee-Ready, iceberg, transition, leg balance (§6), microprice,
+imbalance, OFI, online learning, out-of-sample IC, nowcast, lead-lag,
+day type (§7), factor, IC, walk-forward,
 permutation test, survivorship bias, point-in-time (§8), notional, collar,
 kill switch, VaR (§9), forward, swap points, NDF, call/put, strike, greeks,
 delta/gamma/vega/theta, implied vol, smile, risk reversal, butterfly,
@@ -553,7 +653,7 @@ ring buffer, SPSC, single-writer, open addressing, linear probing,
 backward-shift deletion, bitmap, flyweight, cache locality (§14), memory
 model, release/acquire, VarHandle (§15), percentile, p99, JIT, warm-up,
 hiccup (§16), FIX, tag=value, scaled long, SBE, sequence recovery (§17),
-sharding, shared-nothing (§18).
+sharding, shared-nothing, checkpoint, atomic rename (§18).
 
 One closing thought. This library's recurring lesson isn't a data structure
 or a formula — it's a habit: **measure, don't assume; prove, don't claim;

@@ -405,4 +405,17 @@ public final class MathUtils {
         Arrays.fill(a, Double.NaN);
         return a;
     }
+
+    private static final double LN2 = Math.log(2);
+
+    /**
+     * Exponential decay factor for a half-life over an elapsed interval:
+     * {@code exp(-dt·ln2/halfLife)}; 1.0 for non-positive {@code dt}. The
+     * single home for the half-life→decay conversion the streaming
+     * estimators use — the ln2 factor is exactly the constant that goes
+     * missing when this is re-spelled per class.
+     */
+    public static double decayFactor(long dtNanos, long halfLifeNanos) {
+        return dtNanos <= 0 ? 1.0 : Math.exp(-dtNanos * LN2 / halfLifeNanos);
+    }
 }

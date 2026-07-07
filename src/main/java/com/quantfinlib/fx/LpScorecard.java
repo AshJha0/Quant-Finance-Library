@@ -1,5 +1,12 @@
 package com.quantfinlib.fx;
 
+import com.quantfinlib.persist.Checkpoint;
+
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
+import java.util.Arrays;
+
 /**
  * Streaming per-LP execution quality: the taker-side answer to last look.
  * FX liquidity is quotes, not firm orders — a provider may hold your order
@@ -210,5 +217,46 @@ public final class LpScorecard {
 
     public int lpCount() {
         return lpCount;
+    }
+
+    // ------------------------------------------------------------------
+    // Persistence (persist.Checkpoint)
+    // ------------------------------------------------------------------
+
+    /**
+     * Persists the learned LP behavior — reject rates, hold times,
+     * effective spreads and post-reject markouts. The pending-markout ring
+     * is intraday (a reject awaiting its horizon) and is not persisted.
+     * See {@code persist.Checkpoint}.
+     */
+    public void writeState(DataOutput out) throws IOException {
+        out.writeByte(1);
+        Checkpoint.writeLongs(out, attempts);
+        Checkpoint.writeLongs(out, fills);
+        Checkpoint.writeLongs(out, rejects);
+        Checkpoint.writeDoubles(out, rejectRate);
+        Checkpoint.writeDoubles(out, holdNanosEwma);
+        Checkpoint.writeDoubles(out, effSpreadEwma);
+        Checkpoint.writeDoubles(out, markoutEwma);
+        out.writeLong(maturedMarkouts);
+    }
+
+    /**
+     * Restores the card; pending markouts reset (restore at session
+     * start). Throws on an LP-count or version mismatch.
+     */
+    public void readState(DataInput in) throws IOException {
+        Checkpoint.requireVersion(in, 1, "LpScorecard");
+        Checkpoint.readLongsInto(in, attempts);
+        Checkpoint.readLongsInto(in, fills);
+        Checkpoint.readLongsInto(in, rejects);
+        Checkpoint.readDoublesInto(in, rejectRate);
+        Checkpoint.readDoublesInto(in, holdNanosEwma);
+        Checkpoint.readDoublesInto(in, effSpreadEwma);
+        Checkpoint.readDoublesInto(in, markoutEwma);
+        maturedMarkouts = in.readLong();
+        Arrays.fill(pendingSide, (byte) 0);
+        Arrays.fill(pendingCursor, (byte) 0);
+        pendingCount = 0;
     }
 }

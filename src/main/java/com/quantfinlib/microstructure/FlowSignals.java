@@ -2,7 +2,9 @@ package com.quantfinlib.microstructure;
 
 /**
  * Streaming order-flow signals for short-horizon execution decisions: the
- * three imbalances an equities engine reads before crossing a spread —
+ * three imbalances an execution engine reads before crossing a spread —
+ * cross-asset (equity ticks or raw FX rates; see the two onQuote entry
+ * points) —
  *
  * <ul>
  *   <li><b>Order-flow imbalance (OFI)</b> — Cont/Kukanov/Stoikov best-level
@@ -24,10 +26,13 @@ public final class FlowSignals {
 
     private final double tauNanos;
 
-    // Previous inside quote.
-    private int prevBidTick = Integer.MIN_VALUE;
+    // Previous inside quote. Prices are doubles so one implementation serves
+    // both markets: equity integer ticks are exact in a double (<= 2^53), so
+    // the tick-based API below delegates here with identical semantics, and
+    // FX raw rates feed the double API directly.
+    private double prevBid;
     private long prevBidSize;
-    private int prevAskTick = Integer.MAX_VALUE;
+    private double prevAsk;
     private long prevAskSize;
     private boolean hasQuote;
 
@@ -67,31 +72,51 @@ public final class FlowSignals {
      * bid up/size up ⇒ +, bid down ⇒ −, ask down/size up ⇒ −, ask up ⇒ +.
      *
      * <p>One-sided quotes (either size ≤ 0, e.g. an {@code Nbbo} sentinel
-     * after the last venue on a side drops) are treated as a signal GAP:
-     * queue imbalance reads 0 and no OFI contribution is booked — a feed
-     * artifact must not look like an aggressive sweep. The next two-sided
-     * quote re-seeds the OFI baseline.</p>
+     * after the last venue on a side drops) and non-dealable prices (NaN,
+     * zero, negative, infinite — placeholder sentinels) are treated as a
+     * signal GAP: queue imbalance reads 0 and no OFI contribution is booked
+     * — a feed artifact must not look like an aggressive sweep. The next
+     * two-sided dealable quote re-seeds the OFI baseline. This is the same
+     * gate {@code SignalEngine} applies, so both classify identically.</p>
      */
     public void onQuote(int bidTick, long bidSz, int askTick, long askSz, long timestampNanos) {
+        onQuote((double) bidTick, bidSz, (double) askTick, askSz, timestampNanos);
+    }
+
+    /**
+     * Inside-quote update on raw double prices — the cross-asset entry
+     * point (FX rates, or anything not tick-gridded). Same semantics as the
+     * tick overload: price comparisons drive the OFI legs, so any monotonic
+     * price representation works.
+     */
+    public void onQuote(double bid, long bidSz, double ask, long askSz, long timestampNanos) {
         quoteCount++;
-        this.bidSize = bidSz;
-        this.askSize = askSz;
-        if (bidSz <= 0 || askSz <= 0) {
+        // Dealable-price gate (!(x > 0) also catches NaN): a zero/infinite
+        // placeholder price with positive sizes must not book phantom OFI
+        // legs (bid 0 < prevBid reads as an aggressive sell) or latch its
+        // sizes into queueImbalance.
+        if (bidSz <= 0 || askSz <= 0
+                || !(bid > 0) || !(ask > 0)
+                || bid == Double.POSITIVE_INFINITY || ask == Double.POSITIVE_INFINITY) {
+            bidSize = 0;
+            askSize = 0;
             hasQuote = false;              // gap: don't book flow off a sentinel
             return;
         }
+        this.bidSize = bidSz;
+        this.askSize = askSz;
         if (hasQuote) {
             double e = 0;
-            if (bidTick > prevBidTick) {
+            if (bid > prevBid) {
                 e += bidSz;
-            } else if (bidTick == prevBidTick) {
+            } else if (bid == prevBid) {
                 e += bidSz - prevBidSize;
             } else {
                 e -= prevBidSize;
             }
-            if (askTick < prevAskTick) {
+            if (ask < prevAsk) {
                 e -= askSz;
-            } else if (askTick == prevAskTick) {
+            } else if (ask == prevAsk) {
                 e -= askSz - prevAskSize;
             } else {
                 e += prevAskSize;
@@ -102,9 +127,9 @@ public final class FlowSignals {
             hasQuote = true;
             ofiTime = timestampNanos;
         }
-        prevBidTick = bidTick;
+        prevBid = bid;
         prevBidSize = bidSz;
-        prevAskTick = askTick;
+        prevAsk = ask;
         prevAskSize = askSz;
     }
 
@@ -155,6 +180,9 @@ public final class FlowSignals {
         return value * decayFactor(lastTime, now);
     }
 
+    // Same half-life algebra as MathUtils.decayFactor, kept local with tau
+    // (= halfLife/ln2) precomputed in the constructor: one divide per event
+    // on this hot path instead of a multiply and a divide.
     private double decayFactor(long lastTime, long now) {
         long dt = now - lastTime;
         return dt <= 0 ? 1.0 : Math.exp(-dt / tauNanos);
