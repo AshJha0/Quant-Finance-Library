@@ -1,5 +1,54 @@
 # Changelog
 
+## v1.6.0 (2026-07-07)
+
+The equities market-structure release: the participant side of the market —
+raw L3 feed in, routed orders out — hot-lane end to end, hardened by an
+8-angle review round.
+
+- **L3 market data in**: `marketdata.ItchCodec` (ITCH 5.0-style binary
+  codec — add/execute/cancel/delete/replace/trade with exact big-endian
+  layouts; flyweight decode, packed-long symbols, 0.0001-tick int prices;
+  encoders for simulators/replay) and `marketdata.L3BookBuilder`
+  (full-depth book reconstruction with the matching engine's disciplines —
+  tick ladder, occupancy bitmaps, pooled intrusive nodes, backward-shift
+  ref map — plus exact own-order queue position: one FIFO walk to
+  initialize, O(1) maintenance per event from price-time priority facts,
+  `sharesAhead(ref)` in constant time; zero allocation proven).
+- **NBBO**: `marketdata.Nbbo` — multi-venue inside consolidation with
+  venue bitmasks at the touch, locked/crossed detection, and a listener
+  that fires only on inside changes.
+- **Flow signals**: `microstructure.FlowSignals` — time-decayed
+  Cont-Kukanov best-level OFI, inside queue imbalance, signed trade-flow
+  imbalance; allocation-free streaming.
+- **Equities order types on the venue book**: `HftOrderBook.submitIoc`,
+  `submitFok` (bitmap-walk liquidity probe; a kill emits no trades),
+  `submitPostOnly` (`REJECT_WOULD_CROSS`).
+- **Hot-lane routing**: `execution.HftSor` — zero-allocation greedy
+  all-in-price routing (fees/rebates in ticks) over parallel venue arrays.
+- **Execution algos**: `execution.PovTracker` (streaming participation
+  ledger measured against others' flow) and
+  `execution.ImplementationShortfallScheduler` (Almgren-Chriss-optimal
+  slicing + front-load→λ calibration by bisection).
+- **Venue self-protection**: `trading.OrderThrottle` (caller-clocked
+  nanosecond token bucket for message-rate limits) and
+  `microstructure.CircuitBreakers` (LULD bands, 15s limit-state → 5-min
+  pause machine, market-wide 7/13/20% halts — styled after the SEC plan,
+  not certified).
+- **8-angle review round on the layer** (every fix regression-tested):
+  overflow-proofed the IOC/FOK sentinel limit clamps (an extreme passive
+  limit could wrap into a market sweep); L3BookBuilder rejects duplicate
+  wire refs (replay would corrupt the ref map) and `track` is idempotent;
+  MWCB no longer downgrades a Level-3 day into 15-minute halts and
+  validates its time unit; FlowSignals treats one-sided/sentinel quotes as
+  signal gaps instead of maximal pressure; `Nbbo.midTick` sums in long;
+  IS calibration survives sinh overflow and fails loudly when it cannot
+  land; LULD pause expiry is pollable without quotes; shared
+  `orderbook.BookPrimitives` (bitmap scans + backward-shift map exist
+  once); six new allocation-counter tests back every zero-alloc claim
+  (Nbbo, throttle, LULD, wire-decode path, POV, TIF ops) plus a randomized
+  FOK-atomicity property test and an NBBO fast-path differential test.
+
 ## v1.5.0 (2026-07-06)
 
 The scale-and-usability release: the venue-grade matching engine, horizontal

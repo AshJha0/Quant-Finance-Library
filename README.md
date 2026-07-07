@@ -50,7 +50,7 @@ factor research to nanosecond market making.
 
 **Getting the library**: tagged releases publish runnable/sources/javadoc jars
 automatically (GitHub Actions → Releases); JitPack works today
-(`com.github.AshJha0:Quant-Finance-Library:v1.5.0`); Maven Central publishing is
+(`com.github.AshJha0:Quant-Finance-Library:v1.6.0`); Maven Central publishing is
 wired and one account-setup away — see [docs/PUBLISHING.md](docs/PUBLISHING.md).
 See [CHANGELOG.md](CHANGELOG.md) for release history.
 
@@ -654,7 +654,13 @@ latency-critical trading:
 | `AutoHedger` (`trading`) | Live position-band hedger: band breach on any tick fires a flattening order for the excess through the fast lane, with per-symbol cooldown while the hedge fill is in flight |
 | `AggregatedBook` + `CrossRateEngine` (`fx`) | Multi-venue composite BBO with venue attribution (primitive arrays, zero alloc per quote, crossed composites reported not hidden) and streaming synthetic crosses (EURJPY from EURUSD×USDJPY) chained on the bus consumer thread |
 | `IncrementalGreeks` (`pricing`) | Tick-fresh options risk without tick-frequency repricing: delta-gamma Taylor updates per tick (two multiplies, zero alloc), full Black-Scholes re-anchor off the hot path on drift |
-| `HftOrderBook` (`orderbook`) | Venue-grade matching engine: dense integer-tick price ladder with occupancy bitmaps, pooled intrusive order nodes, primitive open-addressing id map (backward-shift deletion), zero allocation — ~204ns/op, 10M+ fills/sec; a model-based equivalence test pins it to the readable reference `OrderBook` |
+| `HftOrderBook` (`orderbook`) | Venue-grade matching engine: dense integer-tick price ladder with occupancy bitmaps, pooled intrusive order nodes, primitive open-addressing id map (backward-shift deletion), zero allocation — ~204ns/op, 10M+ fills/sec; a model-based equivalence test pins it to the readable reference `OrderBook`. Full equities time-in-force set: limit, market, IOC, FOK (bitmap liquidity probe), post-only (`REJECT_WOULD_CROSS`) |
+| `ItchCodec` + `L3BookBuilder` (`marketdata`) | The equities participant stack: ITCH 5.0-style flyweight codec (packed-long symbols, 0.0001-tick int prices) driving full-depth L3 book reconstruction — same ladder/bitmap/pool disciplines as the matching engine, plus exact own-order queue position (`sharesAhead`): one FIFO walk to initialize, O(1) per event after, zero allocation |
+| `Nbbo` (`marketdata`) | Multi-venue NBBO consolidation: inside price/size, venue bitmasks at the touch, locked/crossed detection; listener fires only on inside changes (natural conflation), zero alloc per venue update |
+| `FlowSignals` (`microstructure`) | Streaming short-horizon flow signals: Cont-Kukanov best-level OFI (time-decayed), inside queue imbalance, signed trade-flow imbalance — allocation-free, fed straight from book/bus callbacks |
+| `HftSor` (`execution`) | Zero-allocation smart order router: greedy all-in-price sweep (fees/rebates in ticks) over parallel venue arrays, splits at displayed size into a caller-owned array — the tick-path sibling of the readable `SmartOrderRouter` |
+| `OrderThrottle` (`trading`) + `CircuitBreakers` (`microstructure`) | Venue self-protection: nanosecond token-bucket message-rate throttle (deterministic, caller-clocked); LULD price bands with the 15s-limit-state→5-min-pause machine and market-wide 7/13/20% halt levels (styled after the SEC plan, not certified) |
+| `PovTracker` + `ImplementationShortfallScheduler` (`execution`) | The two execution algos TWAP/VWAP can't cover: streaming percentage-of-volume participation ledger (measures against others' flow, so the algo never chases itself), and Almgren-Chriss-optimal IS slicing with a trader-friendly front-load→risk-aversion calibrator |
 | `HiccupMonitor` (`util`) | jHiccup-style platform stall attribution: all four benchmarks print a hiccup summary so tail outliers are correctly attributed to GC/safepoints/scheduler vs code (on the Windows dev box: benchmark max 541µs vs platform hiccups up to 1.6ms — the platform owns the tail) |
 
 ```java
@@ -725,15 +731,18 @@ directly on GitHub).
 com.quantfinlib
 ├── core          Bar, BarSeries (primitive-array OHLCV time series)
 ├── orderbook     OrderBook (research matching model), HftOrderBook (venue-
-│                 grade: tick ladder + pooled nodes, zero-alloc, 10M+ fills/s),
-│                 BookAnalytics, Side, LimitOrder
+│                 grade: tick ladder + pooled nodes, zero-alloc, 10M+ fills/s,
+│                 limit/market/IOC/FOK/post-only), BookPrimitives (shared
+│                 bitmap-scan + open-addressing map), BookAnalytics, Side
 ├── alpha         Factor research pipeline: Factors (9 signals), SignalEvaluator
 │                 (IC/IR/turnover), AlphaValidation (walk-forward, CV, Monte
 │                 Carlo, sensitivity), AlphaBacktester (cost-aware),
 │                 PortfolioConstruction (sizing, budgets, neutrality),
 │                 AlphaReport (decay, attribution, rolling metrics)
 ├── microstructure QueueModel, MarketImpactModel, TransactionCostAnalyzer,
-│                 TickSizeSchedule (MiFID II price bands), Auction (call uncross)
+│                 TickSizeSchedule (MiFID II price bands), Auction (call uncross),
+│                 FlowSignals (OFI/queue/trade imbalance), CircuitBreakers
+│                 (LULD bands + limit-state machine, market-wide halts)
 ├── fx            CurrencyPair conventions, SwapPointsCurve, FxSwap, Ndf,
 │                 FxVolSurface (delta-quoted smile), FixingRisk,
 │                 AggregatedBook (multi-venue BBO), CrossRateEngine (streaming)
@@ -743,8 +752,9 @@ com.quantfinlib
 │                 IncrementalGreeks (tick-path delta-gamma updates)
 ├── hedging       DeltaHedger, GreekHedger, MinimumVarianceHedge, FxHedger,
 │                 PairsHedger, HedgingSimulator (Monte Carlo hedging error)
-├── execution     TWAP/VWAP schedulers, SmartOrderRouter, IcebergOrder,
-│                 DarkPoolSimulator, MidPegTracker, VenueBenchmark
+├── execution     TWAP/VWAP schedulers, SmartOrderRouter + HftSor (zero-alloc),
+│                 PovTracker, ImplementationShortfallScheduler (Almgren-Chriss),
+│                 IcebergOrder, DarkPoolSimulator, MidPegTracker, VenueBenchmark
 ├── regulatory    FixAnalyzer, BestExecutionAnalyzer, MarketQualityMetrics
 ├── indicators    21-indicator batch engine + O(1) StreamingIndicators for live/HFT
 ├── risk          RiskMetrics, PortfolioRiskAnalyzer, Portfolio, metric registry,
@@ -772,13 +782,17 @@ com.quantfinlib
 ├── volatility    EwmaVolatility, Garch11 (MLE fit + forecasts)
 ├── trading       OrderGateway, PaperTradingGateway (risk-gated paper venue),
 │                 fast lane: HftRiskGate, OrderRingBuffer, HftOrderGateway,
-│                 HftQuoter (streaming market maker), AutoHedger (band hedging)
+│                 HftQuoter (streaming market maker), AutoHedger (band hedging),
+│                 OrderThrottle (venue message-rate token bucket),
+│                 ShardedTradingEngine + GlobalRiskAggregator (scale-out)
 ├── fix           FIX 4.4 engine: FixMessage codec, FixSession (initiator/acceptor,
 │                 logon/heartbeat/logout), NewOrderSingle, ExecutionReport
 ├── dsl           Rule, Rules, StrategyBuilder
 ├── screener      Technical + fundamental filters, ranking, CSV export
 ├── simulation    MonteCarloSimulator, SimulationResult
-├── marketdata    HFT path: TickRingBuffer, HftMarketDataBus, SymbolRegistry
+├── marketdata    HFT path: TickRingBuffer, HftMarketDataBus, SymbolRegistry,
+│                 equities L3: ItchCodec (ITCH 5.0-style), L3BookBuilder
+│                 (full depth + own-order queue position), Nbbo (consolidated)
 │                 convenience path: RingBuffer, MarketDataProcessor, HistoricalDataStore
 ├── report        Report model + HTML/CSV/PDF/XLSX exporters, ReportGenerator,
 │                 SvgCharts (inline equity/drawdown charts in HTML reports)

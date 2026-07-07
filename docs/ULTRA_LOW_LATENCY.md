@@ -162,7 +162,7 @@ and nothing latency-relevant hides in the research lane. The lane map:
 
 | Lane | Packages / components | Contract |
 |---|---|---|
-| **Hot** (zero-alloc, proven) | `marketdata` HFT path, `trading` fast lane (gate, gateway, quoter, hedger), `orderbook.HftOrderBook`, `sbe.*`, `fx.AggregatedBook`/`CrossRateEngine`, `pricing.IncrementalGreeks`, `microstructure.TickSizeSchedule` lookups, `fix.FixOrderEncoder` + `fix.FixExecReportView`, `data.AsyncTickCapture` (ring handoff), `util.LatencyRecorder` | no allocation, no locks, no String/boxing per event |
+| **Hot** (zero-alloc, proven) | `marketdata` HFT path incl. `ItchCodec`/`L3BookBuilder`/`Nbbo`, `trading` fast lane (gate, gateway, quoter, hedger, `OrderThrottle`), `orderbook.HftOrderBook` (limit/market/IOC/FOK/post-only), `execution.HftSor`, `microstructure.FlowSignals` + `CircuitBreakers.Luld`, `sbe.*`, `fx.AggregatedBook`/`CrossRateEngine`, `pricing.IncrementalGreeks`, `microstructure.TickSizeSchedule` lookups, `fix.FixOrderEncoder` + `fix.FixExecReportView`, `data.AsyncTickCapture` (ring handoff), `util.LatencyRecorder` | no allocation, no locks, no String/boxing per event |
 | **Edge** (I/O-bound adapters) | `fix.FixSession` session management, `feed.WebSocketFeed`, `data.TickFileWriter/Reader` | buffered, off the decision loop or explicitly documented when not |
 | **Research** (clarity first) | `alpha`, `backtest.*`, `pricing`/`fx` analytics, `rates`, `volatility`, `risk`, `ml`, `optimization`, `screener`, `simulation`, `hedging`, `report`, `cli`, `dsl`, `orderbook.OrderBook` | correctness + readability; allocation is fine because no tick waits on it |
 
@@ -176,6 +176,44 @@ in-place symbol comparison, so orders out AND fills in never allocate or touch a
 double), and `data.AsyncTickCapture` (file I/O moved off the bus consumer thread
 through a private ring — a disk stall now hits the writer thread, and backpressure
 drops-and-counts rather than ever blocking the trading loop).
+
+## The equities participant stack — L3 in, routed orders out
+
+The venue side (`HftOrderBook`) answers "how does an exchange match"; the
+participant side answers the harder practical question: <em>what do I do with a
+venue's raw feed</em>. That path is hot-lane end to end:
+
+- **`marketdata.ItchCodec`** — an ITCH 5.0-style binary codec (add/execute/
+  cancel/delete/replace/trade, exact big-endian layouts). Decoding is a flyweight
+  over the wire bytes; symbols travel as packed 8-byte longs, prices as 0.0001-tick
+  ints. Encoders exist for simulators and replay only.
+- **`marketdata.L3BookBuilder`** — full-depth book reconstruction with the same
+  disciplines as the matching engine (tick ladder, occupancy bitmaps, pooled
+  intrusive nodes, backward-shift ref map), plus the participant-only feature a
+  venue book cannot have: **exact own-order queue position**. Initialization is one
+  FIFO walk; maintenance is O(1) per event, resting on two price-time facts —
+  executions consume the head, and a cancel is ahead of you iff it queued before
+  you. `sharesAhead(ref)` is then a constant-time read, and
+  `microstructure.QueueModel` converts it to fill probability.
+- **`marketdata.Nbbo`** — per-venue tops consolidated into the national best
+  bid/offer with inside size, venue bitmasks, and locked/crossed detection; the
+  listener fires only on inside changes, so downstream work is naturally conflated.
+- **`microstructure.FlowSignals`** — streaming order-flow imbalance
+  (Cont-Kukanov best-level OFI, exponentially time-decayed), queue imbalance and
+  signed trade-flow imbalance: the classic short-horizon direction signals,
+  allocation-free.
+- **`execution.HftSor`** — the routing decision without the routing objects:
+  greedy all-in-price sweep (fees/rebates in ticks) over parallel venue arrays,
+  child quantities written into a caller array. The research-lane
+  `SmartOrderRouter` remains for readable plans; this one is for the tick path.
+- **`trading.OrderThrottle`** — a nanosecond token bucket for venue message-rate
+  limits; `microstructure.CircuitBreakers` supplies LULD bands/limit-state/pause
+  logic and market-wide halt levels so the strategy can see a halt coming rather
+  than discover it as rejects.
+
+`HftOrderBook` itself gained the equities time-in-force set — `submitIoc`,
+`submitFok` (bitmap-walk liquidity probe, kill emits nothing), `submitPostOnly`
+(`REJECT_WOULD_CROSS`) — so simulators can exercise real order-type behavior.
 
 ## Scaling out — sharding as shipped machinery
 

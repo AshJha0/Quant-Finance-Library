@@ -44,6 +44,8 @@ public final class HftOrderBook {
     public static final long REJECT_POOL_FULL = -1;
     public static final long REJECT_OUT_OF_BAND = -2;
     public static final long REJECT_INVALID = -3;
+    /** Post-only order would have crossed the spread and taken liquidity. */
+    public static final long REJECT_WOULD_CROSS = -4;
 
     /** Primitive fill callback: maker is the resting order, taker the incoming one. */
     @FunctionalInterface
@@ -194,6 +196,110 @@ public final class HftOrderBook {
                 ? matchBuy(id, ladder - 1, quantity, timestampNanos)
                 : matchSell(id, 0, quantity, timestampNanos);
         return quantity - remaining;
+    }
+
+    /**
+     * Immediate-or-cancel: a price-limited taker — matches while it crosses,
+     * and the remainder expires instead of resting. Returns the filled
+     * quantity (0 when nothing crossed). Zero allocation.
+     */
+    public long submitIoc(Side side, int priceTick, long quantity, long timestampNanos) {
+        if (quantity <= 0) {
+            return 0;
+        }
+        long id = nextId++;
+        orderCount++;
+        // Clamp only the aggressive end: an off-band-aggressive limit is a
+        // market order; an off-band-passive limit simply cannot cross. The
+        // subtraction is done in long so sentinel limits (Integer.MIN/MAX_VALUE
+        // for "pure market") cannot wrap into the opposite meaning.
+        long remaining = side == Side.BUY
+                ? matchBuy(id, buyLimitIdx(priceTick), quantity, timestampNanos)
+                : matchSell(id, sellLimitIdx(priceTick), quantity, timestampNanos);
+        return quantity - remaining;
+    }
+
+    /** Buy limit as a ladder index, overflow-safe: [-1 = uncrossable, ladder-1 = market]. */
+    private int buyLimitIdx(int priceTick) {
+        long d = (long) priceTick - minTick;
+        return (int) Math.max(Math.min(d, ladder - 1L), -1L);
+    }
+
+    /** Sell limit as a ladder index, overflow-safe: [0 = market, ladder = uncrossable]. */
+    private int sellLimitIdx(int priceTick) {
+        long d = (long) priceTick - minTick;
+        return (int) Math.min(Math.max(d, 0L), ladder);
+    }
+
+    /**
+     * Fill-or-kill: executes the full quantity within the limit price or
+     * does nothing at all. Returns {@code quantity} on fill, 0 on kill —
+     * a killed order emits no trades and consumes no id/counters, like a
+     * venue rejecting pre-match. Zero allocation (the liquidity probe walks
+     * the same occupancy bitmaps as matching).
+     */
+    public long submitFok(Side side, int priceTick, long quantity, long timestampNanos) {
+        if (quantity <= 0 || !fillableWithin(side, priceTick, quantity)) {
+            return 0;
+        }
+        return submitIoc(side, priceTick, quantity, timestampNanos);
+    }
+
+    /**
+     * Post-only (add-liquidity-only) limit order: rests at {@code priceTick},
+     * or is rejected with {@link #REJECT_WOULD_CROSS} when it would trade on
+     * arrival — the maker-fee-preserving order type. Returns the positive
+     * order id on acceptance.
+     */
+    public long submitPostOnly(Side side, int priceTick, long quantity, long timestampNanos) {
+        if (quantity <= 0) {
+            return REJECT_INVALID;
+        }
+        int idx = priceTick - minTick;
+        if (idx < 0 || idx >= ladder) {
+            return REJECT_OUT_OF_BAND;
+        }
+        boolean crosses = side == Side.BUY
+                ? bestAskIdx != NONE && bestAskIdx <= idx
+                : bestBidIdx != NONE && bestBidIdx >= idx;
+        if (crosses) {
+            return REJECT_WOULD_CROSS;
+        }
+        // Same id/count discipline as submitLimit: a pool-full reject still
+        // consumed an id and counts as an order, so id sequences and
+        // orderCount reconcile identically regardless of entry point.
+        long id = nextId++;
+        orderCount++;
+        if (freeHead == NONE) {
+            return REJECT_POOL_FULL;
+        }
+        rest(id, side == Side.BUY ? BUY : SELL, idx, quantity);
+        return id;
+    }
+
+    /** True when the opposite side offers at least {@code quantity} within the limit. */
+    private boolean fillableWithin(Side side, int priceTick, long quantity) {
+        long avail = 0;
+        if (side == Side.BUY) {
+            int limit = buyLimitIdx(priceTick);
+            for (int idx = bestAskIdx; idx != NONE && idx <= limit;
+                 idx = nextSetAtOrAbove(askBits, idx + 1)) {
+                avail += askQty[idx];
+                if (avail >= quantity) {
+                    return true;
+                }
+            }
+        } else {
+            int limit = sellLimitIdx(priceTick);
+            for (int idx = bestBidIdx; idx != NONE && idx >= limit;
+                 idx = nextSetAtOrBelow(bidBits, idx - 1)) {
+                avail += bidQty[idx];
+                if (avail >= quantity) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /** Cancels a resting order. False when unknown/already gone — never throws. */
@@ -352,100 +458,28 @@ public final class HftOrderBook {
     }
 
     // ------------------------------------------------------------------
-    // Bitmap scans (best-price advancement)
+    // Bitmap scans + id map: thin wrappers over the shared BookPrimitives
+    // (one copy of the subtle logic, invokestatic = zero hot-path cost)
     // ------------------------------------------------------------------
 
-    /** Lowest set bit at or above {@code from}, or NONE. */
-    private int nextSetAtOrAbove(long[] bits, int from) {
-        if (from >= ladder) {
-            return NONE;
-        }
-        int word = from >>> 6;
-        long w = bits[word] & (-1L << (from & 63)); // mask below `from`
-        while (true) {
-            if (w != 0) {
-                return (word << 6) + Long.numberOfTrailingZeros(w);
-            }
-            if (++word >= bits.length) {
-                return NONE;
-            }
-            w = bits[word];
-        }
+    private static int nextSetAtOrAbove(long[] bits, int from) {
+        return BookPrimitives.nextSetAtOrAbove(bits, from);
     }
 
-    /** Highest set bit at or below {@code from}, or NONE. */
-    private int nextSetAtOrBelow(long[] bits, int from) {
-        if (from < 0) {
-            return NONE;
-        }
-        int word = from >>> 6;
-        long w = bits[word] & (-1L >>> (63 - (from & 63))); // mask above `from`
-        while (true) {
-            if (w != 0) {
-                return (word << 6) + 63 - Long.numberOfLeadingZeros(w);
-            }
-            if (--word < 0) {
-                return NONE;
-            }
-            w = bits[word];
-        }
+    private static int nextSetAtOrBelow(long[] bits, int from) {
+        return BookPrimitives.nextSetAtOrBelow(bits, from);
     }
-
-    // ------------------------------------------------------------------
-    // Primitive open-addressing id map (linear probe, backward-shift delete)
-    // ------------------------------------------------------------------
 
     private void mapPut(long key, int value) {
-        int slot = (int) mix(key) & mapMask;
-        while (mapKeys[slot] != 0) {
-            slot = (slot + 1) & mapMask;
-        }
-        mapKeys[slot] = key;
-        mapVals[slot] = value;
+        BookPrimitives.mapPut(mapKeys, mapVals, mapMask, key, value);
     }
 
-    /** Slot of {@code key}, or NONE. */
     private int mapFind(long key) {
-        int slot = (int) mix(key) & mapMask;
-        while (mapKeys[slot] != 0) {
-            if (mapKeys[slot] == key) {
-                return slot;
-            }
-            slot = (slot + 1) & mapMask;
-        }
-        return NONE;
+        return BookPrimitives.mapFind(mapKeys, mapMask, key);
     }
 
-    /**
-     * Backward-shift deletion: re-place every entry of the probe run that
-     * follows the hole, so lookups never need tombstones and cancel churn
-     * cannot degrade probe lengths over a long session.
-     */
     private void mapRemoveAt(int slot) {
-        int hole = slot;
-        int probe = (hole + 1) & mapMask;
-        while (mapKeys[probe] != 0) {
-            int home = (int) mix(mapKeys[probe]) & mapMask;
-            // Move back iff the entry's home position is "at or before" the
-            // hole in circular probe order (standard backward-shift rule).
-            boolean move = hole <= probe
-                    ? (home <= hole || home > probe)
-                    : (home <= hole && home > probe);
-            if (move) {
-                mapKeys[hole] = mapKeys[probe];
-                mapVals[hole] = mapVals[probe];
-                hole = probe;
-            }
-            probe = (probe + 1) & mapMask;
-        }
-        mapKeys[hole] = 0;
-    }
-
-    /** Stafford variant 13 finalizer: cheap, well-mixed long hash. */
-    private static long mix(long z) {
-        z = (z ^ (z >>> 30)) * 0xbf58476d1ce4e5b9L;
-        z = (z ^ (z >>> 27)) * 0x94d049bb133111ebL;
-        return z ^ (z >>> 31);
+        BookPrimitives.mapRemoveAt(mapKeys, mapVals, mapMask, slot);
     }
 
     // ------------------------------------------------------------------
