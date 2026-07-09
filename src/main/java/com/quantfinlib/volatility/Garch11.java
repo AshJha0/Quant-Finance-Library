@@ -41,7 +41,10 @@ public final class Garch11 {
 
         double bestAlpha = 0.05, bestBeta = 0.9;
         double bestLl = Double.NEGATIVE_INFINITY;
-        double alphaLo = 0.005, alphaHi = 0.40, betaLo = 0.40, betaHi = 0.995;
+        // Full admissible box (the persistence check prunes invalid cells):
+        // a narrower start is a hard cap refinement can barely creep past,
+        // pinning low-persistence/high-ARCH series at the box edge.
+        double alphaLo = 0.005, alphaHi = 0.99, betaLo = 1e-6, betaHi = 0.999;
 
         for (int pass = 0; pass < 3; pass++) {
             int grid = 25;

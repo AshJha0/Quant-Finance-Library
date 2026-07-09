@@ -33,7 +33,12 @@ public final class HftOrderGateway implements AutoCloseable {
     private final OrderListener dispatcher = this::dispatch;
 
     private volatile boolean running;
-    private volatile long delivered;    // single-writer (venue thread)
+    // Venue-thread counter in its own object (no line sharing with the
+    // trading-thread fields below) and updated once per DRAIN BATCH with a
+    // release store — a per-order volatile store would fence the venue
+    // thread for an observability-only number.
+    private final java.util.concurrent.atomic.AtomicLong delivered =
+            new java.util.concurrent.atomic.AtomicLong();
     private long submitted;             // single-writer (trading thread)
     private long ringFull;              // single-writer (trading thread)
     private long nextId = 1;            // single-writer (trading thread)
@@ -119,13 +124,14 @@ public final class HftOrderGateway implements AutoCloseable {
         for (OrderListener l : ls) {
             l.onOrder(orderId, symbolId, side, quantity, price, timestampNanos);
         }
-        delivered = delivered + 1;
     }
 
     private void venueLoop() {
         while (true) {
             int n = ring.drainTo(dispatcher, 256);
-            if (n == 0) {
+            if (n > 0) {
+                delivered.setRelease(delivered.getPlain() + n);
+            } else {
                 if (!running && ring.isEmpty()) {
                     return;
                 }
@@ -152,7 +158,7 @@ public final class HftOrderGateway implements AutoCloseable {
 
     /** Orders handed to the venue thread so far. */
     public long deliveredCount() {
-        return delivered;
+        return delivered.get();
     }
 
     public long ringFullCount() {

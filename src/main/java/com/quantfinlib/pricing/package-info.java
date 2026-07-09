@@ -18,6 +18,14 @@
  * structured product: memory coupons, autocall observations, European
  * knock-in — Monte Carlo with antithetic variates under documented GBM
  * simplifications; RFQ market structure for trading it lives in
- * {@code rfq}).
+ * {@code rfq}). Market-risk pricing models
+ * ({@code docs/MARKET_RISK.md} step 4):
+ * {@link com.quantfinlib.pricing.Black76} (options on forwards/futures
+ * — the convention caps, swaptions and futures options are quoted in),
+ * {@link com.quantfinlib.pricing.Heston} (stochastic volatility,
+ * semi-analytic little-trap form, MC cross-checked) and
+ * {@link com.quantfinlib.pricing.HigherOrderGreeks} (vanna, volga,
+ * exchange-option cross-gamma — pinned as finite differences of the
+ * first-order Greeks).
  */
 package com.quantfinlib.pricing;

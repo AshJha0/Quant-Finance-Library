@@ -351,6 +351,22 @@ reality is decoration.
 `risk/RiskMetrics.java`, `risk/VarBacktest.java` (Kupiec/Christoffersen
 tests).
 
+**The full market-risk workflow** goes far beyond a daily VaR number,
+and the library maps the whole thing in
+[MARKET_RISK.md](MARKET_RISK.md): four flavors of portfolio VaR that
+disagree exactly when they should (`VarEngine` — a short-gamma book's
+tail is worse than the Gaussian formula admits, and the delta-gamma
+method knows it), Expected Shortfall beside every VaR (what the average
+BAD day costs, not just the threshold), extreme value theory for
+quantiles beyond the sample (`ExtremeValueTheory` — which refuses to
+report a finite tail mean when the fitted tail has none), stress tests
+including the regulator's favorite inverted question "what move breaks
+us?" (`StressTester.reverseStress`, answered in closed form with an
+implausibility score in sigmas), and the Basel/FRTB layer
+(`FrtbEs`, `PnlAttribution`) — styled after the regulation, tested on
+its arithmetic, and honest that certification is a program, not a
+library.
+
 ### 10. Derivatives in five minutes
 
 A **forward** is an agreement to trade at a future date at a price fixed

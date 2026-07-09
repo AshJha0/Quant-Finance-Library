@@ -22,6 +22,12 @@ import java.util.concurrent.locks.LockSupport;
  * and may allocate. For the convenience object-based API (String symbols,
  * multiple producers) see {@link MarketDataProcessor}; this bus is the
  * single-producer HFT path.</p>
+ *
+ * <p><b>Dispatch cost note:</b> each subscribed listener is an interface
+ * call; with three or more distinct {@link TickListener} implementations on
+ * one symbol the call site goes megamorphic (~10-20&nbsp;ns per listener,
+ * no inlining). Keep the per-symbol listener count at one or two and fan
+ * out inside your own listener when you need more consumers.</p>
  */
 public final class HftMarketDataBus implements AutoCloseable {
 
@@ -37,7 +43,12 @@ public final class HftMarketDataBus implements AutoCloseable {
     private final TickListener dispatcher = this::dispatch;
 
     private volatile boolean running;
-    private volatile long processed;   // single-writer (consumer thread)
+    // Consumer-thread counter in its own object (no line sharing with the
+    // producer-written ringFull) and updated once per DRAIN BATCH with a
+    // release store — a per-tick volatile store would pay a StoreLoad
+    // fence on every dispatch for an observability-only number.
+    private final java.util.concurrent.atomic.AtomicLong processed =
+            new java.util.concurrent.atomic.AtomicLong();
     private long ringFull;             // single-writer (producer thread)
     private Thread consumer;
 
@@ -148,13 +159,14 @@ public final class HftMarketDataBus implements AutoCloseable {
         for (TickListener l : gs) {
             l.onTick(symbolId, price, size, timestampNanos);
         }
-        processed = processed + 1;
     }
 
     private void consumeLoop() {
         while (true) {
             int n = ring.drainTo(dispatcher, 1024);
-            if (n == 0) {
+            if (n > 0) {
+                processed.setRelease(processed.getPlain() + n);
+            } else {
                 if (!running && ring.isEmpty()) {
                     return;
                 }
@@ -181,7 +193,7 @@ public final class HftMarketDataBus implements AutoCloseable {
     }
 
     public long processedCount() {
-        return processed;
+        return processed.get();
     }
 
     /**

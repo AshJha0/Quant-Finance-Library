@@ -31,8 +31,18 @@ public final class OrderRingBuffer {
 
     private final PaddedSequence head = new PaddedSequence();
     private final PaddedSequence tail = new PaddedSequence();
+    // Local sequence caches padded apart — same reasoning as TickRingBuffer:
+    // the trading thread stores cachedHead and the venue thread cachedTail,
+    // and sharing a line with each other or the slot-array fields would put
+    // false sharing back on the submit path.
+    @SuppressWarnings("unused")
+    private long hp1, hp2, hp3, hp4, hp5, hp6, hp7;
     private long cachedHead;
+    @SuppressWarnings("unused")
+    private long tp1, tp2, tp3, tp4, tp5, tp6, tp7;
     private long cachedTail;
+    @SuppressWarnings("unused")
+    private long ep1, ep2, ep3, ep4, ep5, ep6, ep7;
 
     public OrderRingBuffer(int requestedCapacity) {
         this.capacity = Integer.highestOneBit(Math.max(2, requestedCapacity - 1)) * 2;

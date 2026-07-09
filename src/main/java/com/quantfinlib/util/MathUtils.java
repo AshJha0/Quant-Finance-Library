@@ -135,10 +135,21 @@ public final class MathUtils {
 
     /**
      * Cholesky decomposition: returns lower-triangular L with A = L * L'.
-     * Adds tiny diagonal jitter if the matrix is borderline non-PSD.
+     * Adds tiny diagonal jitter if the matrix is BORDERLINE non-PSD
+     * (rank-deficient factor models produce pivots a hair below zero),
+     * but a pivot grossly negative relative to the diagonal scale means
+     * the input is genuinely indefinite — a typo'd correlation &gt; 1, or
+     * inconsistent pairwise estimates — and simulating a silently
+     * clamped, DIFFERENT dependence structure would misstate risk, so
+     * that fails loudly instead.
      */
     public static double[][] cholesky(double[][] a) {
         int n = a.length;
+        double maxDiag = 0;
+        for (int i = 0; i < n; i++) {
+            maxDiag = Math.max(maxDiag, Math.abs(a[i][i]));
+        }
+        double indefinite = -1e-8 * Math.max(maxDiag, Double.MIN_NORMAL);
         double[][] l = new double[n][n];
         for (int i = 0; i < n; i++) {
             for (int j = 0; j <= i; j++) {
@@ -147,6 +158,11 @@ public final class MathUtils {
                     sum -= l[i][k] * l[j][k];
                 }
                 if (i == j) {
+                    if (sum < indefinite) {
+                        throw new IllegalArgumentException("matrix is not positive "
+                                + "semi-definite (pivot " + i + " = " + sum
+                                + ") — check for correlations beyond 1");
+                    }
                     if (sum <= 0) {
                         sum = 1e-12;
                     }
@@ -417,5 +433,105 @@ public final class MathUtils {
      */
     public static double decayFactor(long dtNanos, long halfLifeNanos) {
         return dtNanos <= 0 ? 1.0 : Math.exp(-dtNanos * LN2 / halfLifeNanos);
+    }
+
+    /** Natural log of the gamma function (Lanczos, |relative error| &lt; 2e-10). */
+    public static double logGamma(double x) {
+        if (!(x > 0)) {
+            throw new IllegalArgumentException("x must be > 0: " + x);
+        }
+        final double[] cof = {76.18009172947146, -86.50532032941677, 24.01409824083091,
+                -1.231739572450155, 0.1208650973866179e-2, -0.5395239384953e-5};
+        double y = x;
+        double tmp = x + 5.5;
+        tmp -= (x + 0.5) * Math.log(tmp);
+        double ser = 1.000000000190015;
+        for (double c : cof) {
+            ser += c / ++y;
+        }
+        return -tmp + Math.log(2.5066282746310005 * ser / x);
+    }
+
+    /**
+     * Regularized incomplete beta function I_x(a, b) via the continued
+     * fraction (modified Lentz), switching to the symmetry
+     * {@code I_x(a,b) = 1 − I_{1−x}(b,a)} where the fraction converges
+     * fastest. Accurate to ~1e-13 across (0, 1).
+     */
+    public static double regularizedIncompleteBeta(double a, double b, double x) {
+        if (!(a > 0) || !(b > 0) || !(x >= 0 && x <= 1)) {
+            throw new IllegalArgumentException("need a, b > 0 and x in [0, 1]");
+        }
+        if (x == 0 || x == 1) {
+            return x;
+        }
+        double lnFront = logGamma(a + b) - logGamma(a) - logGamma(b)
+                + a * Math.log(x) + b * Math.log(1 - x);
+        if (x < (a + 1) / (a + b + 2)) {
+            return Math.exp(lnFront) * betaContinuedFraction(a, b, x) / a;
+        }
+        return 1 - Math.exp(lnFront) * betaContinuedFraction(b, a, 1 - x) / b;
+    }
+
+    private static double betaContinuedFraction(double a, double b, double x) {
+        final double eps = 3e-14;
+        final double tiny = 1e-300;
+        double qab = a + b;
+        double qap = a + 1;
+        double qam = a - 1;
+        double c = 1;
+        double d = 1 - qab * x / qap;
+        if (Math.abs(d) < tiny) {
+            d = tiny;
+        }
+        d = 1 / d;
+        double h = d;
+        for (int m = 1; m <= 300; m++) {
+            int m2 = 2 * m;
+            double aa = m * (b - m) * x / ((qam + m2) * (a + m2));
+            d = 1 + aa * d;
+            if (Math.abs(d) < tiny) {
+                d = tiny;
+            }
+            c = 1 + aa / c;
+            if (Math.abs(c) < tiny) {
+                c = tiny;
+            }
+            d = 1 / d;
+            h *= d * c;
+            aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2));
+            d = 1 + aa * d;
+            if (Math.abs(d) < tiny) {
+                d = tiny;
+            }
+            c = 1 + aa / c;
+            if (Math.abs(c) < tiny) {
+                c = tiny;
+            }
+            d = 1 / d;
+            double del = d * c;
+            h *= del;
+            if (Math.abs(del - 1) < eps) {
+                break;
+            }
+        }
+        return h;
+    }
+
+    /**
+     * Student-t CDF with {@code df} degrees of freedom — exact via the
+     * regularized incomplete beta ({@code P(T ≤ t) = 1 − ½·I_{ν/(ν+t²)}(ν/2, ½)}
+     * for t ≥ 0), no normal approximation: the tails are precisely where
+     * a t distribution and its moment-matched normal disagree most.
+     */
+    public static double tCdf(double t, double df) {
+        if (!(df > 0)) {
+            throw new IllegalArgumentException("df must be > 0: " + df);
+        }
+        if (t == 0) {
+            return 0.5;
+        }
+        double halfTail = 0.5 * regularizedIncompleteBeta(df / 2, 0.5, df / (df + t * t));
+        return t > 0 ? 1 - halfTail : halfTail;
     }
 }

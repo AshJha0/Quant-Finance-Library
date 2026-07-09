@@ -63,7 +63,12 @@ public final class PaperTradingGateway implements OrderGateway {
     private final List<WorkingOrder> resting = new ArrayList<>();
     private final Map<String, Position> positions = new HashMap<>();
     private final List<ExecutionListener> listeners = new ArrayList<>();
+    // Capped: a soak with a misconfigured limit checker rejects every order,
+    // and an unbounded String log would grow the heap for the whole run.
+    // The first entries carry the diagnosis; the count keeps the total.
+    private static final int REJECTION_LOG_CAP = 1_000;
     private final List<String> rejectionLog = new ArrayList<>();
+    private int rejectionCount;
     private double cash;
     private double realizedPnl;
     private long nextId = 1;
@@ -129,7 +134,7 @@ public final class PaperTradingGateway implements OrderGateway {
         Quote q = quotes.get(symbol);
         if (q == null) {
             order.status = OrderStatus.REJECTED;
-            rejectionLog.add("order " + order.id + ": NO_QUOTE for " + symbol);
+            logRejection("order " + order.id + ": NO_QUOTE for " + symbol);
             return order.id;
         }
         double touch = side == Side.BUY ? q.ask() : q.bid();
@@ -194,6 +199,8 @@ public final class PaperTradingGateway implements OrderGateway {
         return value;
     }
 
+    /** The first {@value #REJECTION_LOG_CAP} rejection messages; the snapshot's
+     *  {@code rejectionCount} keeps counting past the cap. */
     public synchronized List<String> rejectionLog() {
         return List.copyOf(rejectionLog);
     }
@@ -216,7 +223,7 @@ public final class PaperTradingGateway implements OrderGateway {
 
     public synchronized AccountSnapshot snapshot() {
         return new AccountSnapshot(cash, equity(), realizedPnl,
-                rejectionLog.size(), positionsSnapshot());
+                rejectionCount, positionsSnapshot());
     }
 
     // ------------------------------------------------------------------
@@ -233,10 +240,17 @@ public final class PaperTradingGateway implements OrderGateway {
                 mid, Math.round(position(order.symbol)), 0);
         if (!check.approved()) {
             order.status = OrderStatus.REJECTED;
-            rejectionLog.add("order " + order.id + ": " + check.violations());
+            logRejection("order " + order.id + ": " + check.violations());
             return false;
         }
         return true;
+    }
+
+    private void logRejection(String entry) {
+        rejectionCount++;
+        if (rejectionLog.size() < REJECTION_LOG_CAP) {
+            rejectionLog.add(entry);
+        }
     }
 
     private void fill(WorkingOrder order, double price) {

@@ -38,6 +38,7 @@ footer{margin:3rem 0 2rem;color:var(--muted);font-size:.85rem;text-align:center}
       <a href="api/index.html">API documentation</a>
       <a class="secondary" href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/LEARN.md">Learn (beginner's guide)</a>
       <a class="secondary" href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/COOKBOOK.md">Cookbook</a>
+      <a class="secondary" href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/MARKET_RISK.md">Market risk roadmap</a>
       <a class="secondary" href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/DIAGRAMS.md">Architecture diagrams</a>
       <a class="secondary" href="https://github.com/AshJha0/Quant-Finance-Library">GitHub</a>
       <a class="secondary" href="https://github.com/AshJha0/Quant-Finance-Library/releases">Releases</a>
@@ -53,7 +54,7 @@ footer{margin:3rem 0 2rem;color:var(--muted);font-size:.85rem;text-align:center}
     Tick-to-order end-to-end&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; p50 = 504 ns&nbsp; p99 = 1.0 µs (15–21M orders/s across runs)<br>
     Tick-to-two-sided-quote&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; p50 = 592 ns&nbsp; p99 &lt; 1 µs (market-making loop, both sides)<br>
     Venue-grade matching engine&nbsp;&nbsp;&nbsp;&nbsp; ≈ 204 ns/op, 10M+ fills/s, zero allocation<br>
-    Test suite&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 810+ tests, ~94% line coverage, CI on every push
+    Test suite&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 840+ tests, ~94% line coverage, CI on every push
   </div>
 
   <h2>What's inside</h2>
@@ -102,10 +103,20 @@ footer{margin:3rem 0 2rem;color:var(--muted);font-size:.85rem;text-align:center}
          post-reject markout) driving expected-all-in LP routing, symmetric
          maker-side last look, WMR fixing schedules, direct-vs-synthetic crosses.</p></div>
     <div class="card"><h3>Derivatives &amp; hedging</h3>
-      <p>Black-Scholes/Garman-Kohlhagen, American trees, SABR, vol surfaces,
+      <p>Black-Scholes/Garman-Kohlhagen, Black-76, Heston stochastic vol
+         (semi-analytic + Monte Carlo cross-check), American trees, SABR,
+         vol surfaces, higher-order Greeks (vanna, volga, cross-gamma),
          autocallables (memory coupons, knock-in) with RFQ dealer-panel
          analytics, options-book Greeks and scenario grids, Monte Carlo
          hedging error.</p></div>
+    <div class="card"><h3>Market risk</h3>
+      <p>The 14-step workflow: four portfolio VaR flavors with expected
+         shortfall (delta-normal, delta-gamma Cornish-Fisher, Monte Carlo,
+         historical), EVT tail fitting (peaks-over-threshold GPD), rank
+         correlations, PCA and Gaussian/Student-t copulas, stress testing
+         with closed-form reverse stress, FRTB liquidity-horizon ES,
+         Basel traffic light and P&amp;L attribution — mapped end-to-end
+         in MARKET_RISK.md.</p></div>
     <div class="card"><h3>Rates &amp; portfolio</h3>
       <p>Curve bootstrap, day counts and calendars, bond analytics; risk parity,
          Black-Litterman, constrained optimization, position sizing.</p></div>

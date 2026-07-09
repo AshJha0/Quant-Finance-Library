@@ -36,8 +36,19 @@ public final class TickRingBuffer {
 
     private final PaddedSequence head = new PaddedSequence(); // next slot to consume
     private final PaddedSequence tail = new PaddedSequence(); // next slot to fill
+    // The local sequence caches are padded apart too: the producer stores
+    // cachedHead and the consumer stores cachedTail on their refresh paths,
+    // and unpadded they would share one cache line with each other and the
+    // mask/array fields read on every call — reintroducing exactly the
+    // false sharing the padded head/tail exist to avoid.
+    @SuppressWarnings("unused")
+    private long hp1, hp2, hp3, hp4, hp5, hp6, hp7;
     private long cachedHead;   // producer-local view of head
+    @SuppressWarnings("unused")
+    private long tp1, tp2, tp3, tp4, tp5, tp6, tp7;
     private long cachedTail;   // consumer-local view of tail
+    @SuppressWarnings("unused")
+    private long ep1, ep2, ep3, ep4, ep5, ep6, ep7;
 
     /** @param requestedCapacity rounded up to the next power of two */
     public TickRingBuffer(int requestedCapacity) {

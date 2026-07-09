@@ -58,7 +58,7 @@ overnight state persistence.
 
 **Getting the library**: tagged releases publish runnable/sources/javadoc jars
 automatically (GitHub Actions → Releases); JitPack works today
-(`com.github.AshJha0:Quant-Finance-Library:v1.10.0`); Maven Central publishing is
+(`com.github.AshJha0:Quant-Finance-Library:v1.11.0`); Maven Central publishing is
 wired and one account-setup away — see [docs/PUBLISHING.md](docs/PUBLISHING.md).
 See [CHANGELOG.md](CHANGELOG.md) for release history.
 
@@ -671,6 +671,7 @@ latency-critical trading:
 | Equity derivatives + RFQ (`pricing`, `rfq`) | `Autocallable` — the flagship structured note: autocall observations, memory (Phoenix) coupons, European knock-in; Monte Carlo with antithetic variates whose zero-vol cases collapse to exact arithmetic in tests, and whose GBM/flat-vol/no-credit simplifications are documented, not hidden. Structured products trade by RFQ, not order book: `RfqAuction` (best and **cover** price by client direction, spread to a model fair-value anchor) and `RfqDealerScorecard` (streaming quote rate, response time, spread-to-fair and win rate per dealer — who deserves tomorrow's panel, persisted overnight). Three market structures — order book, FX quote streams, RFQ — one learned-counterparty discipline |
 | `LiquiditySeekingAlgo` (`execution`) | The opportunistic archetype beside the schedule-driven executor: trade in bursts when the market is cheap **relative to its time-of-day forecast** (spread under `SpreadForecaster`, calm vol regime, low `KylesLambda` impact), sit still otherwise — with the discipline every seek algo needs: a completion floor that ramps over the final stretch, so patience can never miss the parent |
 | `ExecutionAlgoBacktester` (`backtest`) | The execution desk's own backtest: replay `BenchmarkExecutor` over a session's bars with a `TradeCostModel`, grade each benchmark TCA-style — implementation shortfall vs arrival, slippage vs session VWAP, signed so positive = cost on both sides. Simplifications stated, not hidden: close-price fills, participation-capped liquidity, oracle volume curve for VWAP (an upper bound on the live curve) |
+| Market risk modeling (`risk`, `pricing`, `rates`, `volatility`) | The complete 14-step workflow, mapped in [docs/MARKET_RISK.md](docs/MARKET_RISK.md): pricing models (`Black76`, `Heston` — semi-analytic stochastic vol whose BS-limit test caught a real complex-sqrt precision bug, `ShortRateModels` for Vasicek/CIR/curve-fitted Hull-White), higher-order Greeks (`HigherOrderGreeks` vanna/volga pinned as finite differences, `KeyRateDurations` whose slices sum back to the parallel DV01), asymmetric volatility (`GjrGarch11` — finding γ≈0 on FX and γ>0 on equities is the point), dependence (`Dependence` rank correlations, `Pca`, `GaussianCopula` with the t-copula tail clustering the Gaussian lacks), the four portfolio VaR flavors with ES (`VarEngine` — MC agrees with delta-normal on linear books, delta-gamma diverges exactly when gamma says it must), EVT tail fits that refuse infinite means (`ExtremeValueTheory`), stress testing with closed-form reverse stress (`StressTester`), and the FRTB layer (`FrtbEs` liquidity-horizon ES cascade + Basel traffic light, `PnlAttribution` PLAT) — regulatory pieces styled after BCBS, not certified, with SA/NMRF named as out of scope |
 | `HftSor` (`execution`) | Zero-allocation smart order router: greedy all-in-price sweep (fees/rebates in ticks) over parallel venue arrays, splits at displayed size into a caller-owned array — the tick-path sibling of the readable `SmartOrderRouter` |
 | `BenchmarkExecutor` (`execution`) | The dynamic benchmark algorithm: one stateful executor for **VWAP, TWAP, Arrival Price, Implementation Shortfall, Closing Price, Opening Price, and Participation (POV)** that re-decides every interval from live market state — bid/ask spread, order-book depth, volatility, the volume curve, alpha signal and a liquidity cap — instead of emitting a fixed slice list. Each benchmark is a completion curve (TWAP linear, Arrival/IS front-loaded, Close back-loaded, Open aggressively front-loaded, VWAP on the volume profile, POV on realized volume); the dynamic layer accelerates on adverse alpha, damps on wide spreads, trades the vol/timing-risk trade-off per benchmark, and caps each child at the displayed depth. Cross-asset (doubles) |
 | `PortfolioExecutor` (`execution`) | True multi-symbol portfolio-level scheduling: a basket (transition, rebalance, program) executed as one coordinated schedule over per-symbol `BenchmarkExecutor` children. Two overlays that only exist at basket level: a **leg-balance band** (the buy and sell legs of a transition stay in step, so the basket never carries unintended net exposure mid-flight — the ahead leg throttles; the lagging leg is never pushed past its own benchmark) and a **per-interval notional budget** allocated risk-weighted — by default weight ∝ (1 + vol regime) × due notional (the diagonal approximation of multi-asset Almgren-Chriss, stated as such); plug in a streaming `EwmaCovariance` via `useRiskModel` and the budget flows by marginal contribution to *basket* variance, so two correlated legs read as one concentrated risk and a natural hedge earns no urgency. Overlays only ever damp; deferred quantity reappears through each child's own catch-up. Zero-alloc decide |
@@ -744,6 +745,10 @@ design, the measured hot path end to end, the alpha pipeline, per-bar survivorsh
 ordering, the matching engine's internals, the FX instrument map, the execution decision
 map (models → benchmark executor → routers), portfolio-level basket scheduling, and the
 overnight checkpoint lifecycle (Mermaid, renders directly on GitHub).
+[docs/MARKET_RISK.md](docs/MARKET_RISK.md) maps the complete 14-step market-risk
+workflow — data → pricing → Greeks → volatility & correlation → VaR/ES → stress →
+Basel/FRTB → production — to the classes that implement each step, with the honest
+out-of-scope list.
 
 ## Project Layout
 
@@ -783,6 +788,8 @@ com.quantfinlib
 │                 LpScorecard + LpRouter (last-look-aware routing),
 │                 SyntheticCross (direct-vs-legs execution arithmetic)
 ├── pricing       Autocallable (memory coupons, knock-in, MC + antithetic),
+│                 Black76 (futures/forward options), Heston (semi-analytic
+│                 stochastic vol), HigherOrderGreeks (vanna/volga/cross-gamma),
 │                 FairValueEngine, TriangularArbitrage, ForwardCurve, BlackScholes,
 │                 VolSurface, BinomialTree (American), SabrModel, VannaVolga,
 │                 DigitalOption, TouchOption, BarrierOption, DividendSchedule,
@@ -810,7 +817,12 @@ com.quantfinlib
 ├── indicators    21-indicator batch engine + O(1) StreamingIndicators for live/HFT
 ├── risk          RiskMetrics, PortfolioRiskAnalyzer, Portfolio, metric registry,
 │                 CounterpartyExposureTracker, PreTradeLimitChecker,
-│                 SettlementRiskAnalyzer, ConcentrationRisk
+│                 SettlementRiskAnalyzer, ConcentrationRisk; market-risk
+│                 workflow (docs/MARKET_RISK.md): VarEngine (4 VaR flavors
+│                 + ES), Dependence (Spearman/Kendall), Pca, GaussianCopula
+│                 (+ t-copula), ExtremeValueTheory (POT/GPD), StressTester
+│                 (+ closed-form reverse stress), FrtbEs (ES cascade +
+│                 Basel traffic light), PnlAttribution (FRTB PLAT)
 ├── ml            GradientBoostedRegressor, VolatilityForecaster,
 │                 MarketImpactPredictor, IntradayLiquidityForecaster, AnomalyDetector
 ├── optimization  PortfolioOptimizer (max Sharpe / min vol / frontier / rebalance)
@@ -829,8 +841,10 @@ com.quantfinlib
 │                 PointInTimeUniverse + UniverseCsvLoader (point-in-time
 │                 membership, delisting/merger events, CSV interchange format)
 ├── feed          WebSocketFeed (live exchange data -> HFT bus), BinanceTradeParser
-├── rates         YieldCurve (bootstrap, forwards), BondPricer (duration, DV01)
-├── volatility    EwmaVolatility, Garch11 (MLE fit + forecasts)
+├── rates         YieldCurve (bootstrap, forwards), BondPricer (duration, DV01),
+│                 ShortRateModels (Vasicek/CIR/Hull-White), KeyRateDurations
+├── volatility    EwmaVolatility, Garch11 (MLE fit + forecasts),
+│                 GjrGarch11 (leverage-effect asymmetry)
 ├── trading       OrderGateway, PaperTradingGateway (risk-gated paper venue),
 │                 fast lane: HftRiskGate, OrderRingBuffer, HftOrderGateway,
 │                 HftQuoter (streaming market maker) + AvellanedaStoikov

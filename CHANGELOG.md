@@ -1,5 +1,123 @@
 # Changelog
 
+## 1.11.0 — 2026-07-09
+
+- **Full-library review round 3 + ULL hardening** (three independent
+  audits over new AND old code: hot-path latency, documentation, code
+  quality — several findings verified by execution before fixing):
+  - `VarEngine.deltaGammaEs` — the Cornish-Fisher tail mean in CLOSED
+    form (`ES = −μ + σ·φ(z)/(1−c)·(1 + z·s/6)`), reducing exactly to
+    `deltaNormalEs` at Γ = 0 — so all four VaR flavors now genuinely
+    carry ES, as the docs already claimed.
+  - `PnlAttribution.ksStatistic`: one NaN P&L day used to hang the
+    caller in an INFINITE LOOP (NaN ties froze the two-pointer advance);
+    non-finite series now throw.
+  - Relative Cholesky pivots: `GaussianCopula`'s factorization no longer
+    rejects genuinely positive-definite covariances quoted in small
+    units (two 0.5bp-vol rate factors used to read "not
+    positive-definite"), and `MathUtils.cholesky` now throws on grossly
+    indefinite input (a typo'd correlation of 1.3) instead of silently
+    simulating a clamped, different dependence structure.
+  - `Pca`: input normalized to unit scale before Jacobi (entries near
+    1e155 overflowed the norm accumulators into spurious
+    non-convergence), and the per-element skip threshold is now
+    consistent with the convergence stop (large books no longer spin
+    100 no-op sweeps on a converged matrix).
+  - Input gates hardened to the house convention: `Heston.callMonteCarlo`
+    (was silently NaN where `call` threw), negative valuation time in
+    `instantaneousForward`, NaN exposures/shocks/gammas in
+    `StressTester`, `GpdFit.var(99.9)`-style confidence typos, non-finite
+    losses in `fitPot`, and aliased out/scratch arrays in
+    `GaussianCopula.sample`/`sampleT` (dim ≥ 3 silently corrupted the
+    dependence).
+  - `GjrGarch11`'s fit box now truly spans the admissible region
+    (α to 0.99, γ to 1.9), matching what its comment promised.
+  - ULL lane: the producer/consumer sequence caches in `TickRingBuffer`
+    and `OrderRingBuffer` are padded onto their own cache lines (they
+    shared a line with each other and the array refs — cross-core RFO
+    on every publish); `HftMarketDataBus`/`HftOrderGateway` counters
+    moved off the per-event path onto per-batch release stores;
+    `PaperTradingGateway`'s rejection log is capped (was unbounded
+    String growth under a misconfigured limit checker); the bus
+    documents its megamorphic-dispatch cost. The audit confirmed the
+    market-risk batch itself adds zero hot-path regressions and all
+    latency/soak budgets remain real.
+  - Landing page: market-risk card + MARKET_RISK.md link added;
+    Heston/Black-76/higher-order Greeks added to the derivatives card.
+
+- **Review-round hardening** (two independent review passes over the
+  market-risk batch; the math pass verified every formula line-by-line):
+  - `Heston`: integration window now stretches with the integrand's
+    actual decay scale ~1/(σ_eff·√T) — a fixed u-limit of 200 silently
+    truncated short-dated/low-vol prices (1-week 4%-vol pinned by a new
+    BS-limit test); the branch-cut safety of the principal-arg log is
+    now documented as a little-trap-only invariant.
+  - `util.MathUtils` gains `logGamma`, `regularizedIncompleteBeta`, and
+    an exact `tCdf`; `GaussianCopula.sampleT` now maps t variates
+    through the exact CDF instead of a moment-matched normal, which put
+    ~37% excess mass below the 1% level at df = 3 — tail uniformity is
+    now tested directly.
+  - `ShortRateModels.instantaneousForward`: second-order one-sided
+    stencil inside the first day (t < 1/365), where the clamped central
+    difference reported the forward near (t+h)/2 instead of t.
+  - `Garch11`/`GjrGarch11`: fit grids now start from the full
+    admissible box — the narrower starting boxes were hard caps the
+    refinement passes could barely creep past, silently pinning
+    low-persistence/high-ARCH fits (regression test plants α = 0.45,
+    β = 0.15).
+  - `Pca`: Jacobi convergence thresholds are now relative to the
+    matrix's own norm (currency-unit covariances no longer burn all 100
+    sweeps), and non-convergence throws instead of returning silently.
+  - `ExtremeValueTheory.fitPot`: ties exactly at the threshold no longer
+    enter as zero exceedances (discretized P&L no longer biases ξ).
+  - `StressTester`: delta-gamma `sensitivityLadder` overload — the
+    linear ladder is explicitly documented as delta-only, so a
+    short-gamma book's down rungs are no longer silently symmetric.
+
+- **Market Risk Modeling — the 14-step workflow** (mapped end-to-end in
+  the new `docs/MARKET_RISK.md`; regulatory pieces styled after BCBS,
+  not certified, with SA/NMRF explicitly out of scope):
+  - Pricing models (step 4): `pricing.Black76` (the convention futures
+    options and caps are quoted in; identity to Black-Scholes with q = r
+    pinned), `pricing.Heston` (semi-analytic stochastic vol in the
+    stable little-trap form — its BS-limit test caught a genuine
+    complex-sqrt precision bug that biased every price ~0.5%, fixed with
+    the numerically stable imaginary-part form and locked in at a 5e-4
+    test tolerance; MC cross-checked in the Feller-violated regime, produces
+    the equity skew for ρ < 0), `rates.ShortRateModels` (Vasicek, CIR,
+    curve-fitted Hull-White — reprices today's curve by construction).
+  - Greeks (step 5): `pricing.HigherOrderGreeks` (vanna, volga,
+    exchange-option cross-gamma — pinned as finite differences of the
+    first-order Greeks with convention-coincidence-proof parameters) and
+    `rates.KeyRateDurations` (per-node DV01s whose slices sum back to
+    the parallel move — tested).
+  - Volatility (step 6): `volatility.GjrGarch11` — the leverage effect:
+    a down move raises tomorrow's variance by α + γ; on symmetric data
+    the honest fit is γ ≈ 0, and on planted-asymmetry data it
+    likelihood-beats the symmetric `Garch11` (both tested).
+  - Dependence (step 7): `risk.Dependence` (Spearman, Kendall's τ, the
+    elliptical τ→ρ bridge), `risk.Pca` (Jacobi eigen-decomposition;
+    rejects asymmetric input), `risk.GaussianCopula` (Gaussian +
+    Student-t samplers — the t's joint-extreme clustering vs the
+    Gaussian's asymptotic independence is pinned by test).
+  - VaR & tails (steps 8-9): `risk.VarEngine` — delta-normal, Monte
+    Carlo (agrees with delta-normal on linear books), delta-gamma
+    Cornish-Fisher (short gamma worsens the tail, long gamma cushions
+    it — both tested) and historical, each returning ES beside VaR;
+    `risk.ExtremeValueTheory` — POT/GPD via probability-weighted
+    moments (recovers a planted Pareto tail index), refusing a finite
+    ES when ξ ≥ 1.
+  - Stress (step 10): `risk.StressTester` — named scenarios (stylized
+    1987/2008/2020 templates documented as starting points),
+    sensitivity ladders, and CLOSED-FORM reverse stress: the
+    most-probable breaking move and its implausibility in sigmas.
+  - Regulatory (steps 11-12): `risk.FrtbEs` (97.5% ES, the
+    liquidity-horizon cascade per MAR33.5 with hand-computed test
+    arithmetic, stressed calibration floored at 1, Basel traffic
+    light) and `risk.PnlAttribution` (the FRTB PLAT: Spearman + KS with
+    green/amber/red zones; a model missing a risk factor cannot pass —
+    tested).
+
 ## v1.10.0 (2026-07-08)
 
 - **Review round 1 over the batch** (3 finder angles, verified then fixed):
