@@ -51,14 +51,14 @@ execution algos, last look, options, garbage collection, ring buffers, the
 memory model, honest benchmarking…), each tied to the class that implements
 it, with a guided reading path and exercises.
 
-**Learn by task, not by API**: [docs/COOKBOOK.md](docs/COOKBOOK.md) — twelve complete
+**Learn by task, not by API**: [docs/COOKBOOK.md](docs/COOKBOOK.md) — thirteen complete
 recipes under 20 lines each, from "backtest your CSV" through survivorship-honest
 factor research and nanosecond market making to portfolio-level execution and
 overnight state persistence.
 
 **Getting the library**: tagged releases publish runnable/sources/javadoc jars
 automatically (GitHub Actions → Releases); JitPack works today
-(`com.github.AshJha0:Quant-Finance-Library:v1.9.0`); Maven Central publishing is
+(`com.github.AshJha0:Quant-Finance-Library:v1.10.0`); Maven Central publishing is
 wired and one account-setup away — see [docs/PUBLISHING.md](docs/PUBLISHING.md).
 See [CHANGELOG.md](CHANGELOG.md) for release history.
 
@@ -667,7 +667,10 @@ latency-critical trading:
 | `Nbbo` (`marketdata`) | Multi-venue NBBO consolidation: inside price/size, venue bitmasks at the touch, locked/crossed detection; listener fires only on inside changes (natural conflation), zero alloc per venue update |
 | `SignalEngine` + `FlowSignals` (`microstructure`) | The unified streaming signal engine, one instance for all symbols, equities and FX alike: imbalance (Cont-Kukanov OFI, queue, trade flow), microprice, time-aware volatility and momentum (decay by elapsed time — constant-step EMAs mis-weight irregular ticks), liquidity (spread/depth/quote intensity) and a weighted dimensionless composite — allocation-free per event, gap-disciplined (one-sided quotes poison nothing) |
 | Quant models (`microstructure`) | The models that feed the benchmark executor's `MarketState`: `VolumeCurve` (dynamic intraday volume prediction — learned profile + live realized-vs-expected rescale, the live VWAP curve), `VolatilityCurve` (intraday vol seasonality — `regime()` is the normalized vol input, so the always-wild open doesn't read as urgency but a wild lunchtime does), `SpreadForecaster` (time-of-day baseline + mean-reverting deviation — damps before a known-wide window, not after), `QueuePositionEstimator` (L2 queue position via pro-rata cancel attribution — the L3-exact sibling is `L3BookBuilder.sharesAhead`), `HiddenLiquidityDetector` (iceberg inference: one print larger than the display is hidden size), `TradeClassifier` (Lee-Ready aggressor inference for feeds that don't say who initiated), `FillProbabilityModel` (passive fill = touch probability × queue-clear probability). All streaming, allocation-free, cross-asset |
-| Adaptive models (`microstructure`) | The layer that learns on top of the models: `OnlineAlphaLearner` (online ridge-SGD from the signal-engine ingredients to next-interval returns — predictions are scored **before** each outcome updates the weights, so the rolling out-of-sample IC is genuinely prequential and a learner that found noise emits no signal), `LeadLagEstimator` (streaming cross-asset lead-lag: EURUSD leads EURJPY, futures lead cash — per-lag decayed correlations, best-lag detection, regression prediction of the follower's next move), `DayTypeProfiles` (expiry days, half days and FX fixing days have different volume/vol/spread shapes — one independently learned curve per day type), `EwmaCovariance` (streaming RiskMetrics-style covariance matrix: marginal basket risk for the portfolio executor, live min-variance hedge ratios — full-vector updates so the matrix stays PSD), `AvellanedaStoikov` (`trading`: closed-form optimal quotes — inventory-shaded reservation price + the γσ²τ/liquidity-floor spread, the principled version of `HftQuoter`'s skew), `KylesLambda` (impact learned from the tape — streaming Δp-on-signed-flow regression, the live `MarketState.impactBps` producer; a noisy negative estimate is clamped, never a subsidy), `JumpRobustVolatility` (bipower variation: one headline print reads as a jump, not a volatility regime — feed its robust vol to `VolatilityCurve`), `ClosingAuctionModel` (learned auction share + imbalance-tilted reserve for the close — a documented-contract structure: the imbalance-feed mapping and sensitivity need validation against your venue's dissemination). The whole learning loop — models → executor → router → scorecards → checkpoint → restore — is exercised end-to-end over five synthetic days by `OvernightLearningLoopTest` |
+| Adaptive models (`microstructure`) | The layer that learns on top of the models: `OnlineAlphaLearner` (online ridge-SGD from the signal-engine ingredients to next-interval returns — predictions are scored **before** each outcome updates the weights, so the rolling out-of-sample IC is genuinely prequential and a learner that found noise emits no signal), `LeadLagEstimator` (streaming cross-asset lead-lag: EURUSD leads EURJPY, futures lead cash — per-lag decayed correlations, best-lag detection, regression prediction of the follower's next move), `DayTypeProfiles` (expiry days, half days and FX fixing days have different volume/vol/spread shapes — one independently learned curve per day type), `EwmaCovariance` (streaming RiskMetrics-style covariance matrix: marginal basket risk for the portfolio executor, live min-variance hedge ratios — full-vector updates so the matrix stays PSD), `AvellanedaStoikov` (`trading`: closed-form optimal quotes — inventory-shaded reservation price + the γσ²τ/liquidity-floor spread, the principled version of `HftQuoter`'s skew), `KylesLambda` (impact learned from the tape — streaming Δp-on-signed-flow regression, the live `MarketState.impactBps` producer; a noisy negative estimate is clamped, never a subsidy), `JumpRobustVolatility` (bipower variation: one headline print reads as a jump, not a volatility regime — feed its robust vol to `VolatilityCurve`), `ClosingAuctionModel` (learned auction share + imbalance-tilted reserve for the close — a documented-contract structure: the imbalance-feed mapping and sensitivity need validation against your venue's dissemination). The whole learning loop — models → executor → router → scorecards → checkpoint → restore — is exercised end-to-end over five synthetic days by `OvernightLearningLoopTest`. Round 6: `HawkesIntensity` (self-exciting event intensity — activity breeds activity, stability enforced via the branching ratio) and `AlphaEnsemble` (IC-weighted blend of alpha components: per-component prequential trust, confidence-sized output — a barely-trusted blend is a barely-sized signal) |
+| Equity derivatives + RFQ (`pricing`, `rfq`) | `Autocallable` — the flagship structured note: autocall observations, memory (Phoenix) coupons, European knock-in; Monte Carlo with antithetic variates whose zero-vol cases collapse to exact arithmetic in tests, and whose GBM/flat-vol/no-credit simplifications are documented, not hidden. Structured products trade by RFQ, not order book: `RfqAuction` (best and **cover** price by client direction, spread to a model fair-value anchor) and `RfqDealerScorecard` (streaming quote rate, response time, spread-to-fair and win rate per dealer — who deserves tomorrow's panel, persisted overnight). Three market structures — order book, FX quote streams, RFQ — one learned-counterparty discipline |
+| `LiquiditySeekingAlgo` (`execution`) | The opportunistic archetype beside the schedule-driven executor: trade in bursts when the market is cheap **relative to its time-of-day forecast** (spread under `SpreadForecaster`, calm vol regime, low `KylesLambda` impact), sit still otherwise — with the discipline every seek algo needs: a completion floor that ramps over the final stretch, so patience can never miss the parent |
+| `ExecutionAlgoBacktester` (`backtest`) | The execution desk's own backtest: replay `BenchmarkExecutor` over a session's bars with a `TradeCostModel`, grade each benchmark TCA-style — implementation shortfall vs arrival, slippage vs session VWAP, signed so positive = cost on both sides. Simplifications stated, not hidden: close-price fills, participation-capped liquidity, oracle volume curve for VWAP (an upper bound on the live curve) |
 | `HftSor` (`execution`) | Zero-allocation smart order router: greedy all-in-price sweep (fees/rebates in ticks) over parallel venue arrays, splits at displayed size into a caller-owned array — the tick-path sibling of the readable `SmartOrderRouter` |
 | `BenchmarkExecutor` (`execution`) | The dynamic benchmark algorithm: one stateful executor for **VWAP, TWAP, Arrival Price, Implementation Shortfall, Closing Price, Opening Price, and Participation (POV)** that re-decides every interval from live market state — bid/ask spread, order-book depth, volatility, the volume curve, alpha signal and a liquidity cap — instead of emitting a fixed slice list. Each benchmark is a completion curve (TWAP linear, Arrival/IS front-loaded, Close back-loaded, Open aggressively front-loaded, VWAP on the volume profile, POV on realized volume); the dynamic layer accelerates on adverse alpha, damps on wide spreads, trades the vol/timing-risk trade-off per benchmark, and caps each child at the displayed depth. Cross-asset (doubles) |
 | `PortfolioExecutor` (`execution`) | True multi-symbol portfolio-level scheduling: a basket (transition, rebalance, program) executed as one coordinated schedule over per-symbol `BenchmarkExecutor` children. Two overlays that only exist at basket level: a **leg-balance band** (the buy and sell legs of a transition stay in step, so the basket never carries unintended net exposure mid-flight — the ahead leg throttles; the lagging leg is never pushed past its own benchmark) and a **per-interval notional budget** allocated risk-weighted — by default weight ∝ (1 + vol regime) × due notional (the diagonal approximation of multi-asset Almgren-Chriss, stated as such); plug in a streaming `EwmaCovariance` via `useRiskModel` and the budget flows by marginal contribution to *basket* variance, so two correlated legs read as one concentrated risk and a natural hedge earns no urgency. Overlays only ever damp; deferred quantity reappears through each child's own catch-up. Zero-alloc decide |
@@ -770,14 +773,17 @@ com.quantfinlib
 │                 DayTypeProfiles (expiry/half-day/fixing-day curves),
 │                 EwmaCovariance (streaming basket risk matrix),
 │                 KylesLambda (learned impact), JumpRobustVolatility
-│                 (bipower), ClosingAuctionModel (imbalance reserve)
+│                 (bipower), ClosingAuctionModel (imbalance reserve),
+│                 HawkesIntensity (self-exciting bursts), AlphaEnsemble
+│                 (IC-weighted signal blend)
 ├── fx            CurrencyPair conventions, SwapPointsCurve, FxSwap, Ndf,
 │                 FxVolSurface (delta-quoted smile), FixingRisk,
 │                 AggregatedBook (multi-venue BBO), CrossRateEngine (streaming),
 │                 FxTierBook (per-LP tier ladders, sweep/full-amount),
 │                 LpScorecard + LpRouter (last-look-aware routing),
 │                 SyntheticCross (direct-vs-legs execution arithmetic)
-├── pricing       FairValueEngine, TriangularArbitrage, ForwardCurve, BlackScholes,
+├── pricing       Autocallable (memory coupons, knock-in, MC + antithetic),
+│                 FairValueEngine, TriangularArbitrage, ForwardCurve, BlackScholes,
 │                 VolSurface, BinomialTree (American), SabrModel, VannaVolga,
 │                 DigitalOption, TouchOption, BarrierOption, DividendSchedule,
 │                 IncrementalGreeks (tick-path delta-gamma updates)
@@ -786,6 +792,7 @@ com.quantfinlib
 ├── execution     BenchmarkExecutor (dynamic VWAP/TWAP/Arrival/IS/Close/Open/POV
 │                 over live market state), PortfolioExecutor (multi-symbol
 │                 basket scheduling: leg balance + risk-weighted capacity),
+│                 LiquiditySeekingAlgo (opportunistic bursts + completion floor),
 │                 static TWAP/VWAP schedulers,
 │                 smart order routing: SmartOrderRouter (readable) + HftSor
 │                 (zero-alloc) + AdaptiveSor (full checklist, lit + dark) with
@@ -795,7 +802,10 @@ com.quantfinlib
 │                 IcebergOrder, DarkPoolSimulator, MidPegTracker, VenueBenchmark
 ├── persist       Checkpoint (multi-day persistence of learned state: atomic
 │                 named-section binary file — curves, alpha weights + IC
-│                 evidence, venue/LP scorecards survive the overnight)
+│                 evidence, venue/LP/dealer scorecards survive the overnight)
+├── rfq           RfqAuction (best/cover by client direction, spread to model
+│                 fair value), RfqDealerScorecard (learned panel quality) —
+│                 how equity derivatives actually trade
 ├── regulatory    FixAnalyzer, BestExecutionAnalyzer, MarketQualityMetrics
 ├── indicators    21-indicator batch engine + O(1) StreamingIndicators for live/HFT
 ├── risk          RiskMetrics, PortfolioRiskAnalyzer, Portfolio, metric registry,

@@ -8,7 +8,16 @@
  * + calibration), {@link com.quantfinlib.pricing.FairValueEngine}
  * (microprice and latency-adjusted true mid),
  * {@link com.quantfinlib.pricing.TriangularArbitrage} (executable FX
- * round-trip edge) and {@link com.quantfinlib.pricing.ForwardCurve}
- * (FX forwards with covered-interest-parity checks).
+ * round-trip edge), {@link com.quantfinlib.pricing.ForwardCurve}
+ * (FX forwards with covered-interest-parity checks), the exotics
+ * ({@link com.quantfinlib.pricing.DigitalOption},
+ * {@link com.quantfinlib.pricing.TouchOption},
+ * {@link com.quantfinlib.pricing.BarrierOption},
+ * {@link com.quantfinlib.pricing.VannaVolga}) and
+ * {@link com.quantfinlib.pricing.Autocallable} (the flagship equity
+ * structured product: memory coupons, autocall observations, European
+ * knock-in — Monte Carlo with antithetic variates under documented GBM
+ * simplifications; RFQ market structure for trading it lives in
+ * {@code rfq}).
  */
 package com.quantfinlib.pricing;

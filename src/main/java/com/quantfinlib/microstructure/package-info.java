@@ -62,6 +62,12 @@
  * variation: a headline print is a jump, not a volatility regime) and
  * {@link com.quantfinlib.microstructure.ClosingAuctionModel}
  * (auction share + imbalance-tilted reserve — shipped as a
- * documented-contract structure, see its javadoc caveat).</p>
+ * documented-contract structure, see its javadoc caveat),
+ * {@link com.quantfinlib.microstructure.HawkesIntensity} (self-exciting
+ * event intensity: activity breeds activity, with stability enforced via
+ * the branching ratio) and
+ * {@link com.quantfinlib.microstructure.AlphaEnsemble} (IC-weighted blend
+ * of alpha components — per-component prequential trust, confidence-sized
+ * output).</p>
  */
 package com.quantfinlib.microstructure;

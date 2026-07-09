@@ -1,5 +1,70 @@
 # Changelog
 
+## v1.10.0 (2026-07-08)
+
+- **Review round 1 over the batch** (3 finder angles, verified then fixed):
+  - `ExecutionAlgoBacktester`'s participation cap silently COMPOUNDED with
+    the executor's internal 25% depth fraction (a configured 10% cap
+    filled at 2.5% — confirmed empirically); the executor is now
+    constructed with its depth fraction at 1 so the Config cap is the
+    single cap, the doc says so, and the tests assert the EXACT fill
+    (6,500) and the exact POV participation (2.6M at 10%) instead of
+    bounds loose enough to pass with the cap deleted.
+  - `LiquiditySeekingAlgo`: NaN volatility/impact PASSED the calm and
+    low-impact gates (a vol-feed outage during a spike would have fired a
+    full burst — the exact opposite of the documented "unknowable is
+    never cheap"); both gates now fail closed, regression-tested.
+  - `Autocallable`: NaN terms constructed successfully and priced as NaN
+    (validation is NaN-proof now); knock-in above the autocall barrier
+    rejected; per-observation discount factors precomputed (~800k
+    redundant `exp` calls per 100k-path price removed).
+  - `AlphaEnsemble`: an observation where NOTHING scored no longer counts
+    toward the track-record gate; the non-finite test now proves the
+    poison-guard preserves a skipped component's evidence instead of
+    asserting a counter.
+  - `RfqAuction.responseNanos` now reports the FIRST response, not the
+    last refresh (a dealer who showed up in 50ms and refreshed at the
+    close is fast, not slow); derivable quoteCount state replaced by a
+    scan; stray editing artifacts removed from the tree.
+
+- **Five new capabilities across the stack** (each with tests, docs and
+  the established disciplines):
+  - `microstructure.HawkesIntensity` — **self-exciting event intensity**
+    (exponential Hawkes): activity breeds activity, in O(1) per event.
+    Stability is enforced, not assumed — a branching ratio α/β ≥ 1
+    (explosive) is rejected at construction; `burstScore()` is the
+    dimensionless activity-regime signal, out-of-order timestamps are
+    dropped rather than becoming negative decay.
+  - `microstructure.AlphaEnsemble` — **IC-weighted blend of alpha
+    components**, the layer above `OnlineAlphaLearner`: one prequential
+    IC per component (snapshot-aligned, the same nowcast trap closed),
+    weights `max(0, IC)` deliberately NOT renormalized — a barely-trusted
+    blend is a barely-sized signal, never a lone IC-0.01 component at
+    full strength. Silent before one IC memory of track record.
+    Persistable.
+  - `execution.LiquiditySeekingAlgo` — **the opportunistic execution
+    archetype** beside the schedule-driven `BenchmarkExecutor`: burst
+    when the spread is at/under its `SpreadForecaster` forecast in a calm
+    regime with low learned impact; a completion floor ramps over the
+    final stretch so patience can never miss the parent. NaN inputs are
+    never "cheap" but the floor never depends on observability.
+  - **Equity derivatives**: `pricing.Autocallable` (the flagship
+    structured note — autocall observations, memory coupons, European
+    knock-in; Monte Carlo with antithetic variates; zero-vol cases
+    collapse to exact arithmetic in tests, and the GBM/flat-vol/no-credit
+    simplifications are documented, not hidden) + the new `rfq` package:
+    `RfqAuction` (best/cover by client direction, spread to a model
+    fair-value anchor) and `RfqDealerScorecard` (streaming quote rate,
+    response time, spread-to-fair, win rate per dealer — the
+    panel-selection input, persistable). Three market structures — order
+    book, FX quote streams, RFQ — one learned-counterparty discipline.
+  - `backtest.ExecutionAlgoBacktester` — **the execution desk's
+    backtest**: replays `BenchmarkExecutor` over a session's bars with a
+    `TradeCostModel`, grading each benchmark TCA-style (shortfall vs
+    arrival, slippage vs session VWAP, both signed so positive = cost on
+    either side). Honest simplifications stated: close-price fills,
+    participation-capped liquidity, oracle volume curve for VWAP.
+
 ## v1.9.0 (2026-07-08)
 
 - **Review round over rounds 4-5** (5 finder angles, verified then fixed):

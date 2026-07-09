@@ -379,7 +379,7 @@ does not).
 ```mermaid
 flowchart LR
     subgraph SESSION["trading session (in memory)"]
-        MODELS["learned state<br/>VolumeCurve · VolatilityCurve · SpreadForecaster<br/>OnlineAlphaLearner (weights + IC evidence)<br/>LeadLagEstimator · EwmaCovariance · KylesLambda<br/>ClosingAuctionModel · VenueScorecard · LpScorecard"]
+        MODELS["learned state<br/>VolumeCurve · VolatilityCurve · SpreadForecaster<br/>OnlineAlphaLearner (weights + IC evidence)<br/>AlphaEnsemble · LeadLagEstimator · EwmaCovariance<br/>KylesLambda · ClosingAuctionModel<br/>VenueScorecard · LpScorecard · RfqDealerScorecard"]
     end
 
     MODELS -->|"end of day:<br/>writeState per model"| W["Checkpoint.Writer<br/>named sections, buffered in memory;<br/>a throwing section commits NOTHING"]
@@ -399,5 +399,5 @@ yesterday's icebergs onto today's unrelated prices).
 - [LEARN.md](LEARN.md) — the from-zero tutorial: every concept in these diagrams, explained for beginners
 - [ARCHITECTURE.md](ARCHITECTURE.md) — the package → classes → tests map and design invariants
 - [ULTRA_LOW_LATENCY.md](ULTRA_LOW_LATENCY.md) — the four-tier latency stack, honestly bounded
-- [COOKBOOK.md](COOKBOOK.md) — twelve runnable recipes across these flows
+- [COOKBOOK.md](COOKBOOK.md) — thirteen runnable recipes across these flows
 - `README.md` — capability tour with runnable examples and all measured numbers

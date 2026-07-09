@@ -13,7 +13,9 @@
  * {@code microstructure.LeadLagEstimator},
  * {@code microstructure.EwmaCovariance} (the basket risk matrix),
  * {@code microstructure.KylesLambda} (learned depth),
- * {@code microstructure.ClosingAuctionModel} (learned auction share), and the
+ * {@code microstructure.ClosingAuctionModel} (learned auction share),
+ * {@code microstructure.AlphaEnsemble} (per-component IC evidence),
+ * {@code rfq.RfqDealerScorecard} (learned dealer-panel quality), and the
  * venue-quality cards ({@code execution.VenueScorecard} — format v2 with
  * fill markouts, still reads v1 — and {@code fx.LpScorecard}).
  * Intraday state resets on read; configuration (bucket/venue counts) must

@@ -53,7 +53,7 @@ footer{margin:3rem 0 2rem;color:var(--muted);font-size:.85rem;text-align:center}
     Tick-to-order end-to-end&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; p50 = 504 ns&nbsp; p99 = 1.0 µs (15–21M orders/s across runs)<br>
     Tick-to-two-sided-quote&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; p50 = 592 ns&nbsp; p99 &lt; 1 µs (market-making loop, both sides)<br>
     Venue-grade matching engine&nbsp;&nbsp;&nbsp;&nbsp; ≈ 204 ns/op, 10M+ fills/s, zero allocation<br>
-    Test suite&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 790+ tests, ~94% line coverage, CI on every push
+    Test suite&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 810+ tests, ~94% line coverage, CI on every push
   </div>
 
   <h2>What's inside</h2>
@@ -79,8 +79,9 @@ footer{margin:3rem 0 2rem;color:var(--muted);font-size:.85rem;text-align:center}
          portfolio-level basket scheduling (leg balance + capacity by marginal
          basket risk from a streaming covariance matrix), smart order routing
          (readable, zero-alloc, and full-checklist adaptive with lit + dark
-         venues and learned adverse selection), iceberg, dark pool, tick-level
-         backtesting with TCA.</p></div>
+         venues and learned adverse selection), opportunistic liquidity seeking
+         with a completion floor, iceberg, dark pool, and a TCA-style backtest
+         that grades each benchmark algo over a session's bars.</p></div>
     <div class="card"><h3>Signals &amp; quant models</h3>
       <p>Unified streaming SignalEngine (imbalance, microprice, volatility,
          liquidity, momentum, composite — equity + FX) plus the models feeding
@@ -102,7 +103,9 @@ footer{margin:3rem 0 2rem;color:var(--muted);font-size:.85rem;text-align:center}
          maker-side last look, WMR fixing schedules, direct-vs-synthetic crosses.</p></div>
     <div class="card"><h3>Derivatives &amp; hedging</h3>
       <p>Black-Scholes/Garman-Kohlhagen, American trees, SABR, vol surfaces,
-         options-book Greeks and scenario grids, Monte Carlo hedging error.</p></div>
+         autocallables (memory coupons, knock-in) with RFQ dealer-panel
+         analytics, options-book Greeks and scenario grids, Monte Carlo
+         hedging error.</p></div>
     <div class="card"><h3>Rates &amp; portfolio</h3>
       <p>Curve bootstrap, day counts and calendars, bond analytics; risk parity,
          Black-Litterman, constrained optimization, position sizing.</p></div>

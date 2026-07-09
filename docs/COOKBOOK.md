@@ -309,6 +309,34 @@ section per day type (`"volume.AAPL.day0"`, `"volume.AAPL.day1"`, …).
 
 ---
 
+## 13. Price an autocallable and RFQ it to the panel
+
+Structured products trade by request-for-quote: price the note with the
+model, ask the dealer panel, deal on the best — and record the cover and
+each dealer's spread-to-fair, which is how tomorrow's panel gets chosen.
+
+```java
+// The note: quarterly observations, 2% memory coupons, 60% knock-in.
+Autocallable note = new Autocallable(1_000_000,
+        new double[]{0.25, 0.5, 0.75, 1.0}, 1.00, 0.80, 0.60, 0.02, true);
+double fair = note.price(spot, initial, vol, rate, divYield, 200_000, 42);
+// vol: pick it from the DOWNSIDE smile region (the knock-in put lives
+// there), e.g. via VolSurface — flat ATM vol underprices the risk.
+
+RfqAuction rfq = new RfqAuction(true, fair, dealerCount, nowNanos);
+// ...dealer responses arrive:
+rfq.onQuote(dealer, price, tsNanos);
+// Deal on rfq.winner(); rfq.coverPrice() is what it would have cost
+// without them; rfq.winnerSpreadToFairBps() is what you paid vs theory.
+panel.onAuction(rfq);                    // RfqDealerScorecard learns
+```
+
+The scorecard's quote rate, response time, spread-to-fair and win rate
+per dealer persist overnight via `Checkpoint` (recipe 12) — panel
+selection is a learning loop, exactly like venue and LP selection.
+
+---
+
 Every number quoted here comes from a committed benchmark; every behavior
 from a committed test. When a recipe and the javadoc disagree, the javadoc
 wins — and please open an issue.

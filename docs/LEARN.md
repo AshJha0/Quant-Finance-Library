@@ -639,7 +639,7 @@ java -cp target/classes com.quantfinlib.examples.LiveTradingDemo   # live Binanc
    `PortfolioExecutor.java` → `persist/Checkpoint.java` — the execution
    intelligence stack from live inputs to basket schedule to overnight
    (§6, §7, §18).
-9. `docs/COOKBOOK.md` — twelve end-to-end recipes to modify and re-run.
+9. `docs/COOKBOOK.md` — thirteen end-to-end recipes to modify and re-run.
 
 **Exercises** (in rough order of difficulty):
 

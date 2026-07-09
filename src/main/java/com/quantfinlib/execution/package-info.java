@@ -22,6 +22,10 @@
  * Implementation Shortfall / Closing / Opening / Participation, re-deciding
  * each interval from live spread, depth, volatility, volume curve, alpha
  * and liquidity — cross-asset),
+ * {@link com.quantfinlib.execution.LiquiditySeekingAlgo} (the
+ * opportunistic archetype: burst when the spread is under its
+ * time-of-day forecast in a calm regime, guaranteed by a completion
+ * floor over the final stretch),
  * {@link com.quantfinlib.execution.PortfolioExecutor} (multi-symbol
  * portfolio-level scheduling over per-symbol BenchmarkExecutor children:
  * leg-balance band for two-sided transitions, per-interval notional budget
