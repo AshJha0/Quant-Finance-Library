@@ -51,7 +51,7 @@ execution algos, last look, options, garbage collection, ring buffers, the
 memory model, honest benchmarking…), each tied to the class that implements
 it, with a guided reading path and exercises.
 
-**Learn by task, not by API**: [docs/COOKBOOK.md](docs/COOKBOOK.md) — thirteen complete
+**Learn by task, not by API**: [docs/COOKBOOK.md](docs/COOKBOOK.md) — fourteen complete
 recipes under 20 lines each, from "backtest your CSV" through survivorship-honest
 factor research and nanosecond market making to portfolio-level execution and
 overnight state persistence.
@@ -831,7 +831,8 @@ com.quantfinlib
 ├── crb           CentralRiskBook (cross-product factor netting, checkpointable),
 │                 SkewedQuoter, InternalizationEngine, CrbHedgeUniverse,
 │                 HedgeOptimizer (min-variance + L1 cost), CrbAutoHedger,
-│                 CrbRouter (internal cross → dark → lit)
+│                 CrbRouter (internal cross → dark → lit), CrbPnlLedger
+│                 (captured spread vs hedge costs — the desk's economics)
 ├── ml            GradientBoostedRegressor, VolatilityForecaster,
 │                 MarketImpactPredictor, IntradayLiquidityForecaster, AnomalyDetector
 ├── optimization  PortfolioOptimizer (max Sharpe / min vol / frontier / rebalance)

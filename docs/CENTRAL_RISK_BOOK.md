@@ -81,7 +81,28 @@ justifies the desk.
 3. **Lit** — half spread plus impact, but it fills; whatever the dark
    legs are not *expected* to fill routes lit too.
 
-## 5. Overnight persistence
+## 5. The economics (the desk head's question)
+
+`CrbPnlLedger` keeps the realized flow economics honest: internalized
+flow captures the street half spread minus the improvement given back;
+routed flow captures nothing; hedges and router allocations cost their
+bps. `netEconomics()` answers the only question that matters at the
+close — did the spread we captured pay for the hedging we did?
+Inventory mark-to-market is deliberately NOT mixed in (that is the
+risk report's job — blending realized spread with unrealized marks is
+how desks fool themselves). Persistable like everything else.
+
+`CrbRealWorldScenarioTest` runs the desk's actual week at realistic
+sizes, vols and costs: a quiet two-way day (internalization rate above
+50%, economics = captured spread), a one-way 18M institutional day
+(warehouse absorbs, band breaches, the cost-aware hedge escalates to
+the direct instrument because a proxy cannot satisfy a per-factor
+band, and the day still nets positive), a COVID-template stress replay
+priced to the dollar with the reverse-stress sigmas showing what the
+netting bought, and an NDF fixing day rolling through the overnight
+checkpoint. Recipe 14 in the cookbook is the runnable version.
+
+## 6. Overnight persistence
 
 `CentralRiskBook.writeState/readState` and the
 `InternalizationEngine` counters plug into `persist.Checkpoint`

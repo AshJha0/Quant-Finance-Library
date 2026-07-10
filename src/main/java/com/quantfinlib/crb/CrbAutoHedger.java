@@ -112,16 +112,24 @@ public final class CrbAutoHedger {
             // The limit is hard; the cost preference is not.
             h = HedgeOptimizer.hedge(excess, covariance, loadings, costPerUnit, 0);
         }
+        // Dust filter: coordinate descent converges instruments that
+        // belong at zero only to ~tolerance of the largest notional —
+        // no desk sends a sub-cent hedge order to the street.
+        double maxH = 0;
+        for (double v : h) {
+            maxH = Math.max(maxH, Math.abs(v));
+        }
+        double dust = 1e-6 * maxH;
         int count = 0;
         for (double v : h) {
-            if (v != 0) {
+            if (Math.abs(v) > dust) {
                 count++;
             }
         }
         HedgeOrder[] orders = new HedgeOrder[count];
         int k = 0;
         for (int i = 0; i < h.length; i++) {
-            if (h[i] != 0) {
+            if (Math.abs(h[i]) > dust) {
                 orders[k++] = new HedgeOrder(i, h[i]);
             }
         }

@@ -21,7 +21,8 @@
  * (the loadings-matrix builder), and hedge orders route through
  * {@link com.quantfinlib.crb.CrbRouter}: internal cross first (the
  * book is the firm's best dark pool), adverse-selection-priced dark
- * venues second, lit last.
+ * venues second, lit last. {@link com.quantfinlib.crb.CrbPnlLedger}
+ * keeps the score: did the captured spread pay for the hedging?
  *
  * <p>Everything is deterministic, single-threaded, research/warm lane
  * (interval cadence — the ULL lanes live in {@code trading} and

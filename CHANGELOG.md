@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+- **CRB real-world layer**:
+  - `CrbPnlLedger` — the desk's realized economics: internalized flow
+    captures the street half spread minus improvement given back,
+    hedges and router allocations cost their bps, and
+    `netEconomics()` answers the close-of-day question (did the
+    netting pay for its own risk management?). Mark-to-market is
+    deliberately NOT mixed in. Checkpointable.
+  - `CrbRealWorldScenarioTest` — the desk's actual week at realistic
+    sizes/vols/costs: quiet two-way day (internalization rate > 50%,
+    warehouse limit held as an invariant), one-way 18M institutional
+    day (band breach → cost-aware hedge escalates to the DIRECT
+    instrument because a proxy cannot satisfy a per-factor band — and
+    the day still nets positive after hedge + routing costs),
+    COVID-template stress replay priced to the dollar with
+    reverse-stress sigmas, NDF fixing day rolling through the
+    overnight checkpoint.
+  - `CrbAutoHedger` dust filter: coordinate descent converges
+    should-be-zero instruments only to tolerance, and the hedger no
+    longer emits sub-cent hedge orders (caught by the realistic
+    scenario, not the unit tests).
+  - Cookbook recipe 14: run a central risk book day.
+
 - **Central Risk Book** (`com.quantfinlib.crb`, mapped in
   `docs/CENTRAL_RISK_BOOK.md`) — one netted view of the firm's risk
   across desks and products, plus the machinery that monetizes it:

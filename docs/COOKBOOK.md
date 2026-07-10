@@ -335,6 +335,52 @@ The scorecard's quote rate, response time, spread-to-fair and win rate
 per dealer persist overnight via `Checkpoint` (recipe 12) — panel
 selection is a learning loop, exactly like venue and LP selection.
 
+## 14. Run a central risk book day (net → internalize → hedge → route)
+
+Two desks paying the street to shed opposite risks is money burned
+twice. The CRB nets first, keeps risk-reducing client flow (and pays
+for it), hedges only the excess, and routes the hedge through its own
+inventory before anyone else's dark pool.
+
+```java
+CentralRiskBook book = new CentralRiskBook();
+InternalizationEngine engine = new InternalizationEngine(5_000_000, 0.4);
+CrbPnlLedger ledger = new CrbPnlLedger();
+
+// Client flow arrives all day (book what the BOOK absorbs):
+var d = engine.decide(book.exposure("EQ:SPY"), clientNotional, 2.0);
+if (d.internalized() != 0) {
+    book.bookCashEquity("client-flow", "SPY", d.internalized() / px, px);
+}
+ledger.onDecision(d, 2.0);               // spread captured, improvement paid
+
+// Quote the next client with the inventory shading in the price:
+var q = SkewedQuoter.quote(mid, 2.0, book.exposure("EQ:SPY"), 5_000_000, 0.5);
+
+// Band breach? Hedge the EXCESS with the cheapest spanning basket:
+CrbHedgeUniverse hedges = new CrbHedgeUniverse(book.factors())
+        .addSingleFactor("ES-FUTURE", "EQ:SPX", 0.4)
+        .addFxForward("EURUSD-1W", "EURUSD", 1.10, 0.2);
+var orders = hedger.check(book.netExposures(), cov,
+        hedges.loadings(), hedges.costs(), lambda, interval);
+for (var o : orders) {
+    var alloc = CrbRouter.route(Math.abs(o.notional()), crossable,
+            darkVenues, halfSpreadBps, impactBps);   // internal → dark → lit
+    ledger.onHedge(o.notional(), costBps);
+    ledger.onRoute(Math.abs(o.notional()), alloc);
+}
+
+// The close: did the netting pay for its own risk management?
+double answer = ledger.netEconomics();   // positive = yes
+var report = book.report(cov, 0.99);     // and the diversification benefit
+```
+
+Everything survives the night via `Checkpoint` sections (book, engine
+counters, ledger — recipe 12), and `CrbRealWorldScenarioTest` runs the
+whole week: quiet two-way day, one-way institutional day (the hedge
+escalation), a COVID-style stress replay to the dollar, and an NDF
+fixing day. Details in `docs/CENTRAL_RISK_BOOK.md`.
+
 ---
 
 Every number quoted here comes from a committed benchmark; every behavior
