@@ -548,6 +548,41 @@ risk it is), `execution/AntiGamingJitter.java`,
 — post passively or cross — as expected-cost arithmetic instead of
 habit).
 
+**The volatility zoo — six kinds, one map.** "Volatility" is six
+different things wearing one word, and confusing them is expensive:
+
+1. **Historical volatility** — how much the price DID move, measured
+   from past returns: `risk/RiskMetrics.annualizedVolatility` (the
+   plain standard deviation) and `volatility/EwmaVolatility` (recent
+   moves weighted more — the RiskMetrics λ=0.94 classic).
+2. **Implied volatility** — the market's forecast, read backwards out
+   of an option's PRICE: `pricing/BlackScholes.impliedVol`,
+   `pricing/Black76.impliedVol`, and the smile structures
+   (`pricing/VolSurface`, `fx/FxVolSurface`, `pricing/VannaVolga`).
+   Historical looks back; implied is what people are PAYING for.
+3. **Realized volatility** — what actually happened over a window,
+   built from intraday returns: `microstructure/JumpRobustVolatility`
+   (and its key trick: bipower variation separates a headline JUMP
+   from a genuine volatility regime), forecast by `volatility/HarRv`.
+4. **Market volatility** — the whole market's expected turbulence,
+   famously tracked by the VIX, the "fear index":
+   `volatility/VolatilityIndex` computes it model-free from an option
+   chain — every out-of-the-money option contributes its 1/K² slice
+   to a portfolio whose payoff IS variance, so the portfolio's price
+   reveals the market's expectation with no pricing model assumed.
+   The put skew is IN the index, which is why VIX sits above ATM
+   implied vol.
+5. **Idiosyncratic volatility** — the company's own story: earnings,
+   management, product launches. It diversifies away across names.
+6. **Systematic volatility** — the economy's story: rates, inflation,
+   macro shocks. It does NOT diversify away — only index hedges
+   remove it. `volatility/VolatilityDecomposition` splits any stock's
+   variance EXACTLY into 5 + 6 via the single-factor regression
+   (β²·market variance + residual); the R² is the systematic share —
+   a utility near 0.7 is mostly a market proxy, a biotech near 0.05
+   is mostly its own story, and the two need entirely different
+   hedges.
+
 ---
 
 ## Part II — The Technology
