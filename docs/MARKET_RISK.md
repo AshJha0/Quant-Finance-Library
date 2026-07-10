@@ -93,7 +93,7 @@ per-symbol equity deltas, dollar gamma/vega, forward-points risk.
 | Jump-robust realized vol | `microstructure.JumpRobustVolatility` (bipower) |
 | Intraday seasonality | `microstructure.VolatilityCurve` |
 | Stochastic volatility | `pricing.Heston` |
-| Market volatility (fear gauge) | `volatility.VolatilityIndex` — VIX-style model-free index from an option chain; a flat-vol chain hands the vol back exactly (tested), and the smile RAISES the index above ATM |
+| Market volatility (fear gauge) | `volatility.VolatilityIndex` — VIX-style model-free index from an option chain; a flat-vol chain hands the vol back within discretization accuracy (tested at 2e-3, measured bias ~+5e-4), and the smile RAISES the index above ATM |
 | Systematic vs idiosyncratic | `volatility.VolatilityDecomposition` — the exact OLS split β²·Var(mkt) + Var(residual); R² is the systematic share |
 
 ## 7. Correlation & Dependence Modeling
