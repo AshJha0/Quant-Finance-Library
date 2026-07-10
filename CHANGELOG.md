@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.12.0 — 2026-07-11
 
 - **The volatility zoo completed** (the six-kinds taxonomy audited:
   historical, implied and realized volatility already existed in
