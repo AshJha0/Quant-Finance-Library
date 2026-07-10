@@ -54,10 +54,12 @@ final class FixDecoder {
                         + Integer.toHexString(buffer[i] & 0xFF));
             }
             bodyLen = bodyLen * 10 + digit;
-        }
-        if (bodyLen > 1 << 20) {
-            throw new IllegalStateException(
-                    "stream corrupt: BodyLength " + bodyLen + " is not a FIX message");
+            // Checked INSIDE the loop: ten corrupt-but-numeric digits
+            // would wrap the int and could sneak under a post-loop cap.
+            if (bodyLen > 1 << 20) {
+                throw new IllegalStateException(
+                        "stream corrupt: BodyLength " + bodyLen + " is not a FIX message");
+            }
         }
         int total = lenEnd + 1 + bodyLen + 7;   // "10=xxx" + SOH trailer
         if (length < total) {

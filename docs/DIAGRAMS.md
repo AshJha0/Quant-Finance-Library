@@ -436,21 +436,31 @@ flowchart LR
         DATA --> FACTORS["risk factors<br/>Pca (how many are REAL?)<br/>crb.CentralRiskBook<br/>(the worked decomposition)"]
     end
     subgraph MODELS["4-7 models"]
-        FACTORS --> PRICE["pricing<br/>BlackScholes · Black76 · Heston<br/>Vasicek/CIR/Hull-White · trees · MC"]
-        PRICE --> GREEKS["sensitivities<br/>delta/gamma/vega/theta/rho<br/>vanna · volga · cross-gamma<br/>DV01 · key-rate durations"]
-        FACTORS --> VOL["volatility<br/>EWMA · GARCH · GJR · EGARCH<br/>HAR-RV · bipower · Heston"]
-        FACTORS --> DEP["dependence<br/>Spearman/Kendall · PCA<br/>Gaussian + t copulas"]
+        PRICE["pricing<br/>BlackScholes · Black76 · Heston<br/>Vasicek/CIR/Hull-White · trees · MC"]
+        GREEKS["sensitivities<br/>delta/gamma/vega/theta/rho<br/>vanna · volga · cross-gamma<br/>DV01 · key-rate durations"]
+        VOL["volatility<br/>EWMA · GARCH · GJR · EGARCH<br/>HAR-RV · bipower · Heston"]
+        DEP["dependence<br/>Spearman/Kendall · PCA<br/>Gaussian + t copulas"]
+        PRICE --> GREEKS
     end
     subgraph RISK["8-11 risk numbers"]
-        GREEKS & VOL & DEP --> VAR["VaR/ES, five flavors<br/>delta-normal · MC · delta-gamma<br/>historical · FULL REVALUATION"]
-        VAR --> TAIL["tail: EVT/POT/GPD<br/>(refuses infinite means)"]
-        VAR --> STRESS["stress + REVERSE stress<br/>('what breaks us, at how many σ?')"]
-        VAR --> BT["backtests: Kupiec ·<br/>Christoffersen · traffic light"]
+        VAR["VaR/ES, five flavors<br/>delta-normal · MC · delta-gamma<br/>historical · FULL REVALUATION"]
+        TAIL["tail: EVT/POT/GPD<br/>(refuses infinite means)"]
+        STRESS["stress + REVERSE stress<br/>('what breaks us, at how many σ?')"]
+        BT["backtests: Kupiec ·<br/>Christoffersen · traffic light"]
+        VAR --> TAIL
+        VAR --> STRESS
+        VAR --> BT
     end
     subgraph REG["12-14 the wrap"]
-        TAIL & STRESS & BT --> FRTB["FRTB: ES 97.5 liquidity cascade<br/>+ PLAT zones (MAR32/33-styled)"]
-        FRTB --> PROD["production: dashboards ·<br/>Checkpoint · reports"]
+        FRTB["FRTB: ES 97.5 liquidity cascade<br/>+ PLAT zones (MAR32/33-styled)"]
+        PROD["production: dashboards ·<br/>Checkpoint · reports"]
+        FRTB --> PROD
     end
+    FACTORS --> PRICE
+    FACTORS --> VOL
+    FACTORS --> DEP
+    GREEKS & VOL & DEP --> VAR
+    TAIL & STRESS & BT --> FRTB
 ```
 
 ---
