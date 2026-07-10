@@ -1,5 +1,76 @@
 # Changelog
 
+## Unreleased
+
+- **Central Risk Book** (`com.quantfinlib.crb`, mapped in
+  `docs/CENTRAL_RISK_BOOK.md`) — one netted view of the firm's risk
+  across desks and products, plus the machinery that monetizes it:
+  - `CentralRiskBook` — cash equities, listed equity options (Black-
+    Scholes greeks land on the SAME factors as cash shares), FX spot
+    (currency-level legs, so EURUSD and USDJPY net their shared USD),
+    FX swaps (points risk with exactly-cancelling base legs), NDFs
+    (full delta until fixing + gross pending-fixing notional per pair)
+    and FX options (Garman-Kohlhagen delta onto the currency legs) —
+    all decomposed into one factor space at booking; netting
+    efficiency, per-desk attribution, and a `report()` that prices the
+    diversification benefit (standalone desk VaRs minus the netted
+    book's VaR, via `VarEngine`).
+  - `SkewedQuoter` — inventory-shaded two-way prices: a long book
+    shades both quotes down, linear in inventory/limit, capped so the
+    quote can never self-cross.
+  - `InternalizationEngine` — risk-reducing flow is crossed against
+    inventory and earns the client a share of the saved spread;
+    risk-adding flow is warehoused only inside the warehouse limit;
+    flow through zero blends the improvement pro-rata.
+  - `HedgeOptimizer` — minimum-variance hedging with an L1 cost term,
+    solved by exact soft-threshold coordinate descent: uneconomic
+    hedges get exactly zero, λ = 0 recovers the closed-form regression
+    hedge (pinned in tests against ρ²-floor residual risk).
+  - `CrbAutoHedger` — per-factor bands with cooldown: warehouse inside
+    the band, hedge only the EXCESS beyond `resetFraction·limit` on a
+    breach, and escalate to cost-blind when the cost-aware hedge would
+    leave a hard limit breached.
+  - `CrbRouter` — internal cross first (the book is the firm's first
+    dark pool: zero cost, zero leakage), dark venues ranked by
+    adverse-selection charge and discounted by fill probability, lit
+    last; a dark venue whose charge exceeds the lit cost gets nothing.
+  - `CrbHedgeUniverse` — builds the loadings matrix the optimizer
+    needs, aligned to the book's registry: FX forwards load currency
+    legs exactly like booked trades, index futures hedge single names
+    through the covariance (the regression hedge falls out of the
+    optimizer, not a beta table), hedge-only factors register with
+    zero book exposure.
+  - Overnight persistence: `CentralRiskBook.writeState/readState`
+    (factor names, net/gross, desk attribution, pending fixings) and
+    `InternalizationEngine` counters plug into `persist.Checkpoint`;
+    restores into fresh instances only, and configuration mismatches
+    throw.
+  - Review-round fixes (independent math review, every finding pinned
+    by a regression test): the FX-swap points factor sign corrected to
+    the true sensitivity (−N for a buy-sell — points widening HURTS
+    it; the original +N was inverted and its test pinned the wrong
+    sign); book-level views hardened for hedge-only factors registered
+    past the booked arrays; every multi-leg booking is now
+    compute-validate-COMMIT (a rejected leg can never leave a
+    half-booked flow) with rate/carry gates added; `HedgeOptimizer`
+    validates covariance (NaN used to come back as a silent all-zero
+    "hedge"), throws on non-PSD input and on non-convergence
+    (relative tolerance, 20k iterations — the Pca lesson applied to
+    its sibling); `CrbAutoHedger` rejects NaN exposures
+    (`Math.abs(NaN) > limit` is false — a corrupted feed silently
+    disabled the bands); `SkewedQuoter` rejects half-spread/skew
+    combinations that could quote a non-positive bid;
+    `settleFixing(pair, notional)` releases pending NDF fixings
+    (over-settling throws — that is a reconciliation break).
+  - 24 tests across `CrbBookTest`/`CrbExecutionTest`/
+    `CrbPersistenceAndUniverseTest`: cross-product
+    netting pinned against `BlackScholes` greeks, swap base legs
+    cancel exactly, diversification benefit exact on a hand-built
+    two-desk book, internalization economics (improvement blending,
+    warehouse limits), optimizer vs closed form, band/cooldown/
+    escalation behavior, router cost ordering, and a six-product
+    full-loop integration.
+
 ## 1.11.0 — 2026-07-09
 
 - **Full-library review round 3 + ULL hardening** (three independent
