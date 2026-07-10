@@ -881,7 +881,9 @@ com.quantfinlib
 ├── volatility    EwmaVolatility, Garch11 (MLE fit + forecasts),
 │                 GjrGarch11 (leverage-effect asymmetry), Egarch11
 │                 (log-variance, leverage as a sign),
-│                 HarRv (Corsi realized-vol forecasting benchmark)
+│                 HarRv (Corsi realized-vol forecasting benchmark),
+│                 VolatilityIndex (VIX-style model-free fear gauge),
+│                 VolatilityDecomposition (systematic vs idiosyncratic)
 ├── trading       OrderGateway, PaperTradingGateway (risk-gated paper venue),
 │                 fast lane: HftRiskGate, OrderRingBuffer, HftOrderGateway,
 │                 HftQuoter (streaming market maker) + AvellanedaStoikov

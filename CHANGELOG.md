@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+- **The volatility zoo completed** (the six-kinds taxonomy audited:
+  historical, implied and realized volatility already existed in
+  depth; the two missing kinds added):
+  - `volatility.VolatilityIndex` — MARKET volatility as the VIX-style
+    "fear gauge": model-free variance-swap replication from an option
+    chain (CBOE-methodology style, single expiry, styled not
+    certified). A flat-20%-vol chain hands 0.20 back within 2e-3
+    (tested — that is what model-free MEANS), a put skew RAISES the
+    index above ATM (the smile is in the index), and a forward
+    outside the strike range throws (extrapolation is an opinion, not
+    a measurement).
+  - `volatility.VolatilityDecomposition` — SYSTEMATIC vs
+    IDIOSYNCRATIC: the exact OLS identity Var(asset) = β²·Var(market)
+    + Var(residual), with R² as the systematic share and annualized
+    vol helpers. β cross-checked equal to `RiskMetrics.beta`; a
+    market clone decomposes to idio = 0 exactly; the planted-β test
+    pins the split as an identity (1e-18), not an approximation.
+  - LEARN.md gains "The volatility zoo — six kinds, one map"
+    (historical / implied / realized / market / idiosyncratic /
+    systematic, each mapped to its classes and its hedge);
+    MARKET_RISK.md step 6 gains both rows.
+
 - **Documentation deep pass — teach everything the code does**:
   - LEARN.md gains "The desk playbooks" (end of Part I): pairs trading
     and mean reversion (the three questions: tether, half-life,

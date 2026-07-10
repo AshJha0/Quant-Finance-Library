@@ -16,8 +16,21 @@
  * autoregressive realized-vol model — daily/weekly/monthly horizons by
  * plain OLS, the forecasting benchmark GARCH papers have to beat; pair
  * it with {@code microstructure.JumpRobustVolatility}'s bipower
- * variance to keep jumps out of the forecast). Feed the outputs to
- * parametric VaR, vol targeting, or option pricing; stochastic
- * volatility lives in {@code pricing.Heston}.
+ * variance to keep jumps out of the forecast). Two more members of the
+ * volatility zoo: {@link com.quantfinlib.volatility.VolatilityIndex}
+ * (the VIX-style "fear gauge" — MARKET volatility read model-free out
+ * of an option chain via the variance-swap replication; the smile is
+ * IN the index, which is why it sits above ATM implied vol) and
+ * {@link com.quantfinlib.volatility.VolatilityDecomposition}
+ * (SYSTEMATIC vs IDIOSYNCRATIC: the exact OLS split
+ * {@code Var(asset) = β²·Var(market) + Var(residual)} — what index
+ * hedges can remove vs what only diversification or single-name
+ * hedges address). Historical volatility lives in
+ * {@code risk.RiskMetrics.annualizedVolatility} and
+ * {@code EwmaVolatility}; IMPLIED volatility in
+ * {@code pricing.BlackScholes.impliedVol}, {@code pricing.Black76},
+ * and the two vol surfaces. Feed the outputs to parametric VaR, vol
+ * targeting, or option pricing; stochastic volatility lives in
+ * {@code pricing.Heston}.
  */
 package com.quantfinlib.volatility;
