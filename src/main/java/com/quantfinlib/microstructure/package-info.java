@@ -69,5 +69,17 @@
  * {@link com.quantfinlib.microstructure.AlphaEnsemble} (IC-weighted blend
  * of alpha components — per-component prequential trust, confidence-sized
  * output).</p>
+ *
+ * <p>Flow toxicity, mean reversion, and bar-only liquidity:
+ * {@link com.quantfinlib.microstructure.Vpin} (volume-synchronized
+ * probability of informed trading — the market maker's when-to-widen
+ * gauge, bucketed in VOLUME time),
+ * {@link com.quantfinlib.microstructure.OrnsteinUhlenbeck} (the pairs
+ * desk's engine: κ/θ/σ by exact AR(1) mapping, half-life, stationary
+ * z-score — and it REFUSES a series with no in-sample mean reversion)
+ * and {@link com.quantfinlib.microstructure.LiquidityMeasures} (Roll's
+ * bounce-implied spread — NaN, not zero, when the signature is absent;
+ * Corwin-Schultz high-low spread; Amihud illiquidity) for every market
+ * where you have bars but no quotes.</p>
  */
 package com.quantfinlib.microstructure;

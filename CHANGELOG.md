@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+- **Quant & signals round: toxicity, mean reversion, vol forecasting,
+  bar-only liquidity** (tested in `QuantSignalsTest`):
+  - `microstructure.Vpin` — volume-synchronized probability of
+    informed trading (Easley/López de Prado/O'Hara): fixed-VOLUME
+    buckets (informed trading compresses clock time, not volume time),
+    trades split across bucket boundaries, NaN before the first bucket
+    (an empty average pretending to be calm is the wrong default for a
+    risk signal).
+  - `microstructure.OrnsteinUhlenbeck` — the pairs desk's engine:
+    κ/θ/σ by exact AR(1) mapping, half-life ln2/κ, stationary z-score
+    σ/√(2κ) — and it REFUSES a series whose fitted AR coefficient
+    shows no in-sample mean reversion, because fitting OU to a random
+    walk is how pairs desks die. Planted-parameter recovery tested.
+  - `volatility.HarRv` — Corsi's HAR realized-vol model
+    (daily/weekly/monthly horizons, plain OLS on the normal
+    equations), forecast floored at zero; the planted HAR process's
+    coefficients are recovered in tests.
+  - `microstructure.LiquidityMeasures` — liquidity from bars alone:
+    Roll's bounce-implied spread (NaN — not zero — when the bounce
+    signature is absent), Corwin-Schultz high-low spread (negative
+    estimates clamp to 0, stated), Amihud illiquidity (zero volume
+    throws as the data gap it is).
+
 - **Execution algo round: the four missing desk staples**
   (`execution`, tested in `AdvancedExecutionAlgosTest`):
   - `SpreadExecutionAlgo` — two-legged pairs/basis execution with a

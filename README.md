@@ -786,7 +786,9 @@ com.quantfinlib
 │                 KylesLambda (learned impact), JumpRobustVolatility
 │                 (bipower), ClosingAuctionModel (imbalance reserve),
 │                 HawkesIntensity (self-exciting bursts), AlphaEnsemble
-│                 (IC-weighted signal blend)
+│                 (IC-weighted signal blend), Vpin (flow toxicity),
+│                 OrnsteinUhlenbeck (mean-reversion fit + z-score),
+│                 LiquidityMeasures (Roll/Corwin-Schultz/Amihud from bars)
 ├── fx            CurrencyPair conventions, SwapPointsCurve, FxSwap, Ndf,
 │                 FxVolSurface (delta-quoted smile), FixingRisk,
 │                 AggregatedBook (multi-venue BBO), CrossRateEngine (streaming),
@@ -859,7 +861,8 @@ com.quantfinlib
 ├── rates         YieldCurve (bootstrap, forwards), BondPricer (duration, DV01),
 │                 ShortRateModels (Vasicek/CIR/Hull-White), KeyRateDurations
 ├── volatility    EwmaVolatility, Garch11 (MLE fit + forecasts),
-│                 GjrGarch11 (leverage-effect asymmetry)
+│                 GjrGarch11 (leverage-effect asymmetry),
+│                 HarRv (Corsi realized-vol forecasting benchmark)
 ├── trading       OrderGateway, PaperTradingGateway (risk-gated paper venue),
 │                 fast lane: HftRiskGate, OrderRingBuffer, HftOrderGateway,
 │                 HftQuoter (streaming market maker) + AvellanedaStoikov
