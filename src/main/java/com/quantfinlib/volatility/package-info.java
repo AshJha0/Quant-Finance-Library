@@ -6,7 +6,12 @@
  * and {@link com.quantfinlib.volatility.GjrGarch11} (the leverage-effect
  * asymmetry equity indices demand — a down move raises tomorrow's
  * variance by α + γ, an up move by only α; fitting γ ≈ 0 is itself the
- * finding that the series is symmetric), and
+ * finding that the series is symmetric),
+ * {@link com.quantfinlib.volatility.Egarch11} (Nelson's log-variance
+ * dynamics: leverage as a SIGN — γ &lt; 0 — with no positivity
+ * constraints by construction; one-step forecasts exact, multi-step
+ * deliberately refused since the log recursion forecasts the median,
+ * not the mean), and
  * {@link com.quantfinlib.volatility.HarRv} (Corsi's heterogeneous
  * autoregressive realized-vol model — daily/weekly/monthly horizons by
  * plain OLS, the forecasting benchmark GARCH papers have to beat; pair

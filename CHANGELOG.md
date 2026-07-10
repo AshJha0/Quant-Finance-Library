@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+- **Market-risk roadmap refresh — the two deliberate gaps closed**
+  (the 14-step map in `docs/MARKET_RISK.md` re-audited against the
+  library):
+  - `volatility.Egarch11` — Nelson's EGARCH(1,1): log-variance
+    dynamics with leverage as a SIGN (γ < 0) and no positivity
+    constraints by construction; grid MLE spanning the full admissible
+    box (the GjrGarch11 lesson applied at birth); one-step forecasts
+    exact, multi-step deliberately refused — iterating the log
+    recursion forecasts the MEDIAN variance, not the mean, and this
+    library does not return medians labelled as forecasts. Step 6's
+    "EGARCH omitted" gap is closed.
+  - `risk.VarEngine.fullRevaluationVar` — every scenario through the
+    caller's pricer callback: the method that sees the knocked-out
+    barrier and the pinned short gamma every sensitivity shortcut
+    misses. A linear pricer reproduces `historicalVar` exactly
+    (tested); a quadratic short-gamma book's 99% VaR is pinned to the
+    dollar; NaN from the pricer throws as the modelling problem it
+    is. Step 8's last box is real code now.
+  - `docs/MARKET_RISK.md` refreshed: step 2 gains bar-only liquidity
+    (`LiquidityMeasures`), step 3 points at the CRB's worked factor
+    decomposition, step 6 gains `Egarch11` + `HarRv`, step 8 gains
+    the full-revaluation row.
+
 - **Quant & signals round: toxicity, mean reversion, vol forecasting,
   bar-only liquidity** (tested in `QuantSignalsTest`):
   - `microstructure.Vpin` — volume-synchronized probability of

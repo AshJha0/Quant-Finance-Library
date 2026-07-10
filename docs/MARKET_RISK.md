@@ -40,6 +40,7 @@ risk-free curve.
 | Return calculation | `core.BarSeries.returns()/logReturns()` |
 | Volatility estimation | step 6 below |
 | Curve construction | `rates.YieldCurve.bootstrapAnnualParSwaps` |
+| Liquidity/spread from bars alone | `microstructure.LiquidityMeasures` (Roll, Corwin-Schultz, Amihud — for history that predates your quote capture) |
 | Survivorship honesty | `data.PointInTimeUniverse` + delisting returns |
 
 ## 3. Risk Factor Identification
@@ -50,7 +51,11 @@ consumed by the covariance/VaR/stress layers below. `risk.Pca` is the
 factor-count honesty check: how many of your named factors are real
 (a 12-tenor curve is ~3 factors: level, slope, curvature). Correlation and
 basis risk live in the covariance matrix itself (`microstructure.EwmaCovariance`
-streaming, or a sample covariance).
+streaming, or a sample covariance). For a WORKED factor decomposition —
+cash equities, equity options, FX spot/swaps/NDFs/FX options all landing
+on one named factor space at booking — see `crb.CentralRiskBook`
+([CENTRAL_RISK_BOOK.md](CENTRAL_RISK_BOOK.md)): currency-level FX legs,
+per-symbol equity deltas, dollar gamma/vega, forward-points risk.
 
 ## 4. Pricing Models
 
@@ -83,13 +88,11 @@ streaming, or a sample covariance).
 | Historical / EWMA | `risk.RiskMetrics.volatility`, `volatility.EwmaVolatility` |
 | GARCH(1,1) | `volatility.Garch11` (MLE, variance targeting) |
 | GJR-GARCH (leverage effect) | `volatility.GjrGarch11` — γ ≈ 0 on a symmetric series is itself the finding |
+| EGARCH (log-variance) | `volatility.Egarch11` — leverage as a SIGN (γ < 0), no positivity constraints by construction; one-step forecast exact, multi-step deliberately refused (the log recursion forecasts the median, not the mean) |
+| HAR-RV forecasting | `volatility.HarRv` — Corsi's daily/weekly/monthly OLS, the benchmark GARCH papers must beat |
 | Jump-robust realized vol | `microstructure.JumpRobustVolatility` (bipower) |
 | Intraday seasonality | `microstructure.VolatilityCurve` |
 | Stochastic volatility | `pricing.Heston` |
-
-*Gap (deliberate):* EGARCH is omitted — GJR captures the same asymmetry
-with a better-behaved likelihood surface for a grid fitter; add EGARCH only
-if log-variance dynamics are specifically required.
 
 ## 7. Correlation & Dependence Modeling
 
@@ -110,9 +113,10 @@ if log-variance dynamics are specifically required.
 | Portfolio Monte Carlo | `risk.VarEngine.monteCarloVar` (agrees with delta-normal on linear books — tested) |
 | Delta-gamma (Cornish-Fisher) | `risk.VarEngine.deltaGammaVar/Es` (short gamma worsens the tail — tested) |
 | Historical simulation (portfolio) | `risk.VarEngine.historicalVar` |
+| Full revaluation | `risk.VarEngine.fullRevaluationVar` — every scenario through YOUR pricer callback; sees the knocked-out barrier and the pinned short gamma that every sensitivity shortcut misses (a linear pricer reproduces historical simulation exactly — tested; a quadratic book's 99% VaR pinned to the dollar) |
 
-Full-revaluation VaR = the Monte Carlo harness plus your pricer per
-scenario; the linear engine is the template.
+Scenario rows are yours: historical rows for historical full-reval,
+Cholesky-generated rows for Monte Carlo full-reval.
 
 ## 9. Tail Risk
 

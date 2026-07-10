@@ -211,6 +211,42 @@ class MarketRiskTest {
         assertTrue(hist.expectedShortfall() > hist.var());
     }
 
+    @Test
+    void fullRevaluationSeesWhatSensitivitiesMiss() {
+        // 100 one-factor scenarios, monotonically worse: x_s = -(s+1)·5e-4.
+        double[][] scenarios = new double[100][1];
+        for (int s = 0; s < 100; s++) {
+            scenarios[s][0] = -(s + 1) * 5e-4;
+        }
+        // A LINEAR pricer reproduces historical simulation exactly.
+        double delta = 1_000_000;
+        var linear = VarEngine.fullRevaluationVar(scenarios,
+                moves -> delta * moves[0], 0.99);
+        var historical = VarEngine.historicalVar(new double[]{delta}, scenarios, 0.99);
+        assertEquals(historical.var(), linear.var(), 1e-9,
+                "a linear pricer IS historical simulation");
+        assertEquals(historical.expectedShortfall(), linear.expectedShortfall(), 1e-9);
+
+        // A SHORT-GAMMA pricer: full revaluation sees the curvature the
+        // linear replay cannot. 99% row is s = 98 (x = -0.0495):
+        // linear 49,500 + quadratic 0.5·4e7·0.0495² = 49,005 -> 98,505.
+        double gamma = -4e7;
+        var quadratic = VarEngine.fullRevaluationVar(scenarios,
+                moves -> delta * moves[0] + 0.5 * gamma * moves[0] * moves[0], 0.99);
+        assertEquals(98_505, quadratic.var(), 1e-6, "hand-computed, to the dollar");
+        assertTrue(quadratic.var() > linear.var(),
+                "short gamma makes every down scenario worse than delta admits");
+        assertTrue(quadratic.expectedShortfall() > quadratic.var());
+
+        // A pricer that cannot price a scenario is a modelling problem.
+        assertThrows(IllegalArgumentException.class,
+                () -> VarEngine.fullRevaluationVar(scenarios,
+                        moves -> Double.NaN, 0.99));
+        assertThrows(IllegalArgumentException.class,
+                () -> VarEngine.fullRevaluationVar(new double[10][1],
+                        moves -> 0, 0.99));
+    }
+
     // ------------------------------------------------------------------
     // EVT
     // ------------------------------------------------------------------

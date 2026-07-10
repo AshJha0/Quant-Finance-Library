@@ -227,6 +227,46 @@ public final class VarEngine {
     }
 
     // ------------------------------------------------------------------
+    // Full revaluation
+    // ------------------------------------------------------------------
+
+    /** Revalues the book under one scenario's factor moves. */
+    @FunctionalInterface
+    public interface ScenarioReval {
+        /** @return the book's P&amp;L under these factor moves (finite) */
+        double pnl(double[] factorMoves);
+    }
+
+    /**
+     * Full-revaluation VaR: every scenario repriced through the
+     * CALLER'S pricer — the method that sees what every sensitivity
+     * shortcut misses (a knocked-out barrier, a pinned short gamma, an
+     * autocall triggered by the scenario itself). Scenarios are rows of
+     * factor moves — historical rows for historical full-reval,
+     * Cholesky-generated rows for Monte Carlo full-reval. A pricer
+     * returning NaN/Infinity throws: a scenario your pricer cannot
+     * price is a modelling problem, not a quantile.
+     */
+    public static VarResult fullRevaluationVar(double[][] scenarios, ScenarioReval pricer,
+                                               double confidence) {
+        if (scenarios.length < 20) {
+            throw new IllegalArgumentException("need >= 20 scenarios");
+        }
+        double[] losses = new double[scenarios.length];
+        for (int s = 0; s < scenarios.length; s++) {
+            double pnl = pricer.pnl(scenarios[s]);
+            if (!Double.isFinite(pnl)) {
+                throw new IllegalArgumentException(
+                        "pricer returned " + pnl + " for scenario " + s
+                                + " — a scenario the pricer cannot price is a "
+                                + "modelling problem, not a quantile");
+            }
+            losses[s] = -pnl;
+        }
+        return tail(losses, confidence);
+    }
+
+    // ------------------------------------------------------------------
     // Shared tail arithmetic
     // ------------------------------------------------------------------
 

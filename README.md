@@ -861,7 +861,8 @@ com.quantfinlib
 ├── rates         YieldCurve (bootstrap, forwards), BondPricer (duration, DV01),
 │                 ShortRateModels (Vasicek/CIR/Hull-White), KeyRateDurations
 ├── volatility    EwmaVolatility, Garch11 (MLE fit + forecasts),
-│                 GjrGarch11 (leverage-effect asymmetry),
+│                 GjrGarch11 (leverage-effect asymmetry), Egarch11
+│                 (log-variance, leverage as a sign),
 │                 HarRv (Corsi realized-vol forecasting benchmark)
 ├── trading       OrderGateway, PaperTradingGateway (risk-gated paper venue),
 │                 fast lane: HftRiskGate, OrderRingBuffer, HftOrderGateway,
