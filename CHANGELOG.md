@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- **Execution algo round: the four missing desk staples**
+  (`execution`, tested in `AdvancedExecutionAlgosTest`):
+  - `SpreadExecutionAlgo` — two-legged pairs/basis execution with a
+    HARD legging-risk cap: the illiquid lead leg worked patiently, the
+    liquid hedge leg chasing at the spread ratio; at the cap the lead
+    stops entirely and the hedge child becomes the full imbalance.
+  - `OrderPlacementPolicy` — post-or-cross as expected-cost
+    arithmetic (`p·(a − h − r) + (1−p)·(h + d)` vs `h`), with the
+    break-even fill probability in closed form; adverse selection and
+    drift are the caller's honest inputs (post-fill markouts, alpha).
+  - `AntiGamingJitter` — seeded size/time randomization for
+    schedule-driven children: totals preserved exactly, monotonicity
+    preserved, deterministic per seed (replayable, auditable). The
+    generic overlay beside `TwapScheduler.scheduleRandomized`'s
+    construction-time size jitter — and it adds the TIME dimension.
+  - `FuturesRollAlgo` — roll across the window on the liquidity
+    migration S-curve (falling behind makes later days bigger, never
+    incomplete); each day's due executes as a calendar spread through
+    `SpreadExecutionAlgo`; curves that do not end at exactly 1 are
+    rejected.
+
 - **CRB real-world layer**:
   - `CrbPnlLedger` — the desk's realized economics: internalized flow
     captures the street half spread minus improvement given back,
