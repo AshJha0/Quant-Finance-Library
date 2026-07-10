@@ -415,6 +415,137 @@ strategies you tried before finding this one.
 queue positions, last look), `backtest/validation/`, `data/TickCapture` +
 replay for deterministic tick-level history.
 
+### The desk playbooks — pairs, toxicity, the central risk book, rolls
+
+Four more things real desks do every day, each a small world of its own.
+These build on everything above, so read §1–§11 first.
+
+**Pairs trading, or: betting on a rubber band.** Some price
+relationships are tethered — two share classes of one company, a stock
+and its ADR, cash equities and index futures, on-the-run vs off-the-run
+bonds. When the SPREAD between them stretches, you sell the expensive
+leg, buy the cheap one, and wait for the tether to pull them back.
+Three questions decide whether this is a strategy or a slow-motion
+accident:
+
+1. *Is the spread actually tethered?* A *cointegration test* asks
+   whether the spread is statistically stationary — two random walks
+   can look correlated for years and then never come back.
+2. *How fast does it snap back?* Fit an **Ornstein-Uhlenbeck** process
+   to the spread: the fitted **half-life** (how long the spread takes
+   to close half its gap) is your expected holding period, and the
+   **z-score** (how many stationary standard deviations you are from
+   the mean) is your entry and exit signal. A 200-day half-life is not
+   a trade — it's an index fund with extra steps. And a spread that
+   shows NO mean reversion in-sample must be refused, not fitted:
+   fitting a rubber-band model to a random walk is how pairs desks die
+   (this library's fit literally throws in that case).
+3. *How do you get in without owning half a trade?* The moment you own
+   one leg without the other, you're not a pairs trader — you're just
+   long (or short) in disguise. **Legging risk** is THE execution risk
+   of spread trading: work the ILLIQUID leg patiently (it's the
+   constraint), let the LIQUID leg chase each fill at the spread
+   ratio, and cap the imbalance HARD — at the cap, stop adding risk
+   entirely and cross the hedge leg to get flat, whatever it costs.
+
+*Real-life case:* a desk sees two dual-listed shares 2.5 z-scores
+apart with a fitted half-life of 8 days. Entry: sell the rich listing,
+buy the cheap one, ratio-locked, legging cap at 5% of the position.
+Exit: z back under 0.5, or the cointegration breaks (a takeover
+announcement is a rubber band CUT — exit everything, the tether is
+gone).
+
+*In this library:* `hedging/CointegrationTest.java` (question 1),
+`microstructure/OrnsteinUhlenbeck.java` (question 2 — κ/θ/σ, half-life,
+z-score, and the refusal), `execution/SpreadExecutionAlgo.java`
+(question 3 — the legging cap), cookbook recipe 15 runs the whole
+chain.
+
+**Flow toxicity, or: knowing when to stop quoting.** §5 explained
+adverse selection — the people most eager to trade with you know
+something. **VPIN** turns that into a live dial: bucket trades by
+VOLUME (informed trading compresses clock time, but volume time it
+cannot hide from), score each bucket's buy/sell imbalance, average the
+last fifty buckets. Balanced two-way flow reads near 0; one-sided,
+informed flow reads toward 1 — famously elevated in the hour before
+the 2010 flash crash. A market maker watching VPIN climb doesn't argue
+with it: widen the spread, cut the quote size, or stop quoting. Being
+the last one quoting into informed flow is how you buy the top tick of
+every move.
+
+And when you have no quote data at all — a 20-year backtest, an
+emerging market, history before your capture started — you can still
+ESTIMATE liquidity from bars alone: Roll's estimator reads the spread
+out of bid-ask bounce (trade prices ping-ponging leave a negative
+autocorrelation fingerprint), Corwin-Schultz reads it from daily
+high-low ranges, and Amihud's ratio (|return| per dollar traded) ranks
+which names punish size. Estimators, not measurements — rank with
+them, don't mark books with them.
+
+*In this library:* `microstructure/Vpin.java`,
+`microstructure/TradeClassifier.java` (feeds it aggressor sides when
+the venue doesn't say), `microstructure/LiquidityMeasures.java`,
+cookbook recipe 17 wires VPIN into a quoting defense.
+
+**The central risk book, or: netting before hedging.** Walk a large
+firm's trading floor: the cash equities desk just bought 2M of an
+index's risk from a client, and three desks away the ETF desk sold 2M
+of nearly the same risk. If both desks hedge with the street, the firm
+paid the spread TWICE for risk it never net had. A **central risk
+book** fixes this by seeing every desk's position in ONE factor space:
+equity deltas per symbol (an option's delta and cash shares land on
+the SAME factor), FX exposure per CURRENCY (so EURUSD spot, a EURUSD
+option's delta, and an NDF's forward all net at the currency level),
+vega and gamma per underlying. What survives the netting is the only
+risk worth paying to hedge — and even then, the CRB hedges only the
+EXCESS beyond its warehouse band, because inventory that will net
+against tomorrow's flow is an asset, not a problem.
+
+The CRB is also a BUSINESS, with three revenue mechanics you can now
+read as code: it *internalizes* client flow that reduces its risk (and
+gives the client back part of the saved spread — being worth trading
+with is the moat), it *skews* its quotes to attract the flow it wants
+(long inventory → shade both quotes down → the ask becomes the
+attractive side), and it routes its own hedges through ITSELF first —
+the firm's own offsetting inventory is a dark pool with zero cost and
+zero information leakage. The close-of-day question is one number:
+did the spread we captured pay for the hedging we did?
+
+*Real-life case:* a pension unwinds 18M of index risk through the desk
+in six tickets. The warehouse absorbs it (that's the service), the
+equity band breaches, the cost-aware hedger notices the cheap ES-proxy
+future can't satisfy a per-symbol band and escalates to the direct
+program trade, the hedge routes internal-first then to a clean
+midpoint pool while the 15bps-markout pool gets nothing — and the day
+still nets positive after every cost. That exact day runs in
+`crb/CrbRealWorldScenarioTest.java`.
+
+*In this library:* the whole `crb/` package —
+[CENTRAL_RISK_BOOK.md](CENTRAL_RISK_BOOK.md) is the guided tour,
+cookbook recipe 14 the runnable day.
+
+**Rolls and anti-gaming, or: the trades everyone can see coming.**
+Two execution problems are special because your intentions are
+PREDICTABLE. First, the futures roll: every futures position must
+migrate from the expiring contract to the next one, everyone knows
+roughly when, and liquidity migrates on a well-known S-curve — roll
+too early and you pay wide back-month spreads, too late and you join
+the last-day scramble. The answer is to roll IN STEP with the
+migration, executing each day's slice as a calendar spread. Second,
+the metronome problem: a TWAP that fires identical child orders on an
+exact clock is detected by predators within minutes, and every
+subsequent child gets leaned on. The fix is seeded randomness — jitter
+child sizes and times enough to kill the pattern while preserving the
+total EXACTLY and keeping every child auditable (same seed, same
+schedule: compliance can replay why each child fired when it did).
+
+*In this library:* `execution/FuturesRollAlgo.java` (the migration
+curve, with a curve that doesn't end at 100% rejected as the delivery
+risk it is), `execution/AntiGamingJitter.java`,
+`execution/OrderPlacementPolicy.java` (the smallest repeated decision
+— post passively or cross — as expected-cost arithmetic instead of
+habit).
+
 ---
 
 ## Part II — The Technology
@@ -655,7 +786,17 @@ java -cp target/classes com.quantfinlib.examples.LiveTradingDemo   # live Binanc
    `PortfolioExecutor.java` → `persist/Checkpoint.java` — the execution
    intelligence stack from live inputs to basket schedule to overnight
    (§6, §7, §18).
-9. `docs/COOKBOOK.md` — fourteen end-to-end recipes to modify and re-run.
+9. The desk playbooks (end of Part I): `microstructure/OrnsteinUhlenbeck.java`
+   → `execution/SpreadExecutionAlgo.java` (a pairs trade end to end),
+   `microstructure/Vpin.java` (toxicity), then the whole `crb/` package
+   with [CENTRAL_RISK_BOOK.md](CENTRAL_RISK_BOOK.md) as the guide and
+   `crb/CrbRealWorldScenarioTest.java` as a realistic trading week you
+   can step through in a debugger.
+10. The risk stack: [MARKET_RISK.md](MARKET_RISK.md) maps all fourteen
+    steps from market data to Basel/FRTB; `risk/VarEngine.java` →
+    `risk/StressTester.java` → `risk/FrtbEs.java` is the reading spine,
+    and `MarketRiskTest.java` shows every formula pinned by hand.
+11. `docs/COOKBOOK.md` — seventeen end-to-end recipes to modify and re-run.
 
 **Exercises** (in rough order of difficulty):
 

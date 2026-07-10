@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- **Documentation deep pass — teach everything the code does**:
+  - LEARN.md gains "The desk playbooks" (end of Part I): pairs trading
+    and mean reversion (the three questions: tether, half-life,
+    legging), flow toxicity and bar-only liquidity, the central risk
+    book as a BUSINESS (netting, internalization economics, skew,
+    internal-first hedging), and rolls/anti-gaming — each with a
+    real-life case and the classes that implement it; the guided
+    reading path extends through the CRB week and the risk stack.
+  - COOKBOOK recipes 15–17: trade a pairs spread (cointegration →
+    OU half-life → legging control), run a market-risk afternoon
+    (five VaR flavors → stress → reverse stress → EVT → FRTB wrap),
+    and defend a quote against toxic flow (VPIN → skew →
+    post-or-cross).
+  - DIAGRAMS 13–14: the central risk book's netted loop (flows →
+    internalize → hedge the excess → route internal-first → the
+    close-of-day question) and the 14-step market-risk pipeline.
+  - README "Real-world playbooks": six personas (execution trader,
+    market maker, pairs trader, CRB desk, risk manager, student)
+    mapped to their day and their entry points.
+  - Recipe counts consistent everywhere (seventeen).
+
 - **Market-risk roadmap refresh — the two deliberate gaps closed**
   (the 14-step map in `docs/MARKET_RISK.md` re-audited against the
   library):

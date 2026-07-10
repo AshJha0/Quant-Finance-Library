@@ -51,10 +51,28 @@ execution algos, last look, options, garbage collection, ring buffers, the
 memory model, honest benchmarking…), each tied to the class that implements
 it, with a guided reading path and exercises.
 
-**Learn by task, not by API**: [docs/COOKBOOK.md](docs/COOKBOOK.md) — fourteen complete
-recipes under 20 lines each, from "backtest your CSV" through survivorship-honest
-factor research and nanosecond market making to portfolio-level execution and
-overnight state persistence.
+**Learn by task, not by API**: [docs/COOKBOOK.md](docs/COOKBOOK.md) — seventeen complete
+recipes under ~30 lines each, from "backtest your CSV" through survivorship-honest
+factor research and nanosecond market making to portfolio-level execution,
+a central-risk-book day, a pairs trade, a market-risk afternoon, and a
+market maker's toxicity defense.
+
+## Real-world playbooks — who does what with this
+
+Every capability here maps to a job someone actually does. Six ways in:
+
+| You are… | Your day looks like | Start here |
+|---|---|---|
+| **An execution trader** | Work a 500k-share parent against VWAP without signaling; speed up on adverse alpha, finish in the close; route where fills don't fade | `BenchmarkExecutor` + `AdaptiveSor` (recipe 10), `AntiGamingJitter`, TCA-grade yourself with `ExecutionAlgoBacktester` |
+| **A market maker** | Quote two-sided all day, shade for inventory, watch flow toxicity, hedge the band breaches, prove your fills aren't adverse-selected | `AvellanedaStoikov` + `HftQuoter`, `Vpin` + `SkewedQuoter` (recipe 17), `VenueScorecard` markouts, `AutoHedger` |
+| **A pairs / relative-value trader** | Test the tether, size by half-life, enter at 2σ, never own half a trade | `CointegrationTest` → `OrnsteinUhlenbeck` → `SpreadExecutionAlgo` (recipe 15); rolls via `FuturesRollAlgo` |
+| **A central-risk-book desk** | Net every desk's flow into one factor space, internalize what reduces risk (pay the client for it), hedge only the excess, cross internally first — and prove the netting paid for itself | the `crb` package end-to-end ([CENTRAL_RISK_BOOK.md](docs/CENTRAL_RISK_BOOK.md), recipe 14, `CrbRealWorldScenarioTest` — a realistic week) |
+| **A market-risk manager** | The afternoon ritual: VaR five ways, ES beside each, stress the book against March 2020, ask what breaks it and at how many sigma, wrap it in FRTB numbers | `VarEngine` → `StressTester` → `FrtbEs`/`PnlAttribution` (recipe 16, [MARKET_RISK.md](docs/MARKET_RISK.md) — all 14 steps) |
+| **A student / interview candidate** | Learn what an order book IS, why spreads exist, what adverse selection costs, how a GARCH differs from an EWMA — then read the real class that implements each answer | [LEARN.md](docs/LEARN.md) top to bottom (finance Part I, tech Part II, desk playbooks, guided path + exercises) |
+
+Every row above is backed by committed tests at realistic sizes — the
+CRB week, the five-day learning loop, the COVID stress replay to the
+dollar — not just unit checks.
 
 **Getting the library**: tagged releases publish runnable/sources/javadoc jars
 automatically (GitHub Actions → Releases); JitPack works today

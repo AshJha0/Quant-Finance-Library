@@ -382,6 +382,118 @@ whole week: quiet two-way day, one-way institutional day (the hedge
 escalation), a COVID-style stress replay to the dollar, and an NDF
 fixing day. Details in `docs/CENTRAL_RISK_BOOK.md`.
 
+## 15. Trade a pairs spread (cointegration → half-life → legging control)
+
+The three questions of pairs trading, in order: is the spread tethered,
+how fast does it snap back, and how do you get in without owning half a
+trade?
+
+```java
+// 1. Is the spread stationary at all? Two random walks can look
+//    correlated for years and never come back.
+var coint = CointegrationTest.engleGranger(pricesA, pricesB);
+if (!coint.cointegrated5pct()) return;          // no tether, no trade
+
+// 2. How fast does it revert? Fit OU to the spread series.
+double[] spread = /* pricesA - hedgeRatio * pricesB */;
+OrnsteinUhlenbeck.Params ou = OrnsteinUhlenbeck.fit(spread, 1.0 / 252);
+// ou.halfLife() in years: 8 trading days ≈ 0.032. A 200-day half-life
+// is an index fund with extra steps — skip it.
+double z = ou.zScore(spread[spread.length - 1]);
+if (Math.abs(z) < 2.0) return;                  // not stretched enough
+
+// 3. Execute with the legging cap: work the ILLIQUID leg patiently,
+//    let the liquid hedge leg chase, stop everything at the cap.
+SpreadExecutionAlgo algo = new SpreadExecutionAlgo(
+        leadQty, hedgeRatio, leggingCapHedgeUnits, leadChildMax);
+while (!algo.done()) {
+    var children = algo.decide();
+    // route children.leadQty() passively (OrderPlacementPolicy says
+    // post or cross), children.hedgeQty() aggressively; report fills:
+    algo.onLeadFill(leadFilled);
+    algo.onHedgeFill(hedgeFilled);
+    if (children.atRiskCap()) { /* you are ALL hedge child now */ }
+}
+```
+
+Exit at |z| < 0.5 — or immediately if the cointegration breaks (a
+takeover announcement doesn't stretch the rubber band, it CUTS it).
+`OrnsteinUhlenbeck.fit` refuses a series with no in-sample mean
+reversion rather than reporting an infinite half-life as a holding
+period.
+
+## 16. Run a market-risk day (VaR → ES → stress → reverse stress → report)
+
+The risk manager's actual afternoon, on a netted factor book — the full
+14-step map is `docs/MARKET_RISK.md`.
+
+```java
+double[] exposures = book.netExposures();       // e.g. from CentralRiskBook
+double[][] cov = /* factor covariance: EwmaCovariance or sample */;
+
+// The four headline numbers (five flavors available):
+double var99 = VarEngine.deltaNormalVar(exposures, cov, 0.99);
+double es99 = VarEngine.deltaNormalEs(exposures, cov, 0.99);       // post-FRTB, ES leads
+double dgVar = VarEngine.deltaGammaVar(exposures, gamma, cov, 0.99); // options books
+var fullReval = VarEngine.fullRevaluationVar(scenarios,
+        moves -> yourPricer.pnl(moves), 0.99);   // sees the knocked-out barrier
+
+// Named stress: what would March 2020 do to THIS book, today?
+double covid = StressTester.scenarioPnl(templateExposures,
+        StressTester.covidMarch2020());
+
+// The regulator's inverted question: what move loses 2M, and how
+// implausible is that move?
+var reverse = StressTester.reverseStress(exposures, cov, 2_000_000);
+// reverse.mahalanobisSigmas() > 10: the netting bought you comfort.
+// < 3: the book breaks on a Tuesday — fix it TODAY.
+
+// Beyond-sample tail: EVT extrapolation with honest refusals.
+var tail = ExtremeValueTheory.fitPot(dailyLosses, 0.95);
+double var999 = tail.var(0.999);                 // beyond the sample, honestly
+// tail.expectedShortfall throws if the fitted tail has no finite mean.
+
+// The Basel wrap: ES cascade, backtest zone, PLAT.
+double frtbEs = FrtbEs.liquidityHorizonEs(esByHorizon, horizons);
+var zone = FrtbEs.TrafficLight.of(exceptionsLast250Days);
+var plat = PnlAttribution.test(hypotheticalPnl, riskTheoreticalPnl);
+```
+
+Every formula here is pinned by a hand-computed test in
+`MarketRiskTest`/`MarketRiskPricingTest` — including the Heston
+BS-limit test that caught a real numerical bug before release.
+
+## 17. Defend a quote against toxic flow (VPIN → skew → post-or-cross)
+
+The market maker's survival loop: measure toxicity, shade the quote,
+and stop paying to be run over.
+
+```java
+Vpin vpin = new Vpin(avgDailyVolume / 50, 50);   // the classic buckets
+// per classified trade (TradeClassifier supplies the aggressor side):
+vpin.onTrade(qty, buyAggressor);
+
+double toxicity = vpin.ready() ? vpin.vpin() : 0.3;   // prudent default
+double half = baseHalfSpreadBps * (1 + 2 * toxicity); // widen as it climbs
+
+// Inventory-aware two-way price (recipe 14's CRB skew, solo edition):
+var quote = SkewedQuoter.quote(mid, half, inventory, inventoryLimit, 0.5);
+
+// And the passive-vs-aggressive hedging decision as arithmetic, not
+// habit: fill probability, adverse selection (markouts), drift, rebate.
+var region = OrderPlacementPolicy.postRegion(halfSpread,
+        adverseSelectionFromMarkouts, expectedDrift, makerRebate);
+boolean post = region.contains(fillProbability);
+// In the toxic regime the region is EMPTY: cross and be done — a
+// passive fill there means the market just came THROUGH you.
+```
+
+VPIN reads near 0 on balanced flow and toward 1 on one-sided informed
+flow (famously elevated before the 2010 flash crash). Past your
+threshold, the honest moves are: widen, shrink, or stop quoting.
+Being the last quote standing in toxic flow is how you buy every top
+tick.
+
 ---
 
 Every number quoted here comes from a committed benchmark; every behavior

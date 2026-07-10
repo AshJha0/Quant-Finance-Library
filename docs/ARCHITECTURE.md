@@ -93,7 +93,7 @@ see **[DIAGRAMS.md](DIAGRAMS.md)** (Mermaid, renders on GitHub).
 
 - [LEARN.md](LEARN.md) — the from-zero tutorial: every concept above explained for
   beginners, with a guided reading path through these packages.
-- [COOKBOOK.md](COOKBOOK.md) — fourteen runnable recipes across the capabilities.
+- [COOKBOOK.md](COOKBOOK.md) — seventeen runnable recipes across the capabilities.
 - [MARKET_RISK.md](MARKET_RISK.md) — the 14-step market-risk workflow mapped to classes.
 - [CENTRAL_RISK_BOOK.md](CENTRAL_RISK_BOOK.md) — the central risk book: cross-product netting, internalization, cost-aware hedging, internal-first routing.
 - `docs/ULTRA_LOW_LATENCY.md` — the latency stack: in-library techniques, JVM flags,
