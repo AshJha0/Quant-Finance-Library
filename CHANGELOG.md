@@ -1,5 +1,38 @@
 # Changelog
 
+## Unreleased
+
+- **Adaptive quant & algo round: regime tests, drifting betas, optimal
+  bands, bandit selection** (tested in `AdaptiveQuantAlgosTest`):
+  - `microstructure.VarianceRatio` — the Lo-MacKinlay test: trending,
+    mean-reverting or random walk, with the homoskedastic z-statistic
+    (robust variant deliberately omitted, stated). The natural
+    companion to `OrnsteinUhlenbeck`: OU refuses a random walk, VR
+    tells you what the series is INSTEAD. Null-case test bounded at
+    3σ, not 2σ — a true random walk draws |z| in [2,3) ~4.5% of the
+    time, and a seed-sensitive assertion at the decision boundary is
+    a flake, not a test (found on the first run: seed 42 drew 2.011).
+  - `microstructure.KalmanBeta` — time-varying regression by Kalman
+    filter: relationships DRIFT, and a static OLS hedge ratio averages
+    the drift into a number that was never true on any single day —
+    the test demonstrates it head-to-head (planted β drifting 1→2:
+    filter lands at 2.0, full-sample OLS at ~1.5). processNoise = 0
+    degenerates to recursive least squares; the filter reports its
+    own β uncertainty.
+  - `hedging.WhalleyWilmott` — the OPTIMAL no-trade hedge band
+    (asymptotic, small proportional costs): band = ((3/2)·k·S·Γ²/λ)^⅓,
+    cube-root scaling laws pinned exactly (costs ×8 → band ×2), and
+    the policy that matters: hedge to the NEAREST EDGE, never the
+    center. Zero gamma degenerates to always-hedge-to-delta. This is
+    where `AutoHedger`/`CrbAutoHedger` band widths should come from.
+  - `execution.Ucb1Selector` — UCB1 bandit for venue/LP/algo-variant
+    selection while scorecards are thin: optimism bonus √(2·ln N/nᵢ),
+    rewards gated to [0,1] (a mis-scaled reward silently breaks the
+    exploration balance), deterministic tie-breaks, no arm ever fully
+    abandoned. Positioned honestly beside `VenueScorecard`: the
+    scorecards win once evidence is deep; the bandit wins the cold
+    start and A/B tests.
+
 ## 1.12.0 — 2026-07-11
 
 - **The volatility zoo completed** (the six-kinds taxonomy audited:

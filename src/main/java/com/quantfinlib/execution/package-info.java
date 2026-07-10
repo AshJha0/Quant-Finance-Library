@@ -46,8 +46,11 @@
  * as expected-cost arithmetic, with the post region in closed form),
  * {@link com.quantfinlib.execution.AntiGamingJitter} (seeded size/time
  * randomization — totals exact, monotonicity preserved, deterministic
- * per seed) and {@link com.quantfinlib.execution.FuturesRollAlgo}
+ * per seed), {@link com.quantfinlib.execution.FuturesRollAlgo}
  * (roll on the liquidity-migration S-curve, executed as calendar
- * spreads).</p>
+ * spreads) and {@link com.quantfinlib.execution.Ucb1Selector}
+ * (UCB1 bandit for venue/variant selection while scorecards are still
+ * thin: exploration decays exactly as evidence accumulates, no arm is
+ * ever fully abandoned).</p>
  */
 package com.quantfinlib.execution;
