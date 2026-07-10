@@ -56,25 +56,50 @@ public final class Vpin {
             throw new IllegalArgumentException("quantity must be > 0");
         }
         long remaining = quantity;
-        while (remaining > 0) {
-            long capacity = bucketVolume - (bucketBuy + bucketSell);
-            long take = Math.min(remaining, capacity);
+        // Finish the open bucket first.
+        long capacity = bucketVolume - (bucketBuy + bucketSell);
+        long take = Math.min(remaining, capacity);
+        if (buyAggressor) {
+            bucketBuy += take;
+        } else {
+            bucketSell += take;
+        }
+        remaining -= take;
+        if (bucketBuy + bucketSell == bucketVolume) {
+            completeBucket();
+        }
+        if (remaining == 0) {
+            return;
+        }
+        // Whole one-sided buckets, handled ARITHMETICALLY: a block of any
+        // size is O(window), never O(quantity/bucketVolume) — buckets
+        // older than the window would be evicted anyway, so only the
+        // last min(full, window) matter (each has imbalance exactly 1).
+        long full = remaining / bucketVolume;
+        long toRecord = Math.min(full, imbalances.length);
+        for (long i = 0; i < toRecord; i++) {
+            imbalances[head] = 1.0;
+            head = (head + 1) % imbalances.length;
+        }
+        filled = (int) Math.min(imbalances.length, filled + full);
+        remaining -= full * bucketVolume;
+        if (remaining > 0) {
             if (buyAggressor) {
-                bucketBuy += take;
+                bucketBuy = remaining;
             } else {
-                bucketSell += take;
-            }
-            remaining -= take;
-            if (bucketBuy + bucketSell == bucketVolume) {
-                imbalances[head] = Math.abs(bucketBuy - bucketSell) / (double) bucketVolume;
-                head = (head + 1) % imbalances.length;
-                if (filled < imbalances.length) {
-                    filled++;
-                }
-                bucketBuy = 0;
-                bucketSell = 0;
+                bucketSell = remaining;
             }
         }
+    }
+
+    private void completeBucket() {
+        imbalances[head] = Math.abs(bucketBuy - bucketSell) / (double) bucketVolume;
+        head = (head + 1) % imbalances.length;
+        if (filled < imbalances.length) {
+            filled++;
+        }
+        bucketBuy = 0;
+        bucketSell = 0;
     }
 
     /**

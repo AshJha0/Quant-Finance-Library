@@ -361,6 +361,7 @@ var q = SkewedQuoter.quote(mid, 2.0, book.exposure("EQ:SPY"), 5_000_000, 0.5);
 CrbHedgeUniverse hedges = new CrbHedgeUniverse(book.factors())
         .addSingleFactor("ES-FUTURE", "EQ:SPX", 0.4)
         .addFxForward("EURUSD-1W", "EURUSD", 1.10, 0.2);
+CrbAutoHedger hedger = new CrbAutoHedger(limits, 0.6, 1);   // bands, reset, cooldown
 var orders = hedger.check(book.netExposures(), cov,
         hedges.loadings(), hedges.costs(), lambda, interval);
 for (var o : orders) {

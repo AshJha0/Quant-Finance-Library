@@ -64,6 +64,36 @@ class AdvancedExecutionAlgosTest {
                 () -> new SpreadExecutionAlgo(100, Double.NaN, 3_000, 100));
     }
 
+    @Test
+    void fractionalRatiosOverfillsAndImpossibleCapsAreHandled() {
+        // Ratio 1.5, lead 3: the hedge target is round(4.5) = 5 —
+        // half-up over-hedging by design, certified here.
+        SpreadExecutionAlgo frac = new SpreadExecutionAlgo(3, 1.5, 4, 3);
+        while (!frac.done()) {
+            SpreadExecutionAlgo.Children c = frac.decide();
+            frac.onLeadFill(c.leadQty());
+            frac.onHedgeFill(c.hedgeQty());
+        }
+        assertEquals(3, frac.leadExecuted());
+        assertEquals(5, frac.hedgeExecuted(), "round(3 x 1.5) = 5, half-up");
+
+        // A legging cap smaller than one lead unit's hedge would make
+        // execution IMPOSSIBLE (decide() could never emit a lead child):
+        // rejected at construction, not discovered as a silent livelock.
+        assertThrows(IllegalArgumentException.class,
+                () -> new SpreadExecutionAlgo(100, 2.0, 1, 10),
+                "a cap that cannot cover one lead unit is not a spread");
+
+        // Hedge overfill is the same upstream bug the lead guard catches:
+        // a duplicate fill report must throw, not silently absorb.
+        SpreadExecutionAlgo over = new SpreadExecutionAlgo(10, 1.0, 5, 10);
+        over.onLeadFill(10);
+        assertThrows(IllegalArgumentException.class, () -> over.onHedgeFill(11),
+                "beyond the spread's hedge target");
+        over.onHedgeFill(10);
+        assertTrue(over.done());
+    }
+
     // ------------------------------------------------------------------
     // Order placement — the arithmetic of post vs cross
     // ------------------------------------------------------------------
@@ -86,11 +116,45 @@ class AdvancedExecutionAlgosTest {
         assertEquals(0.0828, toxic.expectedPostCost(), 1e-12);
         assertFalse(toxic.post(), "cross and be done");
 
-        // The breakeven threshold, verified from both sides.
-        double pStar = OrderPlacementPolicy.breakevenFillProbability(0.05, 0.02, 0.01, 0.002);
-        assertEquals(0.01 / 0.092, pStar, 1e-12, "d / (2h + r + d - a)");
-        assertTrue(OrderPlacementPolicy.decide(0.05, pStar + 0.01, 0.02, 0.01, 0.002).post());
-        assertFalse(OrderPlacementPolicy.decide(0.05, pStar - 0.01, 0.02, 0.01, 0.002).post());
+        // The post REGION, verified from both sides. Normal regime
+        // (2h+r+d > a): posting pays ABOVE the threshold.
+        OrderPlacementPolicy.PostRegion normal =
+                OrderPlacementPolicy.postRegion(0.05, 0.02, 0.01, 0.002);
+        assertEquals(0.01 / 0.092, normal.from(), 1e-12, "d / (2h + r + d - a)");
+        assertEquals(1, normal.to(), 1e-12);
+        assertTrue(OrderPlacementPolicy.decide(0.05, normal.from() + 0.01,
+                0.02, 0.01, 0.002).post());
+        assertFalse(OrderPlacementPolicy.decide(0.05, normal.from() - 0.01,
+                0.02, 0.01, 0.002).post());
+
+        // TOXIC regime (a > 2h+r+d): the slope flips and posting never
+        // pays — the region is EMPTY, where a scalar threshold would
+        // have reported a meaningless negative number.
+        assertTrue(OrderPlacementPolicy.postRegion(0.05, 0.15, 0.01, 0.002).isEmpty(),
+                "adverse selection swamps everything: never post");
+
+        // FLIPPED regime with favorable drift: posting pays only BELOW
+        // the threshold (waiting is good, but a fill means being run over).
+        OrderPlacementPolicy.PostRegion flipped =
+                OrderPlacementPolicy.postRegion(0.05, 0.3, -0.05, 0);
+        assertEquals(0, flipped.from(), 1e-12);
+        assertEquals(0.2, flipped.to(), 1e-12, "d/coef = -0.05/-0.25");
+        assertTrue(OrderPlacementPolicy.decide(0.05, 0.1, 0.3, -0.05, 0).post(),
+                "below the flipped threshold: post");
+        assertFalse(OrderPlacementPolicy.decide(0.05, 0.3, 0.3, -0.05, 0).post(),
+                "above it: a fill here means being run over — cross");
+
+        // Flat-in-p regime (coef == 0): the drift sign decides for all p.
+        assertFalse(OrderPlacementPolicy.postRegion(1, 1, -1, 0).isEmpty(),
+                "postCost = h+d-0 = 0 < 1 for every p");
+        assertTrue(OrderPlacementPolicy.postRegion(1, 2.1, 0.1, 0).isEmpty());
+
+        // Exact probability boundaries.
+        assertFalse(OrderPlacementPolicy.decide(0.05, 0, 0.02, 0, 0).post(),
+                "p = 0, d = 0: a tie, resolved to CROSS");
+        assertEquals(0.02 - 0.05 - 0.002,
+                OrderPlacementPolicy.decide(0.05, 1, 0.02, 0.01, 0.002)
+                        .expectedPostCost(), 1e-12, "p = 1: cost is a - h - r exactly");
 
         // Favorable drift (the market is expected to come to you) makes
         // waiting cheaper, exactly as it should.
@@ -153,6 +217,18 @@ class AdvancedExecutionAlgosTest {
                 () -> new AntiGamingJitter(1, 0.6, 0.1));
         assertThrows(IllegalArgumentException.class,
                 () -> jitter.jitterTimes(new long[]{5, 5}, 0));
+
+        // Zero fractions = IDENTITY, exactly — "jitter off" must mean
+        // the untouched schedule, an auditable property.
+        AntiGamingJitter off = new AntiGamingJitter(99, 0, 0);
+        assertArrayEquals(clockwork, off.jitterSizes(clockwork));
+        assertArrayEquals(times, off.jitterTimes(times, 0));
+
+        // Degenerate schedules survive: one child, no pairs to transfer.
+        assertArrayEquals(new long[]{5_000},
+                jitter.jitterSizes(new long[]{5_000}));
+        assertArrayEquals(new long[]{100},
+                new AntiGamingJitter(3, 0.3, 0.4).jitterTimes(new long[]{100}, 0));
     }
 
     // ------------------------------------------------------------------
@@ -199,5 +275,25 @@ class AdvancedExecutionAlgosTest {
         assertThrows(IllegalArgumentException.class,
                 () -> new FuturesRollAlgo(1_000, new double[]{0.5, 0.4, 1.0}));
         assertThrows(IllegalArgumentException.class, () -> roll.onRolled(1));
+
+        // Degenerate windows: a single-day roll and a one-lot position.
+        FuturesRollAlgo oneDay = new FuturesRollAlgo(500,
+                FuturesRollAlgo.defaultMigration(1));
+        assertEquals(500, oneDay.dueOnDay(0), "everything, today");
+        oneDay.onRolled(500);
+        assertTrue(oneDay.done());
+        FuturesRollAlgo oneLot = new FuturesRollAlgo(1, FuturesRollAlgo.defaultMigration(5));
+        long total = 0;
+        for (int d = 0; d < 5; d++) {
+            long due = oneLot.dueOnDay(d);
+            oneLot.onRolled(due);
+            total += due;
+        }
+        assertEquals(1, total, "rounding never loses or duplicates the lot");
+        assertTrue(oneLot.done());
+        // Zero early entries are valid: nothing due yet, contract [0, 1].
+        FuturesRollAlgo lateStart = new FuturesRollAlgo(1_000, new double[]{0, 0, 1});
+        assertEquals(0, lateStart.dueOnDay(0));
+        assertEquals(1_000, lateStart.dueOnDay(2));
     }
 }

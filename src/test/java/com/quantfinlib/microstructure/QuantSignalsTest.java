@@ -56,6 +56,30 @@ class QuantSignalsTest {
         assertThrows(IllegalArgumentException.class, () -> calm.onTrade(0, true));
     }
 
+    @Test
+    void vpinEvictsExactlyTheOldestBucketAndSurvivesBlockTrades() {
+        // Window 3 holding {1, 0, 0}: rolling in one more balanced bucket
+        // must evict exactly the toxic 1.0 — not average a stale slot.
+        Vpin vpin = new Vpin(100, 3);
+        vpin.onTrade(100, true);                       // bucket 1: imbalance 1
+        for (int i = 0; i < 2; i++) {
+            vpin.onTrade(50, true);                    // buckets 2, 3: balanced
+            vpin.onTrade(50, false);
+        }
+        assertEquals(1.0 / 3, vpin.vpin(), 1e-12, "window {1, 0, 0}");
+        vpin.onTrade(50, true);
+        vpin.onTrade(50, false);
+        assertEquals(0.0, vpin.vpin(), 1e-12,
+                "the oldest (toxic) bucket was the one evicted");
+
+        // A block trade of ANY size is O(window), never O(size/bucket):
+        // this returns instantly and reads maximum toxicity.
+        Vpin block = new Vpin(1_000, 4);
+        block.onTrade(Long.MAX_VALUE - 1, true);
+        assertTrue(block.ready());
+        assertEquals(1.0, block.vpin(), 1e-12, "one-sided by definition");
+    }
+
     // ------------------------------------------------------------------
     // Ornstein-Uhlenbeck
     // ------------------------------------------------------------------
@@ -131,6 +155,18 @@ class QuantSignalsTest {
         // The floor: a pathological parameter set cannot forecast a
         // negative variance.
         assertEquals(0, HarRv.forecast(rv, new HarRv.Params(-10, 0, 0, 0)), 0.0);
+
+        // Window alignment pinned EXACTLY where the horizons disagree:
+        // 21 flat days then a spiked last day. d = 0.5, w = (4·0.1+0.5)/5
+        // = 0.18, m = (21·0.1+0.5)/22; a d/w swap or off-by-one window
+        // moves this a lot.
+        double[] spiked = new double[22];
+        java.util.Arrays.fill(spiked, 0.1);
+        spiked[21] = 0.5;
+        HarRv.Params hand = new HarRv.Params(0.01, 0.5, 0.3, 0.1);
+        double expected = 0.01 + 0.5 * 0.5 + 0.3 * 0.18 + 0.1 * (21 * 0.1 + 0.5) / 22;
+        assertEquals(expected, HarRv.forecast(spiked, hand), 1e-12,
+                "c + bd·d + bw·w + bm·m, by hand");
 
         assertThrows(IllegalArgumentException.class, () -> HarRv.fit(new double[59]));
         double[] bad = rv.clone();

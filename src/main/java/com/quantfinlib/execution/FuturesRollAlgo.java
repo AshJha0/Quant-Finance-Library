@@ -29,7 +29,8 @@ public final class FuturesRollAlgo {
      *                          the caller's ticket), &gt; 0
      * @param cumulativeMigration cumulative fraction migrated by end of
      *                            each roll day: non-decreasing, in
-     *                            (0, 1], final entry exactly 1
+     *                            [0, 1] (a zero early entry = nothing
+     *                            due yet), final entry exactly 1
      */
     public FuturesRollAlgo(long positionContracts, double[] cumulativeMigration) {
         if (positionContracts <= 0) {
@@ -42,7 +43,7 @@ public final class FuturesRollAlgo {
         for (double c : cumulativeMigration) {
             if (!(c >= prev) || c > 1) {
                 throw new IllegalArgumentException(
-                        "migration curve must be non-decreasing within (0, 1]");
+                        "migration curve must be non-decreasing within [0, 1]");
             }
             prev = c;
         }

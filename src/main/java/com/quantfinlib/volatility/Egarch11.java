@@ -17,11 +17,13 @@ import com.quantfinlib.util.MathUtils;
  * nothing else.
  *
  * <p>Estimation mirrors the family: Gaussian MLE over a coarse-to-fine
- * grid spanning the FULL admissible box (the {@code GjrGarch11}
- * lesson: a narrower starting box is a hard cap in disguise), with ω
- * targeted to the sample's log variance ({@code ω = (1−β)·ln σ̄²} — an
- * approximation, since {@code E[ln h] ≤ ln E[h]} by Jensen; stated,
- * not hidden). One-step-ahead {@link #nextVariance} is exact; multi-
+ * grid spanning the EMPIRICALLY PLAUSIBLE box — α ∈ [0, 0.9],
+ * γ ∈ [−0.9, 0.9], β ∈ [0, 0.995]. Negative α or β, while formally
+ * admissible in the log form, are not searched (stated, not hidden:
+ * they describe oscillating log-variance no asset-return series
+ * exhibits). ω is targeted to the sample's log variance
+ * ({@code ω = (1−β)·ln σ̄²} — an approximation, since
+ * {@code E[ln h] ≤ ln E[h]} by Jensen; stated, not hidden). One-step-ahead {@link #nextVariance} is exact; multi-
  * step forecasts are deliberately NOT offered — iterating the log
  * recursion forecasts the MEDIAN variance, not the mean, and quietly
  * returning it as "the forecast" is the kind of lie this library
@@ -65,8 +67,9 @@ public final class Egarch11 {
         double bestGamma = 0;
         double bestBeta = 0.9;
         double bestLl = Double.NEGATIVE_INFINITY;
-        // Full admissible box: |β| < 1 is the ONLY constraint the log
-        // form imposes; α/γ boxes span every empirically plausible fit.
+        // The empirically plausible box (see class doc): |β| < 1 is the
+        // only formal constraint, but negative α/β describe oscillating
+        // log-variance no return series exhibits and are not searched.
         double aLo = 0.0, aHi = 0.9;
         double gLo = -0.9, gHi = 0.9;
         double bLo = 0.0, bHi = 0.995;
@@ -103,6 +106,25 @@ public final class Egarch11 {
         return new Params(omega, bestAlpha, bestGamma, bestBeta, bestLl);
     }
 
+    /**
+     * The recursion needs a positive, finite starting variance — a
+     * constant or NaN-bearing series would return h = 0 or NaN silently,
+     * contradicting the "positive by construction" guarantee.
+     */
+    private static void requireSeries(double[] returns) {
+        if (returns.length < 2) {
+            throw new IllegalArgumentException("need >= 2 returns");
+        }
+        for (double x : returns) {
+            if (!Double.isFinite(x)) {
+                throw new IllegalArgumentException("returns must be finite");
+            }
+        }
+        if (!(MathUtils.variance(returns) > 0)) {
+            throw new IllegalArgumentException("returns carry no variance");
+        }
+    }
+
     private static double logLikelihood(double[] r, double lnSampleVar,
                                         double alpha, double gamma, double beta) {
         double lnH = lnSampleVar;
@@ -124,6 +146,7 @@ public final class Egarch11 {
 
     /** Conditional variance series under the fitted parameters. */
     public static double[] conditionalVariances(double[] returns, Params p) {
+        requireSeries(returns);
         double mean = MathUtils.mean(returns);
         double[] h = new double[returns.length];
         double lnH = Math.log(MathUtils.variance(returns));

@@ -37,5 +37,17 @@
  * {@link com.quantfinlib.execution.MidPegTracker} (peg repricing with
  * thresholds) and {@link com.quantfinlib.execution.VenueBenchmark}
  * (fill rate, effective spread, markout per venue).
+ *
+ * <p>The spread-and-microstructure layer:
+ * {@link com.quantfinlib.execution.SpreadExecutionAlgo} (two-legged
+ * pairs/basis execution — the illiquid lead leg worked patiently, the
+ * liquid hedge leg chasing at the ratio, and a HARD legging-risk cap),
+ * {@link com.quantfinlib.execution.OrderPlacementPolicy} (post-or-cross
+ * as expected-cost arithmetic, with the post region in closed form),
+ * {@link com.quantfinlib.execution.AntiGamingJitter} (seeded size/time
+ * randomization — totals exact, monotonicity preserved, deterministic
+ * per seed) and {@link com.quantfinlib.execution.FuturesRollAlgo}
+ * (roll on the liquidity-migration S-curve, executed as calendar
+ * spreads).</p>
  */
 package com.quantfinlib.execution;

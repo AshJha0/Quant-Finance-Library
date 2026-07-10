@@ -7,7 +7,8 @@ first, warehouse what nets against future flow, hedge only the excess
 — and hedge it through yourself before anyone else.
 
 Everything lives in `com.quantfinlib.crb` (research/warm lane,
-deterministic, tested in `CrbBookTest` and `CrbExecutionTest`).
+deterministic, tested in `CrbBookTest`, `CrbExecutionTest`,
+`CrbPersistenceAndUniverseTest` and `CrbRealWorldScenarioTest`).
 
 ## 1. One factor space for every product
 

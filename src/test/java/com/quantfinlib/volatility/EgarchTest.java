@@ -78,4 +78,36 @@ class EgarchTest {
         assertThrows(IllegalArgumentException.class, () -> Egarch11.fit(new double[200]),
                 "zero variance is not a fittable series");
     }
+
+    @Test
+    void oneStepRecursionMatchesHandArithmeticExactly() {
+        // Two returns {0.01, -0.02}: mean -0.005, sample var 4.5e-4.
+        // z1 = 0.015/sqrt(4.5e-4) = 1/sqrt(2); the recursion is then
+        // fully determined — computed by hand below and pinned.
+        Egarch11.Params p = new Egarch11.Params(
+                0.1 * Math.log(1e-4), 0.15, -0.12, 0.9, 0);
+        double[] r = {0.01, -0.02};
+        double lnH0 = Math.log(4.5e-4);
+        double z1 = 0.015 / Math.sqrt(4.5e-4);
+        double lnH1 = p.omega() + 0.9 * lnH0
+                + 0.15 * (z1 - Math.sqrt(2 / Math.PI)) - 0.12 * z1;
+        double[] cv = Egarch11.conditionalVariances(r, p);
+        assertEquals(4.5e-4, cv[0], 1e-18, "seeded at the sample variance");
+        assertEquals(Math.exp(lnH1), cv[1], 1e-15, "the exact one-step transition");
+
+        double z2 = -0.015 / Math.sqrt(cv[1]);
+        double lnH2 = p.omega() + 0.9 * Math.log(cv[1])
+                + 0.15 * (Math.abs(z2) - Math.sqrt(2 / Math.PI)) - 0.12 * z2;
+        assertEquals(Math.exp(lnH2), Egarch11.nextVariance(r, p), 1e-15,
+                "nextVariance IS the recursion's next step, nothing else");
+
+        // The house gates: a constant series must throw, never return
+        // h = 0 (which would contradict 'positive by construction').
+        assertThrows(IllegalArgumentException.class,
+                () -> Egarch11.conditionalVariances(new double[]{0.01, 0.01, 0.01}, p));
+        assertThrows(IllegalArgumentException.class,
+                () -> Egarch11.nextVariance(new double[]{0.01, Double.NaN}, p));
+        assertThrows(IllegalArgumentException.class,
+                () -> Egarch11.conditionalVariances(new double[]{0.01}, p));
+    }
 }

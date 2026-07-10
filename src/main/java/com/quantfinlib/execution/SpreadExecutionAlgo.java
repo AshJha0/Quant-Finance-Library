@@ -55,6 +55,13 @@ public final class SpreadExecutionAlgo {
         if (leggingLimitHedgeUnits < 1) {
             throw new IllegalArgumentException("leggingLimit must be >= 1 hedge unit");
         }
+        if (leggingLimitHedgeUnits < hedgePerLeadUnit) {
+            // floor(limit/ratio) would be 0 at zero imbalance: decide()
+            // could never emit a lead child and the algo would livelock.
+            throw new IllegalArgumentException("leggingLimit " + leggingLimitHedgeUnits
+                    + " cannot cover even one lead unit's hedge (ratio "
+                    + hedgePerLeadUnit + ") — execution would be impossible");
+        }
         if (leadChildMax <= 0) {
             throw new IllegalArgumentException("leadChildMax must be > 0");
         }
@@ -97,10 +104,14 @@ public final class SpreadExecutionAlgo {
         leadExecuted += qty;
     }
 
-    /** Hedge-leg fill. */
+    /** Hedge-leg fill. Bounded by the full spread's hedge target —
+     *  a fill beyond it is a duplicate report, the same upstream bug
+     *  the lead-leg guard exists to catch. */
     public void onHedgeFill(long qty) {
-        if (qty < 0) {
-            throw new IllegalArgumentException("hedge fill must be >= 0");
+        long target = Math.round(leadParent * ratio);
+        if (qty < 0 || hedgeExecuted + qty > target) {
+            throw new IllegalArgumentException("hedge fill " + qty
+                    + " would exceed the spread's hedge target " + target);
         }
         hedgeExecuted += qty;
     }

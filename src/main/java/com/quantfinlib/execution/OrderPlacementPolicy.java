@@ -67,19 +67,58 @@ public final class OrderPlacementPolicy {
     }
 
     /**
-     * The fill probability at which posting and crossing break even —
-     * the desk's rule-of-thumb threshold for these market conditions.
-     * Returns a value possibly outside [0, 1]: above 1 means posting
-     * NEVER pays here (e.g. adverse selection swamps the spread), below
-     * 0 means it always does.
+     * The fill-probability REGION where posting beats crossing. A single
+     * breakeven scalar cannot carry the answer: {@code postCost(p) =
+     * (h+d) − p·(2h+r+d−a)} is linear in p, and when adverse selection
+     * exceeds {@code 2h+r+d} the slope flips — posting then pays only
+     * BELOW the threshold, not above. The region says it directly.
+     * Empty ({@link #isEmpty()}) = never post under these conditions.
+     * Boundaries are indifference points (measure zero; {@code decide}
+     * crosses on a tie).
      */
-    public static double breakevenFillProbability(double halfSpread, double adverseSelection,
-                                                  double adverseDrift, double rebate) {
-        // Solve p·(a − h − r) + (1−p)(h + d) = h  →  p = d / (2h + r + d − a).
-        double denominator = 2 * halfSpread + rebate + adverseDrift - adverseSelection;
-        if (denominator == 0) {
-            return Double.POSITIVE_INFINITY;
+    public record PostRegion(double from, double to) {
+
+        public boolean isEmpty() {
+            return from > to;
         }
-        return adverseDrift / denominator;
+
+        public boolean contains(double fillProbability) {
+            return fillProbability >= from && fillProbability <= to;
+        }
+    }
+
+    private static final PostRegion NEVER = new PostRegion(1, 0);
+
+    /**
+     * The desk's rule for these market conditions: post iff the fill
+     * probability lands inside the returned region of [0, 1].
+     */
+    public static PostRegion postRegion(double halfSpread, double adverseSelection,
+                                        double adverseDrift, double rebate) {
+        if (!(halfSpread > 0) || halfSpread == Double.POSITIVE_INFINITY) {
+            throw new IllegalArgumentException("halfSpread must be positive and finite");
+        }
+        if (!(adverseSelection >= 0) || adverseSelection == Double.POSITIVE_INFINITY) {
+            throw new IllegalArgumentException("adverseSelection must be >= 0 and finite");
+        }
+        if (!Double.isFinite(adverseDrift)) {
+            throw new IllegalArgumentException("adverseDrift must be finite");
+        }
+        if (!(rebate >= 0) || rebate == Double.POSITIVE_INFINITY) {
+            throw new IllegalArgumentException("rebate must be >= 0 and finite");
+        }
+        // postCost(p) = (h + d) − p·coef;  post iff postCost < h  ⇔  d < p·coef.
+        double coef = 2 * halfSpread + rebate + adverseDrift - adverseSelection;
+        if (coef > 0) {
+            double pStar = adverseDrift / coef;
+            return pStar >= 1 ? NEVER : new PostRegion(Math.max(0, pStar), 1);
+        }
+        if (coef < 0) {
+            // The slope flipped: posting pays only BELOW the threshold.
+            double pStar = adverseDrift / coef;
+            return pStar <= 0 ? NEVER : new PostRegion(0, Math.min(1, pStar));
+        }
+        // Flat in p: the sign of the drift decides for every p at once.
+        return adverseDrift < 0 ? new PostRegion(0, 1) : NEVER;
     }
 }

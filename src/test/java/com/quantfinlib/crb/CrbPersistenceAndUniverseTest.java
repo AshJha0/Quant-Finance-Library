@@ -77,6 +77,48 @@ class CrbPersistenceAndUniverseTest {
                 () -> r3.section("crb.book", day2::readState));
     }
 
+    @Test
+    void ledgerRoundTripsEveryFieldAndIgnoresFullyRoutedFlow(@TempDir Path dir)
+            throws IOException {
+        CrbPnlLedger ledger = new CrbPnlLedger();
+        ledger.onInternalized(1_000_000, 4, 1);        // captured 300, paid 100
+        ledger.onHedge(-500_000, 2);                   // cost 100 (abs notional)
+        ledger.onRoute(200_000, new CrbRouter.Allocation(0, new double[0], 200_000, 3));
+        assertEquals(300, ledger.spreadCaptured(), 1e-9);
+        assertEquals(100, ledger.improvementPaid(), 1e-9);
+        assertEquals(100, ledger.hedgeCost(), 1e-9);
+        assertEquals(60, ledger.routerCost(), 1e-9);
+        assertEquals(1, ledger.internalizations());
+        assertEquals(1, ledger.hedges());
+        assertEquals(300 - 100 - 60, ledger.netEconomics(), 1e-9);
+
+        // A fully-routed decision earns NOTHING and counts as nothing —
+        // the internalization stat must not inflate on flow we passed on.
+        ledger.onDecision(new InternalizationEngine.Decision(0, 5_000_000, 0), 4);
+        assertEquals(1, ledger.internalizations(), "routed flow is not internalization");
+        assertEquals(300, ledger.spreadCaptured(), 1e-9);
+
+        // The gate: improvement beyond the half spread means the desk
+        // would be PAYING clients to trade.
+        assertThrows(IllegalArgumentException.class,
+                () -> ledger.onInternalized(1_000_000, 4, 5));
+
+        // EVERY field survives the round-trip — not just netEconomics,
+        // which a swapped hedgeCost/routerCost would leave unchanged.
+        Path file = dir.resolve("ledger.qfl");
+        try (Checkpoint.Writer w = Checkpoint.writer(file)) {
+            w.section("crb.pnl", ledger::writeState);
+        }
+        CrbPnlLedger restored = new CrbPnlLedger();
+        assertTrue(Checkpoint.reader(file).section("crb.pnl", restored::readState));
+        assertEquals(ledger.spreadCaptured(), restored.spreadCaptured(), 0.0);
+        assertEquals(ledger.improvementPaid(), restored.improvementPaid(), 0.0);
+        assertEquals(ledger.hedgeCost(), restored.hedgeCost(), 0.0);
+        assertEquals(ledger.routerCost(), restored.routerCost(), 0.0);
+        assertEquals(ledger.internalizations(), restored.internalizations());
+        assertEquals(ledger.hedges(), restored.hedges());
+    }
+
     // ------------------------------------------------------------------
     // Hedge universe
     // ------------------------------------------------------------------
