@@ -394,10 +394,71 @@ yesterday's icebergs onto today's unrelated prices).
 
 ---
 
+## 13. The central risk book — one netted view, four decisions
+
+Every product decomposes into ONE factor space at booking (currency-level
+FX legs, per-symbol equity deltas, gamma/vega per underlying), and every
+downstream decision runs on the netted residual. The commercial loop:
+capture spread by internalizing, spend as little of it as possible on
+hedging, and answer one question at the close.
+
+```mermaid
+flowchart TB
+    FLOWS["client flows, all desks<br/>cash equity · equity options · FX spot<br/>FX swaps · NDFs · FX options"]
+    FLOWS -->|"quote with inventory skew<br/>SkewedQuoter"| DECIDE{"InternalizationEngine<br/>risk-reducing? warehouse room?"}
+    DECIDE -->|"internalize<br/>(+ price improvement)"| BOOK["CentralRiskBook<br/>ONE factor space:<br/>EQ:sym · CCY:ccy · FXPOINTS:pair<br/>gamma · vega · pending fixings"]
+    DECIDE -->|"route out"| STREET["the street"]
+    BOOK -->|"band breach?<br/>hedge the EXCESS only"| HEDGE["CrbAutoHedger →<br/>HedgeOptimizer<br/>(min variance + L1 cost;<br/>uneconomic hedges = exactly 0)<br/>over CrbHedgeUniverse"]
+    HEDGE --> ROUTE["CrbRouter:<br/>1. internal cross (free, silent)<br/>2. dark pools by adverse-selection bps<br/>3. lit (spread + impact, but fills)"]
+    ROUTE --> STREET
+    BOOK -->|"report(cov, 0.99)"| RISK["VarEngine VaR/ES +<br/>diversification benefit:<br/>standalone desk VaRs − netted VaR"]
+    BOOK & HEDGE & ROUTE -->|"realized economics"| PNL["CrbPnlLedger:<br/>spread captured − improvement paid<br/>− hedge cost − routing cost<br/>= did netting pay for its risk management?"]
+    BOOK <-->|"writeState / readState<br/>overnight"| CKPT[("Checkpoint")]
+```
+
+The whole loop at realistic sizes and costs is
+`crb/CrbRealWorldScenarioTest` (quiet day, one-way institutional day,
+COVID-template stress day, NDF fixing day); recipe 14 is the runnable
+version and [CENTRAL_RISK_BOOK.md](CENTRAL_RISK_BOOK.md) the guided tour.
+
+---
+
+## 14. The market-risk workflow — data to Basel, fourteen steps
+
+The map `docs/MARKET_RISK.md` maintains, as a pipeline. Every box is
+implemented and tested; the regulatory boxes are styled after BCBS, not
+certified — stated, not hidden.
+
+```mermaid
+flowchart LR
+    subgraph INPUTS["1-3 data → factors"]
+        DATA["collection + cleaning<br/>CorporateActions · SeriesAligner<br/>YieldCurve bootstrap ·<br/>LiquidityMeasures (bars only)"]
+        DATA --> FACTORS["risk factors<br/>Pca (how many are REAL?)<br/>crb.CentralRiskBook<br/>(the worked decomposition)"]
+    end
+    subgraph MODELS["4-7 models"]
+        FACTORS --> PRICE["pricing<br/>BlackScholes · Black76 · Heston<br/>Vasicek/CIR/Hull-White · trees · MC"]
+        PRICE --> GREEKS["sensitivities<br/>delta/gamma/vega/theta/rho<br/>vanna · volga · cross-gamma<br/>DV01 · key-rate durations"]
+        FACTORS --> VOL["volatility<br/>EWMA · GARCH · GJR · EGARCH<br/>HAR-RV · bipower · Heston"]
+        FACTORS --> DEP["dependence<br/>Spearman/Kendall · PCA<br/>Gaussian + t copulas"]
+    end
+    subgraph RISK["8-11 risk numbers"]
+        GREEKS & VOL & DEP --> VAR["VaR/ES, five flavors<br/>delta-normal · MC · delta-gamma<br/>historical · FULL REVALUATION"]
+        VAR --> TAIL["tail: EVT/POT/GPD<br/>(refuses infinite means)"]
+        VAR --> STRESS["stress + REVERSE stress<br/>('what breaks us, at how many σ?')"]
+        VAR --> BT["backtests: Kupiec ·<br/>Christoffersen · traffic light"]
+    end
+    subgraph REG["12-14 the wrap"]
+        TAIL & STRESS & BT --> FRTB["FRTB: ES 97.5 liquidity cascade<br/>+ PLAT zones (MAR32/33-styled)"]
+        FRTB --> PROD["production: dashboards ·<br/>Checkpoint · reports"]
+    end
+```
+
+---
+
 ## Where to go next
 
 - [LEARN.md](LEARN.md) — the from-zero tutorial: every concept in these diagrams, explained for beginners
 - [ARCHITECTURE.md](ARCHITECTURE.md) — the package → classes → tests map and design invariants
 - [ULTRA_LOW_LATENCY.md](ULTRA_LOW_LATENCY.md) — the four-tier latency stack, honestly bounded
-- [COOKBOOK.md](COOKBOOK.md) — fourteen runnable recipes across these flows
+- [COOKBOOK.md](COOKBOOK.md) — seventeen runnable recipes across these flows
 - `README.md` — capability tour with runnable examples and all measured numbers
