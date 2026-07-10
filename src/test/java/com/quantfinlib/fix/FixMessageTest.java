@@ -11,6 +11,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FixMessageTest {
 
+    @Test
+    void corruptBodyLengthFailsLoudlyInsteadOfZombifying() {
+        // One flipped byte in the BodyLength digits used to inflate the
+        // expected frame size, and the framer would then wait FOREVER —
+        // a zombie session silently swallowing all later traffic.
+        byte[] bytes = sampleOrder();
+        int soh = 0;
+        while (bytes[soh] != FixMessage.SOH) {
+            soh++;
+        }
+        bytes[soh + 3] = ':';                  // '9' + 1: the classic bit flip
+        FixDecoder decoder = new FixDecoder();
+        decoder.feed(bytes, 0, bytes.length);
+        assertThrows(IllegalStateException.class, decoder::poll,
+                "corruption must disconnect, never stall");
+    }
+
     private static byte[] sampleOrder() {
         return FixMessage.builder(FixMessage.NEW_ORDER_SINGLE)
                 .field(FixMessage.CL_ORD_ID, "ord-1")

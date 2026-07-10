@@ -189,6 +189,52 @@ class FixSessionTest {
         long clientHeartbeats = clientEvents.messages.stream()
                 .filter(m -> FixMessage.HEARTBEAT.equals(m.msgType())).count();
         assertTrue(clientHeartbeats >= 1, "no heartbeats received: " + clientHeartbeats);
+        // The UPPER bound matters too: heartbeating far above the
+        // negotiated 1s interval is a venue-disconnect offense that
+        // "at least one" would never catch. Generous (a slow CI cannot
+        // flake it) but an interval-unit bug fails instantly.
+        assertTrue(clientHeartbeats <= 8,
+                "heartbeat spam at a 1s interval over ~2.5s: " + clientHeartbeats);
+    }
+
+    @Test
+    void deadPeerEscalatesToTestRequestThenDisconnects() throws Exception {
+        // A HALF-DEAD peer: TCP established and reading, application
+        // silent — the failure mode that hangs sessions forever when the
+        // TestRequest/timeout escalation regresses.
+        server = new ServerSocket(0);
+        Future<FixSession> accepting = executor.submit(() -> FixSession.accept(server,
+                new FixSession.Config("VENUE", "CLIENT", 1), venueEvents));
+        try (java.net.Socket raw = new java.net.Socket("127.0.0.1", server.getLocalPort())) {
+            raw.getOutputStream().write(FixMessage.builder(FixMessage.LOGON)
+                    .field(FixMessage.HEART_BT_INT, 1L)
+                    .encode("CLIENT", "VENUE", 1, "20260710-12:00:00.000"));
+            raw.getOutputStream().flush();
+            venue = accepting.get(5, TimeUnit.SECONDS);
+            assertTrue(venue.isEstablished());
+
+            // Read everything the venue sends (its writes never block),
+            // but never write again.
+            java.io.InputStream in = raw.getInputStream();
+            StringBuilder wire = new StringBuilder();
+            byte[] chunk = new byte[1024];
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(8);
+            while (System.nanoTime() < deadline && venueEvents.disconnectReason == null) {
+                if (in.available() > 0) {
+                    int n = in.read(chunk);
+                    for (int i = 0; i < n; i++) {
+                        wire.append((char) chunk[i]);
+                    }
+                } else {
+                    Thread.sleep(20);
+                }
+            }
+            assertTrue(wire.toString().contains("35=1"),
+                    "silence must escalate to a TestRequest before the kill: " + wire);
+            assertTrue(venueEvents.disconnectReason != null,
+                    "a peer that ignores the TestRequest gets disconnected");
+            assertTrue(!venue.isEstablished(), "the session is DOWN, not zombified");
+        }
     }
 
     @Test

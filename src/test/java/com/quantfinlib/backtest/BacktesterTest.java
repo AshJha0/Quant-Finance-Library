@@ -113,6 +113,15 @@ class BacktesterTest {
         assertEquals(1, result.trades().size());
         assertEquals(Trade.REASON_TAKE_PROFIT, result.trades().getFirst().exitReason());
         assertTrue(result.trades().getFirst().pnl() > 0);
+        // The fill must be AT the 120 target (max(target, open)), not the
+        // bar's close (128) or high (130) — a close-fill would inflate
+        // every take-profit trade by ~7% and still pass the sign checks.
+        assertTrue(result.trades().getFirst().returnPct() > 0.15
+                        && result.trades().getFirst().returnPct() < 0.22,
+                "filled at the target, costs aside: "
+                        + result.trades().getFirst().returnPct());
+        assertEquals(5, result.trades().getFirst().exitIndex(),
+                "triggered intrabar on the rally bar");
     }
 
     @Test

@@ -124,6 +124,44 @@ class SbeCodecTest {
         }
     }
 
+    @Test
+    void orderChannelReassemblesSplitFramesAndDetectsCorruption() throws Exception {
+        // The market-data side has both of these tests; the ORDER channel
+        // — where a compact() bug means duplicated or dropped orders at
+        // the venue seam — had neither.
+        Pipe pipe = Pipe.open();
+        List<long[]> received = new ArrayList<>();
+        BinaryOrderReceiver receiver = new BinaryOrderReceiver(pipe.source(),
+                (orderId, symbolId, side, qty, price, ts) -> {
+                    synchronized (received) {
+                        received.add(new long[]{orderId, symbolId, qty});
+                    }
+                });
+        receiver.start();
+
+        ByteBuffer frame = ByteBuffer.allocate(OrderFlyweight.BLOCK_LENGTH)
+                .order(ByteOrder.LITTLE_ENDIAN);
+        new OrderFlyweight().wrap(frame, 0).encode(7L, 2, Side.BUY, 500, 101.5, 42L);
+        writeChunk(pipe, frame, 0, 10);                    // a torn write...
+        Thread.sleep(50);
+        writeChunk(pipe, frame, 10, OrderFlyweight.BLOCK_LENGTH - 10);
+        awaitTrue(() -> receiver.ordersReceived() == 1, "split frame not reassembled");
+        synchronized (received) {
+            assertEquals(1, received.size(), "exactly ONE order — never a duplicate");
+            assertEquals(7L, received.get(0)[0]);
+            assertEquals(2L, received.get(0)[1]);
+            assertEquals(500L, received.get(0)[2]);
+        }
+
+        // Corruption stops the stream loudly, and fabricates nothing.
+        ByteBuffer junk = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN);
+        junk.putInt(0, 99);
+        writeChunk(pipe, junk, 0, 8);
+        awaitTrue(() -> receiver.failureReason() != null, "corruption not detected");
+        assertTrue(receiver.failureReason().contains("unknown message type 99"));
+        assertEquals(1, receiver.ordersReceived(), "no orders fabricated from junk");
+    }
+
     // ---- Binary order entry off the gateway's venue seam ---------------------
 
     @Test

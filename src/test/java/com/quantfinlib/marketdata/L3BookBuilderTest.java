@@ -19,6 +19,27 @@ class L3BookBuilderTest {
         return new L3BookBuilder(LOCATE, MIN, MAX, 1 << 12);
     }
 
+    @Test
+    void attributedAddsBookExactlyLikePlainAdds() {
+        // On real TotalView a large share of adds are type 'F' (add with
+        // MPID attribution). Dropping that dispatch case would silently
+        // ignore them and corrupt the whole book — this pins the path,
+        // which needs a hand-crafted frame (no encoder produces F).
+        assertEquals(40, ItchCodec.length(ItchCodec.ADD_MPID));
+        L3BookBuilder b = book();
+        byte[] buf = new byte[64];
+        ItchCodec.encodeAdd(buf, 0, LOCATE, 1L, 7, ItchCodec.BUY, 100,
+                ItchCodec.packStock("TEST"), 1_750_000);
+        buf[0] = ItchCodec.ADD_MPID;                   // same layout + 4 MPID bytes
+        buf[36] = 'M';
+        buf[37] = 'P';
+        buf[38] = 'I';
+        buf[39] = 'D';
+        assertEquals(40, b.onMessage(buf, 0), "consumed as a 40-byte F frame");
+        assertEquals(100, b.openQuantity(7), "the attributed add is IN the book");
+        assertEquals(1_750_000, b.bestBidTick());
+    }
+
     // ------------------------------------------------------------------
     // Book semantics
     // ------------------------------------------------------------------
