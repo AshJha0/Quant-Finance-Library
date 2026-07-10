@@ -85,7 +85,10 @@ public final class VolatilityIndex {
                 pivot = i;
             }
         }
-        double df = Math.exp(rate * tYears);
+        // e^{+rT}: FORWARD-values the option mids (the CBOE construction)
+        // — this is a growth factor, not a discount factor; "fixing" it
+        // to e^{-rT} would introduce a 2rT relative error.
+        double growth = Math.exp(rate * tYears);
         double sum = 0;
         for (int i = 0; i < n; i++) {
             double dk = i == 0 ? strikes[1] - strikes[0]
@@ -94,7 +97,7 @@ public final class VolatilityIndex {
             double q = i < pivot ? putMids[i]
                     : i > pivot ? callMids[i]
                     : (putMids[i] + callMids[i]) / 2;    // the K0 straddle average
-            sum += dk / (strikes[i] * strikes[i]) * df * q;
+            sum += dk / (strikes[i] * strikes[i]) * growth * q;
         }
         double k0 = strikes[pivot];
         double variance = (2 / tYears) * sum

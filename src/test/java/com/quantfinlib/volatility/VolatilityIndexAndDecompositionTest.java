@@ -28,7 +28,7 @@ class VolatilityIndexAndDecompositionTest {
         double[] puts = new double[n];
         double[] calls = new double[n];
         for (int i = 0; i < n; i++) {
-            strikes[i] = 60 + i;                  // 60..140: ~9 sigma of coverage
+            strikes[i] = 60 + i;                  // 60..140: 8.9σ down, 5.9σ up
             // max(0, ·): the normCdf approximation can leave deep-OTM
             // prices at ~-1e-9; real chains quote >= 0 by construction.
             puts[i] = Math.max(0,
@@ -38,6 +38,23 @@ class VolatilityIndexAndDecompositionTest {
         }
         double flat = VolatilityIndex.index(strikes, puts, calls, 100, 0, t);
         assertEquals(0.20, flat, 2e-3, "the fear gauge reads the market's own number");
+
+        // F STRICTLY BETWEEN strikes: with F on a strike (above) the
+        // (F/K0-1)^2 correction term is exactly zero and untestable —
+        // dropping it would pass. At F = 100.9 the omission error is
+        // ~+2.9e-3, so THIS assertion is what makes the term load-bearing
+        // (chain re-priced at the shifted forward via spot = 100.9, r=0).
+        double[] putsF = new double[n];
+        double[] callsF = new double[n];
+        for (int i = 0; i < n; i++) {
+            putsF[i] = Math.max(0,
+                    BlackScholes.price(OptionType.PUT, 100.9, strikes[i], 0, 0, 0.20, t));
+            callsF[i] = Math.max(0,
+                    BlackScholes.price(OptionType.CALL, 100.9, strikes[i], 0, 0, 0.20, t));
+        }
+        double offGrid = VolatilityIndex.index(strikes, putsF, callsF, 100.9, 0, t);
+        assertEquals(0.20, offGrid, 2e-3,
+                "the K0 != F correction term earns its keep here");
 
         // A put SKEW (downside priced at 25%) must RAISE the index above
         // the ATM 20% — the wings carry real premium and the replication
