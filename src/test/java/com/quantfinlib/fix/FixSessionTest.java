@@ -229,6 +229,15 @@ class FixSessionTest {
                     Thread.sleep(20);
                 }
             }
+            // Final drain: on a stalled CI box the TestRequest and the
+            // disconnect can land in the same heartbeat tick, and the
+            // loop above exits before reading the in-flight bytes.
+            while (in.available() > 0) {
+                int n = in.read(chunk);
+                for (int i = 0; i < n; i++) {
+                    wire.append((char) chunk[i]);
+                }
+            }
             assertTrue(wire.toString().contains("35=1"),
                     "silence must escalate to a TestRequest before the kill: " + wire);
             assertTrue(venueEvents.disconnectReason != null,

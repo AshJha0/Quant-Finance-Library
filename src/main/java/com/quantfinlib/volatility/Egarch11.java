@@ -52,6 +52,11 @@ public final class Egarch11 {
             throw new IllegalArgumentException("need at least 100 returns, got "
                     + returns.length);
         }
+        for (double x : returns) {
+            if (!Double.isFinite(x)) {
+                throw new IllegalArgumentException("returns must be finite");
+            }
+        }
         double mean = MathUtils.mean(returns);
         double[] r = new double[returns.length];
         for (int i = 0; i < r.length; i++) {

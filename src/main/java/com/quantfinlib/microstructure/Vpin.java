@@ -81,7 +81,10 @@ public final class Vpin {
             imbalances[head] = 1.0;
             head = (head + 1) % imbalances.length;
         }
-        filled = (int) Math.min(imbalances.length, filled + full);
+        // Clamp full BEFORE adding: with bucketVolume == 1 a corrupt
+        // Long.MAX_VALUE trade makes filled + full wrap negative.
+        filled = (int) Math.min(imbalances.length,
+                filled + Math.min(full, imbalances.length));
         remaining -= full * bucketVolume;
         if (remaining > 0) {
             if (buyAggressor) {

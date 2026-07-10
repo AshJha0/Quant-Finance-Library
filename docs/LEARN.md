@@ -515,10 +515,12 @@ did the spread we captured pay for the hedging we did?
 in six tickets. The warehouse absorbs it (that's the service), the
 equity band breaches, the cost-aware hedger notices the cheap ES-proxy
 future can't satisfy a per-symbol band and escalates to the direct
-program trade, the hedge routes internal-first then to a clean
-midpoint pool while the 15bps-markout pool gets nothing — and the day
-still nets positive after every cost. That exact day runs in
-`crb/CrbRealWorldScenarioTest.java`.
+program trade, the hedge routes to a clean midpoint pool while the
+15bps-markout pool gets nothing (internal crossing is the router's
+standing FIRST priority — that day there happened to be nothing
+crossable) — and the day still nets positive after every cost. That
+exact day runs in `crb/CrbRealWorldScenarioTest.java` (under
+`src/test`).
 
 *In this library:* the whole `crb/` package —
 [CENTRAL_RISK_BOOK.md](CENTRAL_RISK_BOOK.md) is the guided tour,
@@ -790,12 +792,13 @@ java -cp target/classes com.quantfinlib.examples.LiveTradingDemo   # live Binanc
    → `execution/SpreadExecutionAlgo.java` (a pairs trade end to end),
    `microstructure/Vpin.java` (toxicity), then the whole `crb/` package
    with [CENTRAL_RISK_BOOK.md](CENTRAL_RISK_BOOK.md) as the guide and
-   `crb/CrbRealWorldScenarioTest.java` as a realistic trading week you
-   can step through in a debugger.
+   `crb/CrbRealWorldScenarioTest.java` (under `src/test`) as a
+   realistic trading week you can step through in a debugger.
 10. The risk stack: [MARKET_RISK.md](MARKET_RISK.md) maps all fourteen
     steps from market data to Basel/FRTB; `risk/VarEngine.java` →
     `risk/StressTester.java` → `risk/FrtbEs.java` is the reading spine,
-    and `MarketRiskTest.java` shows every formula pinned by hand.
+    and `risk/MarketRiskTest.java` (under `src/test`) shows every
+    formula pinned by hand.
 11. `docs/COOKBOOK.md` — seventeen end-to-end recipes to modify and re-run.
 
 **Exercises** (in rough order of difficulty):
