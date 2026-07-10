@@ -806,7 +806,9 @@ com.quantfinlib
 │                 HawkesIntensity (self-exciting bursts), AlphaEnsemble
 │                 (IC-weighted signal blend), Vpin (flow toxicity),
 │                 OrnsteinUhlenbeck (mean-reversion fit + z-score),
-│                 LiquidityMeasures (Roll/Corwin-Schultz/Amihud from bars)
+│                 LiquidityMeasures (Roll/Corwin-Schultz/Amihud from bars),
+│                 VarianceRatio (trending/reverting/random-walk test),
+│                 KalmanBeta (time-varying hedge ratios)
 ├── fx            CurrencyPair conventions, SwapPointsCurve, FxSwap, Ndf,
 │                 FxVolSurface (delta-quoted smile), FixingRisk,
 │                 AggregatedBook (multi-venue BBO), CrossRateEngine (streaming),
@@ -829,6 +831,7 @@ com.quantfinlib
 │                 SpreadExecutionAlgo (pairs/basis, hard legging cap),
 │                 OrderPlacementPolicy (post-or-cross arithmetic),
 │                 AntiGamingJitter (seeded schedule randomization),
+│                 Ucb1Selector (UCB1 bandit venue/variant selection),
 │                 FuturesRollAlgo (migration-curve roll via calendar spreads),
 │                 static TWAP/VWAP schedulers,
 │                 smart order routing: SmartOrderRouter (readable) + HftSor

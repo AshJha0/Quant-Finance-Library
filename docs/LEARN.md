@@ -459,7 +459,16 @@ gone).
 `microstructure/OrnsteinUhlenbeck.java` (question 2 — κ/θ/σ, half-life,
 z-score, and the refusal), `execution/SpreadExecutionAlgo.java`
 (question 3 — the legging cap), cookbook recipe 15 runs the whole
-chain.
+chain. Two refinements the desks add:
+`microstructure/VarianceRatio.java` answers the question BEFORE
+question 1 — is this series trending, mean-reverting, or a random
+walk? (under a random walk variance grows linearly with horizon, so
+the ratio is 1; mean reversion cancels, momentum compounds) — and
+`microstructure/KalmanBeta.java` replaces the static hedge ratio with
+a time-varying one: relationships DRIFT, a β fitted on last year is
+stale by spring, and the filter tracks the current β while a
+full-sample OLS averages the drift into a number that was never true
+on any single day (the test demonstrates exactly that).
 
 **Flow toxicity, or: knowing when to stop quoting.** §5 explained
 adverse selection — the people most eager to trade with you know

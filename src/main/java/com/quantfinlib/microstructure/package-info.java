@@ -80,6 +80,13 @@
  * and {@link com.quantfinlib.microstructure.LiquidityMeasures} (Roll's
  * bounce-implied spread — NaN, not zero, when the signature is absent;
  * Corwin-Schultz high-low spread; Amihud illiquidity) for every market
- * where you have bars but no quotes.</p>
+ * where you have bars but no quotes. Regime and relationship tracking:
+ * {@link com.quantfinlib.microstructure.VarianceRatio} (Lo-MacKinlay:
+ * trending, mean-reverting or random walk — the question that comes
+ * before every strategy choice) and
+ * {@link com.quantfinlib.microstructure.KalmanBeta} (time-varying
+ * hedge ratios by Kalman filter — a static OLS averages the drift
+ * away; the filter is AT the current β and knows its own
+ * uncertainty).</p>
  */
 package com.quantfinlib.microstructure;
