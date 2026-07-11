@@ -56,9 +56,13 @@ public final class SettlementRiskAnalyzer {
             events.add(new Event(leg.payTimeMillis(), leg.receiveAmount()));
             events.add(new Event(leg.receiveTimeMillis(), -leg.receiveAmount()));
         }
-        // At equal timestamps apply receipts (negative deltas) before payments.
+        // At equal timestamps apply PAYMENTS (positive deltas) before
+        // receipts: for a worst-case exposure metric the conservative
+        // reading of a simultaneous pay/receive is that your money left
+        // first. Receipts-first would quietly understate the peak — the
+        // wrong direction for a number named after Herstatt.
         events.sort(java.util.Comparator.comparingLong(Event::time)
-                .thenComparingDouble(Event::delta));
+                .thenComparing(java.util.Comparator.comparingDouble(Event::delta).reversed()));
         double outstanding = 0, peak = 0;
         for (Event e : events) {
             outstanding += e.delta();

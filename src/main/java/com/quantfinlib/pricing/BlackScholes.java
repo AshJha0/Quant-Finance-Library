@@ -31,6 +31,14 @@ public final class BlackScholes {
         if (timeYears <= 0) {
             return intrinsic(type, spot, strike);
         }
+        if (vol <= 0) {
+            // Deterministic world: discounted forward intrinsic. Without
+            // this branch the ATM-forward case is 0/0 in d1 and the price
+            // comes back NaN (off-ATM it survives only because +/-Inf
+            // happens to hit the right CDF tail).
+            return Math.max(0, type.sign() * (spot * Math.exp(-carry * timeYears)
+                    - strike * Math.exp(-rate * timeYears)));
+        }
         double d1 = d1(spot, strike, rate, carry, vol, timeYears);
         double d2 = d1 - vol * Math.sqrt(timeYears);
         double df = Math.exp(-rate * timeYears);
@@ -117,10 +125,20 @@ public final class BlackScholes {
                 rho(type, spot, strike, rate, carry, vol, timeYears));
     }
 
-    /** Implied volatility by bisection (price must be arbitrage-consistent). */
+    /**
+     * Implied volatility by bisection. Returns {@code NaN} when the price
+     * is not attainable inside the [1e-4, 5.0] vol bracket (below
+     * intrinsic, or above the maximum BS price) — a stale or rounded
+     * market price must surface as "no vol", not silently come back as
+     * the 500% search bound and poison a smile.
+     */
     public static double impliedVol(OptionType type, double marketPrice, double spot,
                                     double strike, double rate, double carry, double timeYears) {
         double lo = 1e-4, hi = 5.0;
+        if (marketPrice < price(type, spot, strike, rate, carry, lo, timeYears)
+                || marketPrice > price(type, spot, strike, rate, carry, hi, timeYears)) {
+            return Double.NaN;
+        }
         for (int i = 0; i < 200; i++) {
             double mid = (lo + hi) / 2;
             if (price(type, spot, strike, rate, carry, mid, timeYears) < marketPrice) {

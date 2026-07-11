@@ -40,6 +40,19 @@ public final class TransactionCostAnalyzer {
         if (midAtFill.length != fills.size()) {
             throw new IllegalArgumentException("midAtFill must align with fills");
         }
+        // Benchmark prices divide every headline number: a single stale
+        // zero mid would put an Infinity in the report with no warning.
+        if (!(arrivalMid > 0) || arrivalMid == Double.POSITIVE_INFINITY
+                || !(marketVwap > 0) || marketVwap == Double.POSITIVE_INFINITY) {
+            throw new IllegalArgumentException("arrivalMid and marketVwap must be positive"
+                    + " and finite: " + arrivalMid + ", " + marketVwap);
+        }
+        for (int i = 0; i < midAtFill.length; i++) {
+            if (!(midAtFill[i] > 0) || midAtFill[i] == Double.POSITIVE_INFINITY) {
+                throw new IllegalArgumentException(
+                        "midAtFill[" + i + "] must be positive and finite: " + midAtFill[i]);
+            }
+        }
         Side side = fills.getFirst().side();
         int sign = side.sign();
 

@@ -65,12 +65,23 @@ public final class ForwardCurve {
     /**
      * Implied continuously-compounded rate differential (domestic minus
      * foreign) from covered interest parity: {@code F = S * e^((rd-rf)*t)}.
+     *
+     * <p>Convention note — this method is CONTINUOUS while
+     * {@link #theoreticalForward} uses SIMPLE deposit rates, because each
+     * matches how its own input is quoted (a differential is usually
+     * consumed in cc form; deposits are quoted simple). Feeding this
+     * output back through {@code theoreticalForward} therefore shows a
+     * spurious ~12bp "basis" at 1y/5% that is pure compounding
+     * convention, not arbitrage — convert first.</p>
      */
     public double impliedRateDifferential(double tenorYears) {
         return Math.log(forward(tenorYears) / spot) / tenorYears;
     }
 
-    /** CIP-theoretical forward from simple deposit rates. */
+    /**
+     * CIP-theoretical forward from SIMPLE deposit rates (see the
+     * convention note on {@link #impliedRateDifferential}).
+     */
     public static double theoreticalForward(double spot, double domesticRate, double foreignRate, double tenorYears) {
         return spot * (1 + domesticRate * tenorYears) / (1 + foreignRate * tenorYears);
     }

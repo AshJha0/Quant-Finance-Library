@@ -243,8 +243,16 @@ public final class BenchmarkExecutor {
             return 0;
         }
 
-        // Dynamic shaping: alpha pulls the pace, spread/vol damp it.
+        // Dynamic shaping: alpha pulls the pace, spread/vol damp it. For
+        // PARTICIPATION the multiplier may only DAMP (clamp to <= 1): the
+        // participation rate is a hard promise to the client, and letting
+        // alpha push a POV child to 4x "behind" realizes participation
+        // far above the configured rate — the one number POV must honor
+        // (PovTracker treats it as a hard cap; this engine must agree).
         double urgency = urgencyMultiplier(m);
+        if (benchmark == Benchmark.PARTICIPATION) {
+            urgency = Math.min(urgency, 1.0);
+        }
         long shaped = (long) Math.ceil(behind * urgency);
 
         // Liquidity cap and parent remainder.
