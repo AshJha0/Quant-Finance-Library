@@ -787,7 +787,9 @@ com.quantfinlib
 │                 (IC/IR/turnover), AlphaValidation (walk-forward, CV, Monte
 │                 Carlo, sensitivity), AlphaBacktester (cost-aware),
 │                 PortfolioConstruction (sizing, budgets, neutrality),
-│                 AlphaReport (decay, attribution, rolling metrics)
+│                 AlphaReport (decay, attribution, rolling metrics),
+│                 FamaMacBeth (cross-sectional factor premia + t-stats),
+│                 CalendarAnomalies (day-of-week/turn-of-month + t-stats)
 ├── microstructure QueueModel, MarketImpactModel, TransactionCostAnalyzer,
 │                 TickSizeSchedule (MiFID II price bands), Auction (call uncross),
 │                 SignalEngine (unified multi-symbol streaming signals:
@@ -868,7 +870,9 @@ com.quantfinlib
 │   │             ExecutionAwareBacktester + Instant/Sor/Iceberg/LastLook models
 │   ├── strategies  SMA/EMA cross, RSI, MACD, Bollinger built-ins
 │   ├── validation  ParameterGrid, GridSearchOptimizer, WalkForwardAnalyzer,
-│   │               SharpeValidation (probabilistic + deflated Sharpe)
+│   │               SharpeValidation (probabilistic + deflated Sharpe +
+│   │               minimum track record length), BlockBootstrap
+│   │               (stationary bootstrap: the Sharpe's confidence interval)
 │   ├── portfolio   PortfolioBacktester (multi-asset long/short; survivorship-
 │   │               aware overload: delistings/mergers/index drops/cash divs),
 │   │               CrossSectionalMomentum (point-in-time 12-1), PositionSizing

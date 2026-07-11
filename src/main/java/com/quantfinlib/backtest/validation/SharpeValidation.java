@@ -66,4 +66,42 @@ public final class SharpeValidation {
         double benchmark = expectedMaxSharpe(trialSharpes.length, MathUtils.variance(trialSharpes));
         return probabilisticSharpe(observedSharpe, benchmark, nObs, skewness, kurtosis);
     }
+
+    /**
+     * Minimum track record length (Bailey &amp; López de Prado): how many
+     * periods of THIS performance are needed before
+     * {@link #probabilisticSharpe} would clear {@code confidence} that
+     * the true Sharpe exceeds the benchmark — the allocator's question
+     * ("how long until this manager's record means something?") in
+     * closed form:
+     *
+     * <pre>  n* = 1 + (1 − γ₃·SR + (γ₄−1)/4·SR²) · (z_conf / (SR − SR*))²</pre>
+     *
+     * Returns {@code POSITIVE_INFINITY} when the observed Sharpe does
+     * not exceed the benchmark — no track record length proves an edge
+     * the record does not show. Sharpe inputs are PER-PERIOD (not
+     * annualized), matching {@code probabilisticSharpe}.
+     */
+    public static double minTrackRecordLength(double observedSharpe, double benchmarkSharpe,
+                                              double skewness, double kurtosis,
+                                              double confidence) {
+        if (!(confidence > 0 && confidence < 1)) {
+            throw new IllegalArgumentException("confidence must be in (0, 1)");
+        }
+        if (!Double.isFinite(observedSharpe) || !Double.isFinite(benchmarkSharpe)
+                || !Double.isFinite(skewness) || !Double.isFinite(kurtosis)) {
+            throw new IllegalArgumentException("inputs must be finite");
+        }
+        if (observedSharpe <= benchmarkSharpe) {
+            return Double.POSITIVE_INFINITY;
+        }
+        double variance = 1 - skewness * observedSharpe
+                + (kurtosis - 1) / 4.0 * observedSharpe * observedSharpe;
+        if (variance <= 0) {
+            return 2;                  // PSR is already 1: any record suffices
+        }
+        double z = MathUtils.normInv(confidence);
+        double edge = observedSharpe - benchmarkSharpe;
+        return 1 + variance * z * z / (edge * edge);
+    }
 }

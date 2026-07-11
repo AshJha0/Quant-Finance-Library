@@ -39,5 +39,15 @@
  * {@link com.quantfinlib.alpha.AlphaContext#withUniverse} to make the whole
  * pipeline survivorship-honest: dead and non-member names score NaN per bar
  * and never enter ICs, validation, or constructed weights.</p>
+ *
+ * <p>Pricing and seasonality: {@link com.quantfinlib.alpha.FamaMacBeth}
+ * (the cross-sectional premium estimator — what an exposure is WORTH
+ * per period, with time-series t-stats that absorb the cross-sectional
+ * correlation a pooled regression trips over; a significant intercept
+ * means returns your factors do not explain) and
+ * {@link com.quantfinlib.alpha.CalendarAnomalies} (day-of-week and
+ * turn-of-month profiles WITH significance — most published calendar
+ * anomalies died after publication, and the t-stat is what separates a
+ * tradable seasonal from a data-mined ghost).</p>
  */
 package com.quantfinlib.alpha;

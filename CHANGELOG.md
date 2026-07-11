@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+- **Alpha, signals & backtesting round: premia, seasonality, honest
+  uncertainty** (tested in `AlphaResearchRoundTest`):
+  - `alpha.FamaMacBeth` — the cross-sectional factor-premium estimator:
+    per-period cross-section regressions, premia as time-series means
+    with t-stats that absorb cross-sectional correlation (the thing a
+    pooled regression trips over); a significant intercept flags
+    returns your factors do not explain; NaN assets skipped per
+    period (the AlphaContext convention). Planted-premium test: the
+    priced factor earns 0.01 with t > 5, the dud earns zero and
+    knows it. Newey-West correction deliberately omitted, stated.
+  - `alpha.CalendarAnomalies` — day-of-week and turn-of-month
+    profiles WITH the t-statistics that keep them honest (most
+    published calendar anomalies died after publication; |t| < 2 is
+    decoration). Calendar-day windows, stated; exact planted-effect
+    recovery tested to 1e-12.
+  - `backtest.validation.BlockBootstrap` — the stationary
+    (Politis-Romano) block bootstrap: the backtest Sharpe's sampling
+    DISTRIBUTION, sorted for percentile reads. The key property is
+    tested head-to-head: on autocorrelated returns the blocked
+    resample is >1.2x wider than the iid resample that destroys the
+    dependence — the classic route to false confidence, closed.
+  - `SharpeValidation.minTrackRecordLength` — Bailey/López de Prado's
+    closed form for "how long until this record MEANS something",
+    round-tripped through probabilisticSharpe in the test;
+    POSITIVE_INFINITY when the record shows no edge (no length proves
+    an absent one).
+
 - **Adaptive quant & algo round: regime tests, drifting betas, optimal
   bands, bandit selection** (tested in `AdaptiveQuantAlgosTest`):
   - `microstructure.VarianceRatio` — the Lo-MacKinlay test: trending,
