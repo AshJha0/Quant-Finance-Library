@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.14.0 — 2026-07-11
 
 - **Backtesting robustness layer** (tested in `ValidationRobustnessTest`,
   every expected value hand-derivable from the javadoc):
