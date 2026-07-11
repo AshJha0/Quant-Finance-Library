@@ -2127,7 +2127,8 @@ f* = mu / sigma^2. Worked number: an edge of 5% annualized on 20% vol
 gives f* = 0.05 / 0.04 = 1.25 -- Kelly says lever the strategy 1.25x.
 Full Kelly is optimal only asymptotically and only if mu and sigma are
 *known*. Neither holds. First, the drawdown profile is savage: full
-Kelly has a 50% chance of halving your capital before doubling it, and
+Kelly has a one-in-three chance of halving your capital before doubling
+it (and a coin-flip chance of halving it at some point), and
 the time to recover is long because the bet shrinks with the equity.
 Second, and worse, the inputs are estimates: overestimating mu by 2x
 (trivially easy with noisy Sharpe estimates) means betting 2x Kelly,
@@ -2135,7 +2136,7 @@ and the growth-rate parabola is asymmetric -- betting double Kelly gives
 *zero* long-run growth, and beyond that, ruin. Since the penalty for
 over-betting exceeds the penalty for under-betting, uncertainty about
 the edge rationally shrinks the bet. Half Kelly is the practitioner's
-standard: it keeps 75% of the growth rate at half the variance, and it
+standard: it keeps 75% of the growth rate at half the volatility, and it
 is robust to the edge being half of what you think. That is not
 timidity; it is the correct Bayesian response to estimated inputs.
 
@@ -2872,7 +2873,7 @@ quote -- straddle / (0.8 x S x sqrt(T)) recovers implied vol in your
 head, which is how you sanity-check a broker quote or read an
 earnings-move expectation off the screen (a $10 one-week straddle on
 a $200 stock: 10/(0.8 x 200 x sqrt(1/52)) ~ 45% vol, i.e. the market
-expects roughly a 10/200/2... call it a 2.5% weekly standard move).
+expects roughly a 10/200 = 5% typical weekly move).
 Why it works so well: at the money, BS is nearly linear in vol (vega
 is maximal and vol-convexity minimal), so the linear-in-sigma formula
 is accurate to a percent or two for realistic inputs -- and that same
@@ -10153,8 +10154,8 @@ unit of BASE. EURUSD 1.0850 means one euro costs 1.0850 dollars; buying
 EURUSD means buying euros and paying dollars. The pip is the conventional
 last full quote digit: 0.0001 for 5-decimal pairs, 0.01 for JPY-quoted
 pairs (which trade to 3 decimals) -- the extra decimal ECNs stream is the
-half-pip "point". Pip value follows directly: base notional times pip
-size, paid in quote currency. On 10M EURUSD one pip is 10,000,000 x 0.0001
+tenth-pip "point" (the pipette). Pip value follows directly: base
+notional times pip size, paid in quote currency. On 10M EURUSD one pip is 10,000,000 x 0.0001
 = 1,000 USD; on 10M USDJPY one pip is 10,000,000 x 0.01 = 100,000 JPY.
 Notice the asymmetry that trips people: the pip value lands in the QUOTE
 currency, so equal-pip moves on EURUSD and USDJPY are not equal dollar
@@ -13088,8 +13089,9 @@ Expected count is 2.5, but "6 feels high" is not a test. Kupiec's
 proportion-of-failures test makes it one: a likelihood ratio comparing
 the binomial likelihood of 6/250 at the claimed 1% rate against the
 observed 2.4% rate; the statistic is asymptotically chi-square(1), and
-6 exceptions yields a p-value low enough to flag at 5% but not
-overwhelming -- one more year of data would settle it. But coverage is
+6 exceptions yields LR of about 3.6, a p-value near 0.06 -- suspicious,
+but just short of rejection at 5% -- one more year of data would settle
+it. But coverage is
 only half the question. Christoffersen's independence test asks whether
 exceptions CLUSTER: a model with exactly 2.5 exceptions per year that
 produces them on consecutive days is broken in the way that matters --
