@@ -1,5 +1,49 @@
 # Changelog
 
+## Unreleased
+
+- **Docs — the full trading pipeline in one line**: alpha discovery →
+  signal generation → nested validation → out-of-sample scoring →
+  selection → risk-managed sizing → portfolio constraints → optimal
+  execution, with each stage's formal statement (candidate set A,
+  s_t = a_k(X_{t-1}), fold-disjointness, Q_k score vector, tau_Q
+  multiple-testing threshold, w = s/(sigma+eps) under DD/vol caps,
+  leverage/beta/name constraints, min-cost schedule dq*) mapped to the
+  classes that implement it. New LEARN.md §8c (the walkthrough and the
+  walk-the-arrows-backwards post-mortem map), DIAGRAMS.md diagram 19,
+  README pipeline banner, ARCHITECTURE data-flow note.
+- **Docs — exercise room grown to 500**: LEARN.md Part IV now carries
+  Q1-Q500 — 365 new in-depth practice questions with real examples and
+  use cases covering every package: data pipeline, indicators/DSL/
+  screener, ML, simulation/reporting/ops, market-data feeds, binary
+  codecs, FIX, transport, order books, matching engines, the trading
+  lane, scaling/resilience, execution algorithms, SOR, microstructure
+  models, TCA, FX conventions/instruments, e-FX and equities market
+  structure, the central risk book, Greeks, exotics and structured
+  products, volatility modeling, hedging, the market-risk workflow,
+  credit/limits, the alpha pipeline, and backtesting/validation mastery.
+- **Docs — COOKBOOK grown to 100 recipes**: recipes 23-100 added, all
+  signature-verified against source — variance swaps, rates volatility
+  (parities checked in the recipe code), risk-committee allocation, the
+  two-asset zoo, curve reading, the full data/indicator/ML/simulation/
+  reporting toolchain, connectivity (ITCH/L3/NBBO/SBE/FIX/WebSocket),
+  matching sessions and the trading lane, every execution algorithm and
+  router, FX instruments and LP routing, the exotics shelf, hedging,
+  all four VaR flavors, EVT/stress/FRTB/PLAT, honest factor premia, and
+  recipe 100: the full pipeline end to end (LEARN 8c as code).
+- **Docs — DIAGRAMS grown to 50**: diagrams 20-50 added — FIX session
+  state machine, variance-swap replication, risk-allocation tree, NDF
+  lifecycle, TIF semantics, ITCH-to-L3, NBBO, binary message anatomy,
+  capture/replay, the four backtest engines, walk-forward/purged-K-fold/
+  CSCV pictures, cost stacking, the GARCH family tree, vol-estimator and
+  VaR-flavor choosers, FX smile construction, SABR at work, the Greeks
+  ladder, barrier map, autocallable lifecycle, hedge-rebalance loop,
+  pairs pipeline, EVT/stress/FRTB maps, internalization tree, last-look
+  timeline, the factor zoo, and the overnight learning loop.
+- Five boundary-pin tests (touch-at-expiry, one-point historical ES,
+  last-look tolerance equality, backward-clock throttle, unfittable
+  Nelson-Siegel grid) — suite at 1001.
+
 ## 1.15.0 — 2026-07-11
 
 - **Whole-project review, two full rounds** (three finder agents per round

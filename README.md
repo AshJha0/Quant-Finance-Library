@@ -44,6 +44,21 @@ java -cp target/classes com.quantfinlib.examples.LiveTradingDemo
 # → open http://localhost:8080
 ```
 
+**The full trading pipeline in one line** — everything here serves one flow:
+
+> **Alpha discovery → signal generation → nested validation → out-of-sample
+> scoring → selection → risk-managed sizing → portfolio constraints →
+> optimal execution.**
+
+Candidate rules `A = {a_1..a_K}` become signals `s_t = a_k(X_{t-1})` (only
+information known before trade time), survive leak-free nested validation
+and a multiple-testing selection threshold, get sized as
+`w_t = s_t/(sigma_t + eps)` under drawdown/vol/leverage/beta caps, and are
+finally reached by the order schedule `dq_t*` that minimizes slippage +
+impact + spread. Each stage maps to a package — the walkthrough lives in
+[docs/LEARN.md §8c](docs/LEARN.md) and Diagram 19 of
+[docs/DIAGRAMS.md](docs/DIAGRAMS.md).
+
 **New to finance or low-latency engineering?** Start with
 [docs/LEARN.md](docs/LEARN.md) — a from-zero tutorial that teaches every
 concept in this library in plain language (order books, market making,
@@ -52,11 +67,11 @@ memory model, honest benchmarking…), each tied to the class that implements
 it, with a guided reading path and exercises.
 
 **Want to test yourself?** [docs/LEARN.md Part IV — The exercise
-room](docs/LEARN.md#part-iv--the-exercise-room) — 135 practice questions
+room](docs/LEARN.md#part-iv--the-exercise-room) — 500 practice questions
 the way trading desks actually pose them, each with an in-depth model
 answer and the class in this library that implements it.
 
-**Learn by task, not by API**: [docs/COOKBOOK.md](docs/COOKBOOK.md) — seventeen complete
+**Learn by task, not by API**: [docs/COOKBOOK.md](docs/COOKBOOK.md) — one hundred complete
 recipes under ~30 lines each, from "backtest your CSV" through survivorship-honest
 factor research and nanosecond market making to portfolio-level execution,
 a central-risk-book day, a pairs trade, a market-risk afternoon, and a
