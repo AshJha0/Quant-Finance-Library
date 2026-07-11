@@ -65,7 +65,13 @@ public final class RegimeDetector {
         double[] scale = new double[n];
         double logLikelihood = Double.NEGATIVE_INFINITY;
 
-        for (int iter = 0; iter < maxIterations; iter++) {
+        // One extra pass beyond maxIterations: the loop always ENDS on an
+        // E-step, so the returned probabilities and log-likelihood are
+        // computed under the RETURNED parameters. Ending on the M-step
+        // (the old shape) handed back parameters one update ahead of the
+        // probabilities — benign at convergence, visibly inconsistent for
+        // small iteration budgets.
+        for (int iter = 0; iter <= maxIterations; iter++) {
             // Forward pass with scaling.
             double ll = 0;
             for (int t = 0; t < n; t++) {
@@ -120,6 +126,13 @@ public final class RegimeDetector {
                     }
                 }
             }
+            // Exit on the E-step: converged, or out of M-step budget.
+            boolean lastPass = iter == maxIterations
+                    || Math.abs(ll - logLikelihood) < 1e-9;
+            logLikelihood = ll;
+            if (lastPass) {
+                break;
+            }
             // M-step.
             pi[0] = gamma[0][0];
             pi[1] = gamma[0][1];
@@ -144,11 +157,6 @@ public final class RegimeDetector {
                 }
                 variance[j] = Math.max(varSum / weight, 1e-14);
             }
-            if (Math.abs(ll - logLikelihood) < 1e-9) {
-                logLikelihood = ll;
-                break;
-            }
-            logLikelihood = ll;
         }
 
         // Canonical ordering: state 1 = high volatility.

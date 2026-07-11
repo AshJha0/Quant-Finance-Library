@@ -17,6 +17,22 @@ public final class RiskParityOptimizer {
     public static PortfolioOptimizer.Allocation equalRiskContribution(
             double[] expectedReturns, double[][] covariance) {
         int n = covariance.length;
+        if (expectedReturns.length != n) {
+            throw new IllegalArgumentException("expectedReturns (" + expectedReturns.length
+                    + ") must align with covariance (" + n + ")");
+        }
+        for (int i = 0; i < n; i++) {
+            if (covariance[i].length != n) {
+                throw new IllegalArgumentException("covariance row " + i + " is not length " + n);
+            }
+            // A zero-variance asset has no risk to contribute: the ERC
+            // fixed point does not exist and the multiplicative update
+            // thrashes on it. Refuse rather than spin.
+            if (!(covariance[i][i] > 0)) {
+                throw new IllegalArgumentException(
+                        "asset " + i + " has non-positive variance: " + covariance[i][i]);
+            }
+        }
         double[] w = new double[n];
         java.util.Arrays.fill(w, 1.0 / n);
 

@@ -40,7 +40,10 @@ public final class VolSurface {
 
         /** Adds one pillar quote. */
         public Builder add(double expiryYears, double strike, double vol) {
-            if (expiryYears <= 0 || strike <= 0 || vol <= 0) {
+            // !(x > 0) rejects NaN too: impliedVol returns NaN for
+            // unattainable prices, and a NaN pillar poisons every
+            // neighboring strike through interpolation.
+            if (!(expiryYears > 0) || !(strike > 0) || !(vol > 0) || vol == Double.POSITIVE_INFINITY) {
                 throw new IllegalArgumentException(
                         "expiry, strike and vol must be positive: " + expiryYears + "/" + strike + "/" + vol);
             }

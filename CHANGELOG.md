@@ -1,5 +1,74 @@
 # Changelog
 
+## 1.15.0 — 2026-07-11
+
+- **Whole-project review, two full rounds** (three finder agents per round
+  over every domain; fixes regression-pinned in `ReviewFixesRoundTest`):
+  - `BlackScholes`: zero-vol prices are the discounted forward intrinsic
+    (ATM-forward used to return NaN via 0/0 in d1); `impliedVol` now
+    bracket-checks and returns NaN for unattainable prices instead of
+    silently handing back the 500% search bound (matching `Black76`).
+  - `HftRiskGate` + `PreTradeLimitChecker`: risk-REDUCING orders pass the
+    position check even from an over-limit book — the gate no longer
+    rejects the exact trade that de-risks it (in-flight fills can stack a
+    book past its cap; only |position|-growing orders are rejected).
+  - `BenchmarkExecutor` PARTICIPATION: the urgency multiplier may only
+    damp (clamped to 1) — alpha could push realized POV to 4x the
+    configured rate, the one number POV promises (agrees with
+    `PovTracker`'s hard-cap semantics).
+  - `SettlementRiskAnalyzer`: coincident pay/receive timestamps now apply
+    the PAYMENT first — the conservative reading for a Herstatt peak
+    (receipts-first understated it).
+  - `RegimeDetector.fit` ends on an E-step: returned probabilities and
+    log-likelihood are computed under the RETURNED parameters (they were
+    one M-step stale — visible at small iteration budgets).
+  - `BondPricer.yieldToMaturity` bracket-checks and throws for prices with
+    no yield in [-90%, 1000%] (bisection silently returned the endpoint);
+    `TransactionCostAnalyzer` refuses non-positive/non-finite benchmark
+    prices (one stale zero mid put Infinity in the report);
+    `Ndf.markToMarket` inside the fixing window degrades to the spot
+    outright instead of throwing mid-lifecycle;
+    `RiskParityOptimizer` validates alignment and refuses zero-variance
+    assets (the ERC fixed point does not exist); `ForwardCurve` documents
+    its simple-vs-continuous convention split.
+- **New quant/risk/portfolio machinery** (`NelsonSiegelTest`,
+  `RiskAllocationTest`, `VarianceSwapTest`):
+  - `rates.NelsonSiegel` — level/slope/curvature curve fit; linear OLS per
+    lambda over a log grid (no local-minimum roulette); planted-parameter
+    recovery, flat-curve exactness and inversion sign pinned.
+  - `risk.ComponentVar` — Euler allocation of delta-normal VaR: component
+    VaR sums EXACTLY to portfolio VaR, marginal vs incremental
+    distinction, hedges carry negative components and closing them raises
+    VaR (all hand-pinned).
+  - `risk.CovarianceShrinkage` — Ledoit-Wolf shrinkage to the scaled
+    identity: data-driven intensity, average variance preserved as an
+    identity, more data means provably less shrinkage.
+  - `pricing.VarianceSwap` — model-free fair strike (delegates to the
+    VIX-style replication and squares it), vega/variance notional bridge,
+    additive-in-time seasoned-swap MTM, Brockhaus-Long vol-swap strike.
+- **New derivatives closed forms** (`StructuredClosedFormsTest`,
+  `RatesOptionsTest` — every formula pinned by its exact limits):
+  - `rates.RatesOptions` — Black-76 swaptions on the curve's forward swap
+    rate (annuity numeraire) and cap/floor caplet strips; payer−receiver
+    = annuity·(F−K) and cap−floor = swap PV hold to 1e-12.
+  - `pricing.ExchangeOption` — Margrabe (collapses to Black-Scholes with a
+    constant second asset; perfect-correlation equal-vol pays forward
+    intrinsic) and Kirk's spread approximation (collapses to Margrabe at
+    K=0 and to Black-76 with no second leg).
+  - `pricing.QuantoOption` — quanto drift adjustment as a carry shift on
+    the tested vanilla pricer; positive asset/FX correlation lowers the
+    quanto forward by exactly e^{-rho·sigmaS·sigmaFX·T}.
+- **Docs**: LEARN.md Part IV — "The interview room": 135 questions
+  actually asked in quant/algo/HFT interviews, each with an in-depth
+  model answer, a real-life example or desk incident (LTCM, Volmageddon,
+  Knight Capital, the WMR fix scandal, Archegos...), and a verified "In
+  this library" pointer to the class that makes the answer runnable.
+  Five core rounds (Q1-35) plus deeper second-interview banks (Q36-135:
+  quant/math, rates and curves, volatility and options theory, risk, the
+  derivatives desk, market structure and execution, backtesting and
+  research process, low-latency systems design). Linked from README and
+  LEARN's reading list; no standalone interview file.
+
 ## 1.14.0 — 2026-07-11
 
 - **Backtesting robustness layer** (tested in `ValidationRobustnessTest`,

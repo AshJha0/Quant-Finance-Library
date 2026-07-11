@@ -109,9 +109,22 @@ public final class Ndf {
      * Undiscounted mark-to-market in base currency: the settlement formula
      * evaluated at the curve's forward to the <b>fixing date</b> — the date
      * the payoff actually references.
+     *
+     * <p>An NDF inside its fixing window (fixing date at or before the
+     * curve's spot date) has no forward to read — the curve starts at
+     * spot. The best curve-only estimate of an imminent or just-published
+     * fixing is the spot outright, so the mark degrades to that instead
+     * of throwing mid-lifecycle (an aged {@code FxSwap} leg gets the same
+     * keep-marking treatment). Once the official fixing prints, the right
+     * number is {@link #settlementAmount} with the actual fixing — a
+     * curve cannot know it.</p>
      */
     public double markToMarket(SwapPointsCurve current) {
-        return settlementAmount(current.outright(fixingDate));
+        LocalDate spot = current.spotDate();
+        double forwardEstimate = fixingDate.isAfter(spot)
+                ? current.outright(fixingDate)
+                : current.outright(spot);
+        return settlementAmount(forwardEstimate);
     }
 
     /**

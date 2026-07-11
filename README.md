@@ -51,6 +51,11 @@ execution algos, last look, options, garbage collection, ring buffers, the
 memory model, honest benchmarking…), each tied to the class that implements
 it, with a guided reading path and exercises.
 
+**Preparing for interviews?** [docs/LEARN.md Part IV — The interview
+room](docs/LEARN.md#part-iv--the-interview-room) — 35 questions actually
+asked in quant, algo-trading and HFT interviews, each with a model answer
+and the class in this library that implements it.
+
 **Learn by task, not by API**: [docs/COOKBOOK.md](docs/COOKBOOK.md) — seventeen complete
 recipes under ~30 lines each, from "backtest your CSV" through survivorship-honest
 factor research and nanosecond market making to portfolio-level execution,
@@ -76,7 +81,7 @@ dollar — not just unit checks.
 
 **Getting the library**: tagged releases publish runnable/sources/javadoc jars
 automatically (GitHub Actions → Releases); JitPack works today
-(`com.github.AshJha0:Quant-Finance-Library:v1.14.0`); Maven Central publishing is
+(`com.github.AshJha0:Quant-Finance-Library:v1.15.0`); Maven Central publishing is
 wired and one account-setup away — see [docs/PUBLISHING.md](docs/PUBLISHING.md).
 See [CHANGELOG.md](CHANGELOG.md) for release history.
 
@@ -823,7 +828,9 @@ com.quantfinlib
 │                 FairValueEngine, TriangularArbitrage, ForwardCurve, BlackScholes,
 │                 VolSurface, BinomialTree (American), SabrModel, VannaVolga,
 │                 DigitalOption, TouchOption, BarrierOption, DividendSchedule,
-│                 IncrementalGreeks (tick-path delta-gamma updates)
+│                 IncrementalGreeks (tick-path delta-gamma updates),
+│                 VarianceSwap (model-free strike + MTM + vol-swap convexity),
+│                 ExchangeOption (Margrabe + Kirk spread), QuantoOption
 ├── hedging       DeltaHedger, GreekHedger, MinimumVarianceHedge, FxHedger,
 │                 PairsHedger, HedgingSimulator (Monte Carlo hedging error)
 ├── execution     BenchmarkExecutor (dynamic VWAP/TWAP/Arrival/IS/Close/Open/POV
@@ -857,7 +864,9 @@ com.quantfinlib
 │                 + ES), Dependence (Spearman/Kendall), Pca, GaussianCopula
 │                 (+ t-copula), ExtremeValueTheory (POT/GPD), StressTester
 │                 (+ closed-form reverse stress), FrtbEs (ES cascade +
-│                 Basel traffic light), PnlAttribution (FRTB PLAT)
+│                 Basel traffic light), PnlAttribution (FRTB PLAT),
+│                 ComponentVar (Euler VaR allocation: sums exactly),
+│                 CovarianceShrinkage (Ledoit-Wolf, data-driven intensity)
 ├── crb           CentralRiskBook (cross-product factor netting, checkpointable),
 │                 SkewedQuoter, InternalizationEngine, CrbHedgeUniverse,
 │                 HedgeOptimizer (min-variance + L1 cost), CrbAutoHedger,
@@ -891,7 +900,9 @@ com.quantfinlib
 │                 membership, delisting/merger events, CSV interchange format)
 ├── feed          WebSocketFeed (live exchange data -> HFT bus), BinanceTradeParser
 ├── rates         YieldCurve (bootstrap, forwards), BondPricer (duration, DV01),
-│                 ShortRateModels (Vasicek/CIR/Hull-White), KeyRateDurations
+│                 ShortRateModels (Vasicek/CIR/Hull-White), KeyRateDurations,
+│                 NelsonSiegel (level/slope/curvature fit), RatesOptions
+│                 (Black-76 swaptions + cap/floor strips, parities pinned)
 ├── volatility    EwmaVolatility, Garch11 (MLE fit + forecasts),
 │                 GjrGarch11 (leverage-effect asymmetry), Egarch11
 │                 (log-variance, leverage as a sign),

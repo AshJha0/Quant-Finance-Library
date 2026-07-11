@@ -86,7 +86,15 @@ public final class PreTradeLimitChecker {
             violations.add("MAX_NOTIONAL: " + notional + " > " + maxOrderNotional);
         }
         long newPosition = currentPositionQty + order.side().sign() * order.quantity();
-        if (Math.abs(newPosition) > maxPositionQuantity) {
+        // Risk-reducing orders pass even from an over-limit position — a
+        // gate that rejects the trade that shrinks the breach wedges the
+        // book at its worst point. But "reducing" means smaller AND the
+        // same sign: flipping through zero to an over-cap position on the
+        // other side is a new breach, not a hedge (same rule as
+        // HftRiskGate).
+        if (Math.abs(newPosition) > maxPositionQuantity
+                && (Math.abs(newPosition) >= Math.abs(currentPositionQty)
+                        || (newPosition ^ currentPositionQty) < 0)) {
             violations.add("MAX_POSITION: |" + newPosition + "| > " + maxPositionQuantity);
         }
         if (!Double.isNaN(referenceMid) && referenceMid > 0 && priceCollarPct != Double.MAX_VALUE) {

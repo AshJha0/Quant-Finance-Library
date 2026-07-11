@@ -59,6 +59,16 @@ public final class BondPricer {
     public static double yieldToMaturity(double price, double face, double couponRate,
                                          int frequency, double yearsToMaturity) {
         double lo = -0.9, hi = 10;
+        // Bracket check: a price outside [PV(10), PV(-0.9)] has no yield in
+        // the search range, and bisection would silently converge to an
+        // endpoint and hand back -89.99% or 1000% as if it were a market
+        // yield. Refuse loudly instead.
+        double maxPrice = priceFromYield(face, couponRate, frequency, yearsToMaturity, lo);
+        double minPrice = priceFromYield(face, couponRate, frequency, yearsToMaturity, hi);
+        if (!(price >= minPrice) || !(price <= maxPrice)) {
+            throw new IllegalArgumentException("price " + price + " has no yield in [-90%, 1000%]"
+                    + " (attainable price range [" + minPrice + ", " + maxPrice + "])");
+        }
         for (int i = 0; i < 200; i++) {
             double mid = (lo + hi) / 2;
             if (priceFromYield(face, couponRate, frequency, yearsToMaturity, mid) > price) {

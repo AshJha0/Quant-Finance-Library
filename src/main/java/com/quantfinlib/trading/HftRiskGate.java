@@ -151,9 +151,18 @@ public final class HftRiskGate {
             bumpRejection(REJECT_NOTIONAL);
             return REJECT_NOTIONAL;
         }
-        long newPosition = (long) LONGS.getAcquire(positions, symbolId)
-                + side.sign() * quantity;
-        if (Math.abs(newPosition) > maxPositionQuantity) {
+        long current = (long) LONGS.getAcquire(positions, symbolId);
+        long newPosition = current + side.sign() * quantity;
+        // Risk-REDUCING orders pass the position check: two 800-lot fills
+        // against a 1000 cap leave the book at 1600, and a gate that then
+        // rejects a 500-lot reducing order (|1100| > cap) is refusing the
+        // exact trade that de-risks it. An over-cap projection is allowed
+        // only when it BOTH shrinks the absolute position AND keeps its
+        // sign — a "reduce" that flips +1600 through zero to -1400 is a
+        // brand-new over-cap short wearing a hedge's clothes.
+        if (Math.abs(newPosition) > maxPositionQuantity
+                && (Math.abs(newPosition) >= Math.abs(current)
+                        || (newPosition ^ current) < 0)) {
             bumpRejection(REJECT_POSITION);
             return REJECT_POSITION;
         }
