@@ -91,9 +91,16 @@ class ExecutionAwareBacktesterTest {
         assertEquals("DARK_X", entryParent.fills().getFirst().venue());
         // Buy fills cost more than mid (spread + fees).
         assertTrue(entryParent.avgFillPrice() > 100.0);
-        // Fully filled: ~990 shares given the 1% affordability buffer.
-        assertTrue(entryParent.filledQty() >= 950 && entryParent.filledQty() <= 995,
+        // Fully filled: ~999 shares — sizing uses the model's EXACT declared
+        // worst-case cost (half-spread + max fee, a few bps), not a flat 1%
+        // buffer. The invariant that matters is cash conservation.
+        assertTrue(entryParent.filledQty() >= 950 && entryParent.filledQty() <= 1000,
                 "filled=" + entryParent.filledQty());
+        double entrySpend = 0;
+        for (Execution f : entryParent.fills()) {
+            entrySpend += f.notional();
+        }
+        assertTrue(entrySpend <= 100_000, "entry must never overdraw cash: " + entrySpend);
         // End of data closes the position; equity stays sane.
         assertEquals(Trade.REASON_END_OF_DATA,
                 r.backtest().trades().getFirst().exitReason());

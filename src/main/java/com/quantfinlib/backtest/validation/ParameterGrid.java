@@ -29,8 +29,15 @@ public final class ParameterGrid {
         return params.isEmpty() ? 0 : n;
     }
 
-    /** All parameter combinations, insertion-ordered and deterministic. */
+    /**
+     * All parameter combinations, insertion-ordered and deterministic.
+     * Empty for an empty grid, consistent with {@link #size()} — never a
+     * single empty map, which a strategy factory would NPE on.
+     */
     public List<Map<String, Double>> combinations() {
+        if (params.isEmpty()) {
+            return List.of();
+        }
         List<Map<String, Double>> out = new ArrayList<>();
         out.add(new LinkedHashMap<>());
         for (Map.Entry<String, double[]> e : params.entrySet()) {

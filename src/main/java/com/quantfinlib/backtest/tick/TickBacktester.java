@@ -51,6 +51,15 @@ public final class TickBacktester implements TickFileReader.ReplayHandler, TickT
                          long defaultQueueAhead, int equitySampleEvery, double tickSize,
                          TickSizeSchedule tickSchedule) {
 
+        public Config {
+            // Sampling divides the tick counter; 0 would ArithmeticException
+            // mid-replay rather than at construction.
+            if (equitySampleEvery <= 0) {
+                throw new IllegalArgumentException(
+                        "equitySampleEvery must be > 0, got " + equitySampleEvery);
+            }
+        }
+
         public static Config defaults() {
             return new Config(1_000_000, 2.0, 0.2, 0, 1_000, 0, null);
         }

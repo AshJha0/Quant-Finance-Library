@@ -6,6 +6,17 @@ import java.util.Locale;
  * Dependency-free inline SVG charts for HTML reports: equity curves and
  * drawdown charts rendered as self-contained SVG strings (no external assets,
  * no JavaScript).
+ *
+ * <p>Why hand-rolled SVG and not a charting library: the report must open
+ * identically in a browser, an email client, and an archive viewer ten
+ * years from now — inline vector markup with no script and no fetch is the
+ * only format with that guarantee, and it keeps the library's
+ * zero-dependency promise. SVG is also resolution-independent (a compliance
+ * PDF print at 300dpi stays sharp) and diff-able in version control.
+ * {@code Locale.US} formatting throughout: an SVG coordinate written as
+ * {@code "1,5"} by a German-locale JVM is the classic silently-blank-chart
+ * bug. Output plugs into {@link Report.Builder#addHtmlSection} and renders
+ * via {@link HtmlReportExporter} only.</p>
  */
 public final class SvgCharts {
 

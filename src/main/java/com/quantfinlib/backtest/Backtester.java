@@ -19,9 +19,34 @@ public final class Backtester {
     }
 
     public static BacktestResult run(TradingStrategy strategy, BarSeries series, BacktestConfig config) {
-        strategy.init(series);
+        return run(strategy, series, config, 0);
+    }
+
+    /**
+     * Variant with a WARM-UP prefix: indicators are initialized over the
+     * whole series, but no signal is acted on (and no equity recorded)
+     * before {@code tradeFrom}. This is how walk-forward analysis avoids the
+     * cold-start bias — evaluating a fold on a bare test slice re-computes
+     * every indicator from scratch, silently forcing HOLD through the first
+     * {@code lookback} bars of <i>every</i> fold; feeding the preceding bars
+     * as warm-up (they are the past — no look-ahead) lets the strategy enter
+     * the test window with warm indicators, the way it would trade live.
+     * The returned equity curve covers {@code [tradeFrom, n)} only.
+     *
+     * <p>Scope of the warm-up: it warms whatever {@link TradingStrategy#init}
+     * precomputes over the series (all shipped strategies). {@code onBar} is
+     * NOT called for warm-up bars, so a strategy that accumulates state
+     * inside {@code onBar} still starts cold at {@code tradeFrom}.</p>
+     */
+    public static BacktestResult run(TradingStrategy strategy, BarSeries series,
+                                     BacktestConfig config, int tradeFrom) {
         int n = series.size();
-        double[] equity = new double[n];
+        if (tradeFrom < 0 || tradeFrom >= n) {
+            throw new IllegalArgumentException(
+                    "tradeFrom must be in [0, " + n + "), got " + tradeFrom);
+        }
+        strategy.init(series);
+        double[] equity = new double[n - tradeFrom];
         List<Trade> trades = new ArrayList<>();
 
         double stopLoss = strategy.stopLossPct() > 0 ? strategy.stopLossPct() : config.stopLossPct();
@@ -33,7 +58,7 @@ public final class Backtester {
         double entryCost = 0;
         int entryIndex = -1;
 
-        for (int i = 0; i < n; i++) {
+        for (int i = tradeFrom; i < n; i++) {
             // 1. Intrabar risk exits (only on bars after the entry bar).
             if (qty > 0 && i > entryIndex) {
                 if (stopLoss > 0) {
@@ -74,7 +99,7 @@ public final class Backtester {
                 qty = 0;
             }
 
-            equity[i] = cash + qty * close;
+            equity[i - tradeFrom] = cash + qty * close;
         }
 
         // 3. Force-close any open position at the final bar.
@@ -82,7 +107,7 @@ public final class Backtester {
             double fill = series.close(n - 1) * (1 - config.slippageRate());
             cash = closePosition(trades, series, config, qty, entryPrice, entryCost,
                     entryIndex, n - 1, fill, Trade.REASON_END_OF_DATA, cash);
-            equity[n - 1] = cash;
+            equity[equity.length - 1] = cash;
         }
 
         return new BacktestResult(strategy.name(), series.symbol(), equity, trades, config.periodsPerYear());

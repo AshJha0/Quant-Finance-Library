@@ -465,10 +465,167 @@ flowchart LR
 
 ---
 
+## 15. How an order reaches the exchange — and how the market comes back
+
+Two lanes meet at the strategy: outbound, a decision survives the risk
+gate, becomes a FIX message, and rides a sequenced session to the venue's
+book; inbound, the venue's raw feed is rebuilt into signals that shape the
+next decision. The `ExecutionReport` closes the loop through position and
+P&L.
+
+```mermaid
+flowchart LR
+    subgraph OUTLANE["outbound — the order's journey"]
+        STRAT["strategy decision<br/>HftQuoter · BenchmarkExecutor ·<br/>your logic"]
+        GATE15["HftRiskGate<br/>qty · notional · position ·<br/>collar · halt (~3 ns)"]
+        ENC["FIX encode<br/>NewOrderSingle 35=D<br/>(FixSession.sendNewOrderSingle)"]
+        SESS["FixSession<br/>seqnums · heartbeats · TestRequest ·<br/>ResendRequest recovery · session store"]
+    end
+    subgraph VENUE15["the venue"]
+        VBOOK["venue book<br/>(HftOrderBook plays this<br/>role in the tests)"]
+        ER["ExecutionReport 35=8<br/>ack · fill · cancel · reject"]
+    end
+    subgraph INLANE["inbound — the market's journey"]
+        WIRE15["ITCH / SBE wire bytes<br/>(ItchCodec · sbe flyweights)"]
+        L315["L3BookBuilder → Nbbo<br/>book rebuild + own-queue position"]
+        SIGS15["SignalEngine / FlowSignals<br/>OFI · imbalance · vol · alpha"]
+    end
+    PNL["position & P&L update<br/>ledger · TCA markouts"]
+
+    STRAT --> GATE15 --> ENC --> SESS
+    SESS -->|"TCP, MsgSeqNum n"| VBOOK
+    VBOOK --> ER
+    ER -->|"onExecutionReport"| PNL
+    ER -.->|"gap? ResendRequest(2),<br/>PossDup replay heals it"| SESS
+    WIRE15 --> L315 --> SIGS15
+    SIGS15 --> STRAT
+    PNL -.->|"inventory feeds the<br/>next quote's skew"| STRAT
+```
+
+The sequenced session is the part people underestimate: the venue's book
+only ever sees messages in order, so every gap is either healed by a
+resend (application messages replayed with PossDup, admin runs coalesced
+into GapFill) or the session refuses to continue. Recipe 21 is the
+runnable version; diagram 2 shows the nanosecond budget of the left lane.
+
+---
+
+## 16. The rates stack — quotes to simulated curves
+
+One curve object underneath everything: quotes bootstrap into zeros, the
+zeros price cash flows, node bumps locate the risk, and the short-rate
+models animate the same curve through time.
+
+```mermaid
+flowchart TD
+    QUOTES16["market quotes<br/>deposits (already zeros) ·<br/>annual par swap rates"]
+    BOOT16["bootstrap<br/>YieldCurve.bootstrapAnnualParSwaps<br/>DF_n = (1 − s_n·A_{n−1}) / (1 + s_n)<br/>· YieldCurve.ofZeroRates"]
+    CURVE16["YieldCurve<br/>zeroRate (linear, flat extrap) ·<br/>discountFactor · forwardRate"]
+    BOND16["BondPricer<br/>priceFromCurve / priceFromYield ·<br/>YTM (bisection) · Macaulay/modified<br/>duration · convexity · DV01<br/>+ date-true dirty/clean price<br/>(DayCount · BusinessCalendar rolls)"]
+    KRD16["KeyRateDurations<br/>bump ONE node ±1bp, reprice:<br/>keyRateDv01s ladder ·<br/>Σ KRD = parallelDv01 (pinned by test)"]
+    HEDGE16["hedge ladder<br/>per-bucket pay-fixed swap notionals<br/>(recipe 18)"]
+    SRM16["ShortRateModels<br/>Vasicek · CIR (Feller check) ·<br/>Hull-White θ(t) fitted TO the curve"]
+    SIM16["simulation<br/>vasicekStep / cirStep paths →<br/>scenario repricing, rate VaR inputs"]
+
+    QUOTES16 --> BOOT16 --> CURVE16
+    CURVE16 --> BOND16 --> KRD16 --> HEDGE16
+    CURVE16 --> SRM16 --> SIM16
+```
+
+The stack splits statics from dynamics. Everything down the left column
+is today's curve interrogated harder and harder — price, then slope
+(DV01), then slope *per node* (the KRD ladder that recipe 18 turns into
+hedge notionals). The right branch is the same curve given a stochastic
+engine: Vasicek and CIR bring their own equilibrium, Hull-White is
+calibrated so today's curve is reproduced exactly — which is why its
+simulations are the ones you can use for curve-consistent scenario P&L.
+
+---
+
+## 17. Portfolio construction — one input set, three optimizers
+
+All three consume the same expected returns and covariance; they disagree
+about how much the return estimates deserve to be trusted, and the weight
+vectors show it.
+
+```mermaid
+flowchart TD
+    INPUTS17["expected returns μ + covariance Σ<br/>same periodicity (both annualized<br/>or both daily) — e.g. EwmaCovariance"]
+    subgraph OPT17["three philosophies about trusting μ"]
+        MS17["PortfolioOptimizer<br/>maxSharpe / minVolatility /<br/>efficientFrontier<br/>trusts μ FULLY — concentrates"]
+        RP17["RiskParityOptimizer<br/>equalRiskContribution<br/>ignores μ — every asset the same<br/>share of portfolio variance"]
+        BL17["BlackLitterman<br/>impliedEquilibriumReturns (market prior)<br/>+ posteriorReturns (views, confidences)<br/>→ PortfolioOptimizer on the posterior"]
+    end
+    W17["weights<br/>(Allocation: w · return · vol · Sharpe)"]
+    BT17["PortfolioBacktester<br/>survivorship-aware, TradeCostModel,<br/>rebalance schedule"]
+    EX17["PortfolioExecutor<br/>the transition INTO the new weights:<br/>leg-balance band + risk-weighted budget"]
+
+    INPUTS17 --> MS17
+    INPUTS17 --> RP17
+    INPUTS17 --> BL17
+    MS17 --> W17
+    RP17 --> W17
+    BL17 --> W17
+    W17 -->|"did the weights survive<br/>history honestly?"| BT17
+    W17 -->|"trade current book → target<br/>as ONE basket schedule"| EX17
+```
+
+The fork at the bottom is the point of the diagram: a weight vector is a
+research artifact until it survives a survivorship-honest backtest
+(diagram 3's pipeline) *and* can be reached from the current book without
+the transition itself destroying the alpha — which is what
+`PortfolioExecutor` (diagram 11) exists to protect. Recipe 19 prints the
+three weight vectors side by side.
+
+---
+
+## 18. The overfitting defense stack — from grid winner to deploy-or-reject
+
+A parameter grid produces N backtests and reports the maximum — which is
+a selection effect, not evidence. Four defenses interrogate the same
+winner from different angles before any capital moves.
+
+```mermaid
+flowchart TD
+    GRID18["one strategy grid<br/>ParameterGrid × StrategyFactory<br/>GridSearchOptimizer.search: every<br/>combination backtested and ranked"]
+    WINNER18["in-sample winner<br/>the best of N Sharpes —<br/>a MAXIMUM of N draws,<br/>not an expectation"]
+    subgraph DEFENSES["the four defenses (recipe 20)"]
+        WF18["WalkForwardAnalyzer<br/>re-optimize per train window,<br/>score unseen test bars, stitched<br/>OOS equity → efficiency = OOS/IS"]
+        PKF18["PurgedKFold<br/>label-horizon purge + embargo:<br/>the ML-fold leak fix"]
+        CSCV18["OverfitProbability.cscvSharpe<br/>C(S,S/2) symmetric IS/OOS splits:<br/>PBO = P(IS winner below<br/>OOS median)"]
+        DSR18["GridSearchOptimizer<br/>.deflatedSharpeOfWinner<br/>winner's Sharpe vs the best of<br/>N zero-skill trials"]
+    end
+    DECIDE18{"deploy or reject?"}
+    DEPLOY18(["deploy — sized by the<br/>OOS numbers, not the IS ones"])
+    REJECT18(["reject: the grid found<br/>noise, not signal"])
+
+    GRID18 --> WINNER18
+    WINNER18 --> WF18
+    WINNER18 --> PKF18
+    WINNER18 --> CSCV18
+    WINNER18 --> DSR18
+    WF18 -->|"efficiency → 1 robust,<br/>→ 0 curve-fit"| DECIDE18
+    PKF18 -->|"fold scores hold<br/>without the leak"| DECIDE18
+    CSCV18 -->|"PBO < 0.1 real ·<br/>PBO ≥ 0.5 noise-mining"| DECIDE18
+    DSR18 -->|"< ~0.95: indistinguishable<br/>from the luckiest of N"| DECIDE18
+    DECIDE18 -->|"all four pass"| DEPLOY18
+    DECIDE18 -->|"any one fails"| REJECT18
+```
+
+Each defense catches a different lie: walk-forward catches parameters
+that only fit the past arrangement of regimes; the purged K-fold catches
+label leakage that ordinary cross-validation invites; CSCV catches a
+broken *selection process* (the winner keeps flipping under resampling);
+the deflated Sharpe catches the multiple-testing haircut everyone forgets
+to apply. Passing one is easy. Passing all four is what "not overfit"
+means here — and PBO ≥ 0.5 is an unconditional stop.
+
+---
+
 ## Where to go next
 
 - [LEARN.md](LEARN.md) — the from-zero tutorial: every concept in these diagrams, explained for beginners
 - [ARCHITECTURE.md](ARCHITECTURE.md) — the package → classes → tests map and design invariants
 - [ULTRA_LOW_LATENCY.md](ULTRA_LOW_LATENCY.md) — the four-tier latency stack, honestly bounded
-- [COOKBOOK.md](COOKBOOK.md) — seventeen runnable recipes across these flows
+- [COOKBOOK.md](COOKBOOK.md) — twenty-two runnable recipes across these flows
 - `README.md` — capability tour with runnable examples and all measured numbers

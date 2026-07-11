@@ -15,6 +15,17 @@ import java.util.List;
  *
  * <p>Bar-level model of the hold window: the order arrives at the bar open
  * and the LP watches the intra-bar move.</p>
+ *
+ * <p><b>Signal-bar handling</b>: when worked through
+ * {@link ExecutionAwareBacktester}, the parent is created at the signal
+ * bar's CLOSE — so on that first bar there is no hold window left to
+ * observe, and filling at that bar's <i>open</i> would credit a price from
+ * before the signal existed (intrabar time travel). The model therefore
+ * HOLDS on the parent's signal bar (no fill, no reject counted — it is
+ * pure latency, the LP has seen nothing yet); the first real attempt is
+ * the next bar, whose open is the price standing when the order actually
+ * arrived. Direct calls without {@link #onParentOrder} keep the plain
+ * arrives-at-the-open semantics.</p>
  * <ul>
  *   <li>Move in the taker's favor beyond {@code rejectThresholdBps} (price
  *       rising on a buy — adverse to the LP who would sell) → <b>reject</b>;
@@ -41,6 +52,7 @@ public final class LastLookExecution implements ExecutionModel {
 
     private long fills;
     private long rejects;
+    private int parentSignalBar = -1;
 
     /**
      * @param spreadBps          half-spread paid on accepted fills
@@ -57,8 +69,33 @@ public final class LastLookExecution implements ExecutionModel {
     }
 
     @Override
+    public void onParentOrder(Side side, long totalQuantity, int signalIndex) {
+        parentSignalBar = signalIndex;
+    }
+
+    @Override
+    public double referencePrice(BarSeries series, int index) {
+        // Fills anchor to the bar OPEN, not the close: sizing against the
+        // close would overdraw cash on any accepted bar that gaps open-high
+        // (the engine budgets request * referencePrice * (1 + spread)).
+        return series.open(index);
+    }
+
+    @Override
+    public double worstCaseCostFraction() {
+        // Exact: the all-in fill is open * (1 + spread), and referencePrice
+        // hands the engine that same open.
+        return spreadBps / 1e4;
+    }
+
+    @Override
     public List<Execution> execute(Side side, long requestedQty, BarSeries series, int index) {
         if (requestedQty <= 0) {
+            return List.of();
+        }
+        if (index == parentSignalBar) {
+            // Order decided at this bar's close: no hold window has elapsed
+            // and this bar's open predates the signal. Hold — not a reject.
             return List.of();
         }
         double open = series.open(index);

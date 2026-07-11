@@ -26,7 +26,8 @@ import java.util.List;
  *       worked through the execution model (a patient model exits slowly —
  *       that realism is the point).</li>
  *   <li>Any position left at the end of data is force-closed at the last
- *       close, bypassing the model.</li>
+ *       close less the model's worst-case cost fraction — unconditional
+ *       (it bypasses the model's fill logic) but not free.</li>
  * </ul>
  */
 public final class ExecutionAwareBacktester {
@@ -124,9 +125,13 @@ public final class ExecutionAwareBacktester {
     // ------------------------------------------------------------------
 
     private void workEntry(int i) {
-        double close = series.close(i);
-        // Cap the request by what cash can actually pay for (1% cost buffer).
-        long affordable = (long) (cash / (close * 1.01));
+        // Cap the request by what cash can actually pay for, priced at the
+        // model's own fill anchor (close for most models, the OPEN for
+        // last-look) with its declared worst-case all-in cost on top — a
+        // flat close-based 1% buffer overdraws cash the moment a model
+        // charges more, or fills off a gapped open.
+        double ref = model.referencePrice(series, i);
+        long affordable = (long) (cash / (ref * (1 + model.worstCaseCostFraction())));
         long request = Math.min(pendingEntry, affordable);
         if (request <= 0) {
             return;
@@ -181,7 +186,7 @@ public final class ExecutionAwareBacktester {
     private void onSignal(Signal signal, int i) {
         if (signal == Signal.BUY && position == 0 && pendingEntry == 0 && pendingExit == 0) {
             double close = series.close(i);
-            long target = (long) (cash / (close * 1.01));
+            long target = (long) (cash / (close * (1 + model.worstCaseCostFraction())));
             if (target <= 0) {
                 return;
             }
@@ -238,7 +243,10 @@ public final class ExecutionAwareBacktester {
             exit = new ParentState(Side.SELL, last, series.close(last), Trade.REASON_END_OF_DATA);
             parents.add(exit);
         }
-        double px = series.close(last);
+        // Even a forced close pays to trade: charge the model's worst-case
+        // cost rather than exiting for free — a run that ends holding must
+        // not get its last round trip's exit cost waived.
+        double px = series.close(last) * (1 - model.worstCaseCostFraction());
         Execution fill = new Execution(series.symbol(), Side.SELL, px, position,
                 series.timestamp(last), "FORCED_CLOSE");
         exit.fills.add(fill);

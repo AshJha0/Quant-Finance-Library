@@ -5,6 +5,7 @@ import com.quantfinlib.backtest.BacktestResult;
 import com.quantfinlib.backtest.Backtester;
 import com.quantfinlib.backtest.PerformanceMetrics;
 import com.quantfinlib.core.BarSeries;
+import com.quantfinlib.util.MathUtils;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -29,6 +30,9 @@ public final class GridSearchOptimizer {
     public static List<Candidate> search(ParameterGrid grid, StrategyFactory factory,
                                          BarSeries series, BacktestConfig config,
                                          ToDoubleFunction<PerformanceMetrics> objective) {
+        if (grid.size() == 0) {
+            throw new IllegalArgumentException("empty parameter grid: nothing to search");
+        }
         List<Candidate> out = new ArrayList<>(grid.size());
         for (Map<String, Double> params : grid.combinations()) {
             BacktestResult result = Backtester.run(factory.create(params), series, config);
@@ -45,5 +49,47 @@ public final class GridSearchOptimizer {
                                  BarSeries series, BacktestConfig config,
                                  ToDoubleFunction<PerformanceMetrics> objective) {
         return search(grid, factory, series, config, objective).getFirst();
+    }
+
+    /**
+     * The MULTIPLE-TESTING HAIRCUT for the grid's winner: the probability
+     * that the top-ranked candidate's Sharpe beats what the best of
+     * {@code ranked.size()} zero-skill trials would have scored anyway
+     * ({@link SharpeValidation#deflatedSharpe}). A grid search computes a
+     * Sharpe for every trial and then quietly reports only the maximum —
+     * this is the one number that makes that selection honest. Values near
+     * 1 mean the winner survives its own search; below ~0.95 the "best"
+     * parameter set is indistinguishable from picking the luckiest of N
+     * random ones.
+     *
+     * @param ranked         result of {@link #search} (uses every trial's
+     *                       Sharpe as the null distribution), &ge; 2 trials
+     * @param winnerReturns  the winner's per-period returns (derive from its
+     *                       equity curve), &ge; 4 observations
+     * @param periodsPerYear the annualization used by the backtest metrics
+     */
+    public static double deflatedSharpeOfWinner(List<Candidate> ranked, double[] winnerReturns,
+                                                int periodsPerYear) {
+        if (ranked.size() < 2) {
+            throw new IllegalArgumentException("need >= 2 trials, got " + ranked.size());
+        }
+        if (winnerReturns.length < 4) {
+            throw new IllegalArgumentException(
+                    "need >= 4 winner returns, got " + winnerReturns.length);
+        }
+        if (periodsPerYear <= 0) {
+            throw new IllegalArgumentException("periodsPerYear must be > 0, got " + periodsPerYear);
+        }
+        // SharpeValidation works in per-period units; metrics store annualized.
+        double perPeriodScale = Math.sqrt(periodsPerYear);
+        double[] trialSharpes = new double[ranked.size()];
+        for (int i = 0; i < trialSharpes.length; i++) {
+            double s = ranked.get(i).metrics().sharpeRatio() / perPeriodScale;
+            trialSharpes[i] = Double.isFinite(s) ? s : 0;
+        }
+        double sd = MathUtils.stdDev(winnerReturns);
+        double observed = sd > 0 ? MathUtils.mean(winnerReturns) / sd : 0;
+        return SharpeValidation.deflatedSharpe(observed, trialSharpes, winnerReturns.length,
+                MathUtils.skewness(winnerReturns), MathUtils.kurtosis(winnerReturns));
     }
 }

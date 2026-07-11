@@ -5,7 +5,16 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.format.DateTimeFormatter;
 
-/** Self-contained styled HTML report (no external assets). */
+/**
+ * Self-contained styled HTML report: one file, inline CSS, no external
+ * assets — so it can be emailed, archived for compliance, or opened from a
+ * network share years later and still render identically (a report whose
+ * stylesheet lives on a CDN is a report that rots). The one exporter that
+ * renders {@link Report.Section#isHtml() HTML sections} (inline
+ * {@link SvgCharts} output); tabular exporters skip them. Every title,
+ * header and cell is HTML-escaped — report content is DATA, and a symbol
+ * named {@code <script>} must render as text, not execute (tested).
+ */
 public final class HtmlReportExporter implements ReportExporter {
 
     @Override

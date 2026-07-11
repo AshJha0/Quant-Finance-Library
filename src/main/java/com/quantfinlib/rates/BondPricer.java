@@ -5,6 +5,24 @@ package com.quantfinlib.rates;
  * duration, convexity, and DV01. Yields are per-annum with {@code frequency}
  * compounding (the bond's coupon frequency); coupons are assumed on a regular
  * schedule with the last payment at maturity.
+ *
+ * <p>The risk numbers and what each is FOR: <b>Macaulay duration</b> is the
+ * cash-flow-weighted average time to payment (years — an intuition number);
+ * <b>modified duration</b> = Macaulay / (1 + y/f) is the first-order price
+ * sensitivity, {@code dP/P ≈ -modDur · dy}; <b>DV01</b> is the same
+ * derivative in money terms per 1bp — the number the desk actually hedges,
+ * because DV01s ADD across positions while durations must be
+ * value-weighted. <b>Convexity</b> is the second-order term that makes the
+ * duration hedge wrong for large moves — always in the LONG bondholder's
+ * favor (price rises more than duration predicts when yields fall, drops
+ * less when they rise), which is why long-convexity positions cost carry.</p>
+ *
+ * <p>Simplifications, stated: whole coupon periods (no accrued-interest
+ * split of dirty into clean price), no settlement-lag discounting, and
+ * yield-to-maturity as the single rate — the classic textbook bond, exact
+ * for pricing OFF a yield quote. Pricing off a full curve (each cash flow
+ * at its own zero rate) is {@link YieldCurve}'s job; hedging a position
+ * against non-parallel curve moves is {@link KeyRateDurations}'.</p>
  */
 public final class BondPricer {
 
