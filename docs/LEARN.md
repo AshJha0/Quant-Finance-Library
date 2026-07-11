@@ -2812,10 +2812,11 @@ earns (1/2) Gamma (dS)^2. Break-even move: at 16 vol, the daily
 break-even is 16% / sqrt(252) ~ 1.0% -- move more, the day is a win;
 move less, theta wins. Realizing 20 against 16 paid: your average day
 moved ~1.26%, earning (1.26^2 - 1.00^2)/1.00^2 ~ 59% more gamma P&L
-than rent each day. Worked number: on $10m of gamma-adjusted notional
-with Gamma S^2 = $2m, a 1.26% day earns (1/2)(2m)(0.0159%) ~ $15.9k
-gamma vs ~$10k theta -- roughly $6k/day of scalping profit. The two
-honest caveats that separate real answers: (1) the P&L is weighted by
+than rent each day. Worked number: on a book with dollar gamma
+Gamma S^2 = $200m ($2m of delta per 1% move), a 1.26% day earns
+(1/2)(200m)(0.0159%) ~ $15.9k gamma vs ~$10k theta -- roughly $6k/day
+of scalping profit. The two honest caveats that separate real
+answers: (1) the P&L is weighted by
 *where* gamma was when moves happened -- dollar gamma rides with spot,
 so realizing 20 vol far from your strike pays little (the
 strike-pinning problem); a variance swap exists precisely to pay
@@ -5245,10 +5246,11 @@ effective lag is (N-1)/2 bars, and it has the famous drop-off artifact:
 the SMA jumps when a large OLD observation falls out of the window, a
 move that has nothing to do with today's price. An EMA weights bars
 geometrically -- alpha = 2/(N+1) on the newest, decaying forever -- so
-it responds faster to fresh information (roughly half the SMA's lag for
-the same nominal period), never exhibits drop-off, and needs only one
-number of state, which is why streaming systems love it. The cost: the
-EMA never fully forgets (a crash months ago still has epsilon weight),
+it responds faster to fresh information (the newest bar gets weight
+2/(N+1), about twice the SMA's 1/N), never exhibits drop-off, and
+needs only one number of state, which is why streaming systems love
+it. The cost: the EMA never fully forgets (a crash months ago still
+has epsilon weight),
 and its "period" is a convention, not a window. Desk use case: crossover
 systems built on SMAs generate signals when old data exits the window --
 a 200-day SMA cross triggered by what happened 200 days ago is a real
