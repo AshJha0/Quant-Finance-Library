@@ -696,7 +696,7 @@ flowchart TD
     end
     subgraph END20["teardown"]
         LOUT20["Logout 35=5 handshake<br/>(logout())"]
-        DISC20["DISCONNECTED<br/>onDisconnect(reason)"]
+        DISC20["DISCONNECTED<br/>(failure paths fire<br/>onDisconnect(reason))"]
     end
 
     TCP20 --> LOGON20
@@ -887,8 +887,9 @@ sentinels mean "pure market" and cannot wrap into the opposite meaning).
 And a killed `submitFok` consumes no order id and emits no trades, like a
 venue rejecting pre-match, while a `submitPostOnly` pool-full reject still
 consumes an id -- so id sequences and `orderCount` reconcile identically
-regardless of entry point. `LimitOrder` and the research-lane `OrderBook`
-cover the same verbs in the readable lane.
+regardless of entry point. The research-lane `OrderBook` covers the limit
+and market verbs in the readable lane; IOC, FOK and post-only exist only
+on the venue-grade book.
 
 ---
 
@@ -1056,14 +1057,14 @@ depends on?
 ```mermaid
 flowchart TD
     Q29(["what does the<br/>edge depend on?"]) --> QP29{"queue position /<br/>tick-level fills?"}
-    QP29 -->|yes| TB29["TickBacktester<br/>models: QFLT replay, market fills at<br/>last trade +/- half spread, limits earn<br/>fills through defaultQueueAhead as<br/>volume prints AT the price<br/>ignores: book depth, multi-asset"]
+    QP29 -->|yes| TB29["TickBacktester<br/>models: QFLT replay, market fills at<br/>last trade +/- half spread, limits earn<br/>fills through defaultQueueAhead as<br/>volume prints AT the price<br/>ignores: book depth, target-weight<br/>rebalancing"]
     QP29 -->|no| MA29{"multi-asset<br/>portfolio weights?"}
     MA29 -->|yes| PB29["PortfolioBacktester<br/>models: long/short rebalancing to target<br/>weights; survivorship-aware overload adds<br/>PointInTimeUniverse, delistings at true<br/>terminal value, mergers, dividends<br/>ignores: intrabar paths, execution detail"]
     MA29 -->|no| EX29{"does execution cost /<br/>TCA matter to the answer?"}
     EX29 -->|yes| EA29["ExecutionAwareBacktester<br/>models: parent orders worked over bars<br/>through an ExecutionModel (SorExecution,<br/>IcebergExecution, InstantExecution),<br/>per-parent TCA<br/>ignores: multi-asset (long-only, single name)"]
     EX29 -->|no| BT29["Backtester<br/>models: bar-close fills + slippage,<br/>intrabar stop/take-profit with gap-aware<br/>fills, warm-up overload for walk-forward<br/>ignores: fill realism, portfolio effects"]
 
-    TB29 --> COST29["shared seam: TradeCostModel +<br/>PerformanceAnalytics -> PerformanceMetrics"]
+    TB29 --> COST29["shared seam: PerformanceAnalytics -><br/>PerformanceMetrics (TradeCostModel plugs<br/>into the portfolio and execution-algo<br/>engines and alpha.AlphaBacktester)"]
     PB29 --> COST29
     EA29 --> COST29
     BT29 --> COST29
@@ -1108,7 +1109,7 @@ flowchart LR
     TR3_30 --> TE3_30
     TE1_30 -->|"carryCapital =<br/>finalEquity of fold 1"| TE2_30
     TE2_30 -->|"capital carries again"| TE3_30
-    TE3_30 --> OUT30["stitched out-of-sample equity +<br/>per-fold Fold records +<br/>efficiency = OOS return sum /<br/>IS return sum"]
+    TE3_30 --> OUT30["stitched out-of-sample equity +<br/>per-fold Fold records +<br/>efficiency = OOS objective sum /<br/>IS objective sum"]
 ```
 
 Detail one: evaluating a fold on a bare test slice would recompute every
@@ -1135,7 +1136,7 @@ training samples adjacent to the test fold have already seen its data.
 flowchart LR
     TRL31["TRAIN (left)<br/>indices 0 .. t0-labelHorizon-1<br/>labels resolve BEFORE<br/>the test fold starts"] --> PGL31["PURGED (pre-test)<br/>t0-labelHorizon .. t0-1<br/>label windows OVERLAP the<br/>test fold -- they peeked"]
     PGL31 --> TEST31["TEST FOLD k<br/>t0 .. t1-1<br/>(contiguous block)"]
-    TEST31 --> PGR31["PURGED (post-test)<br/>t1 .. t1+labelHorizon-1<br/>labels DRAW ON bars<br/>inside the test fold"]
+    TEST31 --> PGR31["PURGED (post-test)<br/>t1 .. t1+labelHorizon-1<br/>the TEST fold's labels are<br/>computed from these bars"]
     PGR31 --> EMB31["EMBARGO<br/>+embargo more bars dropped:<br/>serial correlation leaks<br/>even without label overlap"]
     EMB31 --> TRR31["TRAIN (right)<br/>t1+labelHorizon+embargo .. n-1<br/>clean again"]
 ```
@@ -1146,8 +1147,8 @@ range and `trainIndices` that are exactly the left block ending at
 `t1 + labelHorizon + embargo` -- hand-checkable, which is how the tests
 verify it. The two purge zones have different causes: the pre-test zone
 holds training samples whose label windows reach into the test fold, and
-the post-test zone holds samples whose labels are computed from test-fold
-bars. The embargo is the humbler admission that returns are serially
+the post-test zone holds the bars the test fold's own labels are computed
+from. The embargo is the humbler admission that returns are serially
 correlated, so a bar just outside the purge zone still carries test-fold
 information. `OverfitProbability` and `SharpeValidation` sit downstream
 in the same `backtest.validation` package -- diagram 18 shows the full
@@ -1167,7 +1168,7 @@ flowchart TD
     B32 --> C32["enumerate ALL C(S, S/2) ways to<br/>pick half the blocks as in-sample;<br/>the other half is out-of-sample<br/>(symmetric: every split's mirror<br/>is also evaluated)"]
     C32 --> P32["per split:<br/>1. concatenate IS blocks,<br/>pick the variant with the<br/>best IS objective<br/>2. rank THAT variant among all<br/>N on the OOS blocks -> w"]
     P32 --> L32["logit lambda = ln(w / (1-w))<br/>positive: IS winner stays<br/>above OOS median"]
-    L32 --> PBO32["PBO = fraction of the<br/>C(S, S/2) logits below 0<br/>Result(pbo, combinations, logits)"]
+    L32 --> PBO32["PBO = fraction of the<br/>C(S, S/2) logits at or below 0<br/>Result(pbo, combinations, logits)"]
 ```
 
 The trick that makes it honest: the selection rule inside each split is
@@ -1199,7 +1200,7 @@ flowchart TD
     C4_33 --> SUM33["costBps(series, i, W)<br/>all-in one-way bps of notional"]
 
     C4_33 -.->|"bars before impactWindow,<br/>or no volume data:<br/>flat components only --<br/>documented degradation,<br/>never a crash"| SUM33
-    SUM33 --> USE33["charged identically by the backtest<br/>engines and alpha.AlphaBacktester --<br/>execution-aware and survivorship-aware<br/>numbers from the SAME cost definition"]
+    SUM33 --> USE33["charged identically by PortfolioBacktester,<br/>ExecutionAlgoBacktester and alpha.AlphaBacktester --<br/>execution-aware and survivorship-aware<br/>numbers from the SAME cost definition"]
 ```
 
 The first three components are size-independent -- double the order,
@@ -1236,8 +1237,9 @@ flowchart TD
 
 The progression is a lesson in paying for parameters: `EwmaVolatility`
 has one knob and no likelihood; `Garch11` earns its three parameters via
-variance targeting (omega is pinned to the sample variance, so the MLE
-grid only searches alpha-beta -- derivative-free and deterministic);
+variance targeting (omega is pinned so the long-run variance equals the
+sample variance, and the MLE grid only searches alpha-beta --
+derivative-free and deterministic);
 `GjrGarch11` adds gamma only where the leverage effect exists to be
 captured, and its own doc says so -- if fitted gamma is near zero, use
 the simpler model. `Egarch11` moves the asymmetry into log-variance so no
@@ -1652,9 +1654,10 @@ covariance matrix at all, but reading a 99.9% quantile from 500
 observations is reading the worst half-observation -- the handoff to
 `ExtremeValueTheory` (diagram 44).
 
-Two unifying details: every method returns expected shortfall alongside
-VaR (`VarResult`), because post-FRTB the ES is the primary number and VaR
-the diagnostic; and `monteCarloVar` builds its correlated draws from
+Two unifying details: every flavor reports expected shortfall alongside
+VaR (the scenario methods return `VarResult`; delta-normal and
+delta-gamma pair with `deltaNormalEs`/`deltaGammaEs`), because post-FRTB
+the ES is the primary number and VaR the diagnostic; and `monteCarloVar` builds its correlated draws from
 `GaussianCopula.cholesky` -- the same machinery the copula exposes
 directly via `sample` and `sampleT` when the joint tail, not the
 portfolio quantile, is the object of study.

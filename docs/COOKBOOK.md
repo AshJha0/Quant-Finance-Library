@@ -1255,17 +1255,19 @@ Two arrays in the result serve different masters and must not be swapped: `curre
 
 ```java
 // Per-interval aggregates from your feed handler (e.g. one-second buckets).
-long[] messages = {410, 395, 402, 388, 9_874, 401, 397};  // orders+cancels+replaces
-long[] trades = {21, 19, 24, 18, 3, 22, 20};              // trades, same intervals
-double[] mids = {100.02, 100.03, 100.01, 100.04, 99.38, 100.02, 100.03};
+long[] messages = {410, 395, 402, 388, 415, 391, 404,     // orders+cancels+replaces
+                   399, 9_874, 401, 397, 407};
+long[] trades = {21, 19, 24, 18, 22, 20, 23, 19, 3, 22, 20, 21};  // same intervals
+double[] mids = {100.02, 100.03, 100.01, 100.04, 100.02, 100.05, 100.03,
+                 100.02, 100.04, 99.38, 99.40, 99.39, 99.41};
 
 // Message rate a 3-sigma outlier AND order-to-trade ratio >= 50.
 List<AnomalyDetector.Anomaly> stuffing =
         AnomalyDetector.detectQuoteStuffing(messages, trades, 3.0, 50.0);
 
-// Interval return a 4-sigma outlier vs its own recent distribution.
+// Interval return a 3-sigma outlier vs its own recent distribution.
 List<AnomalyDetector.Anomaly> spikes =
-        AnomalyDetector.detectPriceSpikes(mids, 4.0);
+        AnomalyDetector.detectPriceSpikes(mids, 3.0);
 
 for (AnomalyDetector.Anomaly a : stuffing) {
     System.out.printf("interval %d: %s z=%.1f%n", a.intervalIndex(), a.type(), a.score());
@@ -1274,7 +1276,7 @@ spikes.forEach(a -> System.out.printf("interval %d: %s z=%.1f%n",
         a.intervalIndex(), a.type(), a.score()));
 ```
 
-The quote-stuffing test deliberately requires both conditions at once: a message-rate spike alone is what a busy open looks like, and a high order-to-trade ratio alone is what a quiet market-maker looks like -- it is the combination (lots of quoting, almost no trading, far above baseline) that characterizes the pattern. Both detectors compute their baselines from the supplied window itself, so feed them rolling windows sized to a regime you consider comparable (a day, a session hour), not a mixed month; and treat the returned `score` as triage priority for a human, not as a verdict -- z-scores flag, people conclude.
+The quote-stuffing test deliberately requires both conditions at once: a message-rate spike alone is what a busy open looks like, and a high order-to-trade ratio alone is what a quiet market-maker looks like -- it is the combination (lots of quoting, almost no trading, far above baseline) that characterizes the pattern. Both detectors compute their baselines from the supplied window itself, so feed them rolling windows sized to a regime you consider comparable (a day, a session hour), not a mixed month -- and long enough to matter: the outlier sits inside its own baseline, so an n-interval window caps any z-score at (n-1)/sqrt(n), and a 3-sigma threshold needs a dozen intervals before it can fire at all. Treat the returned `score` as triage priority for a human, not as a verdict -- z-scores flag, people conclude.
 
 ## 41. Predict market impact before trading
 
