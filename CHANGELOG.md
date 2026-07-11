@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.13.0 — 2026-07-11
 
 - **Alpha, signals & backtesting round: premia, seasonality, honest
   uncertainty** (tested in `AlphaResearchRoundTest`):

@@ -53,7 +53,40 @@ class AlphaResearchRoundTest {
 
         assertThrows(IllegalArgumentException.class,
                 () -> FamaMacBeth.fit(new double[5][10][2], new double[5][10]),
-                "premia need a time series");
+                "fewer than 12 periods supplied");
+
+        // A SINGULAR cross-section (a factor constant across assets that
+        // period) is skipped and counted, like a thin one — one bad
+        // period must not abort 59 good ones.
+        for (int a = 0; a < assets; a++) {
+            x[30][a][1] = 1.0;                      // collinear with the intercept
+        }
+        FamaMacBeth.Result skipped = FamaMacBeth.fit(x, r);
+        assertEquals(59, skipped.periodsUsed(), "the singular period is skipped");
+        assertEquals(0.01, skipped.premia()[0], 0.001, "and the premium survives");
+
+        // Infinity is a data error, not a missing name: fail fast.
+        double[][] rBad = new double[periods][assets];
+        for (int t = 0; t < periods; t++) {
+            rBad[t] = r[t].clone();
+        }
+        rBad[5][5] = Double.POSITIVE_INFINITY;
+        assertThrows(IllegalArgumentException.class, () -> FamaMacBeth.fit(x, rBad),
+                "infinite return = broken adjustment upstream");
+
+        // The USABLE-cross-sections gate (distinct from the length gate):
+        // enough periods supplied, but too many are too thin to price.
+        double[][][] thinX = new double[20][assets][2];
+        double[][] thinR = new double[20][assets];
+        for (int t = 0; t < 20; t++) {
+            for (int a = 0; a < assets; a++) {
+                thinX[t][a][0] = rnd.nextGaussian();
+                thinX[t][a][1] = rnd.nextGaussian();
+                thinR[t][a] = t < 10 ? Double.NaN : 0.01 * thinX[t][a][0];
+            }
+        }
+        assertThrows(IllegalArgumentException.class, () -> FamaMacBeth.fit(thinX, thinR),
+                "only 10 usable cross-sections — premia need a time series");
     }
 
     // ------------------------------------------------------------------

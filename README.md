@@ -76,7 +76,7 @@ dollar — not just unit checks.
 
 **Getting the library**: tagged releases publish runnable/sources/javadoc jars
 automatically (GitHub Actions → Releases); JitPack works today
-(`com.github.AshJha0:Quant-Finance-Library:v1.12.0`); Maven Central publishing is
+(`com.github.AshJha0:Quant-Finance-Library:v1.13.0`); Maven Central publishing is
 wired and one account-setup away — see [docs/PUBLISHING.md](docs/PUBLISHING.md).
 See [CHANGELOG.md](CHANGELOG.md) for release history.
 
