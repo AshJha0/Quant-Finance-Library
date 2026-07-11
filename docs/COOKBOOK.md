@@ -925,6 +925,8 @@ the swap that drives that node (recipe 18 turns the ladder into pay-fixed
 notionals), and sum(KRD) reconciling to the parallel DV01 is the
 consistency check that says no bucket got lost. Use the parametric fit to
 SMOOTH and COMPARE; use the bootstrap (recipe 18) when every input must
+reprice exactly.
+
 ## 28. Load and clean a messy CSV of bars
 
 Real vendor files arrive with semicolon delimiters, capitalized headers, quoted thousands separators, unordered rows and blank lines -- `CsvBarLoader` swallows all of it and hands back a sorted `BarSeries`.
@@ -3415,10 +3417,6 @@ being a leveraged market bet in disguise; and the executor turns targets into
 children the market can absorb. Skip a stage and the backtest improves -- that
 is the tell, not a reward. LEARN.md 8c walks the same line with the math
 attached; recipes 3, 4, 10 and 20 expand the individual stages.
-
----
-
-reprice exactly.
 
 ---
 
