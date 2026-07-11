@@ -6,7 +6,7 @@
 
     <groupId>com.quantfinlib</groupId>
     <artifactId>quant-finance-library</artifactId>
-    <version>1.12.0</version>
+    <version>1.13.0</version>
     <packaging>jar</packaging>
 
     <name>Quant-Finance-Library</name>
@@ -168,7 +168,7 @@
     <profiles>
         <!-- Maven Central publishing: inert in normal builds/CI; activate
              explicitly with `mvn -P central-release deploy` once the Central
-             Portal account, com.quantfinlib namespace and GPG key exist â€”
+             Portal account, com.quantfinlib namespace and GPG key exist —
              the exact steps live in docs/PUBLISHING.md. -->
         <profile>
             <id>central-release</id>

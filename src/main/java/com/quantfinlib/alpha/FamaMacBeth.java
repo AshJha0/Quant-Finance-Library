@@ -78,9 +78,21 @@ public final class FamaMacBeth {
             java.util.Arrays.fill(xty, 0);
             int rows = 0;
             for (int a = 0; a < assets; a++) {
+                if (exposures[t][a].length != factors) {
+                    throw new IllegalArgumentException("period " + t + " asset " + a
+                            + " has " + exposures[t][a].length + " factors, expected "
+                            + factors);
+                }
                 double y = forwardReturns[t][a];
+                // NaN = not in this cross-section (the AlphaContext
+                // convention): skip. INFINITY = a data error (a broken
+                // adjustment upstream): fail fast, never silent garbage.
                 if (Double.isNaN(y) || hasNaN(exposures[t][a])) {
-                    continue;                        // not in this cross-section
+                    continue;
+                }
+                if (Double.isInfinite(y) || hasInfinity(exposures[t][a])) {
+                    throw new IllegalArgumentException("infinite value at period " + t
+                            + " asset " + a + " — a data error, not a missing name");
                 }
                 row[0] = 1;
                 for (int k = 0; k < factors; k++) {
@@ -97,7 +109,16 @@ public final class FamaMacBeth {
             if (rows < factors + 2) {
                 continue;                            // too thin: skip, counted
             }
-            lambdas[used++] = MathUtils.solveLinear(xtx, xty);
+            try {
+                double[] lambda = MathUtils.solveLinear(xtx, xty);
+                lambdas[used++] = lambda;
+            } catch (IllegalArgumentException singular) {
+                // A collinear cross-section (a factor constant across the
+                // surviving assets — sector dummies in filtered universes
+                // do this) prices nothing THAT period. Skip it like a
+                // thin period; aborting 59 good periods for one bad one
+                // would be the wrong trade.
+            }
         }
         if (used < 12) {
             throw new IllegalArgumentException("only " + used
@@ -129,6 +150,15 @@ public final class FamaMacBeth {
     private static boolean hasNaN(double[] a) {
         for (double x : a) {
             if (Double.isNaN(x)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasInfinity(double[] a) {
+        for (double x : a) {
+            if (Double.isInfinite(x)) {
                 return true;
             }
         }

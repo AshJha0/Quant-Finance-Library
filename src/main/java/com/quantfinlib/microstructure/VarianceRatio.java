@@ -19,10 +19,12 @@ import com.quantfinlib.util.MathUtils;
  * REFUSES a series with no mean reversion, and the variance ratio
  * tells you what the series is INSTEAD (VR ≈ 1: don't trade the
  * spread, index it; VR &gt; 1: you're holding a momentum name, trade it
- * that way). Overlapping q-period sums (the standard estimator), the
- * homoskedastic z-statistic — the heteroskedasticity-robust variant is
- * deliberately omitted and stated, not hidden. VR(1) is identically 1.
- * Static, deterministic, research lane.</p>
+ * that way). Overlapping q-period sums with the SIMPLIFIED denominator
+ * — Lo-MacKinlay's small-sample unbiased correction is omitted (bias
+ * ~(q−1)/n, negligible for n ≫ q; the length gate enforces n ≥ 10q) —
+ * and the homoskedastic z-statistic; the heteroskedasticity-robust
+ * variant is likewise omitted. Stated, not hidden. VR(1) is
+ * identically 1. Static, deterministic, research lane.</p>
  */
 public final class VarianceRatio {
 
