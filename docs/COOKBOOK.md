@@ -494,6 +494,225 @@ threshold, the honest moves are: widen, shrink, or stop quoting.
 Being the last quote standing in toxic flow is how you buy every top
 tick.
 
+## 18. Build a yield curve and hedge a bond with key-rate durations
+
+Where does a bond's rate risk actually live? Bootstrap the curve, price
+the position off it, then bump one node at a time — the KRD ladder IS the
+hedging recipe. (Money-market deposits are already zeros — feed those
+pillars through `YieldCurve.ofZeroRates`; par swap quotes bootstrap.)
+
+```java
+int[] tenors = {1, 2, 3, 5, 7, 10, 30};
+double[] parRates = {0.0320, 0.0335, 0.0345, 0.0360, 0.0370, 0.0380, 0.0400};
+YieldCurve curve = YieldCurve.bootstrapAnnualParSwaps(tenors, parRates);
+System.out.printf("DF(5y)=%.4f  fwd(4y,5y)=%.4f%n",
+        curve.discountFactor(5), curve.forwardRate(4, 5));
+
+// The position: 10M face of a 4% semi-annual 10-year bond.
+double face = 10_000_000;
+double price = BondPricer.priceFromCurve(100, 0.04, 2, 10, curve);
+double ytm = BondPricer.yieldToMaturity(price, 100, 0.04, 2, 10);
+double dv01 = BondPricer.dv01(100, 0.04, 2, 10, ytm) * face / 100;  // $/bp, parallel
+
+// WHERE the risk lives: bump ONE node 1bp, reprice, repeat per node.
+double[] krd = KeyRateDurations.keyRateDv01s(100, 0.04, 2, 10, curve);
+double parallel = KeyRateDurations.parallelDv01(100, 0.04, 2, 10, curve);
+// sum(krd) == parallel within interpolation tolerance — the consistency check.
+
+// The hedge: per bucket, the pay-fixed swap notional that cancels that node.
+double[] nodes = curve.tenors().stream().mapToDouble(Double::doubleValue).toArray();
+for (int i = 0; i < krd.length; i++) {
+    if (Math.abs(krd[i]) < 0.001) continue;              // only material buckets
+    double y = curve.zeroRate(nodes[i]);
+    double hedgeDv01 = BondPricer.dv01(100, y, 1, nodes[i], y);  // par swap proxy, per 100
+    System.out.printf("%4.0fy  KRD %8.4f  hedge notional %,14.0f%n",
+            nodes[i], krd[i], face * krd[i] / hedgeDv01);
+}
+```
+
+The parallel DV01 says *how much* a basis point costs; the ladder says
+*which* basis point. A 10-year bullet concentrates at the 10y node with a
+coupon strip smeared across the short nodes — hedging only the big bucket
+leaves the strip unhedged, which is exactly what a curve steepener bill
+looks like. `ShortRateModels.hullWhiteBond` prices off the same curve when
+you need the dynamics, not just the statics.
+
+## 19. Construct a portfolio three ways (and see why they disagree)
+
+Same expected returns, same covariance — three philosophies about how much
+to trust the return estimates.
+
+```java
+double[] mu = {0.08, 0.10, 0.12};                 // annualized
+double[][] cov = {{0.0400, 0.0180, 0.0120},
+                  {0.0180, 0.0900, 0.0240},
+                  {0.0120, 0.0240, 0.1600}};
+
+// 1. Max Sharpe: trusts mu COMPLETELY — and concentrates accordingly.
+var maxSharpe = new PortfolioOptimizer(mu, cov).maxSharpe(0.03);
+
+// 2. Risk parity: trusts mu NOT AT ALL (used only for reporting);
+//    every asset contributes the same share of portfolio variance.
+var riskParity = RiskParityOptimizer.equalRiskContribution(mu, cov);
+double[] rc = RiskParityOptimizer.riskContributions(riskParity.weights(), cov);
+// each rc[i] == 1/3 — that IS the definition.
+
+// 3. Black-Litterman: start from what the MARKET must believe (reverse-
+//    optimize the market-cap weights), then tilt by one explicit view.
+double[] pi = BlackLitterman.impliedEquilibriumReturns(2.5, cov,
+        new double[]{0.5, 0.3, 0.2});             // market portfolio
+double[] posterior = BlackLitterman.posteriorReturns(0.025, cov, pi,
+        new double[][]{{0, 1, -1}},               // view: asset 2 beats asset 3
+        new double[]{0.02},                       // ...by 2% a year
+        new double[]{0.001});                     // ...held with this much doubt
+var bl = new PortfolioOptimizer(posterior, cov).maxSharpe(0.03);
+
+System.out.println("max Sharpe : " + Arrays.toString(maxSharpe.weights()));
+System.out.println("risk parity: " + Arrays.toString(riskParity.weights()));
+System.out.println("BL + view  : " + Arrays.toString(bl.weights()));
+```
+
+They differ because they price estimation error differently. Max-Sharpe
+piles into whatever `mu` flatters — garbage-in, leverage-out. Risk parity
+throws `mu` away and allocates by risk alone, so the low-vol asset gets
+the big weight. Black-Litterman sits between: the equilibrium prior keeps
+weights near the market, and each view moves them only as far as its
+stated confidence (shrink `omega` toward 0 and the BL weights walk toward
+the max-Sharpe answer; inflate it and they walk back to the market).
+
+## 20. Prove your backtest isn't overfit
+
+A grid search computes N Sharpes and quietly reports the maximum. Before
+believing the winner, make it survive all four defenses — each catches a
+different way of lying to yourself.
+
+```java
+ParameterGrid grid = new ParameterGrid().add("fast", 10, 20, 30)
+                                        .add("slow", 50, 100, 200);
+StrategyFactory factory = p ->
+        new SmaCrossStrategy(p.get("fast").intValue(), p.get("slow").intValue());
+BacktestConfig config = BacktestConfig.defaults();
+
+// The temptation: nine trials, keep the best in-sample Sharpe.
+var ranked = GridSearchOptimizer.search(grid, factory, series, config,
+        PerformanceMetrics::sharpeRatio);
+
+// (a) Walk-forward: re-optimize on each train window, score only unseen bars.
+var wf = WalkForwardAnalyzer.analyze(series, grid, factory, config,
+        504, 126, PerformanceMetrics::sharpeRatio);
+
+// (b) Deflated Sharpe: winner's Sharpe vs the best of 9 zero-skill trials.
+double[] eq = Backtester.run(factory.create(ranked.getFirst().params()),
+        series, config).equityCurve();
+double[] winnerReturns = new double[eq.length - 1];
+for (int t = 1; t < eq.length; t++) winnerReturns[t - 1] = eq[t] / eq[t - 1] - 1;
+double dsr = GridSearchOptimizer.deflatedSharpeOfWinner(ranked, winnerReturns, 252);
+
+// (c) CSCV: across every symmetric IS/OOS split, how often is the
+//     in-sample winner a BELOW-MEDIAN out-of-sample performer?
+double[][] variantReturns = new double[eq.length - 1][ranked.size()];
+for (int j = 0; j < ranked.size(); j++) {
+    double[] e = Backtester.run(factory.create(ranked.get(j).params()),
+            series, config).equityCurve();
+    for (int t = 1; t < e.length; t++) variantReturns[t - 1][j] = e[t] / e[t - 1] - 1;
+}
+var pbo = OverfitProbability.cscvSharpe(variantReturns, 8);
+
+// (d) Training an ML model on the same bars? A 5-bar forward-return label
+//     leaks into ordinary K-fold; purge the horizon and embargo the echo.
+var splits = PurgedKFold.splits(series.size(), 5, 5, (int) (0.01 * series.size()));
+
+System.out.printf("WF efficiency %.2f · deflated Sharpe %.2f · PBO %.2f%n",
+        wf.efficiency(), dsr, pbo.pbo());
+```
+
+The decision rule: walk-forward efficiency near 1 is robust, near 0 is
+curve-fitting; deflated Sharpe below ~0.95 means the winner is
+indistinguishable from the luckiest of nine random trials; and **PBO ≥ 0.5
+means the selection process is pure noise-mining** — the config you would
+have picked is a coin-flip to be an out-of-sample loser, regardless of how
+good its backtest looks. Any single failure is a rejection; they test
+different lies.
+
+## 21. Speak FIX to a venue (logon → orders → resend → logout)
+
+The whole session protocol — Logon handshake, heartbeats with TestRequest
+probing, sequence-gap ResendRequest recovery, Logout — runs on the
+session's own threads; your code sends orders and receives reports.
+
+```java
+FixSession.Listener desk = new FixSession.Listener() {
+    @Override public void onExecutionReport(FixSession s, ExecutionReport r) {
+        if (r.isFill()) { /* position += r.lastQty() at r.lastPrice() */ }
+    }
+    @Override public void onSequenceGap(long expected, long received) {
+        // Session already sent ResendRequest(2); the missed messages are
+        // redelivered with PossDupFlag, admin runs arrive as GapFill.
+    }
+    @Override public void onDisconnect(String reason) { /* alert + reconnect */ }
+};
+
+try (FixSession session = FixSession.initiate("fix.venue.example", 9880,
+        new FixSession.Config("MYDESK", "VENUE", 30).withCredentials("user", "***"),
+        desk, new FileSessionStore(Path.of("fix-state")))) {   // seqnums survive restarts
+    // initiate() returns AFTER the Logon handshake; heartbeats now run themselves.
+    session.sendNewOrderSingle("ord-1", "EURUSD", Side.BUY, 1_000_000,
+            1.0851, NewOrderSingle.TIF_DAY);   // limitPrice = NaN → market order
+    session.sendOrderCancelReplace("ord-2", "ord-1", "EURUSD", Side.BUY,
+            1_000_000, 1.0849, NewOrderSingle.TIF_DAY);
+    // ... trade the day; ExecutionReports arrive on the listener ...
+    session.logout();                          // Logout handshake, then close
+}
+```
+
+The venue side is the same class: `FixSession.accept(serverSocket, config,
+listener)` receives your `onNewOrderSingle` and answers with
+`sendExecutionReport(ExecutionReport.accepted(...))` /
+`ExecutionReport.filled(...)` — `FixSessionTest` drives both ends of a
+real TCP socket through every path above, including a forced sequence gap
+and the PossDup-flagged replay that heals it. With the `FileSessionStore`,
+a restart resumes yesterday's sequence numbers and can still service the
+peer's ResendRequest for messages sent before the crash.
+
+## 22. Run a best-execution report
+
+The compliance afternoon: slippage versus arrival on every parent order,
+the message-discipline ratio, the spread decomposition — and one screen
+for the 4pm fix.
+
+```java
+BestExecutionAnalyzer bestEx = new BestExecutionAnalyzer();
+// One outcome per parent order (unfilled: filled=false, price/latency ignored).
+bestEx.add(new BestExecutionAnalyzer.OrderOutcome("ord-1", "XLON", Side.BUY,
+        10_000, 100.00, 100.02, 45_000_000L, true));
+// ... every order of the day ...
+var rep = bestEx.report();
+System.out.printf("fill %.0f%% · slip %.2f bps · median latency %.1f ms · "
+                + "at-or-better %.0f%% · by venue %s%n",
+        rep.fillRate() * 100, rep.avgSlippageBps(), rep.medianLatencyToFillMillis(),
+        rep.atOrBetterThanArrivalPct() * 100, rep.avgSlippageBpsByVenue());
+
+// Message discipline — the number regulators read first:
+double otr = MarketQualityMetrics.orderToTradeRatio(messagesToday, tradesToday);
+
+// Spread decomposition per fill: effective ≈ realized + impact.
+double effective = MarketQualityMetrics.effectiveSpreadBps(Side.BUY, fillPx, midAtExec);
+double realized  = MarketQualityMetrics.realizedSpreadBps(Side.BUY, fillPx, midAfter5m);
+double impact    = MarketQualityMetrics.priceImpactBps(Side.BUY, midAtExec, midAfter5m);
+
+// Banging-the-close screen: big share of the fixing window + run-up
+// aligned with the desk's net flow + reversion after = the signature.
+var screen = FixAnalyzer.analyze(midSamplesInWindow, preWindowMid, postWindowMid,
+        deskBuyQty, deskSellQty, windowMarketVolume, 0.25);
+if (screen.flagged()) { /* escalate BEFORE the regulator asks */ }
+```
+
+Impact that persists is information; impact that decays was pressure —
+that's why the screen demands reversion, not just a price move. A high
+order-to-trade ratio with clean slippage numbers still gets you a venue
+letter; `BestExecutionAnalyzer` and the message counts come from the same
+day's FIX logs, so run them together.
+
 ---
 
 Every number quoted here comes from a committed benchmark; every behavior

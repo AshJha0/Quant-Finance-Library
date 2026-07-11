@@ -865,14 +865,21 @@ com.quantfinlib
 │                 (captured spread vs hedge costs — the desk's economics)
 ├── ml            GradientBoostedRegressor, VolatilityForecaster,
 │                 MarketImpactPredictor, IntradayLiquidityForecaster, AnomalyDetector
-├── optimization  PortfolioOptimizer (max Sharpe / min vol / frontier / rebalance)
-├── backtest      Backtester, config, trades, performance analytics,
-│   │             ExecutionAwareBacktester + Instant/Sor/Iceberg/LastLook models
+├── optimization  PortfolioOptimizer (max Sharpe / min vol / frontier / rebalance),
+│                 RiskParityOptimizer (equal risk contribution),
+│                 BlackLitterman (equilibrium + views), ConstrainedPortfolioOptimizer
+├── backtest      Backtester (warm-up-aware), config, trades, performance analytics,
+│   │             ExecutionAwareBacktester + Instant/Sor/Iceberg/LastLook models,
+│   │             BenchmarkComparison (alpha/beta/tracking error/IR/capture),
+│   │             DrawdownAnalytics (depth AND duration, time under water)
 │   ├── strategies  SMA/EMA cross, RSI, MACD, Bollinger built-ins
-│   ├── validation  ParameterGrid, GridSearchOptimizer, WalkForwardAnalyzer,
+│   ├── validation  ParameterGrid, GridSearchOptimizer (+ deflated Sharpe of the
+│   │               winner), WalkForwardAnalyzer (warm OOS folds),
 │   │               SharpeValidation (probabilistic + deflated Sharpe +
 │   │               minimum track record length), BlockBootstrap
-│   │               (stationary bootstrap: the Sharpe's confidence interval)
+│   │               (stationary bootstrap: the Sharpe's confidence interval),
+│   │               PurgedKFold (purge + embargo: the label-leak fix),
+│   │               OverfitProbability (CSCV PBO: is the SELECTION overfit?)
 │   ├── portfolio   PortfolioBacktester (multi-asset long/short; survivorship-
 │   │               aware overload: delistings/mergers/index drops/cash divs),
 │   │               CrossSectionalMomentum (point-in-time 12-1), PositionSizing

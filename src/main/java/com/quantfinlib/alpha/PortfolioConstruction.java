@@ -194,7 +194,7 @@ public final class PortfolioConstruction {
             // Unknown sector → unique label → the name demeans against
             // itself (to zero) instead of polluting a real sector's offset.
             sectors[i] = sectorBySymbol.getOrDefault(ctx.symbols().get(i),
-                    " UNKNOWN:" + ctx.symbols().get(i));
+                    "\0UNKNOWN:" + ctx.symbols().get(i));
         }
         return sectorNeutralize(weights, sectors);
     }

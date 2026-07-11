@@ -46,6 +46,17 @@ public final class SorExecution implements ExecutionModel {
     }
 
     @Override
+    public double worstCaseCostFraction() {
+        // A buy's worst all-in is ask * (1 + max venue fee) with the ask at
+        // close * (1 + halfSpread): compound the two off the close anchor.
+        double maxFeeBps = 0;
+        for (VenueConfig v : venues) {
+            maxFeeBps = Math.max(maxFeeBps, v.feeBps());
+        }
+        return (1 + halfSpreadBps / 1e4) * (1 + maxFeeBps / 1e4) - 1;
+    }
+
+    @Override
     public List<Execution> execute(Side side, long requestedQty, BarSeries series, int index) {
         if (requestedQty <= 0) {
             return List.of();

@@ -21,6 +21,19 @@ import java.util.function.ToDoubleFunction;
  * stitched into one continuous equity curve (capital carries across folds),
  * giving honest out-of-sample metrics and the walk-forward efficiency ratio
  * (OOS / IS objective — near 1 is robust, near 0 is curve-fitting).
+ *
+ * <p>Each test window is evaluated WARM: the backtest sees the preceding
+ * train bars for indicator warm-up but only trades from the test boundary
+ * ({@link Backtester#run(com.quantfinlib.backtest.TradingStrategy, BarSeries,
+ * BacktestConfig, int)}). Evaluating a bare test slice would re-compute
+ * every indicator cold and force HOLD through each fold's first lookback
+ * bars — systematically understating out-of-sample activity.</p>
+ *
+ * <p>The efficiency ratio is only meaningful when the in-sample objective
+ * sum is positive; when it is zero or negative (the optimizer could not
+ * find anything that even backtests well in-sample) efficiency is
+ * {@code NaN} — a ratio of two losses saying "0.5" would read as robust
+ * when both sides are failing.</p>
  */
 public final class WalkForwardAnalyzer {
 
@@ -65,9 +78,10 @@ public final class WalkForwardAnalyzer {
             GridSearchOptimizer.Candidate best =
                     GridSearchOptimizer.best(grid, factory, train, config, objective);
 
-            BarSeries test = series.slice(trainTo, testTo);
-            BacktestResult oos = Backtester.run(factory.create(best.params()), test,
-                    config.withInitialCapital(carryCapital));
+            // Warm-up = the train window; trading starts at the test boundary.
+            BarSeries warmPlusTest = series.slice(start, testTo);
+            BacktestResult oos = Backtester.run(factory.create(best.params()), warmPlusTest,
+                    config.withInitialCapital(carryCapital), trainBars);
             double oosScore = objective.applyAsDouble(oos.metrics());
 
             folds.add(new Fold(start, trainTo, trainTo, testTo,
@@ -89,7 +103,7 @@ public final class WalkForwardAnalyzer {
         }
         PerformanceMetrics metrics = PerformanceAnalytics.compute(
                 equity, oosTrades, config.periodsPerYear());
-        double efficiency = isSum == 0 ? 0 : oosSum / isSum;
+        double efficiency = isSum > 0 ? oosSum / isSum : Double.NaN;
         return new WalkForwardResult(folds, equity, metrics, oosTrades, efficiency);
     }
 }

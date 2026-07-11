@@ -30,4 +30,31 @@ public interface ExecutionModel {
      * on subsequent bars.
      */
     List<Execution> execute(Side side, long requestedQty, BarSeries series, int index);
+
+    /**
+     * The price this model's fills are anchored to on the given bar — the
+     * engine budgets entry requests as
+     * {@code cash / (referencePrice * (1 + worstCaseCostFraction()))}.
+     * Default: the bar close. A model that fills off a different price
+     * point (e.g. {@link LastLookExecution} fills at the OPEN) must
+     * override this, or a gap between close and its actual anchor lets a
+     * fully-filled request overdraw cash.
+     */
+    default double referencePrice(BarSeries series, int index) {
+        return series.close(index);
+    }
+
+    /**
+     * Upper bound on this model's all-in cost as a fraction of
+     * {@link #referencePrice} (spread + fees + slippage). The engine uses
+     * it to size entries so that a fully-filled parent can never overdraw
+     * cash — a model whose fills can cost more than
+     * {@code referencePrice * (1 + worstCaseCostFraction())} MUST override
+     * one or both methods, or the backtest silently trades on margin it
+     * doesn't have. Wrappers must DELEGATE both to the model that actually
+     * prices the fills. Default 1%.
+     */
+    default double worstCaseCostFraction() {
+        return 0.01;
+    }
 }

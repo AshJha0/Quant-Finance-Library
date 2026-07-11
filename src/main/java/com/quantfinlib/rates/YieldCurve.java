@@ -5,9 +5,29 @@ import java.util.NavigableSet;
 import java.util.TreeMap;
 
 /**
- * Zero-coupon yield curve with continuously-compounded pillar rates: linear
- * interpolation on zero rates, flat extrapolation, discount factors, implied
- * forwards, and bootstrapping from annual par swap rates.
+ * Zero-coupon yield curve — the single most load-bearing object in fixed
+ * income: every bond price, swap value, forward rate and DV01 is a
+ * function of it. The curve stores continuously-compounded ZERO rates at
+ * pillar tenors; everything else is derived: the discount factor
+ * {@code DF(t) = e^{-z(t)·t}} answers "what is 1 unit at time t worth
+ * today", and the implied forward between t1 and t2 falls out of the
+ * ratio of discount factors — the market's own break-even rate for that
+ * future period, no forecast involved.
+ *
+ * <p>You rarely observe zero rates directly; the market quotes PAR
+ * instruments (deposits, swaps). Bootstrapping walks the quotes from
+ * shortest to longest, at each pillar solving for the one discount factor
+ * that reprices the quote given the factors already solved — for annual
+ * par swaps, {@code DF_n = (1 - parRate_n · A_{n-1}) / (1 + parRate_n)}
+ * with {@code A} the annuity so far. The result reprices every input
+ * exactly (tested), which is the definition of a usable curve.</p>
+ *
+ * <p>Model choices, stated: linear interpolation ON ZERO RATES (simple,
+ * fast, and the standard first choice; its known wart is small forward-rate
+ * kinks at pillars — smoothing splines fix that at the cost of locality),
+ * flat extrapolation beyond the pillars, and one curve for both
+ * discounting and projection (pre-2008 style; a multi-curve OIS/projection
+ * split is a composition of two of these). Research/warm lane.</p>
  */
 public final class YieldCurve {
 

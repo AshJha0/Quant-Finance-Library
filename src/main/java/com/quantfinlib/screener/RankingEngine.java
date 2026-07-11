@@ -8,6 +8,20 @@ import java.util.function.ToDoubleFunction;
 /**
  * Ranking engine: scores stocks by a weighted blend of min-max-normalized
  * criteria and sorts them best-first.
+ *
+ * <p>Why normalize before blending: raw metrics live on wildly different
+ * scales (ROE ~0.15, market cap ~1e11), so a weighted sum of raw values
+ * is just "whichever metric has the biggest units wins". Min-max
+ * normalization maps each criterion to [0,1] ACROSS THE CANDIDATE SET
+ * first; the weights then express genuine relative importance. Two
+ * consequences to design around: scores are relative to this run's
+ * universe (the same stock scores differently in a different candidate
+ * list — fine for "pick the best 20 today", wrong for tracking one name
+ * through time), and min-max is outlier-sensitive (one absurd P/E
+ * compresses everyone else's spread; screen out garbage with
+ * {@link FundamentalFilters} BEFORE ranking, which is the intended
+ * pipeline order). Negative weights invert a criterion — lower P/E
+ * ranks higher — without a separate "ascending" flag.</p>
  */
 public final class RankingEngine {
 

@@ -24,6 +24,13 @@ public final class InstantExecution implements ExecutionModel {
     }
 
     @Override
+    public double worstCaseCostFraction() {
+        // The all-in fill is exactly close * (1 + costRate); declare it so
+        // entry sizing can spend cash to the last share without overdrawing.
+        return costRate;
+    }
+
+    @Override
     public List<Execution> execute(Side side, long requestedQty, BarSeries series, int index) {
         if (requestedQty <= 0) {
             return List.of();

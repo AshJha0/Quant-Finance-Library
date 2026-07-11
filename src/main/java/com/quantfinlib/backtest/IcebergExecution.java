@@ -45,6 +45,19 @@ public final class IcebergExecution implements ExecutionModel {
     }
 
     @Override
+    public double worstCaseCostFraction() {
+        // The INNER model prices the fills; a wrapper that reports the 1%
+        // default while wrapping a costlier model re-opens the cash
+        // overdraw the engine's sizing exists to prevent.
+        return inner.worstCaseCostFraction();
+    }
+
+    @Override
+    public double referencePrice(BarSeries series, int index) {
+        return inner.referencePrice(series, index);
+    }
+
+    @Override
     public void onParentOrder(Side side, long totalQuantity, int signalIndex) {
         iceberg = new IcebergOrder(totalQuantity, displayQty, randomizePct,
                 seed + parentSeq++ * 1_000_003L);

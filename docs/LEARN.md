@@ -330,6 +330,67 @@ winning, mildly), value, low volatility, quality. The research loop:
 (cost-aware), `PortfolioConstruction` (neutralization); `data/PointInTimeUniverse.java`
 and `backtest/portfolio/` for survivorship honesty.
 
+### 8b. Portfolio construction: turning forecasts into weights
+
+A validated signal (§8) still leaves the hardest practical question
+unanswered: *how much* of each thing do you hold? The classical answer
+is Markowitz **mean-variance optimization**: feed in expected returns
+and a covariance matrix, get back the weights with the best return per
+unit of risk. `optimization/PortfolioOptimizer.java` implements it —
+`maxSharpe` for the best risk-adjusted portfolio, `minVolatility` for
+the safest fully-invested one, `efficientFrontier` for the whole
+risk/return menu.
+
+Then the dirty secret every practitioner learns in week one:
+**max-Sharpe portfolios are error-maximizers.** Expected returns are
+estimated with enormous noise (a year of daily data pins volatility
+reasonably well and the mean terribly), and the optimizer *loves*
+noise: the asset whose return you overestimated the most looks the
+best, so it gets the biggest weight. You end up systematically
+overweighting your worst estimation mistakes, and a tiny change in the
+inputs flips the entire allocation. Three professional fixes, in
+increasing order of ambition:
+
+- **Stop forecasting returns.** **Risk parity** uses only the
+  covariance matrix (the estimable input) and asks for the portfolio
+  where every asset contributes *equally* to total risk —
+  `RiskParityOptimizer.equalRiskContribution` solves it by fixed-point
+  iteration, and `riskContributions` audits any existing book ("that
+  60/40 portfolio is actually ~90% equity risk" is this one function
+  call).
+- **Anchor the forecasts.** **Black-Litterman** starts from the
+  returns *implied* by market weights — if the market holds this
+  portfolio, what expectations justify it?
+  (`BlackLitterman.impliedEquilibriumReturns`) — then blends in your
+  views with explicit confidences (`posteriorReturns`). No views =
+  hold the market; a view tilts you away from it in proportion to how
+  confident you claimed to be. Garbage-in becomes
+  garbage-shrunk-toward-sensible.
+- **Bound the damage.** `ConstrainedPortfolioOptimizer` adds per-asset
+  weight caps and floors (`withBounds`) and a turnover penalty against
+  current holdings (`withTurnoverPenalty`) — the optimizer is charged
+  the real cost of getting from here to there, so it stops chasing
+  noise-sized improvements through cost-sized trades.
+
+How does `alpha/PortfolioConstruction.java` (§8) relate? It's the
+*cross-sectional* cousin. When your "assets" are 500 stocks ranked by
+a factor, you don't estimate a 500x500 covariance and optimize — you
+size by z-score, neutralize sector and beta, and budget by inverse
+volatility (`zScoreWeights` → `sectorNeutralize` → `betaNeutralize` →
+`inverseVolBudget`). The `optimization` package is for the *other*
+shape of problem: a handful of assets or strategies whose covariance
+you can actually know.
+
+*Real-life case:* a fund allocates across its 5 strategies. Naive
+`maxSharpe` on their track records puts 80% into the strategy with the
+best — i.e. luckiest — backtest. Risk parity spreads the book so no
+single strategy dominates the risk. Black-Litterman starts from the
+current capital allocation as the equilibrium and lets the PM express
+one view ("stat arb beats trend by 2%, modest confidence") as a tilt
+rather than an upheaval. The constrained pass caps any strategy at
+35% and charges turnover — and the resulting rebalance is small enough
+to actually execute.
+
 ### 9. Risk: the systems that say no
 
 Every order passes a **pre-trade risk gate** before it can leave the
@@ -367,6 +428,45 @@ implausibility score in sigmas), and the Basel/FRTB layer
 its arithmetic, and honest that certification is a program, not a
 library.
 
+### 9b. Regulation and surveillance: proving you behaved
+
+Risk systems protect the firm from itself; regulatory analytics prove
+to everyone else that clients and markets were treated fairly. Two
+obligations follow every desk around, and both are measurement
+problems this library implements:
+
+**Best execution.** If you execute client orders, you must get terms
+as good as reasonably available — and *demonstrate* it, per order,
+per venue. `regulatory/BestExecutionAnalyzer.java` (MiFID II
+RTS 27/28 spirit) accumulates order outcomes and its `report()`
+answers the questions an auditor asks: fill rate, average slippage in
+bps versus the arrival mid, median latency to fill, the fraction
+executed at-or-better than arrival, and slippage broken down by venue
+(the venue whose fills are consistently worst has some explaining to
+do). The shared vocabulary for venue quality lives in
+`regulatory/MarketQualityMetrics.java`: **quoted spread** (what was
+posted), **effective spread** (what the taker actually paid — twice
+the signed distance from the mid), **realized spread** (the same
+measured against the mid a horizon *later* — the part the maker kept
+after adverse selection), and **price impact** (effective is roughly
+realized plus impact — the decomposition that says whether a wide
+spread was compensation for risk or extraction from customers). Plus the
+**order-to-trade ratio** — messages per executed trade, the metric
+venues fine you on when your algo sprays cancels.
+
+**Banging the close.** A genuinely fun surveillance example. Benchmark
+fixes are computed from prices inside a window
+(`regulatory/FixAnalyzer.calculateFix` — the median of mid samples,
+WM/R style), so a participant with a large position *marked* at the
+fix has an incentive to push the price during it. The signature is
+threefold, and `FixAnalyzer.analyze` flags only when all three hold:
+an outsized share of window volume, a price run-up into the fix
+*aligned* with the participant's net flow, and reversion after the
+window — impact that decays is the footprint of pressure, not
+information. Notice this is §5's markout logic wearing a compliance
+badge: the same physics that tells a maker it was run over tells a
+surveillance officer who did the running.
+
 ### 10. Derivatives in five minutes
 
 A **forward** is an agreement to trade at a future date at a price fixed
@@ -399,6 +499,86 @@ SabrModel, exotics, VannaVolga), `fx/` (SwapPointsCurve, Ndf, FxVolSurface),
 `hedging/` (DeltaHedger and friends), `rates/` (curves, day counts — yes,
 finance has multiple definitions of how long a year is).
 
+### 10b. Rates: the price of time
+
+A dollar today and a dollar in ten years are different assets, and the
+exchange rate between them is an interest rate. Money can be lent for
+any horizon, so there isn't one rate but a **yield curve** — a rate
+per maturity. Every future cash flow in finance (bond coupons, swap
+legs, a forward's settlement) is valued by asking the curve one
+question: what is $1 at date T worth today? That number is the
+**discount factor**.
+
+You can't observe the curve directly — the market quotes *instruments*
+(deposits, futures, par swaps), each bundling many cash flows.
+**Bootstrapping** unbundles them: solve for the 1-year discount factor
+from the 1-year instrument, use it to solve the 2-year, and walk out
+the curve one maturity at a time. `rates/YieldCurve.java` implements
+the classic version (`bootstrapAnnualParSwaps`), stores zero rates at
+pillar tenors, and answers the three questions everything else asks:
+`zeroRate(t)`, `discountFactor(t)`, and `forwardRate(t1, t2)` — the
+rate the curve *implies* for lending between two future dates. Forwards
+are (roughly) the curve's derivative, so a small kink in the zeros
+becomes a large swing in the forwards — which is why desks judge a
+curve build by its forwards, not its zeros.
+
+A **bond** is a bundle of cash flows on a schedule, so a curve prices
+it directly (`rates/BondPricer.priceFromCurve`) — or you compress the
+whole curve into one number, the **yield**, and convert both ways
+(`priceFromYield`, `yieldToMaturity`). The sensitivities are the desk
+vocabulary: **duration** (`macaulayDuration` — the PV-weighted average
+time to cash flow; `modifiedDuration` — percentage price change per
+unit yield), **convexity** (the curvature that makes duration hedges
+drift as rates move), and above all **DV01** (`dv01` — dollars lost
+per one-basis-point rise, the unit rates traders actually speak).
+
+But "the yield rises 1bp" is a fiction: the curve rarely moves in
+parallel — it steepens, flattens, twists. **Key-rate durations** slice
+DV01 across the curve: bump ONE pillar by 1bp, hold the rest, reprice,
+repeat per pillar. `rates/KeyRateDurations.keyRateDv01s` returns that
+vector, and `parallelDv01` is the consistency check — the slices must
+sum back to the parallel number, and the tests pin that they do.
+
+*Real-life case:* a desk is long $50M of a 10-year corporate bond and
+wants to be flat rates (keeping only the credit exposure). The naive
+hedge — sell 10-year futures matching the bond's total DV01 — is flat
+to parallel moves only; a steepening that lifts the 10y point while
+the 5y sits still leaves the "hedged" book bleeding. The KRD vector
+shows where the risk actually lives: mostly at the 10y node, but a
+meaningful slice at 5y and 7y from the coupons. Hedge each node with
+the futures contract that drives it and the position survives
+steepeners, flatteners, and butterflies — not just the parallel shift
+that never happens.
+
+**Day counts: how long is a year?** Real term sheets disagree —
+ACT/360 (money markets), ACT/365 (GBP), 30/360 (US corporates),
+ACT/ACT (governments) — and `rates/DayCount.yearFraction` implements
+each exactly. This is not pedantry: accrue a coupon on ACT/365 when
+the term sheet says ACT/360 and every accrual is misstated by ~1.4% —
+a real, recurring source of PnL breaks between you and your
+counterparty. `rates/BusinessCalendar.java` handles the other half of
+date reality: payment dates that land on weekends or holidays roll by
+convention (`Roll.MODIFIED_FOLLOWING` — forward, unless that crosses
+month-end), settlement is T+n *business* days (`addBusinessDays`), and
+FX pairs settle on the union of two centers' calendars (`union`).
+`BondPricer.dirtyPrice`/`cleanPrice`/`accruedInterest` put it all
+together with real dates.
+
+**Making rates move: short-rate models.** For risk simulation and
+curve-dependent pricing you need a model of how rates evolve.
+`rates/ShortRateModels.java` implements the workhorse trio in closed
+form: **Vasicek** (Gaussian mean reversion — tractable everywhere,
+honest about its flaw: rates can go negative, which post-2015 is a
+feature as much as a bug), **CIR** (the square-root diffusion keeps
+rates non-negative — `cirFeller` tells you when they stay strictly
+positive), and **Hull-White** (Vasicek with the drift fitted so the
+model reprices *today's* curve exactly — the production choice,
+because a rates model that disagrees with the discount curve it hedges
+against is wrong by construction). Each has a simulation step for
+Monte Carlo scenarios: `vasicekStep` is exact (the transition is
+Gaussian — no discretization error), `cirStep` is full-truncation
+Euler (never sources volatility from a negative rate).
+
 ### 11. Backtesting honestly
 
 A **backtest** replays history against your strategy. The ways it lies to
@@ -414,6 +594,47 @@ strategies you tried before finding this one.
 *In this library:* `backtest/` (bar-level, execution-aware, tick-level with
 queue positions, last look), `backtest/validation/`, `data/TickCapture` +
 replay for deterministic tick-level history.
+
+**Was the *search* honest?** A single backtest can be clean and the
+process that selected it still rotten. Four more defenses:
+
+- **Purged K-fold with embargo.** Ordinary K-fold cross-validation
+  leaks on financial data, and the leak is subtle: a sample's LABEL is
+  usually computed from bars that come *after* it (a "5-bar forward
+  return"). Put bar 99 in training and bar 100 in test, and bar 99's
+  label was computed from bars 100–104 — the model has already seen
+  the test answer. `backtest/validation/PurgedKFold.splits` purges
+  every training sample whose label window overlaps the test fold and
+  adds an **embargo** buffer after it (serial correlation means
+  features just past the fold still echo test-period information) —
+  and refuses any split that leaves a fold with no training data,
+  because silently training on nothing is how "great" fold scores
+  happen.
+- **Probability of backtest overfitting.** You didn't run one
+  backtest; you ran 400 parameter sets and reported the best. The
+  right diagnostic is CSCV
+  (`backtest/validation/OverfitProbability.java`): split time into
+  blocks, form every symmetric in-sample/out-of-sample combination,
+  and ask how often the in-sample winner lands *below the median* out
+  of sample. That fraction is the **PBO** — below 0.1 the selection is
+  finding something real; at 0.5 it's pure noise-mining and the "best"
+  backtest is meaningless however good it looks.
+- **The deflated Sharpe, wired in.** The deflated Sharpe ratio above
+  isn't a separate ritual here — `GridSearchOptimizer.deflatedSharpeOfWinner`
+  takes the ranked grid-search results and judges the winner's Sharpe
+  against what the best of N zero-skill trials would have scored
+  anyway. The search that created the multiple-testing problem hands
+  you its own haircut.
+- **Compared to what?** A standalone Sharpe answers "was this good?";
+  an allocator asks "was this good *compared to just buying the
+  index*?" — `backtest/BenchmarkComparison.java` computes beta (how
+  much of the strategy is the benchmark in disguise), Jensen alpha,
+  tracking error, information ratio, and up/down capture. And
+  "max drawdown 18%" hides the number that actually fires clients:
+  how LONG the pain lasted. `backtest/DrawdownAnalytics.java` walks
+  every peak-to-recovery episode — depth, duration, time under water —
+  and surfaces a drawdown still open at series end instead of hiding
+  it, because that is often the honest state of the strategy today.
 
 ### The desk playbooks — pairs, toxicity, the central risk book, rolls
 
@@ -728,30 +949,101 @@ late it wakes up: if the do-nothing thread also stalled 1.6ms, the
 *Try it:* `examples/HftLatencyBenchmark.java` and friends — each is a
 single-file, readable benchmark you can run from the CLI.
 
-### 17. Protocols: talking to venues
+### 17. Protocols: how an order reaches the exchange
 
 **FIX** is finance's venerable text protocol: `35=D|55=EURUSD|54=1|38=1000000`
 (tag=value, delimited by an invisible byte-1 character). Human-debuggable,
-universally supported, verbose. This library has a full FIX engine — but a
-naive implementation allocates Strings for every tag of every message. The
-hot-path answer: **encode into reusable byte buffers** (writing digits
-directly, no String.format) and **decode via flyweights** (§14). Prices
-travel as **scaled longs** — 1.08505 becomes mantissa 108505 with 5
-decimals — because `double` cannot represent most decimal fractions
-exactly, and rounding errors in prices are how you fail audits.
+universally supported, verbose. Tag 35 is the message type, and three of
+them carry most of trading: `35=D` (NewOrderSingle — "I want to trade"),
+`35=8` (ExecutionReport — the venue's answer), `35=W`/`35=X` (market data
+snapshot / incremental — the prices).
 
-**Binary protocols** (ITCH for market data in, OUCH-style for orders,
-SBE-style internally) skip text entirely: fixed offsets, native integers.
-That's the difference between parsing and *casting*.
+**The life of an order, end to end.** Follow one BUY from decision to
+position:
 
-**Sessions and recovery**: TCP connections drop. FIX numbers every message,
-so on reconnect each side says "I'm at sequence 4,832" and the counterparty
-**resends** what was missed. This library implements the full recovery
-dance (gap fill, possible-duplicate flags, sequence resets) — unglamorous,
-and exactly the part that pages you at 3am if done wrong.
+1. *The strategy decides.* A signal crosses a threshold (§7); the
+   pre-trade risk gate (§9) approves in ~3ns.
+2. *Encode.* The order becomes a `35=D` NewOrderSingle. Session lane:
+   `FixSession.sendNewOrderSingle(clOrdId, symbol, side, qty,
+   limitPrice, tif)` builds it with the String-based `FixMessage` —
+   fine for its purpose. Hot lane: `fix/FixOrderEncoder.java` writes
+   the same message with zero allocation — one reusable byte buffer
+   (body first, then the `8=FIX.4.4|9=len|` prefix written *backwards*
+   in front of it), digits rendered directly (no `Long.toString`),
+   symbols pre-registered as bytes, the timestamp's date part cached
+   until the UTC day rolls. Every encoded message is round-tripped
+   through the validated parser in tests — fast and correct, proven
+   together.
+3. *The wire.* TCP to the venue's gateway, over a session (below).
+4. *The venue matches.* Your order meets someone's resting order in
+   the venue's book — exactly the mechanics of §2, run by them
+   instead of you.
+5. *The answer comes back.* An ExecutionReport (`35=8`): `execType`
+   `'0'` = accepted, `'F'` = fill, `'8'` = rejected. The session
+   surfaces it via `Listener.onExecutionReport` as a typed
+   `fix/ExecutionReport.java` (cumQty, leavesQty, avgPrice); the hot
+   lane reads the same bytes through the `fix/FixExecReportView.java`
+   flyweight without materializing anything.
+6. *Position updated.* The **ClOrdID** you chose in step 2 is the
+   thread that ties every report back to its order — correlation is
+   yours to manage, not the venue's.
 
-*In this library:* `fix/` (engine + garbage-free `FixOrderEncoder`,
-`FixExecReportView`, `FixMarketDataView`), `marketdata/ItchCodec.java`, `sbe/`.
+**The session layer** is where the unglamorous reliability lives —
+`fix/FixSession.java` implements all of it. A session starts with a
+**Logon handshake** and stays alive by **heartbeats**: send one after
+each idle heartbeat interval, and if nothing arrives for 1.5 intervals,
+send a **TestRequest** ("are you alive? prove it") — a peer that stays
+silent to 2.5 intervals is declared dead and disconnected. That
+escalation matters because TCP won't tell you about a dead peer for
+minutes; a trading system needs to know in seconds, because *its
+orders may still be alive at the venue*.
+
+Every message carries a **sequence number**. When the receiver sees
+seq 4,835 while expecting 4,833, it sends a **ResendRequest** for the
+gap; the peer replays application messages flagged
+`PossDupFlag(43)` (so a fill is never booked twice) and coalesces
+admin messages into a `SequenceReset-GapFill(4)` — nobody needs old
+heartbeats back. A `FileSessionStore` persists sequence numbers and
+sent messages so recovery works across a process restart, not just a
+dropped socket. This dance is the part that pages you at 3am if done
+wrong: a desync at reconnect means you don't know which of your
+orders the venue thinks exist.
+
+**The inbound side: market data.** Three dialects, one trade-off:
+
+- **ITCH** (`marketdata/ItchCodec.java`): the L3 binary style —
+  fixed-offset messages, native integers, millions per second (§3).
+- **FIX market data** (`fix/FixMarketDataView.java`): `35=W` full
+  snapshots and `35=X` incremental updates — the lingua franca of
+  e-FX bank streams. It's still tag=value text, so this library reads
+  it with a flyweight: one pass over the framed bytes into
+  preallocated primitive arrays, entry order preserved (for tiered LP
+  streams, position IS the tier).
+- **SBE-style binary** (`sbe/` — `QuoteFlyweight`, `TradeFlyweight`,
+  `OrderFlyweight`, with `BinaryMarketDataClient` feeding the bus):
+  fixed offsets and native-endian integers. Reading a price is a
+  *cast*, not a parse.
+
+Why binary wins on the hot path: tag=value must scan every byte to
+find delimiters, branch per tag, and convert ASCII digits to numbers;
+a fixed-layout binary message needs none of that — field offsets are
+compile-time constants. Same information, a fraction of the work; and
+since a flyweight makes even the text path allocation-free, the
+difference binary buys is work, not garbage.
+
+Everywhere on these paths, prices travel as **scaled longs** — 1.08505
+becomes mantissa 108505 with 5 decimals — because `double` cannot
+represent most decimal fractions exactly, and rounding errors in
+prices are how you fail audits. Feed-to-order never touches a double.
+
+*Real-life: the 500ns after your strategy says BUY.* Signal update on
+the incoming tick: ~50ns. Risk gate: ~3ns. FIX encode via
+`FixOrderEncoder`: ~100ns of digit-writing into a buffer that already
+exists. Handoff to the venue thread through a ring buffer (§14): one
+release store. Socket write: the kernel takes over. Notice what is
+*absent* from that path: no String, no parsing, no allocation, no
+lock, no syscall until the very last step — every section of Part II
+was about removing exactly those.
 
 ### 18. Scaling out and staying safe
 
@@ -826,24 +1118,40 @@ java -cp target/classes com.quantfinlib.examples.LiveTradingDemo   # live Binanc
 5. `orderbook/HftOrderBook.java` — everything from §14 in one file.
 6. `marketdata/L3BookBuilder.java` + `fx/FxTierBook.java` — the two market
    structures side by side (§3, §4).
-7. `backtest/Backtester.java` → the `alpha` package (§8, §11).
-8. `microstructure/VolumeCurve.java` → `SignalEngine.java` →
+7. `backtest/Backtester.java` → the `alpha` package (§8, §11), then the
+   search-honesty tools: `backtest/validation/PurgedKFold.java` →
+   `OverfitProbability.java` → `backtest/BenchmarkComparison.java` +
+   `DrawdownAnalytics.java` (§11).
+8. `optimization/PortfolioOptimizer.java` → `RiskParityOptimizer.java` →
+   `BlackLitterman.java` → `ConstrainedPortfolioOptimizer.java` (§8b) —
+   forecasts into weights, and why the naive optimizer can't be trusted
+   with your forecasts.
+9. `microstructure/VolumeCurve.java` → `SignalEngine.java` →
    `OnlineAlphaLearner.java` → `execution/BenchmarkExecutor.java` →
    `PortfolioExecutor.java` → `persist/Checkpoint.java` — the execution
    intelligence stack from live inputs to basket schedule to overnight
    (§6, §7, §18).
-9. The desk playbooks (end of Part I): `microstructure/OrnsteinUhlenbeck.java`
-   → `execution/SpreadExecutionAlgo.java` (a pairs trade end to end),
-   `microstructure/Vpin.java` (toxicity), then the whole `crb/` package
-   with [CENTRAL_RISK_BOOK.md](CENTRAL_RISK_BOOK.md) as the guide and
-   `crb/CrbRealWorldScenarioTest.java` (under `src/test`) as a
-   realistic trading week you can step through in a debugger.
-10. The risk stack: [MARKET_RISK.md](MARKET_RISK.md) maps all fourteen
+10. The desk playbooks (end of Part I): `microstructure/OrnsteinUhlenbeck.java`
+    → `execution/SpreadExecutionAlgo.java` (a pairs trade end to end),
+    `microstructure/Vpin.java` (toxicity), then the whole `crb/` package
+    with [CENTRAL_RISK_BOOK.md](CENTRAL_RISK_BOOK.md) as the guide and
+    `crb/CrbRealWorldScenarioTest.java` (under `src/test`) as a
+    realistic trading week you can step through in a debugger.
+11. The rates lane (§10b): `rates/YieldCurve.java` → `BondPricer.java` →
+    `KeyRateDurations.java` → `ShortRateModels.java` — curve to bond to
+    hedge to simulation, each file under 200 lines.
+12. The risk stack: [MARKET_RISK.md](MARKET_RISK.md) maps all fourteen
     steps from market data to Basel/FRTB; `risk/VarEngine.java` →
     `risk/StressTester.java` → `risk/FrtbEs.java` is the reading spine,
     and `risk/MarketRiskTest.java` (under `src/test`) shows every
-    formula pinned by hand.
-11. `docs/COOKBOOK.md` — seventeen end-to-end recipes to modify and re-run.
+    formula pinned by hand. Then the compliance view (§9b):
+    `regulatory/MarketQualityMetrics.java` and `regulatory/FixAnalyzer.java`
+    are both readable in one sitting.
+13. Connectivity (§17): `fix/FixSession.java` (with `fix/FixSessionTest.java`
+    under `src/test` — watch a logon, a fill and a gap-fill happen) and
+    `fix/FixOrderEncoder.java`, the same message written the readable way
+    and the fast way.
+14. `docs/COOKBOOK.md` — twenty-two end-to-end recipes to modify and re-run.
 
 **Exercises** (in rough order of difficulty):
 
@@ -868,14 +1176,22 @@ slippage, volume curve, volatility regime, spread forecast, fill
 probability, Lee-Ready, iceberg, transition, leg balance (§6), microprice,
 imbalance, OFI, online learning, out-of-sample IC, nowcast, lead-lag,
 day type (§7), factor, IC, walk-forward,
-permutation test, survivorship bias, point-in-time (§8), notional, collar,
-kill switch, VaR (§9), forward, swap points, NDF, call/put, strike, greeks,
+permutation test, survivorship bias, point-in-time (§8), mean-variance,
+error-maximizer, risk parity, Black-Litterman, turnover penalty (§8b),
+notional, collar, kill switch, VaR (§9), best execution, quoted/effective/
+realized spread, price impact, order-to-trade ratio, banging the close (§9b),
+forward, swap points, NDF, call/put, strike, greeks,
 delta/gamma/vega/theta, implied vol, smile, risk reversal, butterfly,
-vanna-volga (§10), deflated Sharpe (§11), GC, Epsilon GC, autoboxing (§13),
+vanna-volga (§10), yield curve, bootstrapping, discount factor, forward
+rate, duration, convexity, DV01, key-rate duration, day count, roll
+convention, short-rate model (§10b), deflated Sharpe, purged K-fold,
+embargo, PBO, tracking error, information ratio, time under water (§11),
+GC, Epsilon GC, autoboxing (§13),
 ring buffer, SPSC, single-writer, open addressing, linear probing,
 backward-shift deletion, bitmap, flyweight, cache locality (§14), memory
 model, release/acquire, VarHandle (§15), percentile, p99, JIT, warm-up,
-hiccup (§16), FIX, tag=value, scaled long, SBE, sequence recovery (§17),
+hiccup (§16), FIX, tag=value, scaled long, SBE, sequence recovery,
+heartbeat, TestRequest, ClOrdID, ExecutionReport (§17),
 sharding, shared-nothing, checkpoint, atomic rename (§18).
 
 One closing thought. This library's recurring lesson isn't a data structure

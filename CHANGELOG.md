@@ -1,5 +1,86 @@
 # Changelog
 
+## Unreleased
+
+- **Backtesting robustness layer** (tested in `ValidationRobustnessTest`,
+  every expected value hand-derivable from the javadoc):
+  - `backtest.validation.PurgedKFold` — purged K-fold CV splits with
+    embargo (Lopez de Prado ch. 7): training samples whose label windows
+    overlap the test fold are purged, plus an embargo for the serial-
+    correlation echo; train set is exact index arithmetic
+    `[0, t0-h) ∪ [t1+h+e, n)`, pinned by hand; a fold that would train
+    on nothing refuses.
+  - `backtest.validation.OverfitProbability` — CSCV probability of
+    backtest overfitting (Bailey et al. 2015): every C(S, S/2) symmetric
+    IS/OOS block split, logit of the IS winner's OOS rank; genuine skill
+    scores PBO = 0 and regime-flipping noise scores PBO = 1 (both
+    constructed exactly — ±1.0 returns so mixed-block means cancel in
+    floating point).
+  - `backtest.BenchmarkComparison` — Jensen alpha, beta, tracking error,
+    information ratio, up/down capture, all pinned on an exact
+    half-beta-plus-10bp case; capture is NaN (not zero) when the
+    benchmark never fell.
+  - `backtest.DrawdownAnalytics` — drawdown STRUCTURE: episode
+    peak/trough/recovery, depth AND duration, time under water; open
+    episodes reported honestly (`recoveryIndex = -1`); agrees exactly
+    with `RiskMetrics.maxDrawdown`.
+  - `GridSearchOptimizer.deflatedSharpeOfWinner` — the multiple-testing
+    haircut wired directly to the grid search that creates the multiple
+    tests.
+- **Backtest engine fixes** (from the review round; regression-pinned in
+  `BacktestQualityRoundTest`):
+  - Walk-forward folds now evaluate WARM: the test window is backtested
+    with the train window as indicator warm-up (new
+    `Backtester.run(..., tradeFrom)` overload) instead of cold-started on
+    a bare slice, which silently forced HOLD through every fold's first
+    lookback bars. Efficiency is NaN when the in-sample objective sum is
+    non-positive (a ratio of two losses read as "robust").
+  - `LastLookExecution` holds (no fill, no reject) on the parent's signal
+    bar: filling at that bar's open credited a price from before the
+    signal existed. First attempt is the next bar's open.
+  - `ExecutionAwareBacktester` sizes entries by the model's declared
+    `worstCaseCostFraction()` (new `ExecutionModel` default) instead of a
+    flat 1% buffer that overdrew cash for costlier models; force-close
+    now pays that cost too instead of exiting free.
+  - `TickBacktester.Config` refuses `equitySampleEvery <= 0` at
+    construction; `ParameterGrid.combinations()` is empty for an empty
+    grid (was one empty combo, inconsistent with `size() == 0`);
+    `GridSearchOptimizer` refuses an empty grid with a clear message.
+  - Verification round (both defects reproduced with compiled probes
+    before fixing, both regression-pinned): `IcebergExecution` now
+    DELEGATES `worstCaseCostFraction()` to its inner model — the wrapper
+    reported the 1% default while wrapping a costlier model, re-opening
+    the exact overdraw this batch fixes (measured: cash −1,475 on a 2.5%
+    inner model). New `ExecutionModel.referencePrice()` hook: the engine
+    budgets entries at the model's own fill anchor — `LastLookExecution`
+    anchors to the bar OPEN, so sizing against the close overdrew on any
+    accepted gapped-open bar (measured: cash −3,950 on a 5% gap);
+    `SorExecution` declares its exact half-spread + max-fee bound.
+    `OverfitProbability` rejects non-finite objectives (not just NaN —
+    an all `-Infinity` in-sample column left the argmax with no winner).
+  - `alpha.PortfolioConstruction`: the sector-sentinel string contained a
+    raw NUL byte (legal Java, but it made every text tool treat the file
+    as binary); now the explicit `"\0"` escape — same runtime string.
+- **Coverage audit round** (`BookPrimitivesTest`, `CorrelationMatrixTest`,
+  `FactorRegistryTest`, `ReportEscapingTest`, `RegulatoryEdgeCasesTest`):
+  the open-addressing map's backward-shift deletion hammered against a
+  HashMap oracle through 500 churn ops (the circular probe-order rule is
+  the subtlest line in the repo); bitmap scans pinned across word
+  boundaries; CSV/XLSX/HTML exporter escaping pinned (RFC 4180 quote
+  doubling, XML entities, numeric cell typing); regulatory zero-trade /
+  zero-mid / empty-window / flow-less gates; performance-metric formulas
+  (profit factor, win rate on zero-PnL trades, CAGR) pinned to exact
+  values.
+- **Docs**: LEARN gains rates/fixed income, connectivity ("how an order
+  reaches the exchange"), portfolio construction, and regulatory
+  surveillance chapters plus purged-CV/PBO in the backtesting section;
+  COOKBOOK recipes 18-22 (yield curve + KRD hedge, portfolio three ways,
+  overfitting defense, FIX session lifecycle, best-execution report);
+  DIAGRAMS 15-18; README/ARCHITECTURE trees brought current; teaching
+  javadoc for `DayCount`, `BusinessCalendar`, `YieldCurve`, `BondPricer`,
+  `Rules`, `RankingEngine`, `TechnicalFilters`, `SvgCharts`,
+  `HtmlReportExporter`.
+
 ## 1.13.0 — 2026-07-11
 
 - **Alpha, signals & backtesting round: premia, seasonality, honest

@@ -3,6 +3,20 @@ package com.quantfinlib.dsl;
 /**
  * Factory of common {@link Rule}s over indicator arrays. All rules are
  * NaN-safe: a rule is never satisfied while its inputs are in warm-up.
+ *
+ * <p>The design decision worth knowing: a {@code Rule} is a predicate over
+ * a BAR INDEX into precomputed indicator arrays, not over live values.
+ * That keeps strategy definitions declarative ("RSI crossed under 30 AND
+ * price above the 200-day") and — more importantly — makes look-ahead
+ * bias structurally harder: the arrays are computed once by causal
+ * indicator code, and a rule can only combine values at {@code i} and
+ * {@code i-1}, never peek at {@code i+1}. Cross rules require the
+ * previous bar to be on the other side (with {@code <=}/{@code >=}), so
+ * a series that OPENS above the level does not count as a cross — the
+ * classic off-by-one that fires a "breakout" signal on bar 0 of every
+ * backtest. NaN warm-up bars satisfy nothing, and combining rules with
+ * {@link Rule#and}/{@link Rule#or}/{@link Rule#not} preserves that.
+ * Assembled into strategies by {@link StrategyBuilder}.</p>
  */
 public final class Rules {
 

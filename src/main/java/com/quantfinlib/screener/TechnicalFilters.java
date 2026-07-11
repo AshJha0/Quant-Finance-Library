@@ -7,6 +7,19 @@ import com.quantfinlib.util.MathUtils;
 /**
  * Technical screening filters evaluated on the most recent bar. All filters
  * are NaN-safe and return {@code false} when the series is too short.
+ *
+ * <p>Design contract worth stating: a screen answers "does this stock look
+ * like X TODAY", so every filter reads only the LAST valid indicator value
+ * — never a history of signals (that is a backtest's job, over in
+ * {@code backtest}). "Too short = false" rather than "too short = throw"
+ * is deliberate: a screen runs across an entire universe, and one
+ * recently-listed ticker with 30 bars must silently drop out of an
+ * SMA(200) screen, not kill the run for the other 2,999 names. The cost
+ * of that choice is that {@code rsiBelow(14, 70)} and "not enough data"
+ * are indistinguishable in the output — compose an explicit
+ * length/liquidity pre-filter first when the distinction matters.
+ * Filters compose via {@link ScreenFilter#and}/{@code or}/{@code negate};
+ * feed survivors to {@link RankingEngine} to order them.</p>
  */
 public final class TechnicalFilters {
 
