@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.16.0 — 2026-07-11
 
 - **Docs — the full trading pipeline in one line**: alpha discovery →
   signal generation → nested validation → out-of-sample scoring →
