@@ -94,7 +94,7 @@ see **[DIAGRAMS.md](DIAGRAMS.md)** (Mermaid, renders on GitHub).
 - [LEARN.md](LEARN.md) — the from-zero tutorial: every concept above explained for
   beginners, with a guided reading path through these packages.
 - [COOKBOOK.md](COOKBOOK.md) — twenty-two runnable recipes across the capabilities.
-- [LEARN.md Part IV — The interview room](LEARN.md#part-iv--the-interview-room) — 35 real interview questions (quant, execution, risk, low-latency) answered with these classes.
+- [LEARN.md Part IV — The exercise room](LEARN.md#part-iv--the-exercise-room) — 135 practice questions (quant, execution, risk, low-latency) answered with these classes.
 - [MARKET_RISK.md](MARKET_RISK.md) — the 14-step market-risk workflow mapped to classes.
 - [CENTRAL_RISK_BOOK.md](CENTRAL_RISK_BOOK.md) — the central risk book: cross-product netting, internalization, cost-aware hedging, internal-first routing.
 - `docs/ULTRA_LOW_LATENCY.md` — the latency stack: in-library techniques, JVM flags,

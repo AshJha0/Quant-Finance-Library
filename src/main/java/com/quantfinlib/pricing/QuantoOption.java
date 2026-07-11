@@ -12,7 +12,7 @@ import com.quantfinlib.pricing.BlackScholes.OptionType;
  *
  * <pre>  F_quanto = S · e^{(r_dom − q − ρ·σ_S·σ_FX)·T}</pre>
  *
- * <p>Sign intuition (the interview question): ρ here is the correlation
+ * <p>Sign intuition (the classic exercise): ρ here is the correlation
  * between the asset and the FX rate quoted as DOMESTIC PER FOREIGN.
  * Positive ρ means the asset rallies exactly when the foreign currency
  * strengthens — the hedger's foreign-currency losses on the short hedge

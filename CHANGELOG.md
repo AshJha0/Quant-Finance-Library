@@ -58,16 +58,16 @@
   - `pricing.QuantoOption` — quanto drift adjustment as a carry shift on
     the tested vanilla pricer; positive asset/FX correlation lowers the
     quanto forward by exactly e^{-rho·sigmaS·sigmaFX·T}.
-- **Docs**: LEARN.md Part IV — "The interview room": 135 questions
-  actually asked in quant/algo/HFT interviews, each with an in-depth
-  model answer, a real-life example or desk incident (LTCM, Volmageddon,
-  Knight Capital, the WMR fix scandal, Archegos...), and a verified "In
-  this library" pointer to the class that makes the answer runnable.
-  Five core rounds (Q1-35) plus deeper second-interview banks (Q36-135:
-  quant/math, rates and curves, volatility and options theory, risk, the
-  derivatives desk, market structure and execution, backtesting and
-  research process, low-latency systems design). Linked from README and
-  LEARN's reading list; no standalone interview file.
+- **Docs**: LEARN.md Part IV — "The exercise room": 135 practice
+  questions posed the way trading desks actually pose them, each with an
+  in-depth model answer, a real-life example or desk incident (LTCM,
+  Volmageddon, Knight Capital, the WMR fix scandal, Archegos...), and a
+  verified "In this library" pointer to the class that makes the answer
+  runnable. Five core rounds (Q1-35) plus deeper follow-on banks
+  (Q36-135: quant/math, rates and curves, volatility and options theory,
+  risk, the derivatives desk, market structure and execution, backtesting
+  and research process, low-latency systems design). Linked from README
+  and LEARN's reading list; no standalone file.
 
 ## 1.14.0 — 2026-07-11
 

@@ -1152,8 +1152,8 @@ java -cp target/classes com.quantfinlib.examples.LiveTradingDemo   # live Binanc
     `fix/FixOrderEncoder.java`, the same message written the readable way
     and the fast way.
 14. `docs/COOKBOOK.md` — twenty-two end-to-end recipes to modify and re-run.
-15. Part IV below — once the above feels familiar, test yourself: 35 real
-    quant/trading/HFT interview questions, each answered and tied back to
+15. Part IV below — once the above feels familiar, test yourself: 135 real
+    quant/trading/HFT practice questions, each answered and tied back to
     a class you've now read.
 
 **Exercises** (in rough order of difficulty):
@@ -1202,17 +1202,17 @@ or a formula — it's a habit: **measure, don't assume; prove, don't claim;
 and when reality imposes a limit, document the limit instead of hiding
 it.** That habit transfers to every system you will ever build.
 
-## Part IV — The interview room
+## Part IV — The exercise room
 
-135 questions actually asked in quant, algo-trading and HFT interviews —
+135 exercises — the questions quant, algo-trading and HFT desks actually ask —
 each answered the way a strong candidate answers it, then tied to the
 class in this library that implements the answer, so every answer is
 **runnable**: read the answer, then read the code, then re-derive one
 number yourself — that's the preparation that survives follow-up
-questions. Grouped by round, because interviews are: the quant/math round,
+questions. Grouped by round, the way desks group them: the quant/math round,
 the derivatives round, the microstructure/execution round, the risk round,
 and the low-latency engineering round — first a core pass through each
-(Q1–35), then the deeper second-interview material (Q36–135): more quant
+(Q1–35), then the deeper follow-on material (Q36–135): more quant
 and math, rates and curves, volatility and options theory, risk, the
 derivatives desk round, market structure and execution, the backtesting
 and research process, and low-latency systems design. All class paths are
@@ -1375,7 +1375,7 @@ cash-or-nothing digitals**. Under Black-Scholes those two pieces are the two
 terms of the formula itself: `S·N(d1)` is the asset digital, `K·e^{−rt}·N(d2)`
 is K cash digitals — so N(d2) is the (risk-neutral) probability of
 finishing in the money, and N(d1) is that probability under the stock
-measure. Interviewers love this because it explains the BS formula
+measure. Teachers love this question because it explains the BS formula
 term-by-term instead of as a memorized blob.
 
 *In this library:* `pricing/DigitalOption.java` (cash-or-nothing,
@@ -1481,7 +1481,7 @@ and demand the semi-analytic price sits inside the MC confidence interval.
 branch-cut discontinuity that silently corrupts long-dated prices; use the
 "little Heston trap" formulation, whose complex log stays on the principal
 branch. (4) **Parity and bounds**: put-call parity and no-arbitrage bounds
-hold for any parameters. The meta-answer interviewers want: semi-analytic
+hold for any parameters. The meta-answer worth internalizing: semi-analytic
 speed and simulation independence, each validating the other.
 
 *In this library:* `pricing/Heston.java` — the little-trap characteristic
@@ -1770,7 +1770,7 @@ belongs).
 
 ### 30. "Your hot path allocates nothing. Prove it."
 
-Claiming is easy; the interview answer is a measurement protocol. (1)
+Claiming is easy; the real answer is a measurement protocol. (1)
 **Allocation-counter tests**: `ThreadMXBean.getThreadAllocatedBytes` around
 the hot loop — warm up first (JIT compilation itself allocates), then
 assert zero bytes over N operations. Make it a unit test so a regression
@@ -1819,7 +1819,7 @@ accumulate and rot probe performance. **Backward-shift deletion** instead
 re-places every entry in the probe run after the hole: each subsequent
 entry moves back if its ideal slot position allows it, restoring the
 invariant that every key is findable with no dead markers. It's the detail
-interviewers probe because getting it wrong is silent — lookups just start
+worth probing because getting it wrong is silent — lookups just start
 missing keys that exist.
 
 *In this library:* `orderbook/BookPrimitives.java` — the primitive long→int
@@ -2186,8 +2186,8 @@ best-of-N expectation, counting correlated variants as fewer effective
 trials. (5) **Stability**: performance should degrade gracefully as
 parameters move; a sharp peak at one setting is the signature of fitted
 noise. (6) **Regime coverage**: demand the strategy was alive through
-at least one episode that should hurt it. The meta-point interviewers
-reward: every defense here converts an unstated hope into a computed
+at least one episode that should hurt it. The meta-point this exercise
+rewards: every defense here converts an unstated hope into a computed
 number.
 
 *In this library:* `backtest/validation/PurgedKFold.java`,
@@ -2355,7 +2355,7 @@ switched their standard quotes to normal vols for exactly this reason,
 and they largely stayed there even after rates turned positive, because
 bp vols behave better when forwards are near zero (a lognormal vol
 explodes as F approaches 0 just to keep the bp-vol finite). The
-interview follow-through: know that sigma_LN ~ sigma_N / F links the
+follow-through: know that sigma_LN ~ sigma_N / F links the
 two regimes when F is comfortably positive, and that SABR's beta
 parameter spans the same spectrum -- beta = 1 lognormal, beta = 0
 normal.
@@ -2379,7 +2379,7 @@ floater's stub risk and any discounting-curve difference. Why desks
 care: the swap achieves that DV01 with no upfront cash (it is unfunded
 leverage -- the balance-sheet cost lives in margin and capital, not
 purchase price), which is why swaps, not bonds, are the default hedging
-instrument. The second-order interview point: bond DV01 is computed off
+instrument. The second-order point: bond DV01 is computed off
 the bond's own yield; swap DV01 off the swap curve -- so hedging bonds
 with swaps leaves you running **swap spread risk**, the basis between
 the two curves. That basis is a real P&L line: swap spreads moved
@@ -2555,7 +2555,7 @@ month-end) changes the payment date, hence the accrual period, hence
 the price. These are not exotic corner cases -- USD money markets are
 ACT/360, US Treasuries ACT/ACT, many corporates 30/360, and swaps mix
 conventions per leg, so any system that hard-codes one convention is
-wrong on most instruments it touches. The interview point: candidates
+wrong on most instruments it touches. The deeper point: anyone
 who wave this off as back-office trivia have not reconciled a
 portfolio; the pedantry *is* the P&L, and the first question a rates
 quant asks about any yield is "under which convention?"
@@ -3376,7 +3376,7 @@ enforces the occasional expensive "no." The cases to cite: the
 London Whale, where the desk's objections to the risk numbers led
 to the *model* being changed to accommodate the positions --
 backwards; and Archegos at Credit Suisse, where limit breaches were
-escalated and then persistently waived. The interviewer is not
+escalated and then persistently waived. The exercise is not
 testing whether you can win an argument with a trader; they are
 testing whether you understand that risk management is the
 institutional design that makes the argument unnecessary.
@@ -3458,7 +3458,7 @@ times what a 1-sigma day costs. The canonical incident is February 5,
 2018 ("Volmageddon"): short-vol products like XIV had collected small
 theta-like gains for years, then VIX roughly doubled in a day and XIV
 lost ~95% overnight and was terminated. Picking up nickels in front of
-a steamroller is the cliche; the interview-grade phrasing is "short
+a steamroller is the cliche; the precise phrasing is "short
 gamma positions have unbounded, accelerating losses funded by bounded,
 linear income."
 
@@ -3584,7 +3584,7 @@ quanto holds the foreign stock, whose *domestic* value is S * FX; when
 the stock and the exchange rate are correlated, the hedge P&L picks up
 a systematic cross-term, and no-arbitrage forces the quanto forward to
 grow at r_foreign - rho * sigma_S * sigma_FX rather than the plain
-forward rate. Intuition check an interviewer will push on: if the
+forward rate. Intuition check worth pushing on: if the
 Nikkei tends to rally when the yen weakens (rho < 0 against USD/JPY
 value of the payout currency), the dealer's stock hedge is worth fewer
 dollars exactly when it needs to be worth more, and the quanto drift
@@ -3615,8 +3615,8 @@ net rather than note-by-note -- offsetting exposures cancel internally
 and only the residual goes to the street, which is precisely the
 central-risk-book economics. Finally, secondary market: clients want
 early exits, the desk buys notes back at model value minus a spread,
-and unwinding the associated hedge is itself a trade. The interview
-point most candidates miss: the day-one margin is not profit until the
+and unwinding the associated hedge is itself a trade. The
+point most people miss: the day-one margin is not profit until the
 last note dies -- March 2020 clawed back years of autocallable margins
 in weeks.
 
@@ -3694,7 +3694,7 @@ position was risk-free, got assigned early, and turned ~$5k into a
 ~$58k loss -- roughly a -2000% return on the "riskless" trade. Second,
 even European boxes carry rates risk before expiry: a long box is long
 duration, and 2022's hikes marked long-dated boxes down like any bond.
-Interviewers use this question to test whether you see options as
+This question tests whether you see options as
 payoff LEGO rather than directional bets.
 
 *In this library:* `rates/YieldCurve.java` (turn the box price into a
@@ -3777,7 +3777,7 @@ matching engine, which either matches it against resting orders
 (generating trades, at the resting orders' prices) or rests it in the
 book. Every outcome fans out twice: a private execution report back
 down your session, and anonymous public market data (an add, or trades
-plus book deltas) to everyone. Why interviewers ask: each hop is a
+plus book deltas) to everyone. Why it gets asked: each hop is a
 failure mode. Knight Capital, August 1, 2012, is the canonical answer
 -- a dead code path reactivated by a partial deploy sent millions of
 unintended child orders; the missing hop was a working pre-trade risk
@@ -3804,7 +3804,7 @@ books in pro-rata markets show inflated depth that would never all
 trade -- which is why real allocation rules are hybrids: CME's
 short-rate contracts give a top-of-book time-priority allocation to
 whoever set the new best price first, then pro-rata the remainder, to
-keep some incentive for price discovery. The interview follow-up is
+keep some incentive for price discovery. The follow-up is
 "which market structure do HFTs prefer?" -- price-time, because speed
 is their edge and queue position is a durable asset; in pro-rata,
 capital (size) substitutes for speed.
@@ -3891,7 +3891,7 @@ whose markouts rot. The area is also compliance-heavy because the
 operator can cheat: Barclays LX settled for $70M (2016) over
 misrepresenting how much predatory HFT flow was in the pool while
 marketing it as safe, and Pipeline (2011) was fined for filling client
-orders from its own affiliated prop desk. The interview-complete answer
+orders from its own affiliated prop desk. The complete answer
 names both halves: dark pools reduce *impact* for size but concentrate
 *selection* risk, and the trade-off is measured in markouts, not
 promised in marketing.
@@ -4002,7 +4002,7 @@ everywhere: market makers score client flows (an FX LP scorecards each
 client's markouts to set spreads or decline flow), execution desks
 score *venues* (Q104 -- a dark pool with rotting 1s markouts gets cut),
 and prop firms score their own passive fills to price queue value.
-Classic pitfall the interviewer wants named: markouts must be measured
+Classic pitfall worth naming: markouts must be measured
 against a mid that excludes your own trade's impact, and horizon choice
 matters -- a market maker recycling inventory in 5 seconds does not
 care about the 5-minute markout.
@@ -4206,7 +4206,7 @@ family size; and compute the probability of backtest overfitting via
 CSCV -- split the sample into blocks, select the best variant on each
 in-sample combination, and measure how often that winner falls in the
 bottom half out-of-sample. A PBO near 50% says your selection process
-is a coin flip. The interview one-liner: the backtest is an experiment,
+is a coin flip. The one-liner: the backtest is an experiment,
 and the p-value belongs to the *search procedure*, not to the winning
 strategy.
 
@@ -4288,7 +4288,7 @@ training observations immediately after the test period, because serial
 correlation in features and volatility leaks information even without
 literal label overlap. The cost is a modest loss of training data; the
 benefit is that a good CV score becomes evidence instead of an
-artifact. Interviewers often probe with: "your CV accuracy dropped from
+artifact. A good follow-up probe: "your CV accuracy dropped from
 0.62 to 0.51 after purging -- what happened?" The desired answer: the
 0.62 *was the leak*; 0.51 is what your model actually knows, and you
 just saved yourself from deploying it.
@@ -4400,7 +4400,7 @@ free of adverse selection, do limit orders fill at prices that were
 never touched in size? (9) Reconciliation -- can a second implementation
 reproduce the equity curve from raw data? Sign errors and timezone bugs
 have produced more Sharpe-4 backtests than genuine edges. Meta-point
-worth saying out loud in the interview: a true Sharpe 4 at scale would
+worth saying out loud: a true Sharpe 4 at scale would
 compound absurdly -- extraordinary claims get the checklist in full,
 and the honest prior is that beautiful backtests are bugs until proven
 otherwise.
@@ -4492,7 +4492,7 @@ should make branches boringly predictable -- process the common message
 type in a straight line and let rare paths be the branch, avoid
 data-dependent branching in the inner loop (branchless min/max,
 arithmetic instead of if), and keep the hot path monomorphic so the JIT
-can inline instead of megamorphic-dispatching. The interview kicker:
+can inline instead of megamorphic-dispatching. The kicker:
 none of this shows in big-O -- an O(log n) tree book and an O(1)-ish
 array book differ far less on paper than their cache behavior differs
 in silicon.
@@ -4606,7 +4606,7 @@ Related honesty rules: never average latencies (report the full
 percentile spectrum to max), warm up before recording, and correlate
 spikes with the hiccup log -- if the benchmark's p99.9 spikes and the
 hiccup monitor shows a matching stall, the platform, not the
-algorithm, is your problem. Interviewers ask this to separate people
+algorithm, is your problem. This question separates people
 who have *published* latency numbers from people who have been burned
 by them.
 
@@ -4756,7 +4756,7 @@ a check is a handful of integer compares -- price inside collar
 rate inside the token bucket, kill switch not thrown -- no allocation,
 no hashing, no branching beyond the compares, returning an int reason
 code; total cost measured in nanoseconds, invisible next to the wire
-time. The design subtleties interviewers push on: position state must
+time. The design subtleties worth pushing on: position state must
 be updated *synchronously* with order submission (count in-flight
 exposure, not just fills, or a burst of unacknowledged orders walks
 through the limit); firm-wide aggregation cannot be a lock, so shards
@@ -4810,7 +4810,7 @@ persistent sequence/message store recovery depends on),
 
 ## How to use this guide
 
-Don't read it like a script — interviews die on the first follow-up. For
+Don't read it like a script — scripted answers die on the first follow-up. For
 each question you want to own, do three things:
 
 1. **Run the class's test.** Every class cited above is pinned by tests
@@ -4827,7 +4827,7 @@ each question you want to own, do three things:
    component-VaR share, the deflated Sharpe of a grid winner, a
    backward-shift probe run — and reproduce it by hand or in a scratch
    `main`. Explaining a number you have personally re-derived sounds
-   completely different from reciting one, and interviewers can tell.
+   completely different from reciting one, and it shows.
 
 If a term here is unfamiliar, Parts I–III above teach all of them from
 zero; [COOKBOOK.md](COOKBOOK.md) has runnable recipes for the workflows

@@ -51,10 +51,10 @@ execution algos, last look, options, garbage collection, ring buffers, the
 memory model, honest benchmarking…), each tied to the class that implements
 it, with a guided reading path and exercises.
 
-**Preparing for interviews?** [docs/LEARN.md Part IV — The interview
-room](docs/LEARN.md#part-iv--the-interview-room) — 35 questions actually
-asked in quant, algo-trading and HFT interviews, each with a model answer
-and the class in this library that implements it.
+**Want to test yourself?** [docs/LEARN.md Part IV — The exercise
+room](docs/LEARN.md#part-iv--the-exercise-room) — 135 practice questions
+the way trading desks actually pose them, each with an in-depth model
+answer and the class in this library that implements it.
 
 **Learn by task, not by API**: [docs/COOKBOOK.md](docs/COOKBOOK.md) — seventeen complete
 recipes under ~30 lines each, from "backtest your CSV" through survivorship-honest
@@ -73,7 +73,7 @@ Every capability here maps to a job someone actually does. Six ways in:
 | **A pairs / relative-value trader** | Test the tether, size by half-life, enter at 2σ, never own half a trade | `CointegrationTest` → `OrnsteinUhlenbeck` → `SpreadExecutionAlgo` (recipe 15); rolls via `FuturesRollAlgo` |
 | **A central-risk-book desk** | Net every desk's flow into one factor space, internalize what reduces risk (pay the client for it), hedge only the excess, cross internally first — and prove the netting paid for itself | the `crb` package end-to-end ([CENTRAL_RISK_BOOK.md](docs/CENTRAL_RISK_BOOK.md), recipe 14, `CrbRealWorldScenarioTest` — a realistic week) |
 | **A market-risk manager** | The afternoon ritual: VaR five ways, ES beside each, stress the book against March 2020, ask what breaks it and at how many sigma, wrap it in FRTB numbers | `VarEngine` → `StressTester` → `FrtbEs`/`PnlAttribution` (recipe 16, [MARKET_RISK.md](docs/MARKET_RISK.md) — all 14 steps) |
-| **A student / interview candidate** | Learn what an order book IS, why spreads exist, what adverse selection costs, how a GARCH differs from an EWMA — then read the real class that implements each answer | [LEARN.md](docs/LEARN.md) top to bottom (finance Part I, tech Part II, desk playbooks, guided path + exercises) |
+| **A student** | Learn what an order book IS, why spreads exist, what adverse selection costs, how a GARCH differs from an EWMA — then read the real class that implements each answer | [LEARN.md](docs/LEARN.md) top to bottom (finance Part I, tech Part II, desk playbooks, guided path + the Part IV exercises) |
 
 Every row above is backed by committed tests at realistic sizes — the
 CRB week, the five-day learning loop, the COVID stress replay to the

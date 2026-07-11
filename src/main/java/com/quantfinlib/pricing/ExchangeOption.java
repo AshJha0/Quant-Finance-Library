@@ -11,8 +11,8 @@ import com.quantfinlib.util.MathUtils;
  * (payoff {@code max(0, S1 − S2)}) is a Black-Scholes call in disguise:
  * price asset 1 IN UNITS OF asset 2 and the strike becomes 1, the rate
  * drops out entirely (a ratio has no financing cost) and the vol is the
- * vol of the RATIO, {@code σ² = σ1² + σ2² − 2ρσ1σ2}. The interview
- * observation worth knowing: with ρ = 1 and σ1 = σ2 the ratio has zero
+ * vol of the RATIO, {@code σ² = σ1² + σ2² − 2ρσ1σ2}. The observation
+ * worth knowing: with ρ = 1 and σ1 = σ2 the ratio has zero
  * vol and the option is pure forward intrinsic — two perfectly correlated
  * equal-vol assets can never finish crossed.</p>
  *
