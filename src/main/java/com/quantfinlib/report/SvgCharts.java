@@ -32,6 +32,11 @@ public final class SvgCharts {
 
     /** Drawdown area chart (720x220): 0 at the top, drawdowns filled below. */
     public static String drawdownChart(double[] equity) {
+        if (equity.length < 2) {
+            // Same guard lineChart carries: one point divides by count-1
+            // and renders a silently blank NaN-coordinate chart.
+            throw new IllegalArgumentException("need at least two points");
+        }
         double[] dd = new double[equity.length];
         double peak = equity[0];
         for (int i = 0; i < equity.length; i++) {

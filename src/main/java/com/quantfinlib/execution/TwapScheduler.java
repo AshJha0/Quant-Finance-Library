@@ -39,6 +39,13 @@ public final class TwapScheduler {
         if (weights.length == 0 || totalQty <= 0) {
             throw new IllegalArgumentException("need positive quantity and at least one slice");
         }
+        // Same overflow guard WmrFixingScheduler carries: a pathological
+        // horizon must not wrap durationMillis * i negative and place
+        // slices before the window opens.
+        if (durationMillis < 0 || durationMillis > Long.MAX_VALUE / weights.length) {
+            throw new IllegalArgumentException(
+                    "durationMillis out of range for " + weights.length + " slices");
+        }
         long[] quantities = VwapScheduler.allocateProportionally(totalQty, weights);
         List<Slice> out = new java.util.ArrayList<>(weights.length);
         for (int i = 0; i < weights.length; i++) {

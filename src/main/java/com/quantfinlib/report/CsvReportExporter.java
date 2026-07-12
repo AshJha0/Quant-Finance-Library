@@ -29,7 +29,9 @@ public final class CsvReportExporter implements ReportExporter {
     }
 
     private static String quote(String v) {
-        if (v.contains(",") || v.contains("\"") || v.contains("\n")) {
+        // \r included: a bare carriage return is a record terminator to
+        // strict RFC-4180 readers and must be quoted like \n.
+        if (v.contains(",") || v.contains("\"") || v.contains("\n") || v.contains("\r")) {
             return "\"" + v.replace("\"", "\"\"") + "\"";
         }
         return v;

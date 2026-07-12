@@ -1276,7 +1276,7 @@ spikes.forEach(a -> System.out.printf("interval %d: %s z=%.1f%n",
         a.intervalIndex(), a.type(), a.score()));
 ```
 
-The quote-stuffing test deliberately requires both conditions at once: a message-rate spike alone is what a busy open looks like, and a high order-to-trade ratio alone is what a quiet market-maker looks like -- it is the combination (lots of quoting, almost no trading, far above baseline) that characterizes the pattern. Both detectors compute their baselines from the supplied window itself, so feed them rolling windows sized to a regime you consider comparable (a day, a session hour), not a mixed month -- and long enough to matter: the outlier sits inside its own baseline, so an n-interval window caps any z-score at (n-1)/sqrt(n), and a 3-sigma threshold needs a dozen intervals before it can fire at all. Treat the returned `score` as triage priority for a human, not as a verdict -- z-scores flag, people conclude.
+The quote-stuffing test deliberately requires both conditions at once: a message-rate spike alone is what a busy open looks like, and a high order-to-trade ratio alone is what a quiet market-maker looks like -- it is the combination (lots of quoting, almost no trading, far above baseline) that characterizes the pattern. The scores are ROBUST z-scores -- (x - median) / (1.4826 * MAD) -- precisely so the anomaly cannot hide inside its own baseline: a mean/stdev z is capped at (n-1)/sqrt(n) because the outlier inflates the very stdev it is measured against (n=7 caps at 2.27 -- a 3-sigma threshold could never fire), while median/MAD ignores up to half the window being contaminated and lets a genuine storm score in the hundreds. Feed rolling windows sized to a regime you consider comparable (a session hour, a day). Treat the returned `score` as triage priority for a human, not as a verdict -- z-scores flag, people conclude.
 
 ## 41. Predict market impact before trading
 
@@ -3419,6 +3419,177 @@ being a leveraged market bet in disguise; and the executor turns targets into
 children the market can absorb. Skip a stage and the backtest improves -- that
 is the tell, not a reward. LEARN.md 8c walks the same line with the math
 attached; recipes 3, 4, 10 and 20 expand the individual stages.
+
+## 101. Bootstrap a credit curve and price a CDS
+
+The credit market's yield-curve bootstrap: walk the CDS quotes from short to
+long, at each pillar solving for the one hazard rate that reprices that
+maturity to zero upfront. Every input reprices exactly -- that is the
+contract, and `CreditTest` pins it at 1e-10.
+
+```java
+YieldCurve discount = YieldCurve.ofZeroRates(
+        new double[]{1, 2, 3, 5, 7, 10},
+        new double[]{0.03, 0.03, 0.03, 0.03, 0.03, 0.03});
+int[] tenors = {1, 3, 5, 7};
+double[] parSpreads = {0.008, 0.012, 0.015, 0.016};    // 80..160bp, upward
+CreditCurve curve = CreditCurve.bootstrap(tenors, parSpreads, 0.40, discount);
+
+// The bootstrap's contract: every quoted pillar reprices to its input.
+System.out.println(CdsPricer.parSpread(curve, discount, 5));   // 0.015...
+
+// Post-2009 contracts run a FIXED 100bp coupon; the risk difference is
+// exchanged as upfront points (positive = protection buyer pays).
+double upfront = CdsPricer.upfront(curve, discount, 0.01, 5);
+double annuity = CdsPricer.riskyAnnuity(curve, discount, 5);   // risky DV01 base
+
+// The credit triangle: par spread ~ hazard * (1 - recovery).
+System.out.printf("h(5y)=%.4f  triangle h=%.4f  Q(5y)=%.4f%n",
+        curve.hazard(5), 0.015 / (1 - 0.40), curve.survivalProbability(5));
+```
+
+The risky annuity is the desk's risky DV01 -- PnL per basis point of spread
+move -- which is why `upfront == (parSpread - coupon) * annuity` to machine
+precision. The triangle `spread ~ h * (1 - R)` is only exact on a flat curve,
+but it is the mental arithmetic every credit desk carries: a 150bp name at
+40% recovery defaults at about 2.5% a year. A quote no hazard in [1e-9, 10]
+can explain throws instead of returning the bracket edge -- the house rule
+for every solver here.
+
+## 102. Measure a bond's credit spread and the CDS-bond basis
+
+The Z-spread strips the entire risk-free curve out of a bond's price; what
+remains is compensation for credit and liquidity. Triangulate it against the
+same name's CDS and you have the classic relative-value number.
+
+```java
+YieldCurve govt = YieldCurve.ofZeroRates(
+        new double[]{1, 2, 3, 5, 7, 10},
+        new double[]{0.03, 0.03, 0.03, 0.03, 0.03, 0.03});
+
+// A 5y 5% semi-annual bond trading 5% below its on-curve PV:
+double onCurve = CreditSpreads.priceWithZSpread(100, 0.05, 2, 5, govt, 0);
+double dirty = onCurve * 0.95;
+double z = CreditSpreads.zSpread(dirty, 100, 0.05, 2, 5, govt);
+
+// Round trip: the solved z reprices the bond exactly.
+System.out.println(dirty
+        - CreditSpreads.priceWithZSpread(100, 0.05, 2, 5, govt, z)); // ~0
+
+// The same name's CDS quotes 120bp at 5y: the basis is z minus par.
+CreditCurve cds = CreditCurve.bootstrap(
+        new int[]{5}, new double[]{0.012}, 0.40, govt);
+double basis = z - CdsPricer.parSpread(cds, govt, 5);
+System.out.printf("z=%.1fbp  basis=%.1fbp%n", z * 1e4, basis * 1e4);
+```
+
+A yield spread compares one bond's YTM to one government point and mixes
+curve shape into the number; the Z-spread removes the whole curve first.
+Negative basis (bond spread above CDS) is the famous trade: buy the bond, buy
+protection, collect the difference -- in theory risk-free, in 2008 a funding
+catastrophe, which is why the basis persists instead of being arbitraged
+away. Both solvers are bracket-checked: a price no spread in [-50%, 500%]
+can explain throws rather than returning an endpoint.
+
+## 103. Read a commodity curve: roll yield and implied carry
+
+A commodity position's PnL is mostly not about spot. A curve in contango
+charges the long every roll; backwardation pays it. Over a decade the roll
+term has dominated most commodity index returns -- the single most
+misunderstood fact about the asset class.
+
+```java
+// WTI-style contango: spot 100, deferred contracts above.
+CommodityCurve wti = CommodityCurve.of(100,
+        new double[]{0.25, 0.5, 1.0}, new double[]{101, 102, 104});
+System.out.println(wti.isContango());                    // true
+double roll = wti.annualizedRollYield(0.25, 1.0);        // negative: long pays
+double carry = wti.impliedCarry(1.0, 0.03);              // u - y (storage minus
+                                                         // convenience), cc
+
+// Heating-oil-style backwardation: the market pays to HOLD the physical.
+CommodityCurve heat = CommodityCurve.of(100,
+        new double[]{0.25, 0.5, 1.0}, new double[]{99, 97, 95});
+System.out.printf("roll=%.2f%%  carry=%.2f%%  paid-to-roll=%.2f%%%n",
+        roll * 100, carry * 100, heat.annualizedRollYield(0.25, 1.0) * 100);
+```
+
+`impliedCarry` backs storage-minus-convenience out of the storage-arbitrage
+relation `F = S * exp((r + u - y) t)`: deeply negative means a convenience
+yield -- think heating oil before a cold snap, or the USO fund's 2020 lesson
+in the other direction (spot oil recovered; the contango roll ate the fund
+anyway). Whole-curve shape tests are strict at every pillar pair, so seasonal
+commodities (natural gas winters) read as neither contango nor backwardation
+by design -- use pairwise roll yields there. When it is time to actually move
+the position to the next contract, `execution.FuturesRollAlgo` (recipe 15's
+sibling) executes the roll along the liquidity-migration S-curve as calendar
+spreads.
+
+## 104. Price and risk a vanilla swap
+
+The missing middle between the curve (bootstrapped FROM par swaps) and
+`RatesOptions` (options ON forward swaps): the PV, par rate and DV01 of an
+actual position, in the single-curve world where the float leg is worth par
+at inception.
+
+```java
+double[] t = {1, 2, 3, 4, 5, 7, 10};
+double[] zeros = {0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05};
+YieldCurve curve = YieldCurve.ofZeroRates(t, zeros);
+
+double par = SwapPricer.parRate(curve, 5);      // (1 - DF(5)) / annuity
+System.out.println(SwapPricer.payerPv(curve, 5, par));   // 0.0 -- an identity
+
+// Pay 4% fixed on a 5% curve: positive PV to the payer, per unit notional.
+double pv = SwapPricer.payerPv(curve, 5, 0.04);
+double dv01 = SwapPricer.dv01(curve, 5, 0.04);  // +1bp parallel zero shift
+double annuity = SwapPricer.annuity(curve, 5);
+System.out.printf("pv=%.5f  dv01=%.6f  annuity*1bp=%.6f%n",
+        pv, dv01, annuity * 1e-4);
+```
+
+A swap struck at the par rate must PV to zero -- pinned at 1e-12, not
+approximately. The DV01 subtlety worth knowing: the bump hits the
+continuously-compounded ZERO curve, and the simple par rate is `e^z - 1`, so
+a 1bp zero shift moves the par rate by `e^z` bp -- the measured DV01 is
+`annuity * e^z * 1bp` on a flat curve, about 5% above the naive
+`annuity * 1bp` at 5% rates (`AssetClassRoundTest` pins exactly this).
+Quoting risk without saying which curve you bumped is how two desks disagree
+about the same trade.
+
+## 105. Run private-markets analytics like an LP
+
+No daily prices, manager-timed cash flows, appraisal NAVs: the usual
+machinery fails on purpose in private markets. The LP toolkit: money-weighted
+IRR, the multiples, a fair public-market benchmark, and desmoothed risk.
+
+```java
+// Investor-signed flows: contributions negative, distributions positive;
+// the final period includes terminal NAV as a distribution.
+double irr = PrivateMarketAnalytics.irr(
+        new double[]{-100, -50, 30, 60, 130});             // per period
+
+double tvpi = PrivateMarketAnalytics.tvpi(150, 90, 105);   // (90+105)/150 = 1.3
+double dpi  = PrivateMarketAnalytics.dpi(150, 90, 105);    // cash back: 0.6
+double rvpi = PrivateMarketAnalytics.rvpi(150, 90, 105);   // still appraisal: 0.7
+
+// KS-PME: a fund that IS the index scores exactly 1 (the replication check).
+double pme = PrivateMarketAnalytics.ksPme(
+        new double[]{100, 0, 0}, new double[]{0, 0, 0}, 121,
+        new double[]{100, 110, 121});                       // 1.0 exactly
+
+// Appraisal NAVs understate volatility; desmooth before comparing risk.
+double[] trueReturns = PrivateMarketAnalytics.geltnerDesmooth(navReturns, 0.4);
+```
+
+DPI is the honest multiple -- you cannot spend RVPI. PME > 1 is the only fair
+"did they beat the market" answer for irregular cash flows: it grows every
+flow forward at the index's return, so "our IRR beat the S&P's return" stops
+being evidence. IRR itself is bracket-checked -- flows that never change sign
+have no IRR and throw. And the Geltner inversion is exact (smoothing then
+desmoothing round-trips to machine precision, pinned by test), so compare the
+standard deviation of `trueReturns` against the observed series: the gap is
+the volatility the appraisal process laundered away.
 
 ---
 

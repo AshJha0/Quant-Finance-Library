@@ -36,13 +36,26 @@ public final class CounterpartyExposureTracker {
         return Math.max(0, net);
     }
 
-    /** Potential future exposure: sum of |notional| × tenor add-on factor. */
+    /**
+     * Potential future exposure with the CEM net-to-gross adjustment:
+     * {@code PFE = (0.4 + 0.6 * NGR) * sum |notional| * addOn}, where
+     * NGR = net current exposure / gross positive MTM. A well-hedged
+     * netting set (offsetting MTMs) earns up to a 60% add-on reduction —
+     * the gross add-on alone materially over-states exposure for exactly
+     * the books that hedge, which is what the netting agreement is FOR.
+     * NGR is 1 (no relief) when there is no positive MTM to net against.
+     */
     public double potentialFutureExposure(String counterparty) {
-        double pfe = 0;
+        double grossAddOn = 0;
+        double grossPositiveMtm = 0;
         for (CounterpartyTrade t : trades(counterparty)) {
-            pfe += Math.abs(t.notional()) * addOnFactor(t.tenorYears());
+            grossAddOn += Math.abs(t.notional()) * addOnFactor(t.tenorYears());
+            grossPositiveMtm += Math.max(0, t.markToMarket());
         }
-        return pfe;
+        double ngr = grossPositiveMtm > 0
+                ? currentExposure(counterparty) / grossPositiveMtm
+                : 1.0;
+        return (0.4 + 0.6 * ngr) * grossAddOn;
     }
 
     /** Total exposure = current + potential future. */

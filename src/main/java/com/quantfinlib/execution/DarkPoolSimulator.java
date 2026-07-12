@@ -35,37 +35,67 @@ public final class DarkPoolSimulator {
     private double mid = Double.NaN;
     private long nextId = 1;
 
-    /** Update the lit reference mid; crossing only happens at a valid mid. */
+    /**
+     * Update the lit reference mid. A LOCKED or CROSSED reference (bid >=
+     * ask) or a non-positive/non-finite side invalidates the mid: a real
+     * midpoint pool is prohibited from executing during a locked/crossed
+     * NBBO, so crossing pauses until a valid two-sided market returns —
+     * resting interest stays resting.
+     */
     public void onQuote(double bid, double ask) {
-        this.mid = (bid + ask) / 2;
+        this.mid = (bid > 0 && ask > 0 && bid < ask && ask != Double.POSITIVE_INFINITY)
+                ? (bid + ask) / 2
+                : Double.NaN;
     }
 
     /**
      * Submits an order: crosses immediately against resting contra interest at
-     * the current mid (time priority, skipping resting orders whose
-     * min-quantity cannot be honored), then rests the remainder. Returns the
+     * the current mid (time priority), then rests the remainder. Returns the
      * fills generated (empty if it fully rested).
+     *
+     * <p>Minimum-execution-quantity is honored AGGREGATE-first, the common
+     * pool semantics: the incoming order's MEQ is checked against the total
+     * crossable contra quantity (an order wanting 100 fills against two
+     * resting 60s), while each resting order's own MEQ still gates its
+     * individual slice.</p>
      */
     public List<Fill> submit(Side side, long quantity, long minExecutionQty) {
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("quantity must be positive, got " + quantity);
+        }
+        if (minExecutionQty < 0) {
+            throw new IllegalArgumentException(
+                    "minExecutionQty must be >= 0, got " + minExecutionQty);
+        }
         long id = nextId++;
         List<Fill> fills = new ArrayList<>();
         long remaining = quantity;
         if (!Double.isNaN(mid)) {
             LinkedList<Resting> contra = side == Side.BUY ? sells : buys;
-            Iterator<Resting> it = contra.iterator();
-            while (it.hasNext() && remaining > 0) {
-                Resting r = it.next();
-                long fill = Math.min(remaining, r.qty);
-                if (fill < minExecutionQty || fill < r.minQty) {
-                    continue;   // constraint not satisfiable against this order
+            // Aggregate crossable quantity first: only slices that satisfy
+            // each resting order's own MEQ count toward it.
+            long crossable = 0;
+            for (Resting r : contra) {
+                if (Math.min(remaining, r.qty) >= r.minQty) {
+                    crossable += Math.min(remaining, r.qty);
                 }
-                r.qty -= fill;
-                remaining -= fill;
-                fills.add(side == Side.BUY
-                        ? new Fill(id, r.id, mid, fill)
-                        : new Fill(r.id, id, mid, fill));
-                if (r.qty == 0) {
-                    it.remove();
+            }
+            if (crossable >= minExecutionQty) {
+                Iterator<Resting> it = contra.iterator();
+                while (it.hasNext() && remaining > 0) {
+                    Resting r = it.next();
+                    long fill = Math.min(remaining, r.qty);
+                    if (fill < r.minQty) {
+                        continue;   // the RESTING order's own constraint
+                    }
+                    r.qty -= fill;
+                    remaining -= fill;
+                    fills.add(side == Side.BUY
+                            ? new Fill(id, r.id, mid, fill)
+                            : new Fill(r.id, id, mid, fill));
+                    if (r.qty == 0) {
+                        it.remove();
+                    }
                 }
             }
         }

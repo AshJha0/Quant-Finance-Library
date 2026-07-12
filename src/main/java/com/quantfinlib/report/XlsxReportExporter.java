@@ -66,15 +66,14 @@ public final class XlsxReportExporter implements ReportExporter {
     }
 
     private static boolean isNumeric(String s) {
+        // Strict OOXML decimal syntax, NOT Double.parseDouble: parseDouble
+        // accepts Java float-literal forms ("1D", "3f", "+5", hex floats)
+        // that are invalid inside <v> — one such cell makes Excel declare
+        // the entire workbook corrupt, not just the cell.
         if (s.isEmpty()) {
             return false;
         }
-        try {
-            double d = Double.parseDouble(s);
-            return !Double.isNaN(d) && !Double.isInfinite(d);
-        } catch (NumberFormatException e) {
-            return false;
-        }
+        return s.matches("-?(\\d+(\\.\\d*)?|\\.\\d+)([eE][-+]?\\d+)?");
     }
 
     private static String escapeXml(String s) {

@@ -8,11 +8,22 @@ import java.util.List;
 /**
  * Surveillance anomaly detection over interval-aggregated market activity:
  * <ul>
- *   <li><b>Quote stuffing</b> — message-rate spikes (z-score) combined with an
- *       abnormal order-to-trade ratio: lots of quoting, little trading.</li>
+ *   <li><b>Quote stuffing</b> — message-rate spikes (robust z-score) combined
+ *       with an abnormal order-to-trade ratio: lots of quoting, little
+ *       trading.</li>
  *   <li><b>Price spikes</b> — interval returns far outside their recent
  *       distribution.</li>
  * </ul>
+ *
+ * <p>Scores are ROBUST z-scores — (x − median) / (1.4826 · MAD) — not
+ * mean/stdev: an anomaly detector whose baseline includes the anomalies
+ * inflates its own scale and misses exactly the events it hunts (a storm
+ * of stuffing intervals raises the stdev until nothing clears the
+ * threshold). Median/MAD ignores up to half the sample being
+ * contaminated; 1.4826 rescales MAD to stdev units under normality so
+ * thresholds keep their familiar sigma meaning. When MAD is 0 (more than
+ * half the intervals identical) the detector falls back to mean/stdev,
+ * and gives up only when that is 0 too.</p>
  */
 public final class AnomalyDetector {
 
@@ -41,14 +52,14 @@ public final class AnomalyDetector {
         for (int i = 0; i < m.length; i++) {
             m[i] = messagesPerInterval[i];
         }
-        double mean = MathUtils.mean(m);
-        double std = MathUtils.stdDev(m);
+        double center = median(m);
+        double scale = robustScale(m, center);
         List<Anomaly> out = new ArrayList<>();
+        if (scale == 0) {
+            return out;
+        }
         for (int i = 0; i < m.length; i++) {
-            if (std == 0) {
-                break;
-            }
-            double z = (m[i] - mean) / std;
+            double z = (m[i] - center) / scale;
             double otr = messagesPerInterval[i] / (double) Math.max(1, tradesPerInterval[i]);
             if (z >= zThreshold && otr >= minOrderToTradeRatio) {
                 out.add(new Anomaly(i, QUOTE_STUFFING, z));
@@ -66,18 +77,35 @@ public final class AnomalyDetector {
         for (int i = 1; i < mids.length; i++) {
             rets[i - 1] = mids[i] / mids[i - 1] - 1;
         }
-        double mean = MathUtils.mean(rets);
-        double std = MathUtils.stdDev(rets);
+        double center = median(rets);
+        double scale = robustScale(rets, center);
         List<Anomaly> out = new ArrayList<>();
-        if (std == 0) {
+        if (scale == 0) {
             return out;
         }
         for (int i = 0; i < rets.length; i++) {
-            double z = Math.abs(rets[i] - mean) / std;
+            double z = Math.abs(rets[i] - center) / scale;
             if (z >= zThreshold) {
                 out.add(new Anomaly(i + 1, PRICE_SPIKE, z));
             }
         }
         return out;
+    }
+
+    private static double median(double[] v) {
+        double[] sorted = v.clone();
+        java.util.Arrays.sort(sorted);
+        int n = sorted.length;
+        return n % 2 == 1 ? sorted[n / 2] : 0.5 * (sorted[n / 2 - 1] + sorted[n / 2]);
+    }
+
+    /** 1.4826 * MAD, falling back to stdev when MAD is degenerate. */
+    private static double robustScale(double[] v, double center) {
+        double[] dev = new double[v.length];
+        for (int i = 0; i < v.length; i++) {
+            dev[i] = Math.abs(v[i] - center);
+        }
+        double mad = median(dev);
+        return mad > 0 ? 1.4826 * mad : MathUtils.stdDev(v);
     }
 }

@@ -20,6 +20,14 @@ package com.quantfinlib.microstructure;
  *       fitting OU to a random walk is how pairs desks die.</li>
  * </ul>
  *
+ * <p>Small-sample honesty: the OLS AR(1) slope is DOWNWARD-biased in
+ * finite samples (Kendall: {@code E[b_hat - b] ~ -(1+3b)/n}), so near the
+ * minimum n=30 the fitted κ runs high and the half-life SHORT — a
+ * 20-day true half-life can fit as ~12. Treat short-sample half-lives as
+ * optimistic lower bounds and prefer n in the hundreds before sizing a
+ * holding period off them. Stated, not corrected: bias corrections trade
+ * variance for bias and are themselves sample-size-sensitive.</p>
+ *
  * <p>Static, deterministic, research lane. Pair with
  * {@code hedging.CointegrationTest} (is the spread stationary at all?)
  * and hand the trade to {@code execution.SpreadExecutionAlgo}.</p>
