@@ -2,6 +2,59 @@
 
 ## Unreleased
 
+- **The exercise room doubled: Q1-1000** — 500 new practice questions
+  (Q501-1000) in `docs/LEARN.md` Part IV, changing the camera angle
+  from concept to workday: data/feed/FIX/venue incidents, risk-gate and
+  market-making mornings, execution-desk and derivatives-desk tickets,
+  risk-desk days, alpha-research and portfolio-construction scenarios,
+  systems/latency engineering, cross-asset desks, and 50 capstones that
+  each cross multiple subsystems. Every answer cites a real class
+  (citations verified against source by the writing agents), zero
+  banned-word occurrences, pure ASCII.
+- **Cookbook tripled: 300 recipes** — recipes 106-300 across data
+  repair, indicators/DSL/screeners/ML, books and connectivity, ULL
+  trading lane, execution/SOR/TCA, options/exotics/structured notes,
+  FX chain, alpha-research + validation + portfolio construction, the
+  CRB stack, cross-asset pipelines, and operations/integration days;
+  recipe 300 is the whole library in one program. Signatures verified
+  by reading source; two invented calls caught in self-review and
+  fixed before landing.
+- **Diagrams doubled: 100** — diagrams 53-100: data cleaning, capture,
+  checkpoint, DSL, screener, ML loop, regime/anomaly, reporting,
+  latency stack, feeds, SBE layout, rings, registry, fast lane, hedger,
+  quoter, sharding, breakers, paper gateway, schedules, executor, SOR,
+  microstructure stack, Hawkes, OU, TCA tree, CVA/EE, swaps/DV01,
+  NS-vs-Svensson, commodity carry, index divisor, private markets,
+  range vol, structured notes, Asians, vol-swap convexity, ES-vs-VaR,
+  reverse stress, FRTB cascade, Euler allocation, trade analytics,
+  reshuffle, post-mortem, two-lane discipline, review methodology, and
+  diagram 100: the grand map. All Mermaid edges outside subgraphs.
+- **Formula reference tripled: ~175 entries** — 125 new entries in the
+  LEARN appendix across 19 new groups (all greeks, digitals/barriers,
+  Asians and structured notes, dividends/forwards/FX conventions,
+  short-rate models, curve mechanics, credit/counterparty, risk
+  engines, model validation, portfolio construction, performance and
+  trade analytics, strategy validation, mean reversion, microstructure
+  signals, execution/TCA, indexes/private markets, range vol,
+  technical indicators, numerical machinery), each with symbol legend,
+  teaching note, pitfall, and the implementing class (signs and factors
+  verified against method bodies). README gains a 33-row formula
+  quick-reference table under "The mathematics".
+- **Trade-level analytics + Monte Carlo reshuffle** —
+  `backtest.TradeAnalytics` (expectancy, payoff ratio, streaks with
+  scratch-trade handling, Kelly with the no-losers over-fit tell, hold
+  times) and `backtest.validation.MonteCarloTradeShuffle`
+  (drawdown/terminal-P&L distribution over Fisher-Yates reshuffles of
+  the trade multiset, with the actual path's percentile rank and the
+  exchangeability blind spot stated; complement to `BlockBootstrap`).
+- **30 new hand-pinned tests** (suite 1060 -> 1090): credit round trips
+  (planted-hazard bootstrap recovery, upfront antisymmetry, z-spread
+  round trip, CVA linearity), swap PV antisymmetry around par, asset
+  class edges (flat-curve carry = -r, divisor continuity, IRR plants,
+  TVPI identity, KS-PME hand fraction, Geltner phi=0), Asian
+  KV-vs-TW convergence with the drift-Jensen floor documented,
+  structured-note vega signs, range-vol zero/scale invariance, trade
+  analytics edge cases and shuffle determinism.
 - **Six new asset classes + structured products** (three review rounds;
   every formula pinned by hand or by its exact limits):
   - `credit` — `CreditCurve` (piecewise-constant hazard bootstrap from

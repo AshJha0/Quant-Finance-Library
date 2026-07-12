@@ -106,8 +106,8 @@ layer living in `rates`, `credit`, `commodities`, `fx` and `markets`
 
 - [LEARN.md](LEARN.md) — the from-zero tutorial: every concept above explained for
   beginners, with a guided reading path through these packages.
-- [COOKBOOK.md](COOKBOOK.md) — one hundred and five runnable recipes across the capabilities.
-- [LEARN.md Part IV — The exercise room](LEARN.md#part-iv--the-exercise-room) — 500 practice questions (quant, execution, risk, low-latency) answered with these classes.
+- [COOKBOOK.md](COOKBOOK.md) — three hundred runnable recipes across the capabilities.
+- [LEARN.md Part IV — The exercise room](LEARN.md#part-iv--the-exercise-room) — 1000 practice questions (quant, execution, risk, low-latency, plus 500 day-to-day professional scenarios) answered with these classes.
 - [MARKET_RISK.md](MARKET_RISK.md) — the 14-step market-risk workflow mapped to classes.
 - [CENTRAL_RISK_BOOK.md](CENTRAL_RISK_BOOK.md) — the central risk book: cross-product netting, internalization, cost-aware hedging, internal-first routing.
 - `docs/ULTRA_LOW_LATENCY.md` — the latency stack: in-library techniques, JVM flags,
