@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.17.0 — 2026-07-12
 
 - **Deep verification round over the whole expansion** (three parallel
   verifiers: every formula vs method bodies, adversarial code/test
