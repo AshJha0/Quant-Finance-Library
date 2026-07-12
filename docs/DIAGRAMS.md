@@ -2126,6 +2126,1937 @@ stream and a calendar-spread roll are different doors). Recipes 101-105
 walk the new instrument column; diagram 19 remains the stage-by-stage
 map of the middle.
 
+
+## 53. The data-cleaning pipeline -- raw CSV to a point-in-time universe
+
+Every backtest is only as honest as the bytes feeding it. The loader stack
+turns a raw vendor CSV into aligned, corporate-action-adjusted, survivorship-
+aware panels -- each stage owned by one class, each failure mode named.
+
+```mermaid
+flowchart TD
+    RAW53(["raw vendor CSV<br/>one file per symbol"]) --> LOAD53
+
+    subgraph PARSE53["CsvBarLoader.parse -- byte-level normalization"]
+        BOM53["strip UTF-8 BOM<br/>+ sniff delimiter (, or ;)"]
+        NUM53["parseNumber: European<br/>decimals (1.234,56) vs US"]
+        EPOCH53["isEpochSecondsFile:<br/>epoch seconds vs ISO date<br/>-> one long timestamp"]
+    end
+    LOAD53["CsvBarLoader.load"] --> ADJ53["CorporateActions.adjust<br/>walk actions back-to-front:<br/>SPLIT scales OHLC + volume,<br/>DIVIDEND back-adjusts price"]
+    ADJ53 --> ALIGN53{"multi-symbol?"}
+    ALIGN53 -->|"tradeable panel"| INT53["SeriesAligner.intersect<br/>keep only shared timestamps"]
+    ALIGN53 -->|"factor panel"| UFF53["SeriesAligner.unionForwardFill<br/>union of dates, carry last close"]
+    INT53 & UFF53 --> PIT53["PointInTimeUniverse.membersAsOf<br/>dead tickers still present;<br/>DELISTING applies delistingReturn,<br/>MERGER terminates the path"]
+    PIT53 --> CLEAN53(["clean point-in-time panel<br/>ready for backtest / screener"])
+```
+
+The ordering is load-bearing. `CsvBarLoader` must resolve encoding and
+number format *before* any arithmetic, or a European-decimal file silently
+parses `1.234` as one-and-a-quarter instead of 1,234. `CorporateActions.adjust`
+runs before alignment so splits do not create phantom gaps, and
+`PointInTimeUniverse` runs last because it is the only stage that deliberately
+keeps delisted names -- dropping them is exactly the survivorship bias
+`StockScreener` warns about. `SeriesAligner` offers two contracts on purpose:
+`intersect` for a book you must actually trade (no phantom bars), and
+`unionForwardFill` for a factor panel where a stale carried value beats a hole.
+
+---
+
+## 54. The QFLT capture loop -- a writer thread, a ring, and honest drops
+
+Diagram 28 records a session and replays it bit-for-bit. This is the other
+half: how `AsyncTickCapture` keeps that recording off the trading thread so a
+disk hiccup stalls the writer, never the strategy -- and accounts for every
+tick it has to drop rather than block.
+
+```mermaid
+flowchart TD
+    FEED54["WebSocketFeed<br/>live ticks -> HftMarketDataBus"] --> BUS54
+    BUS54["HftMarketDataBus (consumer thread)"] --> CONS54["AsyncTickCapture.onTick<br/>runs ON the hot lane"]
+    CONS54 --> OFFER54{"ring.offer(tick)?"}
+    OFFER54 -->|"accepted"| RING54["TickRingBuffer<br/>SPSC, cache-line padded<br/>~28 MB at capacity 1M"]
+    OFFER54 -->|"ring full<br/>(writer stalled)"| DROP54["droppedTicks++<br/>consumer NEVER blocks"]
+    RING54 --> DRAIN54["drainLoop (writer thread)"]
+    DRAIN54 --> WRITE54["TickFileWriter -> .qflt file"]
+    WRITE54 -.->|"page-cache flush / AV scan /<br/>disk hiccup stalls HERE"| DRAIN54
+    WRITE54 --> FILE54(["session.qflt<br/>replayable by TickFileReader"])
+    DROP54 -.->|"a visible gap you can count"| FILE54
+```
+
+The design decision is the honest one for a recorder on a trading path:
+`AsyncTickCapture` publishes into a private `TickRingBuffer` and lets a
+dedicated drain thread do the file I/O, so a writeback stall parks the
+*writer*, not the consumer that `HftQuoter` and `AutoHedger` share. When the
+ring saturates, ticks are dropped and counted in `droppedTicks` -- never
+blocking the bus -- because a recording gap you can see beats latency you
+cannot explain. The plain `TickCapture` (diagram 28) is the simpler
+capture-only sibling; you reach for the async variant precisely when the same
+bus is live.
+
+---
+
+## 55. The checkpoint file -- named sections, atomic commit, honest restore
+
+Diagram 12 draws the overnight lifecycle. This zooms into the file format
+`Checkpoint` actually writes: a bag of independently-versioned named sections
+that commit all-or-nothing and restore with three explicit safety rules.
+
+```mermaid
+flowchart TD
+    subgraph WRITE55["Checkpoint.Writer -- end of day"]
+        S1_55["section volume.AAPL<br/>VolumeCurve.writeState"]
+        S2_55["section alpha.AAPL<br/>OnlineAlphaLearner.writeState"]
+        S3_55["section venues<br/>VenueScorecard.writeState"]
+        BUF55["buffer each section<br/>to its own byte[]<br/>(own version byte)"]
+        COMMIT55["MAGIC + section table<br/>flushed in ONE write;<br/>a throwing section<br/>commits NOTHING"]
+    end
+    subgraph READ55["Checkpoint.Reader -- next session"]
+        LOAD55["load whole file up front<br/>(these files are kilobytes)"]
+        MATCH55["r.section(name, reader)<br/>returns false if absent"]
+        SKIP55["unknown section?<br/>SKIP (forward-compatible)"]
+        REJECT55["section not fully consumed?<br/>REJECT loudly"]
+    end
+    S1_55 --> BUF55
+    S2_55 --> BUF55
+    S3_55 --> BUF55
+    BUF55 --> COMMIT55
+    COMMIT55 --> FILE55[("one .qflc file")]
+    FILE55 --> LOAD55
+    LOAD55 --> MATCH55
+    MATCH55 --> SKIP55
+    MATCH55 --> REJECT55
+    MATCH55 -.->|"absent section:<br/>model warm-starts from zero"| WARM55(["persistent state only;<br/>intraday resets on read"])
+```
+
+The three restore rules are what make `Checkpoint` survivable across a
+deploy. A section absent from an older file returns `false` from
+`section(...)`, so a newly-added model warm-starts cleanly instead of
+crashing. An *unknown* section (written by a newer build, read by an older
+one) is skipped for forward compatibility. But a section the model failed to
+fully drain is rejected loudly -- the loudest failure the class raises --
+because a half-read model is a silent corruption waiting to trade. Only
+persistent state lives here; intraday counters reset on read, since you
+restore at a session boundary, not mid-tape.
+
+---
+
+## 56. Warm-up and streaming parity -- one strategy, two runtimes
+
+A strategy is written once against batch indicator arrays, then must run live
+tick-by-tick without behaving differently. `StreamingIndicators` guarantees
+that by matching `Indicators` seed-for-seed -- and both agree that a warm-up
+bar is NaN, never a guessed value.
+
+```mermaid
+flowchart TD
+    subgraph BATCH56["research runtime -- Indicators (arrays)"]
+        BIN56["double[] closes"]
+        BEMA56["Indicators.ema(close, 26)<br/>index 0..24 = NaN (warm-up),<br/>seeded at index 25"]
+    end
+    subgraph STREAM56["live runtime -- StreamingIndicators (O(1)/tick)"]
+        SIN56["tick in"]
+        SEMA56["StreamingIndicators.Ema.update<br/>same seed, same alpha,<br/>NaN until the window fills"]
+    end
+    BIN56 --> BEMA56
+    SIN56 --> SEMA56
+    BEMA56 --> RULE56{"Rules predicate at bar i<br/>(NaN warm-up satisfies NOTHING)"}
+    SEMA56 --> RULE56
+    RULE56 -->|"identical decisions"| PARITY56(["backtest == live<br/>no relearning from zero"])
+```
+
+The contract is stated in the class docs and pinned by tests: the streaming
+forms are "numerically identical to the batch implementations (same seeding
+and smoothing)", so a strategy validated on `Indicators` arrays behaves the
+same when fed `StreamingIndicators` on the `HftMarketDataBus` consumer
+thread. Warm-up is the subtle half: both runtimes return NaN until an
+indicator has enough history, and every `Rules` predicate treats NaN as
+unsatisfied. That single convention is why a strategy cannot accidentally
+fire a signal on bar 0 in the backtest and then behave differently on the
+first live tick -- the warm-up window is respected identically on both sides.
+
+---
+
+## 57. The strategy DSL -- a rule tree that cannot look ahead
+
+`StrategyBuilder` composes a strategy out of `Rules` predicates over
+precomputed indicator arrays. The tree distinguishes crosses from thresholds,
+combines them with boolean logic, and is built so look-ahead bias is
+structurally impossible.
+
+```mermaid
+flowchart TD
+    subgraph LEAVES57["Rules leaves -- predicates over bar index i"]
+        CA57["crossAbove(fast, slow)<br/>prev bar <= AND this bar >"]
+        CB57["crossBelow(fast, slow)"]
+        TH57["isAbove(rsi, 70) /<br/>isBelow(rsi, 30)<br/>(threshold, level state)"]
+    end
+    subgraph COMBINE57["boolean combinators"]
+        AND57["Rule.and"]
+        OR57["Rule.or"]
+        NOT57["Rule.not"]
+    end
+    CA57 --> AND57
+    TH57 --> AND57
+    CB57 --> OR57
+    AND57 --> ENTRY57["StrategyBuilder.enterWhen"]
+    OR57 --> EXIT57["StrategyBuilder.exitWhen"]
+    NOT57 -.-> EXIT57
+    ENTRY57 --> BUILD57["StrategyBuilder.build<br/>+ withStopLoss / withTakeProfit"]
+    EXIT57 --> BUILD57
+    BUILD57 --> BT57(["backtestable strategy"])
+    NAN57["NaN warm-up bar"] -.->|"satisfies nothing --<br/>preserved through and/or/not"| LEAVES57
+```
+
+Two decisions keep the tree honest. First, a `Rule` is a predicate over a bar
+*index* into arrays computed once by causal indicator code, and it may only
+read values at `i` and `i-1` -- never `i+1` -- so a rule cannot peek at the
+future by construction. Second, cross rules require the previous bar to sit on
+the other side (`<=`/`>=`), so a series that *opens* above the level does not
+count as a cross; that is the classic off-by-one that fires a phantom
+"breakout" on bar 0 of every backtest. Threshold rules like `isAbove` model a
+state ("RSI is above 70 now") rather than an event. NaN warm-up bars satisfy
+nothing, and `and`/`or`/`not` preserve that all the way to
+`StrategyBuilder.build`.
+
+---
+
+## 58. The screener funnel -- filter wide, rank the survivors
+
+`StockScreener` narrows a whole universe to a ranked shortlist in two phases:
+cheap boolean filters remove the disqualified, then `RankingEngine` orders
+what remains. The order matters -- ranking before filtering lets one outlier
+poison everyone's score.
+
+```mermaid
+flowchart TD
+    UNIV58(["universe snapshot<br/>membersAsOf (dead tickers kept)"]) --> TECH58
+
+    subgraph FILTERS58["filter phase -- StockScreener.matching"]
+        TECH58["TechnicalFilters<br/>rsiBelow, smaCross, ...<br/>last valid bar only;<br/>too-short = false"]
+        FUND58["FundamentalFilters<br/>peBelow, marketCapAbove, ...<br/>NaN fundamentals never match"]
+    end
+    TECH58 --> COMPOSE58["ScreenFilter.and / or / negate"]
+    FUND58 --> COMPOSE58
+    COMPOSE58 --> SURV58["survivors<br/>(garbage screened OUT first)"]
+    SURV58 --> RANK58["RankingEngine.rank<br/>min-max normalize each criterion<br/>ACROSS the survivor set,<br/>weighted blend, negative weight inverts"]
+    RANK58 --> TOP58(["best-first shortlist<br/>e.g. top 20 today"])
+```
+
+The funnel shape is deliberate. `TechnicalFilters` reads only the last valid
+indicator value because a screen asks "does this look like X *today*", and it
+returns `false` (not an exception) when a recently-listed ticker is too short
+-- so one 30-bar name silently drops out of an SMA(200) screen instead of
+killing the run for the other 2,999. `RankingEngine` normalizes each criterion
+to [0,1] across the candidate set before the weighted blend, which is why
+`FundamentalFilters` must run *first*: min-max is outlier-sensitive, and one
+absurd P/E left in the set would compress everyone else's spread. Scores are
+relative to the run's universe -- perfect for "pick the best today", wrong for
+tracking one name through time.
+
+---
+
+## 59. The ML alpha loop -- features to a fitted model to an OOS gate
+
+Where diagram 49 catalogs hand-built factors, this is the machine-learned
+lane: a feature snapshot feeds `GradientBoostedRegressor`, and nothing ships
+until `AlphaValidation` measures the in-sample-to-out-of-sample gap.
+
+```mermaid
+flowchart TD
+    SNAP59["feature snapshot<br/>double[][] X (causal panel)<br/>+ forward-return target y"] --> SPLIT59{"time-ordered split"}
+    SPLIT59 -->|"train window"| FIT59["GradientBoostedRegressor.fit<br/>additive decision stumps,<br/>squared-error loss (XGBoost-style)"]
+    FIT59 --> PRED59["predict on the NEXT<br/>unseen window (OOS)"]
+    SPLIT59 -->|"held-out window"| PRED59
+    PRED59 --> GATE59{"AlphaValidation<br/>walk-forward + blocked K-fold"}
+    GATE59 -->|"IS->OOS gap small,<br/>IC survives every block"| DEPLOY59(["deploy the model"])
+    GATE59 -->|"works in one block only"| REJECT59(["reject: regime story,<br/>not an edge"])
+    DEPLOY59 -.->|"roll the window forward"| SNAP59
+```
+
+The loop is defensive by design. `GradientBoostedRegressor` is deliberately
+small -- additive stumps under squared-error loss, no dependencies -- because
+the risk is not model capacity but overfitting a short financial series.
+`AlphaValidation` is the gate: walk-forward picks the best variant on a
+training window by in-sample IC, then measures it on the *following* unseen
+window, and the IS-to-OOS gap is the overfitting made numeric. Its blocked
+K-fold uses contiguous time blocks rather than shuffled folds precisely
+because shuffling leaks adjacent bars across the train/test line; a factor
+that only works in one block is a regime story, not an edge, and gets
+rejected before any capital-weighted conclusion is drawn.
+
+---
+
+## 60. The regime detector -- a two-state hidden Markov machine
+
+`RegimeDetector` fits a two-state Gaussian Markov-switching model by
+Baum-Welch EM: the market is either calm or turbulent, you never observe
+which, and the transition matrix says how sticky each regime is.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Calm60: fit() seeds on abs-return median
+    Calm60: Calm (state 0)\nlow mean-vol Gaussian
+    Turbulent60: Turbulent (state 1)\nALWAYS the high-vol regime
+    Calm60 --> Calm60: transition[0][0] (stay, high)
+    Calm60 --> Turbulent60: transition[0][1] (shock)
+    Turbulent60 --> Turbulent60: transition[1][1] (persist)
+    Turbulent60 --> Calm60: transition[1][0] (calm down)
+    Turbulent60 --> [*]: de-lever when\nsmoothedHighVolProbability rises
+```
+
+The model is fit by forward-backward EM with scaling over a return series of
+at least 100 points, and by convention state 1 is *always* the
+high-volatility regime, so downstream code never has to guess which label is
+which. The `RegimeModel` record exposes `smoothedHighVolProbability` (the full-
+data smoothed estimate) and `currentProbabilities` (the filtered, data-up-to-
+now estimate), plus `expectedDuration(state) = 1/(1 - transition[s][s])` --
+the diagonal of the transition matrix turned into an expected persistence in
+periods. That feeds vol targeting directly: lever down as the high-vol
+probability climbs, and size the response to how sticky the turbulent state
+is.
+
+---
+
+## 61. The anomaly detector -- a robust-z pipeline that ignores the storm
+
+`AnomalyDetector` flags quote stuffing and price spikes over interval-
+aggregated activity. Its one non-negotiable is the scale it measures against:
+median and MAD, never mean and stdev, so the anomalies cannot inflate the
+baseline that is supposed to catch them.
+
+```mermaid
+flowchart TD
+    RAW61["per-interval market activity<br/>message counts, returns,<br/>order-to-trade ratio"] --> BASE61
+
+    subgraph ROBUST61["robust scale (per metric)"]
+        MED61["median (ignores up to<br/>half the sample contaminated)"]
+        MAD61["MAD x 1.4826<br/>= stdev units under normality"]
+    end
+    BASE61["baseline"] --> MED61
+    BASE61 --> MAD61
+    MED61 --> Z61["robust z = (x - median)<br/>/ (1.4826 x MAD)"]
+    MAD61 --> Z61
+    Z61 --> STUFF61{"z > threshold AND<br/>abnormal order-to-trade?"}
+    Z61 --> SPIKE61{"return z outside<br/>recent distribution?"}
+    STUFF61 -->|"yes"| A1_61["Anomaly QUOTE_STUFFING"]
+    SPIKE61 -->|"yes"| A2_61["Anomaly PRICE_SPIKE"]
+    MAD61 -.->|"MAD = 0 (>half identical)"| FALL61["fall back to mean/stdev;<br/>give up only if that is 0 too"]
+```
+
+The robust-z choice is the whole point. An anomaly detector whose baseline
+includes the anomalies inflates its own scale and misses exactly the events it
+hunts -- a storm of stuffing intervals raises the stdev until nothing clears
+the threshold. Median and MAD ignore up to half the sample being contaminated,
+and the 1.4826 factor rescales MAD to stdev units under normality so a
+"3-sigma" threshold keeps its familiar meaning. Quote stuffing needs *both* a
+message-rate spike and an abnormal order-to-trade ratio (lots of quoting,
+little trading); price spikes are returns far outside their recent
+distribution. When more than half the intervals are identical (MAD = 0) the
+detector degrades to mean/stdev, and only gives up when that is degenerate
+too.
+
+---
+
+## 62. Report generation -- one model, five renderings
+
+`ReportGenerator` assembles a single in-memory `Report` from portfolio, risk,
+and backtest inputs, then fans it out to every format a desk asks for through
+one `ReportExporter` interface -- with inline SVG charts that survive into the
+HTML.
+
+```mermaid
+flowchart TD
+    subgraph BUILD62["ReportGenerator -- fluent assembly"]
+        PS62["addPortfolioSummary"]
+        PERF62["addPerformance / addStrategyPerformance"]
+        RISK62["addRiskAnalysis"]
+        MC62["addMonteCarlo"]
+        CHART62["addEquityCurveChart / addDrawdownChart<br/>-> SvgCharts (inline SVG)"]
+    end
+    PS62 --> MODEL62
+    PERF62 --> MODEL62
+    RISK62 --> MODEL62
+    MC62 --> MODEL62
+    CHART62 --> MODEL62
+    MODEL62["Report (format-neutral model)"] --> EXP62{"ReportExporter.export"}
+    EXP62 --> HTML62["HtmlReportExporter<br/>(renders inline SVG)"]
+    EXP62 --> PDF62["PdfReportExporter"]
+    EXP62 --> XLSX62["XlsxReportExporter"]
+    EXP62 --> CSV62["CsvReportExporter"]
+```
+
+The split between model and renderer is what keeps this maintainable: every
+`addXxx` call appends a typed section to a format-neutral `Report`, and the
+four exporters each implement the same one-method `ReportExporter` contract
+(`export(Report, Path)`). Adding a sixth format is one new class, not a rewrite.
+The SVG charts are the one format-aware detail -- `addEquityCurveChart` and
+`addDrawdownChart` embed `SvgCharts` output that only the `HtmlReportExporter`
+renders inline, while the tabular exporters carry the underlying numbers. One
+build call, `toHtml`/`toPdf`/etc., and the same numbers reach a browser, a
+board deck, a spreadsheet, and a data pipeline without diverging.
+
+---
+
+## 63. The latency measurement stack -- histogram plus a hiccup witness
+
+Diagram 2 reports measured hot-path latencies. This is the instrumentation
+that produces them honestly: `LatencyRecorder` captures the distribution on
+the hot path, and `HiccupMonitor` runs alongside to tell you when a tail spike
+was the platform, not your code.
+
+```mermaid
+flowchart TD
+    HOT63["hot path (per event)"] -->|"couple of array writes,<br/>zero alloc"| REC63
+    subgraph RECORDER63["LatencyRecorder -- log-linear histogram"]
+        REC63["record(nanos)"]
+        BUCKETS63["64 x 16 buckets<br/>(HdrHistogram-style,<br/>~6% quantile error)"]
+        AGG63["running count / sum /<br/>min / max"]
+    end
+    REC63 --> BUCKETS63
+    REC63 --> AGG63
+    BUCKETS63 --> Q63["p50 / p99 / p99.9<br/>read out offline"]
+
+    PLAT63["JVM + OS platform"] -.->|"GC pause, safepoint,<br/>JIT deopt, scheduler preempt"| HICCUP63
+    subgraph MONITOR63["HiccupMonitor -- daemon thread"]
+        HICCUP63["park for fixed resolution,<br/>record excess over requested"]
+        HREC63["its own LatencyRecorder"]
+    end
+    HICCUP63 --> HREC63
+    HREC63 -.->|"stall matches app p99.9 spike?<br/>platform ate the tail"| Q63
+```
+
+The two together separate "my code is slow" from "the machine hiccuped".
+`LatencyRecorder` is a single-writer, allocation-free log-linear histogram (16
+sub-buckets per power of two, ~6% worst-case quantile error), so `record` is a
+couple of array writes safe to call on the hot path. `HiccupMonitor` is a
+jHiccup-style witness: a daemon thread parks for a fixed resolution and records
+how much *longer than requested* each park took, and any excess is a GC pause,
+safepoint, JIT deopt stall, or scheduler preemption -- the pauses that corrupt
+percentiles without appearing in application code. When a benchmark's p99.9
+spikes and the monitor shows a matching stall, the platform ate the tail, and
+`docs/ULTRA_LOW_LATENCY.md` covers the tuning that shrinks it.
+
+---
+
+## 64. The WebSocket feed -- a reconnect state machine with backoff
+
+`WebSocketFeed` is the last mile from a live exchange into the
+`HftMarketDataBus`. Real feeds drop, so its core is a reconnect state machine:
+connect, optionally subscribe, stream, and on any failure back off
+exponentially and try again -- with epochs that never overlap.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Connecting64: start()
+    Connecting64: Connecting\njava.net.http WebSocket
+    Connecting64 --> Subscribing64: onOpen
+    Connecting64 --> Backoff64: connect failed
+    Subscribing64: Subscribing\noptional subscribe message
+    Subscribing64 --> Streaming64: subscribed (or none needed)
+    Streaming64: Streaming\nFeedParser -> bus.publish
+    Streaming64 --> Backoff64: onError / onClose
+    Backoff64: Backoff\nexponential, capped
+    Backoff64 --> Connecting64: next epoch (never overlaps prior)
+    Streaming64 --> Closed64: close()
+    Backoff64 --> Closed64: close()
+    Closed64 --> [*]
+```
+
+The state machine is what makes everything downstream just work on real ticks.
+`WebSocketFeed` is pure JDK (`java.net.http` WebSocket), with a pluggable
+`FeedParser` per exchange -- `BinanceTradeParser` ships as the reference -- and
+an optional subscription message for venues that require one after connecting.
+The threading guarantee is subtle and load-bearing: the JDK invokes listener
+methods sequentially per connection, and reconnect epochs never overlap, so the
+bus's single-consumer model is preserved across a reconnect. Wire it once in
+front of `TickCapture` (diagram 54) and the same tape that trades is the one
+you record and replay.
+
+---
+
+## 65. The SBE order flyweight -- a 44-byte fixed memory layout
+
+Diagram 27 contrasts a binary message with tag=value FIX. This is the byte
+map itself: `OrderFlyweight` reads and writes an order-entry message directly
+over a `ByteBuffer` at fixed offsets, with padding chosen so every 64-bit
+field lands on a natural boundary.
+
+```mermaid
+flowchart LR
+    subgraph LAYOUT65["OrderFlyweight wire layout -- 44 bytes, little-endian"]
+        F0_65["off 0  int32<br/>messageType = 2"]
+        F4_65["off 4  int64<br/>orderId"]
+        F12_65["off 12 int32<br/>symbolId"]
+        F16_65["off 16 int8<br/>side (0 BUY / 1 SELL)"]
+        F17_65["off 17 int8[3]<br/>PADDING"]
+        F20_65["off 20 int64<br/>quantity"]
+        F28_65["off 28 double<br/>price (NaN = market)"]
+        F36_65["off 36 int64<br/>timestampNanos"]
+    end
+    F0_65 --> F4_65 --> F12_65 --> F16_65 --> F17_65 --> F20_65 --> F28_65 --> F36_65
+    F17_65 -.->|"3 bytes keep quantity/price/ts<br/>8-byte aligned"| ALIGN65(["natural alignment<br/>= no split-cache-line reads"])
+```
+
+The layout is the message -- there is no parse step. `OrderFlyweight` exposes
+`BLOCK_LENGTH = 44` and constants like `ORDER_ID_OFFSET`, `PRICE_OFFSET`, and
+`TIMESTAMP_OFFSET`, and each accessor is a single typed read/write against the
+wrapped `ByteBuffer` at its offset, so encoding a `NewOrderSingle`-equivalent
+allocates nothing. The three padding bytes at offset 17 are the detail worth
+seeing: `side` is one byte at offset 16, and without the pad the following
+`quantity` would straddle an 8-byte boundary; the pad restores natural
+alignment so the 64-bit fields never cross a cache line. `price` carries NaN as
+its market-order sentinel, mirroring the same convention the matching engine
+uses. `TradeFlyweight` and `QuoteFlyweight` follow the identical pattern.
+
+---
+
+## 66. The ring buffer -- a padded SPSC lane between two cores
+
+Both the market-data and order lanes hand work between a producer core and a
+consumer core through the same primitive: a bounded, lock-free, single-
+producer/single-consumer ring whose head and tail counters are padded onto
+their own cache lines to kill false sharing.
+
+```mermaid
+flowchart LR
+    PROD66(["producer core"]) -->|"offer(e): full? return false<br/>(caller picks drop/retry)"| SLOTS66
+    subgraph RING66["TickRingBuffer / OrderRingBuffer / RingBuffer<E>"]
+        SLOTS66["preallocated slots<br/>power-of-two mask indexing"]
+        TAIL66["PaddedSequence tail<br/>+ p1..p7 filler"]
+        HEAD66["PaddedSequence head<br/>+ p1..p7 filler"]
+    end
+    SLOTS66 -->|"poll(): empty? return null"| CONS66(["consumer core"])
+    TAIL66 -.->|"own cache line"| HEAD66
+    HEAD66 -.->|"no false sharing:<br/>producer store never invalidates<br/>consumer's line"| CONS66
+```
+
+The padding is the performance story, and `ULTRA_LOW_LATENCY.md` records the
+war story behind it. In `TickRingBuffer` and `OrderRingBuffer` the head and
+tail counters are `PaddedSequence`s -- each extends `AtomicLong` with seven
+trailing `volatile long p1..p7` fields -- so head and tail
+occupy separate cache lines; the local sequence caches are padded apart for the
+same reason, because unpadded they would share a line and each producer store
+would invalidate the consumer's copy. Both counters advance monotonically with
+power-of-two mask indexing, so there is no modulo on the hot path. The policy
+on saturation is left to the caller by design: `offer` returns `false` when
+full and `poll` returns `null` when empty, which is exactly the seam
+`AsyncTickCapture` uses to drop-and-count (diagram 54) rather than block. The
+generic `RingBuffer<E>` is the object-carrying cousin for reference events.
+
+---
+
+## 67. The symbol registry -- interning strings to dense ids once
+
+The hot path must never hash a `String`. `SymbolRegistry` interns each
+instrument symbol to a dense int id at subscription time, so every publish and
+dispatch afterward carries a primitive int that doubles as an array index.
+
+```mermaid
+flowchart TD
+    SUB67(["subscription time (cold path)"]) --> REG67["SymbolRegistry.register(symbol)<br/>synchronized: assign next dense id,<br/>copy-on-write the symbols[] array"]
+    REG67 --> MAP67["ConcurrentHashMap<String,Integer><br/>+ volatile String[] symbols"]
+    MAP67 --> ID67(["stable dense id: 0, 1, 2, ..."])
+    ID67 --> HOT67["hot path (per tick)"]
+    HOT67 -->|"id(symbol): map read,<br/>throws if unregistered"| PUB67["bus.publish(symbolId, ...)"]
+    PUB67 --> ARR67["per-symbol state arrays<br/>indexed by id -- no hashing,<br/>no boxing, no map lookup"]
+    ID67 -.->|"symbol(id): reverse lookup<br/>for logs / reports"| LOG67(["human-readable name"])
+```
+
+The dense-id trick is why `HftQuoter`, `AutoHedger`, and the risk gate can all
+keep per-symbol state in flat primitive arrays indexed by id -- resolve the id
+once, then never touch string machinery again. `register` is `synchronized` and
+copy-on-write: it assigns the next id (`symbols.length`) and swaps in a grown
+`volatile String[]`, so registration is safe from any thread while readers see
+a consistent array. On the hot path `id(symbol)` is a plain map read that
+throws on an unregistered symbol (a programming error, caught loudly), and
+`symbol(id)` gives the reverse mapping for logs and reports. Ids are stable and
+dense from zero, which is exactly what makes them usable as array indices
+rather than just handles.
+
+---
+
+## 68. One order through the fast lane -- decision to acked position
+
+Diagram 15 shows an order reaching an exchange in the readable lane. This is
+the zero-allocation HFT path: a strategy decision passes the risk gate, crosses
+a padded ring to the venue core, and the fill loops back to update the very
+position the next decision reads.
+
+```mermaid
+flowchart TD
+    TICK68["tick on HftMarketDataBus<br/>(consumer core)"] --> DEC68["strategy / HftQuoter.decide<br/>(reads live position)"]
+    DEC68 --> GATE68{"HftRiskGate<br/>pre-trade checks +<br/>kill switch (one acquire load)"}
+    GATE68 -->|"rejected"| REJ68(["order never leaves --<br/>counted, like production"])
+    GATE68 -->|"passed"| RING68["OrderRingBuffer.offer<br/>(SPSC, cache-line padded)"]
+    RING68 --> VEN68["HftOrderGateway (venue core)<br/>drains ring -> venue"]
+    VEN68 --> ACK68["venue ack / fill"]
+    ACK68 -->|"HftRiskGate.onFill"| POS68["position updated<br/>(release store)"]
+    POS68 -.->|"next decision reads it<br/>(acquire load)"| DEC68
+```
+
+The lane is a closed loop with exactly one ring crossing. Decisions run on the
+market-data consumer core, where `HftRiskGate` applies pre-trade checks and the
+firm-wide kill switch as a single acquire-loaded boolean; a rejected order is
+counted and never reaches the wire, matching production semantics. Passing
+orders are handed to the venue core through the padded `OrderRingBuffer`
+(diagram 66), so the two cores never share mutable state. Crucially, position
+only moves on a confirmed fill via `HftRiskGate.onFill` -- a release store that
+the next `decide` reads with an acquire load -- which is what lets `HftQuoter`'s
+inventory skew and `AutoHedger`'s band logic close their loops without any
+extra bookkeeping.
+
+---
+
+## 69. The auto-hedger -- a position-band machine with a cooldown
+
+`AutoHedger` watches the risk gate's live position on every tick and flattens
+back to the band edge the moment inventory breaches it. A cooldown keeps it
+from stacking hedges while the first fill is still in flight.
+
+```mermaid
+stateDiagram-v2
+    [*] --> InBand69
+    InBand69: In band\n|position| <= positionBand (warehouse)
+    Breached69: Breached\n|position| > positionBand
+    Cooldown69: Cooldown\nwithin minHedgeIntervalNanos
+    InBand69 --> Breached69: tick pushes |position| over band
+    Breached69 --> Cooldown69: submit opposite-side order\nfor the EXCESS over the band
+    Cooldown69 --> Cooldown69: further breach ticks suppressed\n(hedge still in flight)
+    Cooldown69 --> InBand69: HftRiskGate.onFill\nposition back inside band
+    Cooldown69 --> Breached69: cooldown elapsed, still out
+```
+
+Two choices define the policy. It hedges back *to the band edge*, not to flat:
+the flattening order covers only the excess over `positionBand`, which removes
+the breach with the smallest order, avoids ping-ponging around zero, and
+matches how dealer books actually run inventory. And it hedges only once per
+`minHedgeIntervalNanos`, because positions update only when fills confirm via
+`HftRiskGate.onFill`, so without a cooldown the hedger would stack duplicate
+orders while the first is still in flight. It runs as a `TickListener` on the
+bus consumer thread, registered *after* the quoter so it sees the same tick the
+quoter acted on, and allocates nothing per tick. For an options book you feed
+it `IncrementalGreeks` delta instead of raw inventory -- the band logic is
+identical.
+
+---
+
+## 70. The quoter -- an inventory-skew loop that closes on its own fills
+
+`HftQuoter` is the market-making loop: each tick produces two orders whose
+prices lean against current inventory, so filling one side nudges the next
+quote back toward balance. `AvellanedaStoikov` supplies the principled version
+of the same skew.
+
+```mermaid
+flowchart TD
+    TICK70["tick -> mid"] --> SKEW70["skew = -position x skewPerUnit<br/>(long inventory shades DOWN)"]
+    SKEW70 --> BID70["bid = mid - halfSpread + skew<br/>rounded DOWN to tick grid"]
+    SKEW70 --> ASK70["ask = mid + halfSpread + skew<br/>rounded UP to tick grid"]
+    BID70 --> CONF70{"conflation:<br/>mid moved >= minMove OR<br/>minRequoteInterval elapsed?"}
+    ASK70 --> CONF70
+    CONF70 -->|"no"| SUP70(["re-quote suppressed<br/>(counted, never silent)"])
+    CONF70 -->|"yes"| GATE70["HftRiskGate checks both sides"]
+    GATE70 --> OUT70["two orders out via HftOrderGateway"]
+    OUT70 --> FILL70["fill -> HftRiskGate.onFill<br/>updates position"]
+    FILL70 -.->|"next tick re-skews"| SKEW70
+    AS70["AvellanedaStoikov<br/>r = mid - q.gamma.sigma^2.tau;<br/>delta = gamma.sigma^2.tau + (2/gamma)ln(1+gamma/kappa)"] -.->|"principled skew + width"| SKEW70
+```
+
+The loop is self-closing: inventory comes straight from the risk gate's
+position (updated by fills via `HftRiskGate.onFill`), so a long position skews
+both quotes down -- making the ask attractive and the bid shy -- and the skew
+term needs no state of its own. Both sides still pass the gate's checks, so a
+quoter can never out-trade its risk limits. Conflation keeps the wire quiet: a
+re-quote is suppressed unless the mid moved at least `minMove` or
+`minRequoteIntervalNanos` elapsed, and suppression is counted rather than
+silent. `HftQuoter` applies the skew heuristically; `AvellanedaStoikov` derives
+the same lean from utility maximization, shading the reservation price by
+`q*gamma*sigma^2*tau` and setting the optimal half-width from volatility and
+the order-arrival decay kappa.
+
+---
+
+## 71. Inside ShardedTradingEngine -- the topology and the cross-shard poll
+
+Diagram 9 sketches shared-nothing scaling conceptually. This is the concrete
+machinery: N independent bus-gate-gateway stacks behind one routing facade,
+plus the one observer that restores a firm-wide risk view without touching a
+hot path.
+
+```mermaid
+flowchart TD
+    ENG71["ShardedTradingEngine<br/>symbol -> shard(s), frozen at start"] --> PUB71["publish(symbolId, ...)<br/>fans to every shard hosting it"]
+
+    subgraph SHARD0_71["Shard 0 (consumer core + venue core)"]
+        B0_71["bus"]
+        G0_71["HftRiskGate (own symbols only)"]
+        W0_71["HftOrderGateway -> venue"]
+    end
+    subgraph SHARDN_71["Shard N-1"]
+        BN_71["bus"]
+        GN_71["HftRiskGate"]
+        WN_71["HftOrderGateway -> venue"]
+    end
+    PUB71 --> B0_71
+    PUB71 --> BN_71
+    B0_71 --> G0_71
+    G0_71 --> W0_71
+    BN_71 --> GN_71
+    GN_71 --> WN_71
+
+    AGG71["GlobalRiskAggregator (monitor thread ~1ms)<br/>sum |position| x refPrice over gates()"] -.->|"poll positions +<br/>refs (release/acquire)"| G0_71
+    AGG71 -.-> GN_71
+    XSYM71["cross symbol registered on 2 shards<br/>(one extra ring publish ~40ns)"] -.->|"leg co-location"| PUB71
+```
+
+The topology makes the scaling model literal: each shard is a full
+`bus -> HftRiskGate -> HftOrderGateway` stack on its own consumer and venue
+cores, and shards never touch each other's state, so aggregate capacity is
+per-shard throughput times shard count -- measured near 2.3M ticks/s per shard
+on the 300-symbol probe. `registerSymbol(sym, shards...)` may place a symbol on
+*several* shards, which is the cross co-location tool: a synthetic cross must
+live where both legs tick, and duplicating a leg's feed costs one extra ring
+publish (~40 ns). What sharding deliberately does not solve is firm-wide risk,
+because each `HftRiskGate` sees only its own symbols -- so `GlobalRiskAggregator`
+polls `gates()` on a monitor thread using the release/acquire semantics the
+gates already publish for their own correctness, making cross-shard aggregation
+free of hot-path cost.
+
+---
+
+## 72. The firm-wide breaker -- trip, hysteretic recovery, and an ops-hold snapshot
+
+`GlobalRiskAggregator` is a circuit breaker, not a per-order gate. When gross
+notional across all shards blows the cap it kills every gate at once; recovery
+is hysteretic and, crucially, remembers which gates an operator had already
+held down so resume never un-holds them.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Armed72
+    Armed72: Armed\ngross = sum|position| x refPrice < cap
+    Tripped72: Tripped\nevery gate killed
+    Armed72 --> Tripped72: gross > maxGrossNotional
+    Tripped72 --> Tripped72: gross still >= cap x resumeFraction
+    Tripped72 --> Armed72: gross < cap x resumeFraction\n(hysteresis: no flapping)
+    note right of Tripped72
+      on trip: snapshot killedBeforeTrip[i] = gate.isKilled()
+      then kill(true) every gate (idempotent)
+      on resume: kill(false) ONLY gates that were
+      NOT already held before the trip
+    end note
+```
+
+The two mechanisms are what make it safe to leave running. Recovery is
+hysteretic: the breaker trips above `maxGrossNotional` but only rearms below
+`cap * resumeFraction` (e.g. 0.9), so the firm does not flap around the limit.
+And before tripping, the aggregator snapshots each gate's current `isKilled()`
+state into `killedBeforeTrip[]`; on resume it calls `kill(false)` only on gates
+that were *not* already killed before the trip. That snapshot is the ops-hold
+rule -- an operator's manual hold on a desk outranks the breaker's auto-recovery,
+so a firm-wide resume never silently re-enables a gate someone deliberately shut.
+Detection latency is the poll interval (default ~1 ms) by design: per-order
+checks stay per-shard and nanosecond-cheap while the firm-wide cap acts as a
+breaker.
+
+---
+
+## 73. The paper gateway -- simulated fills with a consistent account snapshot
+
+`PaperTradingGateway` closes the research-to-production loop by running real
+strategy and risk-gate code against simulated fills. Quotes drive the market,
+the same pre-trade checks reject the same orders, and a dashboard can read a
+consistent account view while another thread trades.
+
+```mermaid
+flowchart TD
+    QUOTE73["onQuote(top-of-book)"] --> MKT73["market state (bid/ask)"]
+    ORD73["order submitted"] --> CHK73{"PreTradeLimitChecker<br/>(optional, like production)"}
+    CHK73 -->|"rejected"| REJ73(["never reaches market"])
+    CHK73 -->|"passed"| TYPE73{"order type"}
+    TYPE73 -->|"market"| FILLNOW73["fill at the touch"]
+    TYPE73 -->|"limit"| REST73["WorkingOrder rests"]
+    MKT73 -.->|"market crosses the limit"| REST73
+    REST73 --> FILLNOW73
+    FILLNOW73 --> ACCT73["account update (synchronized):<br/>signed position + avg cost, cash,<br/>realized/unrealized PnL, commission"]
+    ACCT73 --> SNAP73["snapshot()<br/>internally consistent view"]
+    SNAP73 -.->|"safe to read from<br/>dashboard thread"| DASH73(["mark-to-market equity"])
+```
+
+The gateway is quote-driven: feed it top-of-book with `onQuote`, and market
+orders fill at the touch while resting limit orders fill when the market
+crosses them. Every order first passes the optional `PreTradeLimitChecker`, so
+rejected orders never reach the simulated market -- exactly the production path,
+which is the point of paper trading through the real risk code. Account
+tracking is full: signed positions with average cost, cash, realized and
+unrealized P&L, commission, and mark-to-market equity. The concurrency contract
+is what makes it usable behind a live dashboard: all operations synchronize on
+the gateway, and `snapshot()` returns an internally consistent view of the
+account, safe to read from a dashboard thread while another thread is trading.
+
+---
+
+## 74. Four static schedules -- how TWAP, VWAP, POV, and IS fill differently
+
+The precomputed schedulers all split one parent order into child slices, but
+their completion curves diverge because each answers a different benchmark.
+Seeing the four curves side by side is the fastest way to pick one.
+
+```mermaid
+flowchart TD
+    PARENT74(["parent order"]) --> CHOICE74{"benchmark / constraint"}
+    CHOICE74 -->|"time-neutral"| TWAP74["TwapScheduler<br/>equal slices, equal intervals<br/>(optional anti-gaming jitter);<br/>LINEAR completion curve"]
+    CHOICE74 -->|"track market volume"| VWAP74["VwapScheduler<br/>slices proportional to expected<br/>intraday volume profile;<br/>U-shaped: heavy at open/close"]
+    CHOICE74 -->|"cap footprint"| POV74["PovTracker<br/>chases REALIZED volume live;<br/>curve = shape of the day<br/>(cannot be prescheduled)"]
+    CHOICE74 -->|"minimize arrival slippage"| IS74["ImplementationShortfallScheduler<br/>Almgren-Chriss trajectory;<br/>FRONT-LOADED, urgency kappa"]
+    TWAP74 --> SUM74(["slices sum EXACTLY to parent<br/>(largest-remainder integer alloc)"])
+    VWAP74 --> SUM74
+    POV74 --> SUM74
+    IS74 --> SUM74
+```
+
+The curves encode the trade-offs. `TwapScheduler` spreads evenly for a linear
+fill and can randomize slice sizes to blunt schedule prediction, while its
+quantities still sum exactly to the parent. `VwapScheduler` allocates
+proportionally to an expected volume profile (from
+`IntradayLiquidityForecaster`), so participation tracks the market's own U-shape.
+`PovTracker` is the streaming odd-one-out: percentage-of-volume cannot be
+prescheduled because it chases realized volume, and it measures against *other
+people's* trading (excluding own fills, else it chases itself to p/(1+p)) while
+clamping child sizes to `[minSlice, maxSlice]`.
+`ImplementationShortfallScheduler` turns an Almgren-Chriss optimal trajectory
+into slices, front-loading with urgency kappa and degrading to TWAP as risk
+aversion lambda goes to zero. For a schedule that re-decides on live state
+instead, diagram 75's `BenchmarkExecutor` is the dynamic counterpart.
+
+---
+
+## 75. Inside BenchmarkExecutor -- a curve, live shaping, and the caps that bound it
+
+The dynamic executor works a parent toward any standard benchmark by
+re-deciding every interval: it computes how far behind the benchmark curve it
+is, shapes that raw quantity with live market state, and then clamps the result
+so no single interval can misbehave.
+
+```mermaid
+flowchart TD
+    PARENT75(["parent order"]) --> CURVE75["1 -- benchmark curve<br/>target fraction complete by now"]
+    CURVE75 --> BEHIND75["raw due = target - executed<br/>('behind schedule' quantity)"]
+
+    subgraph SHAPE75["2 -- live shaping (MarketState, normalized)"]
+        VOL75["volatility -> speed up when risky"]
+        ALPHA75["IC-gated alpha -> lean into edge"]
+        SPREAD75["spread cost -> ease off when wide"]
+        LIQ75["hidden liquidity -> size to true depth"]
+    end
+    BEHIND75 --> SHAPE75
+    SHAPE75 --> CAPS75{"3 -- caps"}
+    CAPS75 -->|"POV ceiling"| C1_75["<= participation x interval volume"]
+    CAPS75 -->|"min/max child"| C2_75["clamp dribble + signaling"]
+    CAPS75 --> CHILD75["child order this interval"]
+    CHILD75 --> FILL75["onFill"]
+    FILL75 -.->|"schedule self-corrects"| CURVE75
+```
+
+The two layers are the design. Each `Benchmark` -- VWAP, TWAP, Arrival, IS,
+Close, Open, POV -- defines the fraction of the parent that *should* be complete
+by now: time-driven benchmarks (TWAP linear, Arrival/IS front-loaded, Close
+back-loaded, Open aggressively front-loaded) use elapsed schedule fraction,
+while volume-driven ones (VWAP, POV) use the realized volume curve. The raw
+"behind schedule" quantity is then shaped by the same normalized `MarketState`
+inputs a production algo watches -- volatility, IC-gated alpha, spread cost,
+hidden liquidity -- before the caps bound it: a participation ceiling and
+min/max child sizes stop any interval from either dribbling or shouting. Because
+it re-decides from live state each interval and self-corrects on `onFill`,
+`BenchmarkExecutor` is the one-executor-fits-all counterpart to the fixed slice
+lists of diagram 74.
+
+---
+
+## 76. The SOR decision tree -- price is where routing starts, not where it ends
+
+`AdaptiveSor` is the full-checklist router: it starts from fee-adjusted
+displayed price like `SmartOrderRouter`, then prices in fill probability,
+latency, adverse selection, and dark liquidity to pick an *expected-cost*-
+optimal split -- lit and dark legs sent together.
+
+```mermaid
+flowchart TD
+    CHILD76(["child order to route"]) --> INTERNAL76{"risk-reducing flow<br/>the book already holds?"}
+    INTERNAL76 -->|"yes"| KEEP76["InternalizationEngine<br/>internalize + share saved spread<br/>(see diagram 47)"]
+    INTERNAL76 -->|"no / residual"| SCORE76["score each venue: EXPECTED COST"]
+
+    subgraph FACTORS76["AdaptiveSor cost terms per venue"]
+        PRICE76["all-in price:<br/>displayed + fee/rebate"]
+        FILL76["(1 - fillRate) x missPenalty;<br/>below reliability floor = veto"]
+        LAT76["latency x urgency<br/>(delay = adverse selection)"]
+        ADV76["adverse-selection penalty:<br/>fills followed by the market<br/>moving against you"]
+    end
+    SCORE76 --> PRICE76
+    SCORE76 --> FILL76
+    SCORE76 --> LAT76
+    SCORE76 --> ADV76
+    PRICE76 --> SPLIT76["ranked split across lit venues"]
+    FILL76 --> SPLIT76
+    LAT76 --> SPLIT76
+    ADV76 --> SPLIT76
+    SPLIT76 --> DARK76["+ simultaneous dark probe<br/>size from VenueScorecard.onDarkProbe;<br/>on dark fill, cancel lit residual"]
+    DARK76 --> OUT76(["fills -> TCA -> recalibrate scorecards"])
+```
+
+The tree is what separates a production SOR from a price-only one. Where
+`SmartOrderRouter` ranks purely on fee-adjusted displayed price and `HftSor`
+does the same at tick speed, `AdaptiveSor` adds four cost terms: a
+`VenueScorecard` fill rate discounts each quote by `(1 - fillRate) *
+missPenalty` and vetoes venues below a reliability floor; latency costs
+`latency * urgency` because in a moving market microseconds of delay are
+adverse selection; and a venue whose fills are systematically followed by
+adverse moves earns an explicit penalty. Dark venues are probed with sizes
+learned from realized probe fills (`VenueScorecard.onDarkProbe`), sent
+alongside the lit legs, and the lit residual is cancelled on a dark fill. The
+internalize-first branch defers to `InternalizationEngine` (diagram 47) -- keep
+risk-reducing flow in-house before ever paying the street -- and every fill
+feeds TCA back into the scorecards that priced it.
+
+## 77. The microstructure signal stack -- five reads of one tape, one alpha
+
+The HFT lane never trusts a single number. `SignalEngine` fuses five
+different reads of the same quote-and-trade tape into one normalized alpha
+per symbol -- each read answers a question the others cannot.
+
+```mermaid
+flowchart TD
+    TAPE77(["one symbol's tape:<br/>quotes + signed trades"])
+    subgraph READS77["five reads of the tape (per symbol id)"]
+        FLOW77["FlowSignals.ofi / queueImbalance /<br/>tradeImbalance -- EWMA order-flow<br/>imbalance: is pressure BUILDING?"]
+        VPIN77["Vpin.vpin -- volume-bucketed<br/>toxicity: is the flow INFORMED?"]
+        KYLE77["KylesLambda.lambda / impactBps --<br/>learned price impact per signed<br/>volume: what will MY order move?"]
+        QUEUE77["QueuePositionEstimator +<br/>QueueModel.fillProbability --<br/>shares ahead -> P(passive fill)"]
+        FILL77["FillProbabilityModel.touchProbability<br/>/ passiveFillProbability -- vol-driven<br/>P(price reaches my resting quote)"]
+    end
+    ENGINE77["SignalEngine per symbol:<br/>microprice, normalizedOfi, momentumZ,<br/>volPerSqrtSecond -> alpha(symbolId)"]
+    ENS77["AlphaEnsemble.combined +<br/>OnlineAlphaLearner (IC-gated):<br/>weight each read by its realized IC,<br/>drop the ones that stop paying"]
+    OUT77(["one signed alpha per symbol -><br/>HftQuoter inventory skew /<br/>execution urgency"])
+
+    TAPE77 --> FLOW77
+    TAPE77 --> VPIN77
+    TAPE77 --> KYLE77
+    TAPE77 --> QUEUE77
+    TAPE77 --> FILL77
+    FLOW77 --> ENGINE77
+    VPIN77 --> ENGINE77
+    KYLE77 --> ENGINE77
+    QUEUE77 --> ENGINE77
+    FILL77 --> ENGINE77
+    ENGINE77 --> ENS77
+    ENS77 --> OUT77
+```
+
+The design rule is that each read is orthogonal: OFI measures *direction*
+of pressure, VPIN measures whether that pressure is *informed*, Kyle's
+lambda measures *my own* footprint, and the queue/fill pair measures
+whether a passive order will even *trade*. Fusing them through
+`AlphaEnsemble` -- which reweights by each component's realized information
+coefficient -- means a signal that goes dead costs nothing rather than
+dragging the blend. Diagram 10 consumes the fused `SignalEngine` as one
+`MarketState` input; diagram 49 is the slower cross-sectional cousin.
+
+---
+
+## 78. The Hawkes self-excitation burst -- why trades arrive in clusters
+
+Order flow is not Poisson: every trade briefly lifts the odds of the next,
+so activity clumps into bursts. `HawkesIntensity` carries that memory in a
+single decaying number and refuses at construction to model a market that
+would explode.
+
+```mermaid
+flowchart TD
+    EV78(["event stream: trades /<br/>quotes / your own fills"])
+    KICK78["each event adds excitation alpha<br/>to S(t) (onEvent)"]
+    BASE78["baseline mu (events/sec):<br/>the rate with NO excitation"]
+    DECAY78["S(t) decays at beta = ln2/halfLife<br/>(MathUtils.decayFactor):<br/>the burst fades between events"]
+    LAMBDA78["intensity(now) = mu + S(now)<br/>-- the self-exciting arrival rate"]
+    BRANCH78{"branching ratio<br/>n = alpha / beta"}
+    STABLE78["n < 1: each event spawns < 1<br/>child on average -> bursts die out<br/>(stationary, the only regime kept)"]
+    EXPLODE78["n >= 1: REJECTED in the ctor --<br/>an explosive market is a modeling<br/>error, not a tradeable regime"]
+    BURST78(["burstScore = clamp(S/mu, 0, 1):<br/>0 in calm flow, ->1 when activity<br/>runs 2x baseline -> widen quotes,<br/>pull size, raise urgency"])
+
+    EV78 --> KICK78
+    BASE78 --> LAMBDA78
+    KICK78 --> DECAY78
+    DECAY78 --> LAMBDA78
+    LAMBDA78 --> BRANCH78
+    BRANCH78 --> STABLE78
+    BRANCH78 --> EXPLODE78
+    STABLE78 --> BURST78
+```
+
+The one subtlety worth seeing is the stability guard: with `beta =
+ln2/halfLife` a 2-second half-life gives `beta ~ 0.35/s`, so an excitation
+above ~0.35 makes each event spawn more than one successor and the
+intensity runs away -- the constructor throws rather than pretend. In
+steady flow `S(t)` decays to zero and `intensity` collapses back to the
+baseline `mu`; the dimensionless `burstScore` is what the quoter actually
+reads. Timestamps must be non-decreasing (a backwards clock would *grow*
+the excitation), one instance per symbol per event type, zero allocation
+per event -- so it lives on the hot path beside diagram 77.
+
+---
+
+## 79. The OU mean-reversion trade -- half-life picks the clock, z-score picks the trade
+
+A stationary spread is pulled back toward its mean at a speed you can
+measure. `OrnsteinUhlenbeck.fit` turns a series into kappa/theta/sigma and
+a half-life: the half-life sets the holding horizon, the z-score sets the
+entry.
+
+```mermaid
+flowchart TD
+    SER79(["a stationary series:<br/>a pair spread, a basis,<br/>a calendar roll"])
+    FIT79["OrnsteinUhlenbeck.fit(series, dt):<br/>an AR(1) regression yields the<br/>Params record"]
+    KAPPA79["kappa -- mean-reversion speed"]
+    THETA79["theta -- the long-run mean"]
+    SIGMA79["sigma -- instantaneous vol"]
+    HL79["halfLife = ln2 / kappa --<br/>time to close HALF the gap;<br/>sets the holding horizon and<br/>the rebalance clock"]
+    STD79["stationaryStdev = sigma/sqrt(2 kappa)<br/>-- the band the process actually<br/>breathes in"]
+    Z79{"zScore(x) = (x - theta)<br/>/ stationaryStdev"}
+    ENTRY79["|z| >= entry (e.g. 2):<br/>FADE the move -- short rich,<br/>long cheap"]
+    EXIT79["|z| <= exit (e.g. 0.5), or<br/>held > a few half-lives:<br/>take it off; if kappa drifts<br/>to 0 the reversion DIED -- stand down"]
+
+    SER79 --> FIT79
+    FIT79 --> KAPPA79
+    FIT79 --> THETA79
+    FIT79 --> SIGMA79
+    KAPPA79 --> HL79
+    KAPPA79 --> STD79
+    SIGMA79 --> STD79
+    THETA79 --> Z79
+    STD79 --> Z79
+    Z79 --> ENTRY79
+    Z79 --> EXIT79
+```
+
+The half-life is the whole trade's clock: it tells you both how long to
+expect to hold and how far to look back when you re-fit. The z-score is
+normalized by the *stationary* standard deviation, not the raw series
+volatility, so entries mean the same thing across instruments with
+different kappa. The honest failure mode is a fit where kappa collapses
+toward zero -- the pull is gone, the "spread" is now a random walk, and no
+z-score should trigger. `lastZScore` is the one-call convenience for the
+live signal; diagram 42 is the full pairs pipeline that puts this OU engine
+under its entry threshold.
+
+---
+
+## 80. The TCA decomposition tree -- one parent order, benchmarks that cannot hide behind each other
+
+One filled parent order is graded against several yardsticks at once
+because each isolates a different cost. `TransactionCostAnalyzer.analyze`
+returns them together so slippage against one benchmark cannot quietly hide
+inside another.
+
+```mermaid
+flowchart TD
+    FILLS80(["child fills of one parent (all<br/>same side) + arrivalMid +<br/>marketVwap + mid-at-each-fill"])
+    AVG80["avgExecutionPrice<br/>(quantity-weighted)"]
+    IS80["implementationShortfallBps:<br/>vs arrivalMid, the DECISION price --<br/>the honest all-in number<br/>(delay + impact + spread)"]
+    VWAP80["slippageVsVwapBps:<br/>vs marketVwap over the interval --<br/>did I beat the crowd's average print?"]
+    EFF80["avgEffectiveSpreadBps:<br/>vs the mid AT each fill -- the spread<br/>I paid to CROSS, timing stripped out"]
+    SPLIT80{"IS minus effective<br/>decomposes into"}
+    DELAY80["delay / timing cost:<br/>mid drift from arrival to fill<br/>(alpha decay, queueing)"]
+    IMPACT80["impact / crossing cost:<br/>fill price vs its contemporaneous mid<br/>(this IS the effective spread)"]
+    MARK80["realized spread / markout:<br/>where the mid goes AFTER the fill --<br/>tracked by VenueScorecard, not the<br/>report (reversion = adverse selection)"]
+    LOOP80(["feeds KylesLambda recalibration,<br/>VenueScorecard, participation --<br/>diagram 10's closing arrow"])
+
+    FILLS80 --> AVG80
+    AVG80 --> IS80
+    AVG80 --> VWAP80
+    AVG80 --> EFF80
+    IS80 --> SPLIT80
+    SPLIT80 --> DELAY80
+    SPLIT80 --> IMPACT80
+    IMPACT80 --> MARK80
+    IS80 --> LOOP80
+    VWAP80 --> LOOP80
+    EFF80 --> LOOP80
+```
+
+The three headline numbers answer three different questions. Effective
+spread (mid *at* the fill) is the pure cost of crossing, with timing
+removed; implementation shortfall (mid at *arrival*) is the full cost
+including the drift you suffered while working the order; VWAP slippage is
+purely relative to the crowd. Their arithmetic is the point: `IS - effective
+spread` is the delay/timing bucket, so an order with tight effective
+spreads but ugly IS was slow, not expensive. Markout -- where the mid heads
+*after* you trade -- lives on `VenueScorecard` rather than the per-order
+report because it is a venue property, not an order one. Every headline
+divides by a benchmark, so `analyze` throws on a non-positive or infinite
+`arrivalMid`/`marketVwap` rather than emit a silent Infinity. Diagram 33 is
+the cost model the backtest charged; TCA is how you check it against the
+tape.
+
+---
+
+## 81. The CVA and expected-exposure picture -- pricing the counterparty
+
+The other branch of diagram 51: that one ended at the CDS-bond basis; this
+prices what the counterparty's possible default costs you. `CvaApproximator`
+multiplies expected exposure, the probability of defaulting in each bucket,
+and discounting into a single charge you subtract from the risk-free price.
+
+```mermaid
+flowchart TD
+    EXP81["EXPOSURE (your stack):<br/>CounterpartyExposureTracker peaks /<br/>a swap's EE hump / Monte Carlo EE<br/>-- EE(t_i) per bucket, from pricing"]
+    PROFILE81["the EE PROFILE shape matters:<br/>a swap HUMPS mid-life (rates<br/>diffuse, then the notional amortizes);<br/>an FX forward GROWS to maturity"]
+    CRV81["CREDIT (CDS-bootstrapped):<br/>CreditCurve survival Q(t) --<br/>diagram 51's output"]
+    DQ81["default-in-bucket probability<br/>Q(t_i-1) - Q(t_i), read straight<br/>off the survival curve"]
+    DISC81["DISCOUNT:<br/>YieldCurve DF(t_i)"]
+    CVA81["CvaApproximator.cva =<br/>LGD * sum_i EE(t_i) *<br/>[Q(t_i-1) - Q(t_i)] * DF(t_i)"]
+    WWR81["approximations, STATED:<br/>exposure independent of default<br/>(NO wrong-way risk -> UNDERSTATES<br/>when an EM sovereign weakens as<br/>your FX fwd goes in-the-money);<br/>unilateral (no DVA); bucket-END EE"]
+    PV81(["risk-free PV - CVA = the price<br/>you can actually show a client"])
+
+    EXP81 --> PROFILE81
+    PROFILE81 --> CVA81
+    CRV81 --> DQ81
+    DQ81 --> CVA81
+    DISC81 --> CVA81
+    CVA81 --> WWR81
+    CVA81 --> PV81
+```
+
+The three ingredients are deliberately separate objects because they come
+from three different desks: exposure from your pricing/simulation stack,
+survival from the credit desk's bootstrapped curve, discounting from the
+rates curve. The class keeps LGD as a passed constant rather than reusing
+the curve's recovery, because the curve's recovery is a *quoting
+convention* while CVA's loss-given-default is a *modeling choice* -- they
+are numerically similar and conceptually different. The honesty stance is
+the wrong-way-risk caveat: assuming exposure and default are independent
+understates CVA precisely in the classic case where they are not, and the
+doc names it rather than burying it. DVA and bilateral CVA are out of
+scope, stated. Diagram 51 is the survival curve this consumes.
+
+---
+
+## 82. The swap pricing and DV01 loop -- annuity, par, bump
+
+One yield curve prices a vanilla swap three ways that must agree: the par
+rate zeroes the swap, the annuity is the DV01's backbone, and a
+one-basis-point bump reprices the risk. `SwapPricer` builds all three off
+the same discount factors.
+
+```mermaid
+flowchart TD
+    CRV82["rates.YieldCurve<br/>discount factors DF(t)"]
+    ANN82["annuity(curve, tenor) =<br/>sum tau_i DF(t_i) --<br/>PV of 1bp of fixed coupon;<br/>the fixed-leg backbone"]
+    PAR82["parRate(curve, tenor) =<br/>(1 - DF(T)) / annuity --<br/>the fixed rate making PV = 0<br/>at inception"]
+    PV82["payerPv(curve, tenor, fixed) =<br/>(parRate - fixed) * annuity --<br/>LINEAR in the rate gap<br/>(a swap is a levered bet on par)"]
+    DV01_82["dv01(curve, tenor, fixed):<br/>reprice under a +1bp parallel<br/>bump -- the P&L per bp,<br/>~ annuity for an at-par swap"]
+    CHECK82(["consistency: payerPv at<br/>fixed = parRate is exactly 0;<br/>dv01 ~ annuity confirms the two<br/>routes to risk agree"])
+
+    CRV82 --> ANN82
+    ANN82 --> PAR82
+    PAR82 --> PV82
+    ANN82 --> PV82
+    PV82 --> DV01_82
+    ANN82 --> DV01_82
+    DV01_82 --> CHECK82
+    PAR82 --> CHECK82
+```
+
+The annuity is the reusable object: it is the PV of a stream of unit
+coupons, so it is both the denominator of the par rate and, essentially,
+the swap's DV01 -- which is why an at-par swap's bump-and-reprice DV01 lands
+right on top of its annuity. `payerPv` being linear in `(parRate - fixed)`
+is the whole reason a swap is a clean rates instrument: all the curve
+complexity lives in the discount factors, and the payoff is a straight line
+on top. The par-in, par-out check (PV of a swap struck at par is zero) is
+the same discipline as the credit bootstrap in diagram 51. Diagram 16 is
+the rates stack that builds the curve, and diagram 83 shows the parametric
+fits that can supply its zero rates.
+
+---
+
+## 83. Nelson-Siegel vs Svensson -- three loadings, one extra hump
+
+Both models fit a whole zero curve with a handful of parameters by
+weighting a few fixed shape functions. `Svensson` adds one term so the
+curve can carry a second hump that the three-factor `NelsonSiegel` cannot.
+
+```mermaid
+flowchart TD
+    TENORS83(["observed zero rates at<br/>tenors 1y .. 30y"])
+    subgraph NS83["NelsonSiegel.fit -- 3 factors"]
+        B0_83["b0 -- LEVEL:<br/>flat loading of 1 (the long rate)"]
+        B1_83["b1 -- SLOPE:<br/>loading (1-e^-t/L)/(t/L):<br/>1 at the short end, ->0 long"]
+        B2_83["b2 -- CURVATURE:<br/>slope loading minus e^-t/L:<br/>a single mid-curve hump at lambda"]
+    end
+    subgraph SV83["Svensson.fit -- 4 factors"]
+        B3_83["b3 -- SECOND HUMP:<br/>a second curvature term with its<br/>OWN lambda2 -> fits a twist the<br/>3-factor curve structurally cannot"]
+    end
+    SHORT83["shortRate = b0 + b1<br/>(the t->0 limit)"]
+    LONG83["longRate = b0<br/>(the t->infinity limit)"]
+    USE83(["zeroRate(t) -> DF(t) -><br/>SwapPricer / BondPricer;<br/>rmse reports fit quality --<br/>prefer NS unless the extra hump<br/>earns its 2 parameters"])
+
+    TENORS83 --> B0_83
+    TENORS83 --> B1_83
+    TENORS83 --> B2_83
+    TENORS83 --> B3_83
+    B0_83 --> SHORT83
+    B1_83 --> SHORT83
+    B0_83 --> LONG83
+    B0_83 --> USE83
+    B1_83 --> USE83
+    B2_83 --> USE83
+    B3_83 --> USE83
+```
+
+The elegance is that the loadings are *fixed* shape functions of tenor --
+level, slope, curvature -- and only their weights are fit, so the four (or
+five, with lambda) parameters carry a whole curve. The short-rate and
+long-rate limits fall straight out of the loadings: at the long end only
+the level survives, at the short end level plus slope. Svensson's fourth
+term buys the ability to fit a second curvature feature -- the kind of
+twist a stressed or richly-supplied curve shows -- at the cost of a second
+decay parameter and the overfitting risk that comes with it. The `rmse`
+field is the honest arbiter: reach for Svensson only when it materially
+beats Nelson-Siegel on the same pillars. Diagram 16 is the surrounding
+rates stack.
+
+---
+
+## 84. Commodity carry -- contango, backwardation, and the roll
+
+A commodity's forward curve slopes for a reason, and its slope is a return.
+`CommodityCurve` reads the roll yield and the carry the curve implies, then
+names the regime that decides whether rolling a long position pays you or
+bleeds you.
+
+```mermaid
+flowchart TD
+    CRV84["CommodityCurve.of(spot,<br/>tenors, futures prices)"]
+    ROLL84["annualizedRollYield(near, far):<br/>the return from rolling a long<br/>position DOWN the curve"]
+    CARRY84["impliedCarry(tenor, rate):<br/>the storage-minus-convenience<br/>yield the curve implies vs financing"]
+    SHAPE84{"curve shape"}
+    UP84["CONTANGO (isContango):<br/>far > near -> rolling a LONG<br/>BLEEDS (sell cheap near, buy dear<br/>far) -- negative roll yield"]
+    DOWN84["BACKWARDATION (isBackwardation):<br/>near > far -> rolling a LONG<br/>EARNS -- positive roll yield,<br/>a scarcity / convenience signal"]
+    EXEC84(["feeds FuturesRollAlgo:<br/>WHEN to roll is an execution<br/>choice; the curve says WHAT the<br/>roll is worth"])
+
+    CRV84 --> ROLL84
+    CRV84 --> CARRY84
+    ROLL84 --> SHAPE84
+    SHAPE84 --> UP84
+    SHAPE84 --> DOWN84
+    UP84 --> EXEC84
+    DOWN84 --> EXEC84
+    CARRY84 --> EXEC84
+```
+
+The insight the curve encodes is that in commodities the *shape* is a
+tradeable return independent of spot: a passive long in a contangoed market
+loses a little every roll even if spot never moves, while a backwardated
+market pays the holder to carry inventory the market is short of. The
+`impliedCarry` reads this as an economic quantity -- storage cost net of
+convenience yield -- against a financing rate, so the same slope can be
+attributed rather than just observed. The library keeps the analytics
+(what the roll is worth) separate from `FuturesRollAlgo` (when and how to
+roll), the same lane split as everywhere else. Diagram 52 places
+commodities in the five-asset pipeline.
+
+---
+
+## 85. Index construction -- weights, level, and divisor continuity
+
+An index is a rule for turning many prices into one number and keeping that
+number continuous when the constituents change. `IndexConstruction` supplies
+the three weighting schemes and the divisor adjustment that stops a
+reconstitution from teleporting the level.
+
+```mermaid
+flowchart TD
+    PRICES85(["constituent prices, shares,<br/>float factors"])
+    CAP85["capWeights(prices, shares,<br/>floatFactors) -- free-float<br/>market-cap (S&P / MSCI style)"]
+    PRICE85["priceWeights(prices) --<br/>price-weighted (Dow style;<br/>a stock split reshapes the index)"]
+    EQ85["equalWeights(n) --<br/>equal weight, rebalanced"]
+    LEVEL85["level(prices, shares,<br/>floatFactors, divisor) =<br/>aggregate float-cap / divisor"]
+    DIV85["adjustDivisor(old, oldAgg, newAgg):<br/>on an add / drop / split, solve the<br/>new divisor so the LEVEL is unchanged<br/>ACROSS the corporate action -- continuity"]
+    TURN85["turnover(from, to):<br/>the trading a reconstitution FORCES<br/>-- the cost of the rule"]
+    OUT85(["a continuous, investable benchmark<br/>-> what every tracking-error and<br/>PME number is measured against"])
+
+    PRICES85 --> CAP85
+    PRICES85 --> PRICE85
+    PRICES85 --> EQ85
+    CAP85 --> LEVEL85
+    LEVEL85 --> DIV85
+    CAP85 --> TURN85
+    DIV85 --> OUT85
+    PRICE85 --> OUT85
+    EQ85 --> OUT85
+    TURN85 --> OUT85
+```
+
+The divisor is the piece that turns a weighting scheme into an *index*: the
+level is the aggregate value divided by it, and when membership changes you
+re-solve the divisor so the level does not jump -- the arithmetic that lets
+"the S&P 500" mean one continuous series across decades of additions and
+splits. The weighting choices carry real behavior: a price-weighted index
+is moved by a split that changes nothing economic, a cap-weighted one drifts
+toward its largest names, an equal-weighted one pays for its diversification
+in `turnover`. That turnover is the rule's running cost -- the trade a
+rebalance forces on anyone replicating it. Diagram 86's PME needs exactly
+this kind of continuous public series.
+
+---
+
+## 86. Private-markets flow -- IRR, PME, and un-smoothing
+
+Private returns arrive as irregular cashflows and appraised NAVs, both of
+which flatter the manager. `PrivateMarketAnalytics` turns the cashflows into
+an IRR, benchmarks them against a public index with PME, and strips the
+appraisal smoothing before any volatility is trusted.
+
+```mermaid
+flowchart TD
+    CF86(["LP cashflows:<br/>contributions (-), distributions (+),<br/>and the final NAV"])
+    IRR86["irr(cashflows):<br/>the money-weighted return --<br/>dollar-weighted, path-sensitive,<br/>solved by root-finding"]
+    MULT86["multiples: tvpi / dpi / rvpi<br/>-- total, realized, and residual<br/>value over paid-in capital"]
+    PME86["ksPme(contributions, distributions,<br/>indexLevels): Kaplan-Schoar --<br/>would the SAME cashflows in the<br/>PUBLIC index have done better?<br/>PME > 1 = beat public"]
+    SMOOTH86["appraised NAVs are STALE:<br/>reported vol is understated<br/>('volatility laundering')"]
+    GELT86["geltnerDesmooth(returns, phi):<br/>invert the appraisal smoothing<br/>-> the true, HIGHER volatility"]
+    LENS86(["the LP lens on any strategy result<br/>(diagram 52's sizing stage): report<br/>IRR + PME + DE-SMOOTHED risk,<br/>never the flattered trio alone"])
+
+    CF86 --> IRR86
+    CF86 --> MULT86
+    CF86 --> PME86
+    IRR86 --> LENS86
+    MULT86 --> LENS86
+    PME86 --> LENS86
+    SMOOTH86 --> GELT86
+    GELT86 --> LENS86
+```
+
+The two honesty moves are the whole point of the class. First, IRR is
+money-weighted and so is not comparable to a public index's time-weighted
+return -- PME fixes the comparison by running the *identical* cashflow
+timing through the index, so a manager who called capital at good times
+cannot claim the timing as skill. Second, appraisal-based NAVs are
+autocorrelated and understate volatility, which flatters every Sharpe and
+VaR downstream; `geltnerDesmooth` inverts the smoothing with the estimated
+`phi` before any risk number is taken seriously. The class doc names the
+"volatility laundering" directly. Diagram 85 supplies the public series PME
+needs; diagram 52 is where this lens sits in the pipeline.
+
+---
+
+## 87. The range-volatility estimator family -- squeeze the bar for its variance
+
+Close-to-close volatility throws away the high and low that each bar already
+paid for. `RangeVolatility` offers four estimators that use more of the OHLC
+bar, trading assumptions for statistical efficiency.
+
+```mermaid
+flowchart TD
+    BAR87(["OHLC bars<br/>(open, high, low, close)"])
+    PARK87["parkinson(high, low):<br/>uses the RANGE only -- ~5x more<br/>efficient than close-to-close;<br/>assumes no drift, no overnight gap"]
+    GK87["garmanKlass(o,h,l,c):<br/>adds open and close -> uses the<br/>whole bar; still no overnight gap"]
+    RS87["rogersSatchell(o,h,l,c):<br/>drift-INDEPENDENT -- stays valid<br/>when the series TRENDS (Parkinson<br/>and GK do not)"]
+    YZ87["yangZhang(o,h,l,c):<br/>overnight + open-to-close + RS<br/>-> handles GAPS and drift;<br/>most complete, needs a window"]
+    OUT87(["match the estimator to the data<br/>you have: trending -> RS;<br/>gappy -> YZ; clean intraday -><br/>Parkinson / GK (diagram 35 chooses)"])
+
+    BAR87 --> PARK87
+    BAR87 --> GK87
+    BAR87 --> RS87
+    BAR87 --> YZ87
+    PARK87 --> OUT87
+    GK87 --> OUT87
+    RS87 --> OUT87
+    YZ87 --> OUT87
+```
+
+The family is a ladder of assumptions traded for efficiency. Parkinson
+extracts several times more information than a close-to-close estimate from
+the same bars by using the high-low range, but it assumes a driftless,
+gapless process; Garman-Klass adds the open and close for more efficiency
+under the same no-gap assumption. Rogers-Satchell is the one that survives a
+*trending* series because its construction is drift-independent, and
+Yang-Zhang is the most complete -- it stitches the overnight jump, the
+open-to-close move, and a Rogers-Satchell term so that a market with gaps
+and drift is handled honestly, at the cost of needing a window of bars.
+Diagram 35 is the estimator chooser that this range family plugs into;
+diagram 34 is the parametric GARCH cousin.
+
+---
+
+## 88. The structured-note decomposition -- a bond and some options in a wrapper
+
+Every structured note is a boring bond plus one or more options; pricing it
+means pricing the pieces and adding them. `StructuredNotes` builds the
+common wrappers from a discount bond and Black-Scholes legs so the embedded
+risk is visible, not hidden in a term sheet.
+
+```mermaid
+flowchart TD
+    PARTS88(["ingredients: a zero-coupon<br/>bond + BlackScholes option legs"])
+    RC88["reverseConvertible =<br/>bond + coupon - a SHORT put:<br/>you sold downside for yield.<br/>reverseConvertibleDelta shows the<br/>equity risk you quietly took on"]
+    CPN88["capitalProtectedNote =<br/>zero-bond (the protection FLOOR)<br/>+ participation * a LONG call;<br/>participationFor solves the call<br/>budget from the bond discount at issue"]
+    DC88["discountCertificate =<br/>spot - a SHORT call at the cap:<br/>buy the stock cheap, cap the upside.<br/>discountCertificateDelta"]
+    RISK88["the wrapper HIDES the option;<br/>the decomposition SHOWS it --<br/>short vol, short skew, or a capped<br/>payoff, PRICED not marketed"]
+    HEDGE88(["the deltas feed DeltaHedger /<br/>OptionsBook -- the issuer's book<br/>is just the pieces, hedged"])
+
+    PARTS88 --> RC88
+    PARTS88 --> CPN88
+    PARTS88 --> DC88
+    RC88 --> RISK88
+    CPN88 --> RISK88
+    DC88 --> RISK88
+    RISK88 --> HEDGE88
+```
+
+The decomposition is the entire lesson: a headline "8% yield" reverse
+convertible is a bond plus a short put, so the yield is the put premium and
+the "risk" is being long the stock below the strike -- the delta accessor
+makes that explicit rather than leaving it in the fine print. A
+capital-protected note is the mirror image: the protection floor is just the
+present value of the zero-coupon bond, and whatever discount that bond
+trades at is the exact budget available to buy upside -- which is what
+`participationFor` solves. Once every note is expressed as pieces, the
+issuer's hedge is mechanical: sum the piece deltas and feed `DeltaHedger`.
+Diagram 38 is the Greeks ladder, diagram 40 the path-dependent autocallable
+cousin, diagram 41 the rebalancing loop.
+
+---
+
+## 89. Asian-option averaging -- geometric closed form, arithmetic by moment matching
+
+Averaging the underlying over the life of the option lowers its volatility
+and kills the closed form for the arithmetic case. `AsianOption` prices the
+geometric average exactly and reaches the arithmetic price by matching the
+first two moments of the average.
+
+```mermaid
+flowchart TD
+    PATH89(["the averaging window: the payoff<br/>sees an AVERAGE of the path,<br/>not a single terminal spot"])
+    GEO89["geometricPrice:<br/>the geometric average IS lognormal<br/>-> an EXACT Black-Scholes-style<br/>closed form (lower vol, adjusted drift)"]
+    ARITH89["arithmeticPrice:<br/>the arithmetic average is NOT<br/>lognormal -> no exact closed form"]
+    MM89["moment matching (Turnbull-Wakeman):<br/>match the mean and variance of the<br/>arithmetic average to a lognormal,<br/>then price THAT -- fast, accurate<br/>at typical vols"]
+    CHEAP89["averaging LOWERS effective vol -><br/>an Asian is CHEAPER than the vanilla;<br/>and harder to manipulate at expiry --<br/>why FX and commodity FIXINGS use it"]
+    OUT89(["a fixing-friendly price; the<br/>geometric form doubles as a control<br/>variate / lower bound for the<br/>arithmetic"])
+
+    PATH89 --> GEO89
+    PATH89 --> ARITH89
+    ARITH89 --> MM89
+    GEO89 --> CHEAP89
+    MM89 --> CHEAP89
+    CHEAP89 --> OUT89
+    GEO89 --> OUT89
+```
+
+The split turns on a distributional fact: a product of lognormals (the
+geometric average) is itself lognormal, so it inherits a clean closed form,
+while a *sum* of lognormals (the arithmetic average) is not any nice
+distribution at all. Moment matching sidesteps the problem by approximating
+the arithmetic average with the lognormal that shares its first two moments
+-- accurate across the volatilities desks actually trade, and far cheaper
+than a full simulation. The economic reason Asians exist is in the "cheap"
+box: averaging damps volatility, so the option costs less, and it resists
+expiry-print manipulation, which is exactly why commodity and FX fixings are
+settled on averages. Diagram 39 is the barrier map, diagram 84 the commodity
+curve whose fixings these settle against.
+
+---
+
+## 90. The vol-swap convexity picture -- variance is linear, volatility is not
+
+Diagram 21 replicated the variance swap from the option chain; a volatility
+swap looks like its square root but is not, and the gap is a convexity cost.
+`VarianceSwap.volSwapStrike` prices that gap from the variance-of-variance.
+
+```mermaid
+flowchart TD
+    VAR90["VarianceSwap.fairVariance<br/>(diagram 21's output): the<br/>replicable strike K_var, LINEAR<br/>in variance"]
+    NAIVE90["naive vol strike = sqrt(K_var)<br/>-- WRONG: E[sqrt(v)] != sqrt(E[v])<br/>by Jensen (sqrt is concave)"]
+    VOV90["variance of variance:<br/>how much realized variance ITSELF<br/>bounces around"]
+    ADJ90["volSwapStrike(fairVariance,<br/>varianceOfVariance):<br/>K_vol ~ sqrt(K_var) *<br/>(1 - varOfVar / (8 K_var^2))<br/>-- the convexity adjustment,<br/>always LOWERS the strike"]
+    CVX90["a vol swap is SHORT convexity in<br/>variance vs the variance swap -><br/>the two CANNOT be statically<br/>replicated into each other;<br/>the adjustment is not free money"]
+    MARK90["markToMarket / varianceNotional /<br/>vegaNotional: size the trade in vega,<br/>settle it in variance"]
+    OUT90(["quote the vol swap BELOW the naive<br/>sqrt(K_var); the gap is the<br/>vol-of-vol you are short"])
+
+    VAR90 --> NAIVE90
+    VAR90 --> ADJ90
+    VOV90 --> ADJ90
+    NAIVE90 --> CVX90
+    ADJ90 --> CVX90
+    CVX90 --> MARK90
+    MARK90 --> OUT90
+```
+
+Diagram 21 got you a clean, statically-replicable *variance* strike; the
+temptation is to take its square root and call it the volatility strike, and
+that is exactly the Jensen error the convexity adjustment corrects. Because
+the square root is concave, the expected volatility is below the square root
+of expected variance, and the gap grows with the variance-of-variance --
+which is why the adjustment always lowers the strike. The deeper structural
+point is in the convexity box: unlike the variance swap, a volatility swap
+has no static option portfolio that replicates it, so the vol-of-vol term is
+a genuine risk the seller is short, not a spread to be arbitraged away.
+Sizing keeps the market convention -- quote in vega, settle in variance.
+Diagram 21 is the replication this sits on top of.
+
+---
+
+## 91. Expected shortfall vs VaR -- the same tail, one number that adds up
+
+Diagram 43 picked the VaR *method* from the book's shape; this asks what VaR
+refuses to tell you. Expected shortfall averages the losses *beyond* VaR,
+and under the normal model both have a one-line closed form that exposes the
+difference.
+
+```mermaid
+flowchart TD
+    DIST91(["the loss distribution (delta-normal:<br/>mean 0, sigma_P = sqrt(w' Sigma w))"])
+    VAR91["deltaNormalVar = z_alpha * sigma_P<br/>-- the THRESHOLD: the loss you<br/>exceed (1-alpha) of the time.<br/>Says NOTHING about how bad beyond it"]
+    ES91["deltaNormalEs = sigma_P *<br/>phi(z_alpha) / (1 - alpha)<br/>-- the AVERAGE loss GIVEN you<br/>breached VaR (the tail's mean)"]
+    RATIO91["ES / VaR = phi(z) / ((1-alpha) z):<br/>~1.15 at 99% normal -- FATTER tails<br/>widen this, and ES SEES it while<br/>VaR stays blind"]
+    COHER91["ES is COHERENT (subadditive):<br/>diversification can never RAISE it.<br/>VaR is NOT -- it can punish a hedge;<br/>why Basel FRTB moved to ES"]
+    BEYOND91["fat tails: FrtbEs.es975,<br/>historicalVar/ES, EVT tail (diagram 44)<br/>-- the closed form is the<br/>normal-world anchor only"]
+    OUT91(["report BOTH: VaR for the limit<br/>line, ES for the size of the<br/>disaster waiting behind it"])
+
+    DIST91 --> VAR91
+    DIST91 --> ES91
+    VAR91 --> RATIO91
+    ES91 --> RATIO91
+    RATIO91 --> COHER91
+    COHER91 --> BEYOND91
+    BEYOND91 --> OUT91
+```
+
+The two numbers describe the same tail from opposite sides: VaR is the
+*edge* of the loss region -- a threshold you cross with fixed probability --
+and ES is the *average depth* once you are inside it. Under the normal
+model the ratio is a clean constant, so at 99% ES sits a predictable
+distance above VaR; the moment the real distribution has fat tails, that
+extra depth grows and ES registers it while VaR, being just a quantile,
+cannot. The reason regulators reweighted toward ES is coherence: ES is
+subadditive, so combining books can never make the measured risk larger than
+the sum, whereas VaR can, and can even penalize a genuine hedge. The
+closed forms here are the normal-world anchor; diagram 44's EVT and the
+historical estimators are what you reach for when the tail stops being
+Gaussian. Diagram 43 chooses the method, diagram 46 is the FRTB capital
+measure built on ES.
+
+---
+
+## 92. Reverse stress, up close -- the smallest shock that breaks the book
+
+Diagram 45 laid out the three stress lanes; this zooms into the one
+regulators added after 2008. `StressTester.reverseStress` finds the most
+probable joint shock that loses a target amount -- in closed form, no
+optimizer -- and prices how plausible that scenario is.
+
+```mermaid
+flowchart TD
+    ASK92(["the question run BACKWARDS:<br/>not 'what if X?' but 'what shock<br/>loses me L, and could it happen?'"])
+    INPUT92["inputs: factor exposures delta,<br/>covariance Sigma, targetLoss L"]
+    LAGR92["minimize the Mahalanobis distance<br/>shock' Sigma^-1 shock<br/>s.t. delta . shock = L --<br/>the LEAST unlikely shock on the<br/>loss hyperplane (one Lagrange mult.)"]
+    SOLVE92["closed form, NO search:<br/>shock* = (L / (delta' Sigma delta))<br/>* Sigma delta -- proportional to<br/>Sigma delta, so CORRELATIONS aim it"]
+    MAH92["mahalanobisSigmas = L / sigma_P,<br/>sigma_P = sqrt(delta' Sigma delta)<br/>-- how many JOINT sigmas away the<br/>breaking scenario sits"]
+    VERDICT92{"plausibility<br/>verdict"}
+    BAD92["breaks at ~3 sigma:<br/>a REAL risk problem"]
+    THEATER92["breaks at ~15 sigma:<br/>a stress-test-THEATER problem<br/>(the limit is slack, the drama fake)"]
+    GUARD92(["a book with no factor risk THROWS<br/>('no finite move loses that amount')<br/>-- an honest refusal, not an<br/>infinite shock"])
+
+    ASK92 --> INPUT92
+    INPUT92 --> LAGR92
+    LAGR92 --> SOLVE92
+    SOLVE92 --> MAH92
+    MAH92 --> VERDICT92
+    VERDICT92 --> BAD92
+    VERDICT92 --> THEATER92
+    INPUT92 --> GUARD92
+```
+
+The elegant part is that under Gaussian factors the reverse problem has an
+analytic answer: minimizing the Mahalanobis distance (the joint
+implausibility) subject to hitting the loss target is a one-constraint
+Lagrange problem whose solution is proportional to `Sigma delta`. That
+direction matters -- the correlations, not just the raw sensitivities, point
+the breaking shock, so a book that looks hedged on a per-factor basis can
+still have a cheap joint move against it. The returned Mahalanobis distance
+is the verdict engine: a book that breaks at three joint sigmas has a real
+problem, while one that needs fifteen has a limit nobody will ever test --
+"stress-test theater." The guard is the honesty stance: a book with no
+factor risk cannot be broken by any finite move, and the method throws
+rather than return an infinite shock. Diagram 45 is the three-lane overview
+this drills into.
+
+---
+
+## 93. The FRTB liquidity-horizon cascade, worked -- square-root-of-time across five buckets
+
+Diagram 46 walked the whole FRTB capital measure; this zooms into its one
+subtle box: how an ES computed at a 10-day base horizon is stretched across
+liquidity horizons. `FrtbEs.liquidityHorizonEs` implements MAR33.5 exactly,
+and the arithmetic rewards being read slowly.
+
+```mermaid
+flowchart TD
+    FACTORS93(["risk factors, each tagged with a<br/>liquidity horizon: how long it takes<br/>to EXIT the position under stress"])
+    LH93["the five FRTB horizons:<br/>LH 10 (major FX / rates) -> 20 -> 40<br/>-> 60 -> 120 (exotic credit / illiquid)"]
+    NEST93["nested ES inputs esByHorizon[j]:<br/>[0] = the FULL factor set at LH10;<br/>each later entry re-runs ES with ONLY<br/>factors of LH >= horizons[j] shocked<br/>(progressively FEWER factors)"]
+    WEIGHT93["a sqrt-of-time weight on the<br/>DIFFERENCE of consecutive horizons:<br/>sqrt((LH_j - LH_j-1) / 10)"]
+    CASC93["liquidityHorizonEs =<br/>sqrt( sum_j [ ES_j *<br/>sqrt((LH_j - LH_j-1)/10) ]^2 )<br/>-- add the horizon buckets in<br/>QUADRATURE"]
+    WHY93["the point: a factor you cannot<br/>exit for 120 days carries MORE<br/>capital than one you clear in 10 --<br/>2008's frozen-book lesson, priced in"]
+    UP93(["feeds the stressed calibration and<br/>the Basel traffic light -- diagram 46"])
+
+    FACTORS93 --> LH93
+    LH93 --> NEST93
+    NEST93 --> WEIGHT93
+    WEIGHT93 --> CASC93
+    CASC93 --> WHY93
+    WHY93 --> UP93
+```
+
+Two details are where implementations usually drift from the text, and the
+library pins both. First, the nesting: `esByHorizon[0]` shocks *every*
+factor at the base 10-day horizon, and each later entry recomputes ES with
+only the *slower* factors still live, so the inputs are a shrinking sequence
+of factor subsets, not independent ES numbers. Second, the square-root
+weights apply to the *differences* between consecutive horizons, not to the
+horizons themselves, and the buckets combine in quadrature. The economic
+content is the "why" box: capital scales with how long you are trapped in a
+position when markets seize, which is precisely the risk 10-day VaR missed
+in 2008. This box is one node inside diagram 46's full cascade, which adds
+the stressed calibration floor and the exception traffic light on top.
+
+---
+
+## 94. The Euler allocation -- why the three VaR cousins add up exactly
+
+Diagram 22 sat `ComponentVar` at the committee table; this is the theorem
+underneath it. Because delta-normal VaR is homogeneous of degree one in the
+positions, Euler's identity splits it into per-desk pieces with no residual
+-- and risk parity is the point where those pieces are equal.
+
+```mermaid
+flowchart TD
+    VAR94["portfolio VaR = z * sqrt(w' Sigma w)<br/>-- HOMOGENEOUS of degree 1 in w:<br/>double every position, VaR doubles"]
+    EULER94["Euler's identity for a degree-1 f:<br/>sum_i w_i * (dVaR / dw_i) = VaR --<br/>the whole EXACTLY equals the sum of<br/>position-weighted sensitivities"]
+    MARG94["marginal_i = dVaR / dw_i =<br/>z (Sigma w)_i / sigma_P<br/>-- the per-unit sensitivity"]
+    COMP94["component_i = w_i * marginal_i<br/>(ComponentVar.allocate.components):<br/>SUMS EXACTLY to VaR, no residual<br/>bucket; a hedge's component is NEGATIVE"]
+    INCR94["incremental_i =<br/>VaR(book) - VaR(book without i)<br/>(ComponentVar.incremental):<br/>NOT the component -- a re-computation<br/>for the close-or-keep question"]
+    PARITY94["risk parity = the weights where ALL<br/>components are EQUAL (RiskParityOptimizer):<br/>budget by risk contribution, not dollars"]
+    USE94(["allocation is a LEVER, not just a<br/>report: grow where marginal is low,<br/>budget by component, size to equal-risk<br/>-- diagram 22 is the committee view"])
+
+    VAR94 --> EULER94
+    EULER94 --> MARG94
+    MARG94 --> COMP94
+    COMP94 --> INCR94
+    COMP94 --> PARITY94
+    PARITY94 --> USE94
+    INCR94 --> USE94
+```
+
+The exact additivity is not a coincidence and not an approximation: VaR
+under the delta-normal model is homogeneous of degree one in the positions
+(scale the book, scale the VaR), and Euler's theorem says any such function
+equals the sum of each input times its own partial derivative. That sum is
+the component VaR, which is why it closes with no leftover bucket -- and why
+a hedge's component is genuinely negative rather than a rounding artifact.
+The trap diagram 22 warned about lives in the contrast between `component`
+and `incremental`: the component is the Euler share, the incremental is a
+full recomputation with the desk removed, and for a hedge they point in
+opposite directions. Turned forward, the same math is a construction lever
+-- risk parity is precisely the fixed point where every component is equal.
+The homogeneity that makes it exact also states its limits: linear
+positions, normal returns. Diagram 22 is the committee-facing view of the
+same numbers.
+
+---
+
+## 95. The trade-analytics signature -- what a track record actually says
+
+A P&L curve hides the shape of the bets that made it. `TradeAnalytics.analyze`
+reduces a list of closed trades to the handful of numbers that separate a
+robust edge from a lucky streak: expectancy, payoff, streaks, and the Kelly
+size the record implies.
+
+```mermaid
+flowchart TD
+    TRADES95(["completed trades (entry / exit<br/>P&L, bars held)"])
+    WIN95["winRate + payoffRatio<br/>(avgWin / avgLoss):<br/>the two TRADE OFF -- a 30% win rate<br/>with a 4:1 payoff still wins"]
+    EXP95["expectancy = avg P&L per trade =<br/>winRate*avgWin - (1-winRate)*avgLoss<br/>-- the edge in one number;<br/><= 0 means DO NOT trade it"]
+    STREAK95["maxWinStreak / maxLossStreak:<br/>the capital and psychology test --<br/>can you survive the worst run this<br/>system has ALREADY produced?"]
+    HOLD95["avgBarsHeldWinners vs Losers:<br/>'cut losers fast, let winners run'<br/>shows up HERE -- or its reverse,<br/>which is a red flag"]
+    KELLY95["kellyFraction (from win / payoff):<br/>the growth-optimal size the record<br/>implies -- usually HALVED in practice<br/>for estimation error"]
+    OUT95(["the signature feeds sizing<br/>(PositionSizing) and the reshuffle<br/>test (diagram 96)"])
+
+    TRADES95 --> WIN95
+    TRADES95 --> EXP95
+    TRADES95 --> STREAK95
+    TRADES95 --> HOLD95
+    WIN95 --> KELLY95
+    EXP95 --> KELLY95
+    KELLY95 --> OUT95
+    STREAK95 --> OUT95
+    HOLD95 --> OUT95
+```
+
+The reason to compute all of these rather than just the win rate is that no
+single one is diagnostic: a low win rate is fine if the payoff ratio is
+high, and a high win rate hides a fat left tail if the payoff ratio is
+below one. Expectancy collapses that trade-off into the actual edge per
+trade -- the number that has to be positive before anything else matters.
+The streak fields are the survivability check the equity curve conceals: the
+worst losing run the system has *already* had is the minimum you must be
+capitalized and composed to sit through. The holding-time split is a
+behavioral tell -- winners held longer than losers is the discipline working;
+the reverse is the disposition effect leaking into the rules. Kelly turns
+the signature into a size, deliberately halved in practice. Diagram 96
+stress-tests this signature by reshuffling the order.
+
+---
+
+## 96. The Monte-Carlo trade reshuffle -- was the equity curve luck or order?
+
+The same set of trades in a different order draws a very different equity
+curve, and the worst orderings are the honest drawdown risk.
+`MonteCarloTradeShuffle` resamples the trade sequence thousands of times to
+turn one realized path into a distribution.
+
+```mermaid
+flowchart TD
+    TRADES96(["the strategy's completed trades<br/>(>= 2)"])
+    SHUFFLE96["reshuffle the ORDER N times (seeded):<br/>same trades, same total P&L,<br/>a different PATH each time"]
+    DIST96["distribution of MAX DRAWDOWN:<br/>medianMaxDrawdown, p95MaxDrawdown,<br/>p99MaxDrawdown"]
+    TERM96["distribution of TERMINAL P&L:<br/>medianTerminalPnl, probLoss --<br/>even a positive-expectancy system<br/>LOSES on some orderings"]
+    ACTUAL96["actualMaxDrawdown /<br/>actualDrawdownPct: where the<br/>REALIZED path sits in the distribution"]
+    VERDICT96{"realized DD near the<br/>median, or in the tail?"}
+    LUCKY96["realized DD << p95:<br/>you drew a LUCKY ordering -- plan<br/>for the p95 / p99 you have not<br/>lived yet"]
+    HONEST96(["size to the p99 drawdown, not the<br/>one you happened to live -- the risk<br/>is in the orderings that did NOT happen"])
+
+    TRADES96 --> SHUFFLE96
+    SHUFFLE96 --> DIST96
+    SHUFFLE96 --> TERM96
+    DIST96 --> ACTUAL96
+    ACTUAL96 --> VERDICT96
+    VERDICT96 --> LUCKY96
+    LUCKY96 --> HONEST96
+    TERM96 --> HONEST96
+```
+
+The trick is that reshuffling holds the *set* of trades fixed -- same
+win rate, same payoffs, same total P&L -- and varies only the sequence, so
+the spread of outcomes is purely path risk: how bad a drawdown the same
+edge could have produced with an unlucky clustering of losers. That is why
+`probLoss` can be non-trivial even for a system with positive expectancy,
+and why the realized max drawdown you happened to experience is close to
+meaningless as a risk estimate on its own -- `actualDrawdownPct` places it
+in the distribution so you can see whether you got lucky. The honest use is
+to capitalize against the p99, not the observed. The one assumption to state
+is exchangeability: reshuffling breaks any genuine serial dependence between
+trades, so a strategy whose trades are autocorrelated (a trend follower in a
+persistent regime) will look tamer here than it is. Diagram 95 is the
+signature this stresses; diagrams 18 and 30 are the overfitting and
+walk-forward defenses upstream.
+
+---
+
+## 97. Walking the arrows backwards -- a pipeline post-mortem
+
+When the live P&L disappoints, the fix is not to re-tune but to walk diagram
+19's pipeline in reverse, asking each stage to prove it was not the leak.
+Every honesty statistic in the library exists to fail loudly at one of these
+steps.
+
+```mermaid
+flowchart TD
+    BAD97(["symptom: live returns <<<<br/>backtest -- the only bug that matters"])
+    EXECQ97["EXECUTION? compare live TCA<br/>(diagram 80) to the backtest's cost<br/>model (diagram 33): slippage and<br/>impact under-modeled?"]
+    SIZEQ97["SIZING? full Kelly where half was<br/>meant? did a VaR limit bind live<br/>but never in the sim?"]
+    VALIDQ97["VALIDATION? re-read PBO (diagram 32),<br/>deflated Sharpe, walk-forward (30):<br/>was the edge already flagged fragile?"]
+    LEAKQ97["LABEL LEAK? purge and embargo<br/>(diagram 31): did test-window<br/>information touch training?"]
+    SURVQ97["SURVIVORSHIP? was the universe<br/>point-in-time (diagram 4), or did<br/>dead names inflate the backtest?"]
+    DATAQ97["DATA? alignment, corporate actions,<br/>stale mids -- the cheapest and<br/>commonest leak of all"]
+    ROOT97(["the leak is almost always UPSTREAM<br/>of where it hurts: fix the STAGE,<br/>not the parameter"])
+
+    BAD97 --> EXECQ97
+    EXECQ97 --> SIZEQ97
+    SIZEQ97 --> VALIDQ97
+    VALIDQ97 --> LEAKQ97
+    LEAKQ97 --> SURVQ97
+    SURVQ97 --> DATAQ97
+    DATAQ97 --> ROOT97
+```
+
+The discipline is inversion: diagram 19 runs data to execution, so a
+post-mortem runs execution back to data, and at each step there is already a
+library tool whose job is to have caught the problem. The ordering is
+deliberate -- start at the cheapest-to-check, most-visible stages (did
+execution cost more than modeled? did sizing differ?) and work back toward
+the silent, upstream ones, because a data or survivorship leak masquerades
+as a strategy failure and will keep doing so no matter how you re-tune the
+parameters. The recurring lesson is in the root node: the symptom appears at
+execution, but the cause is usually far upstream, and the fix is to repair
+the stage rather than curve-fit around it. Diagram 19 is the forward
+pipeline; 4, 18, 30, 31, 32, 33 and 80 are the tripwires named at each step.
+
+---
+
+## 98. The two-lane discipline -- what each lane promises
+
+Diagram 1 mapped which classes live in which lane; this states the CONTRACT
+each lane signs. The value of the split is not the boxes but the promises:
+knowing the lane tells you exactly what a class guarantees and what it
+refuses to do.
+
+```mermaid
+flowchart TD
+    subgraph HOT98["HOT LANE promises"]
+        H1_98["ZERO steady-state allocation<br/>(per-thread alloc-counter tests)"]
+        H2_98["BOUNDED latency, MEASURED<br/>(HiccupMonitor in every benchmark;<br/>tails attributed, not hidden)"]
+        H3_98["NO exceptions on the hot path<br/>(HftRiskGate reject = an int code,<br/>counted, never thrown)"]
+        H4_98["NO locks / boxing / String<br/>(SPSC rings, dense int symbol ids)"]
+    end
+    subgraph RES98["RESEARCH LANE promises"]
+        R1_98["CORRECTNESS first<br/>(closed forms pinned by tests to<br/>1e-10; par-in par-out round trips)"]
+        R2_98["READABILITY first<br/>(allocation allowed; a human can<br/>audit the math on the page)"]
+        R3_98["HONESTY over flattery<br/>(deflated Sharpe, PBO, purging fail<br/>LOUDLY; approximations stated)"]
+        R4_98["REPRODUCIBILITY<br/>(seeded, deterministic: same input<br/>-> same number, every run)"]
+    end
+    BOTH98["both lanes share: the venue-book<br/>equivalence (OrderBook <-> HftOrderBook,<br/>cross-checked) and the rule that every<br/>claim ships with its proof"]
+    PICK98(["read the lane, know the contract:<br/>never demand ns latency from research<br/>code, or a printed proof from the hot<br/>path -- diagram 1 is the map"])
+
+    H1_98 --> BOTH98
+    H2_98 --> BOTH98
+    H3_98 --> BOTH98
+    H4_98 --> BOTH98
+    R1_98 --> BOTH98
+    R2_98 --> BOTH98
+    R3_98 --> BOTH98
+    R4_98 --> BOTH98
+    BOTH98 --> PICK98
+```
+
+Diagram 1 is a where-does-it-live map; this is a what-does-it-owe contract.
+The hot lane's promises are all mechanical and testable -- no allocation, no
+locks, no boxing, no thrown exceptions, and a latency bound that is measured
+and whose tails are attributed rather than assumed away. The research lane
+trades every one of those for a different set: correctness pinned to
+machine precision, code a human can read and audit, statistics engineered to
+embarrass a false positive, and bit-for-bit reproducibility. The shared spine
+is the equivalence test between the readable and the fast order book, plus
+the house rule that no claim appears without its proof. The practical payoff
+is in the last node: the lane a class advertises tells you which questions
+are fair to ask of it. Diagram 1 shows the packages; diagram 2 shows the
+measured hot path behind the latency promise.
+
+---
+
+## 99. The review methodology -- finder, fix, verify by measurement
+
+A review that ends at "looks right" is not a review. The library's quality
+loop is mechanical: a finder surfaces a candidate defect, a fix changes
+exactly one thing, and a MEASUREMENT -- a test, a benchmark, a re-run --
+decides whether the fix is real. Never an opinion.
+
+```mermaid
+flowchart TD
+    FIND99["FINDER: scope ONE diff; hunt<br/>correctness bugs plus reuse /<br/>simplify / efficiency cleanups"]
+    CLASS99{"what kind<br/>of finding?"}
+    BUG99["CORRECTNESS: a wrong number,<br/>a leak, an unbounded path"]
+    SMELL99["CLEANUP: duplication, an allocation<br/>on the hot path, a clearer form"]
+    FIX99["FIX: change exactly ONE thing;<br/>keep the diff small enough that the<br/>measurement is unambiguous"]
+    VERIFY99["VERIFY BY MEASUREMENT: drive the<br/>REAL flow, not just the type-check --<br/>a test that FAILS before and passes<br/>after, a benchmark, a re-run"]
+    PROOF99{"did the number move<br/>the right way?"}
+    DONE99(["yes: land it -- the proof ships<br/>alongside the claim"])
+    BACK99["no / regressed: back to the finder<br/>-- the 'fix' was a guess"]
+    OUTLOOP99["the same loop behind this doc set:<br/>formulas pinned by tests, recipes<br/>compiled AND run, diagrams<br/>content-checked -- findings are<br/>EARNED, not asserted"]
+
+    FIND99 --> CLASS99
+    CLASS99 --> BUG99
+    CLASS99 --> SMELL99
+    BUG99 --> FIX99
+    SMELL99 --> FIX99
+    FIX99 --> VERIFY99
+    VERIFY99 --> PROOF99
+    PROOF99 --> DONE99
+    PROOF99 --> BACK99
+    BACK99 --> FIND99
+    DONE99 --> OUTLOOP99
+```
+
+The loop's one non-negotiable is the verify step: a change is not done when
+it compiles or when the reasoning sounds right, but when a measurement that
+would have caught the old behavior now passes -- a test red before and green
+after, a benchmark that shows the allocation gone, a re-run whose number
+matches the claim. Keeping each fix to a single change is what makes that
+measurement legible; a diff that touches five things cannot tell you which
+one moved the number. The classify step routes correctness bugs and cleanups
+into the same discipline so that a "simplification" still has to prove it did
+not change behavior. The failure branch is deliberate: a verify that does not
+move the number the right way sends the finding back, because it means the
+diagnosis, not just the patch, was wrong. This is the loop that pins the
+formulas, compiles the recipes, and content-checks the diagrams in this very
+document -- claims here are earned, not asserted.
+
+---
+
+## 100. The grand map -- the whole library on one page
+
+One capstone view: every package grouped by what it is FOR. Read it as a
+table of contents -- the lane it lives in, the asset class it speaks, the
+pipeline stage it serves -- and treat diagrams 1 through 99 as zoom-ins on
+each cluster.
+
+```mermaid
+flowchart TD
+    subgraph DATA100["data in"]
+        D_100["data - feed - marketdata -<br/>sbe - fix"]
+    end
+    subgraph HOT100["HOT LANE (ns-budgeted)"]
+        HB_100["orderbook (HftOrderBook) -<br/>trading (HftQuoter / Gateway /<br/>HftRiskGate / sharding) -<br/>indicators (streaming)"]
+    end
+    subgraph PRICE100["instruments + pricing (per asset class)"]
+        P_100["pricing - fx - rates - credit -<br/>commodities - volatility - markets"]
+    end
+    subgraph ALPHA100["discovery + validation"]
+        A_100["alpha - screener - dsl - ml -<br/>backtest (+ validation) - simulation"]
+    end
+    subgraph RISK100["sizing + risk"]
+        RK_100["risk - optimization - hedging -<br/>crb (central risk book)"]
+    end
+    subgraph EXEC100["execution + microstructure"]
+        E_100["execution - microstructure -<br/>rfq - regulatory"]
+    end
+    subgraph OPS100["persistence + reporting + ops"]
+        O_100["persist (checkpoint) - report -<br/>cli - util - core - examples (benchmarks)"]
+    end
+
+    D_100 --> HB_100
+    D_100 --> A_100
+    P_100 --> A_100
+    A_100 --> RK_100
+    RK_100 --> E_100
+    HB_100 --> E_100
+    E_100 --> O_100
+    RK_100 --> O_100
+```
+
+Read the clusters in three overlapping ways. By *lane*: the hot cluster
+(order book, quoting, gating, sharded engine, streaming indicators) is the
+nanosecond-budgeted machine of diagram 2, and everything else is the
+clarity-first research lane of diagram 1. By *asset class*: the pricing
+cluster is a column of instrument libraries -- equities, FX, rates, credit,
+commodities, volatility -- that all feed the same downstream, which is
+diagram 52's whole point. By *pipeline stage*: data in, discovery and
+validation, sizing and risk, execution, then persistence and reporting is
+diagram 19's line drawn as a map. The few cross-cluster arrows are the main
+flow of value; the fine structure of each box is a diagram of its own. Start
+anywhere -- every cluster here has a zoom-in earlier in this file.
+
+---
+
 ---
 
 ## Where to go next
@@ -2133,5 +4064,5 @@ map of the middle.
 - [LEARN.md](LEARN.md) — the from-zero tutorial: every concept in these diagrams, explained for beginners
 - [ARCHITECTURE.md](ARCHITECTURE.md) — the package → classes → tests map and design invariants
 - [ULTRA_LOW_LATENCY.md](ULTRA_LOW_LATENCY.md) — the four-tier latency stack, honestly bounded
-- [COOKBOOK.md](COOKBOOK.md) — one hundred and five runnable recipes across these flows
+- [COOKBOOK.md](COOKBOOK.md) — three hundred runnable recipes across these flows
 - `README.md` — capability tour with runnable examples and all measured numbers

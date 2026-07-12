@@ -80,6 +80,49 @@ Fifteen headline identities the library implements (and tests), one line each:
 - `DV01 ~ annuity x 1bp` -- payer-swap PV per +1bp zero-curve shift, bump-and-reprice (`rates.SwapPricer`)
 - `train = [0, t0 - h) U [t1 + h + embargo, n)` -- the purged K-fold arithmetic that stops label leaks (`backtest.validation.PurgedKFold`)
 
+### The formula quick reference
+
+Beyond the headline identities: the formulas the library is built around -- one line each, in
+the exact conventions the code implements. The full teaching version
+(symbol legends, pitfalls, ~170 entries) is the appendix of
+[docs/LEARN.md](docs/LEARN.md).
+
+| Formula | What it is | Class |
+|---|---|---|
+| `call = S e^{-qT} N(d1) - K e^{-rT} N(d2)` | Black-Scholes vanilla (q = dividend/foreign yield) | `pricing/BlackScholes` |
+| `call = e^{-rT} (F N(d1) - K N(d2))` | Black-76 on a forward -- futures options, caps, swaptions | `pricing/Black76` |
+| `call - put = S e^{-qT} - K e^{-rT}` | Put-call parity, model-free | `pricing/BlackScholes` |
+| `vega = S e^{-qT} phi(d1) sqrt(T)`; `gamma = e^{-qT} phi(d1)/(S sigma sqrt(T))` | The two convexity greeks a vol book lives on | `pricing/BlackScholes` |
+| `vanna = -e^{-qT} phi(d1) d2 / sigma`; `volga = vega d1 d2 / sigma` | The second-order greeks the smile charges for | `pricing/HigherOrderGreeks` |
+| `digital = payout e^{-rT} N(+-d2)` | Cash-or-nothing digital -- every vanilla is a pair of these | `pricing/DigitalOption` |
+| `KO = vanilla - KI` | Barrier in-out parity (reflection-principle pricing) | `pricing/BarrierOption` |
+| `Var[ln G] = sigma^2 T (n+1)(2n+1)/(6n^2)` | Kemna-Vorst geometric Asian -- averaging cuts variance to a third | `pricing/AsianOption` |
+| `sigma^2 = (2/T) sum (dK/K^2) e^{rT} Q(K) - (1/T)(F/K0 - 1)^2` | Variance-swap / VIX static replication | `pricing/VarianceSwap` |
+| `note = bond + options` (e.g. `revConv = (par+c) DF - (par/K) put`) | Structured notes priced by replication -- the margin made visible | `pricing/StructuredNotes` |
+| `u = e^{sigma sqrt(dt)}`, `p = (e^{(r-q)dt} - d)/(u - d)` | CRR binomial tree (American exercise) | `pricing/BinomialTree` |
+| `S <- S exp((mu - sigma^2/2) dt + sigma sqrt(dt) z)` | The exact GBM Monte Carlo step | `simulation/MonteCarloSimulator` |
+| `h_t = omega + alpha r^2 + beta h` | GARCH(1,1) -- vol clusters, and this is the cluster model | `volatility/Garch11` |
+| `sigma_yz^2 = sigma_o^2 + k sigma_c^2 + (1-k) sigma_rs^2` | Yang-Zhang range volatility -- gap-aware, drift-free | `volatility/RangeVolatility` |
+| `DF(t) = e^{-z(t) t}`; `DF_n = (1 - s_n A_{n-1})/(1 + s_n)` | Discount factors and the par-swap bootstrap | `rates/YieldCurve` |
+| `parRate = (1 - DF(T)) / annuity` | The single-curve swap identity | `rates/SwapPricer` |
+| `P = e^{A(T) - B(T) r}` | Affine bond price -- Vasicek/CIR/Hull-White short rates | `rates/ShortRateModels` |
+| `z(t) = b0 + b1 f1 + b2 f2 + b3 f2'` | Nelson-Siegel-Svensson curve fit (the ECB's daily form) | `rates/Svensson` |
+| `DV01 = modDuration * price * 1e-4` | The bond risk number desks actually add up | `rates/BondPricer` |
+| `S ~ h (1 - R)` | The credit triangle: spread = hazard x loss given default | `credit/CreditCurve` |
+| `CVA = LGD sum EE(t)[Q(t-) - Q(t)] DF(t)` | The price of the counterparty | `credit/CvaApproximator` |
+| `VaR = z_c sqrt(w' Sigma w)`; `ES = sigma phi(z_c)/(1-c)` | Delta-normal VaR and Gaussian expected shortfall | `risk/VarEngine` |
+| `ES = sqrt(sum [ES_j sqrt(dLH_j/10)]^2)` | FRTB liquidity-horizon ES cascade | `risk/FrtbEs` |
+| `component_i = w_i (Sigma w)_i / sigma_p` | Euler risk allocation -- components sum exactly to total | `risk/ComponentVar` |
+| `f* = mu / sigma^2`; discrete `f = W - (1-W)/R` | Kelly sizing, continuous and from a trade record | `backtest/portfolio/PositionSizing`, `backtest/TradeAnalytics` |
+| `PSR = N((SR - SR*) sqrt(n-1) / sqrt(1 - g3 SR + (g4-1)/4 SR^2))` | Probabilistic/deflated Sharpe -- is the track record luck? | `backtest/validation/SharpeValidation` |
+| `x_j = X sinh(kappa(T - t_j)) / sinh(kappa T)` | Almgren-Chriss optimal execution trajectory | `microstructure/AlmgrenChriss` |
+| `impact = Y sigma sqrt(Q / ADV)` | The square-root market impact law | `microstructure/MarketImpactModel` |
+| `r = mid - q gamma sigma^2 tau` | Avellaneda-Stoikov reservation price (inventory shading) | `trading/AvellanedaStoikov` |
+| `microprice = I ask + (1-I) bid`, `I = bidSz/(bidSz+askSz)` | The size-weighted fair value inside the spread | `orderbook/BookAnalytics` |
+| `VPIN = mean |buyV - sellV| / bucketV` | Flow toxicity in volume time | `microstructure/Vpin` |
+| `dx = kappa(theta - x)dt + sigma dW`; `halfLife = ln2/kappa` | Ornstein-Uhlenbeck -- the engine under every pairs trade | `microstructure/OrnsteinUhlenbeck` |
+| `F = S e^{(r_d - r_f) T}` | Covered interest parity -- FX forwards and points | `pricing/ForwardCurve`, `fx/SwapPointsCurve` |
+
 **New to finance or low-latency engineering?** Start with
 [docs/LEARN.md](docs/LEARN.md) — a from-zero tutorial that teaches every
 concept in this library in plain language (order books, market making,
@@ -88,11 +131,12 @@ memory model, honest benchmarking…), each tied to the class that implements
 it, with a guided reading path and exercises.
 
 **Want to test yourself?** [docs/LEARN.md Part IV — The exercise
-room](docs/LEARN.md#part-iv--the-exercise-room) — 500 practice questions
-the way trading desks actually pose them, each with an in-depth model
+room](docs/LEARN.md#part-iv--the-exercise-room) — 1000 practice questions
+the way trading desks actually pose them — 500 on the concepts, 500 on
+the day-to-day scenarios professionals face — each with an in-depth model
 answer and the class in this library that implements it.
 
-**Learn by task, not by API**: [docs/COOKBOOK.md](docs/COOKBOOK.md) — one hundred and five complete
+**Learn by task, not by API**: [docs/COOKBOOK.md](docs/COOKBOOK.md) — three hundred complete
 recipes under ~30 lines each, from "backtest your CSV" through survivorship-honest
 factor research and nanosecond market making to portfolio-level execution,
 a central-risk-book day, a pairs trade, a market-risk afternoon, and a
