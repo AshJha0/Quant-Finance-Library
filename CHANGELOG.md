@@ -1,5 +1,66 @@
 # Changelog
 
+## Unreleased
+
+- **Six new asset classes + structured products** (three review rounds;
+  every formula pinned by hand or by its exact limits):
+  - `credit` — `CreditCurve` (piecewise-constant hazard bootstrap from
+    CDS par spreads: every pillar reprices to 1e-10, credit triangle
+    S ~ h(1-R) pinned), `CdsPricer` (legs, par spread, risky annuity,
+    standardized upfront = (par-coupon)*annuity as an identity),
+    `CreditSpreads` (bracket-checked Z-spread, the cds-bond basis),
+    `CvaApproximator` (unilateral CVA off the hazard curve).
+  - `rates` — `SwapPricer` (par-swap-PV-zero identity; DV01 with the
+    e^z zero-vs-par sensitivity pinned), `Svensson` (6-parameter NSS:
+    planted recovery, NS nesting, double-hump beats plain NS >5x rmse).
+  - `commodities` — `CommodityCurve` (roll yield, cash-and-carry
+    implied carry exact, contango/backwardation, no extrapolation).
+  - `markets` — `IndexConstruction` (cap/price/equal weighting, divisor
+    continuity through member swaps, turnover),
+    `PrivateMarketAnalytics` (bracket-checked IRR, TVPI/DPI/RVPI,
+    Kaplan-Schoar PME with the exact PME=1 replication pin, Geltner
+    desmoothing exact round trip).
+  - `pricing.AsianOption` — exact discrete-fixing Kemna-Vorst geometric
+    + Turnbull-Wakeman arithmetic (E[A^2] double sum re-derived by the
+    verifier); one fixing IS vanilla BS, pinned at 1e-12.
+  - `pricing.StructuredNotes` — reverse convertible, capital-protected
+    note (with the participation-rate solver: low rates starve
+    participation, pinned), discount certificate — each note tested
+    EQUAL to its bond+vanilla replication; deltas by decomposition.
+  - `volatility.RangeVolatility` (Parkinson/Garman-Klass/
+    Rogers-Satchell/Yang-Zhang per the papers) +
+    `InformationCriteria` (AIC/BIC); `SignalEvaluator.quantileReturns`
+    (per-quantile forward returns + top-minus-bottom spread).
+- **FIX ResetSeqNumFlag(141)**: initiator `withResetOnLogon()` sends
+  141=Y and resets both counters (persisted pre-thread-start); the
+  receive side accepts a 141=Y/seq-1 Logon without the too-low-seq
+  disconnect. Known limitation (stated): mid-session 141=Y is accepted
+  but not re-confirmed — a design decision deferred.
+- **Review fixes across three rounds** (finder -> fix -> verify by
+  measurement): DarkPoolSimulator refuses locked/crossed mids and now
+  dry-runs aggregate MEQ against the exact time-priority consumption
+  (the pre-scan overcounted against shrinking remainders — caught by
+  the verifier's probe); CsvBarLoader European semicolon files finally
+  parse decimal commas (round-1's fix was PROVEN dead code by a failing
+  test — the splitter still split on both delimiters; now the delimiter
+  is decided once, quote-aware, per file); GlobalRiskAggregator recovery
+  no longer clears ops kill-holds it did not set; Twap/Vwap/IS
+  schedulers carry the WMR overflow guard; XlsxReportExporter emits
+  strict OOXML numerics ('1D' cells no longer corrupt workbooks);
+  AnomalyDetector scores with robust median/MAD (outliers no longer
+  inflate their own baseline); RiskParityOptimizer refuses
+  non-convergence; CounterpartyExposureTracker applies the CEM
+  net-to-gross (0.4 + 0.6*NGR) add-on relief; MidPegTracker gates;
+  HftRiskGate rejection counters atomic; MathUtils dot/covariance
+  length gates; CSV \r quoting; SvgCharts drawdown guard; OU
+  small-sample bias disclosed.
+- **Docs**: LEARN 10c teaches credit/commodities/indexes/private
+  markets; 8c gains the same-line-every-asset-class pipeline table;
+  a 41-formula appendix (code conventions flagged where they differ
+  from textbooks); README "The mathematics" section; COOKBOOK recipes
+  101-105; DIAGRAMS 51-52 (credit stack; one pipeline, five asset
+  classes).
+
 ## 1.16.0 — 2026-07-11
 
 - **Docs — the full trading pipeline in one line**: alpha discovery →

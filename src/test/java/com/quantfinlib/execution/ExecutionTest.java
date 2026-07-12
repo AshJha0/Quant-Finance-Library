@@ -187,6 +187,34 @@ class ExecutionTest {
         assertEquals(300, pool.restingQty(Side.BUY));                // buyer rests instead
     }
 
+    @Test
+    void darkPoolAggregateMeqCountsOnlyWhatWouldActuallyFill() {
+        // Incoming BUY 100 with aggregate MEQ 100 against SELL 60 (no MEQ)
+        // and SELL 60 (MEQ 50). A static pre-scan against the ORIGINAL
+        // remaining counts 60 + 60 = 120 and crosses — but after the first
+        // fill only 40 remain, below the second seller's MEQ 50, so the
+        // true executable total is 60 < 100: the cross must not happen.
+        DarkPoolSimulator pool = new DarkPoolSimulator();
+        pool.onQuote(99.99, 100.01);
+        pool.submit(Side.SELL, 60, 0);
+        pool.submit(Side.SELL, 60, 50);
+        List<DarkPoolSimulator.Fill> fills = pool.submit(Side.BUY, 100, 100);
+        assertTrue(fills.isEmpty(), "aggregate MEQ 100 cannot be met: only 60 can execute");
+        assertEquals(120, pool.restingQty(Side.SELL));
+        assertEquals(100, pool.restingQty(Side.BUY));
+
+        // Same book, MEQ 60: exactly satisfiable, fills the first seller only.
+        DarkPoolSimulator ok = new DarkPoolSimulator();
+        ok.onQuote(99.99, 100.01);
+        ok.submit(Side.SELL, 60, 0);
+        ok.submit(Side.SELL, 60, 50);
+        List<DarkPoolSimulator.Fill> okFills = ok.submit(Side.BUY, 100, 60);
+        assertEquals(1, okFills.size());
+        assertEquals(60, okFills.getFirst().quantity());
+        assertEquals(60, ok.restingQty(Side.SELL));   // the MEQ-50 seller untouched
+        assertEquals(40, ok.restingQty(Side.BUY));    // remainder rests
+    }
+
     // ---- Venue benchmarking ---------------------------------------------
 
     @Test

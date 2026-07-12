@@ -146,6 +146,72 @@ class SignalEvaluatorTest {
     }
 
     @Test
+    void quantileReturnsAreMonotoneForTheOracleWithExactMeans() {
+        // 8 names, 4 quantiles: ranks split 2-2-2-2 by drift, and forward
+        // returns are deterministic ((1+d)^5 - 1), so every bucket mean is
+        // an exact hand computation, monotone by construction.
+        SignalEvaluator.QuantileReport r =
+                SignalEvaluator.quantileReturns(panel(), oracle(), 10, 5, 4);
+        assertEquals(4, r.quantiles());
+        assertEquals(4, r.meanReturns().length);
+        assertTrue(r.dates() > 10);
+        for (int q = 1; q < 4; q++) {
+            assertTrue(r.meanReturns()[q] > r.meanReturns()[q - 1],
+                    "bucket " + q + " not above bucket " + (q - 1));
+        }
+        double bottom = ((Math.pow(1 - 0.004, 5) - 1) + (Math.pow(1 - 0.003, 5) - 1)) / 2;
+        double top = ((Math.pow(1 + 0.004, 5) - 1) + (Math.pow(1 + 0.003, 5) - 1)) / 2;
+        assertEquals(bottom, r.meanReturns()[0], 1e-12);
+        assertEquals(top, r.meanReturns()[3], 1e-12);
+        assertEquals(top - bottom, r.spread(), 1e-12);
+        assertTrue(r.spread() > 0);
+        // Every (symbol, date) pair lands in exactly one bucket.
+        int total = 0;
+        for (int c : r.counts()) {
+            total += c;
+        }
+        assertEquals(8 * r.dates(), total);
+    }
+
+    @Test
+    void nanNamesAreExcludedFromTheQuantiles() {
+        // NaN out the best name (S0, drift +0.004): the cross-section is 7
+        // names, ranks 0..6 bucket as 0,0,1,1,2,2,3 — the top quantile is
+        // exactly S1, whose deterministic forward return we know exactly.
+        // If the NaN leaked in, the top mean would be S0's higher number.
+        AlphaFactor noBest = (ctx, index) -> {
+            double[] s = oracle().scores(ctx, index);
+            s[0] = Double.NaN;   // symbols sort S0..S7, so index 0 is S0
+            return s;
+        };
+        SignalEvaluator.QuantileReport r =
+                SignalEvaluator.quantileReturns(panel(), noBest, 10, 5, 4);
+        assertEquals(Math.pow(1.003, 5) - 1, r.meanReturns()[3], 1e-12);
+        assertTrue(r.meanReturns()[3] < Math.pow(1.004, 5) - 1);
+    }
+
+    @Test
+    void quantileGatesRefuseNonsense() {
+        assertThrows(IllegalArgumentException.class,     // quantiles < 2
+                () -> SignalEvaluator.quantileReturns(panel(), oracle(), 10, 5, 1));
+        assertThrows(IllegalArgumentException.class,     // horizon <= 0
+                () -> SignalEvaluator.quantileReturns(panel(), oracle(), 10, 0, 4));
+        assertThrows(IllegalArgumentException.class,     // startIndex < 0
+                () -> SignalEvaluator.quantileReturns(panel(), oracle(), -1, 5, 4));
+        // Only 2 scored names but 4 buckets requested: every date is
+        // excluded, and the evaluation refuses rather than fabricating.
+        AlphaFactor sparse = (ctx, index) -> {
+            double[] s = new double[ctx.symbolCount()];
+            java.util.Arrays.fill(s, Double.NaN);
+            s[0] = 1;
+            s[1] = -1;
+            return s;
+        };
+        assertThrows(IllegalArgumentException.class,
+                () -> SignalEvaluator.quantileReturns(panel(), sparse, 10, 5, 4));
+    }
+
+    @Test
     void nanScoresAreDroppedPairwiseNotFabricated() {
         // Only two scored symbols → fewer than 3 complete pairs → no IC
         // observations → evaluation refuses rather than reporting noise.

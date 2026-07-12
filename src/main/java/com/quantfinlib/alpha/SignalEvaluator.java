@@ -130,6 +130,99 @@ public final class SignalEvaluator {
     }
 
     /**
+     * Mean forward return per score quantile — the picture behind the IC:
+     * {@code meanReturns()[0]} is the average forward return of the
+     * lowest-scored names, the last entry of the highest-scored, and
+     * {@link QuantileReport#spread()} is the top-minus-bottom long/short
+     * return per period. A real factor shows MONOTONE quantile returns;
+     * a factor whose spread lives entirely in one extreme quantile is a
+     * tail bet wearing a factor costume — the IC alone cannot tell the
+     * difference, which is why desks always plot both.
+     */
+    public record QuantileReport(String factorName, double[] meanReturns, int[] counts,
+                                 int quantiles, int dates) {
+
+        /** Top-quantile minus bottom-quantile mean forward return. */
+        public double spread() {
+            return meanReturns[meanReturns.length - 1] - meanReturns[0];
+        }
+    }
+
+    /**
+     * Buckets each evaluation date's cross-section into {@code quantiles}
+     * score-ranked groups and averages the forward returns per group, over
+     * the same non-overlapping date grid as
+     * {@link #evaluate(AlphaContext, AlphaFactor, int, int)}: dates step by
+     * {@code horizon} from {@code startIndex}, a NaN score or NaN forward
+     * return drops that (symbol, date) pair, and a date with fewer complete
+     * pairs than {@code quantiles} contributes to no bucket at all.
+     * Bucketing is by ascending score rank ({@code rank * quantiles / n}),
+     * so groups are as equal-sized as the cross-section allows; ties are
+     * split by input order at the boundary — quantile membership, unlike
+     * the rank IC, is not fully tie-invariant, stated.
+     *
+     * @param quantiles number of buckets, &ge; 2 (5 = quintiles, 10 = deciles)
+     */
+    public static QuantileReport quantileReturns(AlphaContext ctx, AlphaFactor factor,
+                                                 int startIndex, int horizon, int quantiles) {
+        if (horizon <= 0 || startIndex < 0) {
+            throw new IllegalArgumentException("need horizon > 0 and startIndex >= 0");
+        }
+        if (quantiles < 2) {
+            throw new IllegalArgumentException("need quantiles >= 2, got " + quantiles);
+        }
+        double[] sums = new double[quantiles];
+        int[] counts = new int[quantiles];
+        int dates = 0;
+        for (int t = startIndex; t + horizon < ctx.bars(); t += horizon) {
+            double[] scores = factor.scores(ctx, t);
+            double[] fwd = forwardReturns(ctx, t, horizon);
+            // Pairwise-complete entries only, exactly as the IC computes.
+            int n = 0;
+            for (int i = 0; i < scores.length; i++) {
+                if (!Double.isNaN(scores[i]) && !Double.isNaN(fwd[i])) {
+                    n++;
+                }
+            }
+            if (n < quantiles) {
+                continue;   // cannot form the buckets: date excluded entirely
+            }
+            double[] s = new double[n];
+            double[] f = new double[n];
+            int k = 0;
+            for (int i = 0; i < scores.length; i++) {
+                if (!Double.isNaN(scores[i]) && !Double.isNaN(fwd[i])) {
+                    s[k] = scores[i];
+                    f[k] = fwd[i];
+                    k++;
+                }
+            }
+            // Sort by score ascending, carrying the forward returns along.
+            Integer[] order = new Integer[n];
+            for (int i = 0; i < n; i++) {
+                order[i] = i;
+            }
+            java.util.Arrays.sort(order, (a, b) -> Double.compare(s[a], s[b]));
+            for (int rank = 0; rank < n; rank++) {
+                int bucket = (int) ((long) rank * quantiles / n);
+                sums[bucket] += f[order[rank]];
+                counts[bucket]++;
+            }
+            dates++;
+        }
+        if (dates == 0) {
+            throw new IllegalArgumentException(
+                    "no date had >= " + quantiles + " scored names — shrink quantiles or the NaNs");
+        }
+        double[] means = new double[quantiles];
+        for (int q = 0; q < quantiles; q++) {
+            // dates >= 1 and n >= quantiles per date guarantee counts[q] >= 1.
+            means[q] = sums[q] / counts[q];
+        }
+        return new QuantileReport(factor.name(), means, counts, quantiles, dates);
+    }
+
+    /**
      * Mean cross-sectional rank correlation between two factors' scores —
      * how much of factor B is already inside factor A. Above ~0.7 the
      * "new" factor adds little beyond the old one.
