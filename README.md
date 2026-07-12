@@ -920,7 +920,8 @@ com.quantfinlib
 ├── backtest      Backtester (warm-up-aware), config, trades, performance analytics,
 │   │             ExecutionAwareBacktester + Instant/Sor/Iceberg/LastLook models,
 │   │             BenchmarkComparison (alpha/beta/tracking error/IR/capture),
-│   │             DrawdownAnalytics (depth AND duration, time under water)
+│   │             DrawdownAnalytics (depth AND duration, time under water),
+│   │             TradeAnalytics (expectancy/payoff/streaks/Kelly/hold times)
 │   ├── strategies  SMA/EMA cross, RSI, MACD, Bollinger built-ins
 │   ├── validation  ParameterGrid, GridSearchOptimizer (+ deflated Sharpe of the
 │   │               winner), WalkForwardAnalyzer (warm OOS folds),
@@ -928,7 +929,8 @@ com.quantfinlib
 │   │               minimum track record length), BlockBootstrap
 │   │               (stationary bootstrap: the Sharpe's confidence interval),
 │   │               PurgedKFold (purge + embargo: the label-leak fix),
-│   │               OverfitProbability (CSCV PBO: is the SELECTION overfit?)
+│   │               OverfitProbability (CSCV PBO: is the SELECTION overfit?),
+│   │               MonteCarloTradeShuffle (path/sequencing risk of the trade set)
 │   ├── portfolio   PortfolioBacktester (multi-asset long/short; survivorship-
 │   │               aware overload: delistings/mergers/index drops/cash divs),
 │   │               CrossSectionalMomentum (point-in-time 12-1), PositionSizing
