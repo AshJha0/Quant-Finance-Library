@@ -471,6 +471,31 @@ candidate was never real (1). Every post-mortem lands on exactly one
 arrow. Diagram 19 in [DIAGRAMS.md](DIAGRAMS.md) draws this pipeline
 end-to-end.
 
+**The same line, every asset class.** The pipeline above used equity
+nouns, but the arrows are asset-blind. The middle of the line
+(validation, scoring, selection) literally runs the same classes on any
+return series -- a fold does not care whether the bars are a stock, a
+currency pair or a CDS spread. Only the ends change: what counts as a
+signal, what "size" is denominated in, and what execution physically
+means. One table, five markets:
+
+| Stage | Equities | FX | Rates | Credit | Commodities |
+|---|---|---|---|---|---|
+| Discovery | `alpha.Factors`, `screener.StockScreener` | carry from forward points, `fx.SwapPointsCurve.impliedCarry` | curve factors (level/slope/curvature), `rates.NelsonSiegel` | hazard curve from CDS quotes, `credit.CreditCurve` | curve shape (contango/backwardation), `commodities.CommodityCurve` |
+| Signals | `alpha.AlphaFactor` on `alpha.AlphaContext` | points vs realized drift (carry signal) | rolldown/carry via `rates.YieldCurve.forwardRate` | CDS-bond basis via `credit.CreditSpreads.zSpread` minus `CdsPricer.parSpread` | roll yield via `CommodityCurve.annualizedRollYield` |
+| Validation | `backtest.validation.PurgedKFold` + `WalkForwardAnalyzer` | same folds; embargo spans the weekend gap | same folds, on curve-factor series | same folds, on spread series | same folds; purge across roll dates |
+| Scoring | `alpha.SignalEvaluator`, `alpha.AlphaBacktester` | same, with spread + last-look reject costs | same, PnL stated in DV01 terms | same, PnL stated in spread-DV01 terms | same, PnL includes the roll term |
+| Selection | `backtest.validation.SharpeValidation`, `OverfitProbability` | same -- and K counts trials ACROSS columns | same | same | same |
+| Sizing | inverse-vol, `alpha.PortfolioConstruction` | vol-target, `backtest.portfolio.PositionSizing` + `volatility.EwmaVolatility` | DV01-matched, `rates.SwapPricer.dv01` | spread-DV01 (risky annuity), `credit.CdsPricer.riskyAnnuity` | inverse-vol on futures returns, `PositionSizing` |
+| Constraints | beta/sector caps, `optimization.ConstrainedPortfolioOptimizer` | settlement + counterparty limits, `risk.SettlementRiskAnalyzer`, `risk.CounterpartyExposureTracker` | key-rate bucket limits, `rates.KeyRateDurations` | issuer concentration caps, `risk.ConcentrationRisk` | scenario limits, `risk.StressTester` |
+| Execution | `execution.BenchmarkExecutor`, `execution.AdaptiveSor` | `fx.LpRouter` over `fx.FxTierBook`; fixings via `execution.WmrFixingScheduler` | par-swap DV01 hedging, `rates.SwapPricer` | upfront on the standard coupon, `credit.CdsPricer.upfront` | calendar-spread rolls, `execution.FuturesRollAlgo` |
+
+Private markets get stages 1-5 only: capital calls and distributions
+arrive quarterly on the manager's clock, so there is no intraday
+execution to optimize -- the pipeline ends at selection, and the tooling
+(`markets.PrivateMarketAnalytics`, section 10c) is built for exactly
+that truncation.
+
 ### 9. Risk: the systems that say no
 
 Every order passes a **pre-trade risk gate** before it can leave the
@@ -658,6 +683,137 @@ against is wrong by construction). Each has a simulation step for
 Monte Carlo scenarios: `vasicekStep` is exact (the transition is
 Gaussian — no discretization error), `cirStep` is full-truncation
 Euler (never sources volatility from a negative rate).
+
+### 10c. Credit, commodities, indexes and private markets
+
+One instrument was still missing from 10b: the swap itself. The curve
+was bootstrapped FROM par swaps, and `rates/SwapPricer.java` closes the
+loop by pricing an actual swap position off it: the fixed-leg annuity is
+`sum DF(t_i)`, the par rate is `(1 - DF(T)) / annuity` (the float leg is
+worth par in a single-curve world, so it needs no forecasting), and a
+payer swap's PV is `annuity * (parRate - K)` -- which is why a swap
+struck at par PVs to exactly zero, an identity the tests pin at 1e-12.
+DV01 is bump-and-reprice; for a fresh par swap it is approximately
+`annuity * 1bp * notional`, the unit rates desks quote risk in. With
+time priced, four more asset classes follow, each with its own version
+of "the curve is the trade."
+
+**Credit: pricing maybe-not-getting-paid.** The credit market's state
+variable is the **hazard rate** h(t) -- conditional on surviving to t,
+the annualized probability of defaulting right now. Survival is its
+exponential integral:
+
+```
+Q(t) = exp(-integral_0^t h(s) ds)
+```
+
+`credit/CreditCurve.java` bootstraps a piecewise-constant h from CDS par
+spreads exactly the way `YieldCurve` bootstraps zeros from par swaps:
+walk the quotes short to long, solving one pillar at a time. A **credit
+default swap** is insurance with a running premium, and its two legs
+(`credit/CdsPricer.java`) are the whole pricing theory: the premium leg
+is `spread * riskyAnnuity` where the risky annuity is
+`sum dt * DF(t_i) * Q(t_i)` plus a half-period accrual-on-default term;
+the protection leg is `(1-R) * sum DF(t_i) * (Q(t_i-1) - Q(t_i))`. Set
+them equal and the **par spread** is `protectionPv / riskyAnnuity`;
+since 2009 contracts trade a fixed coupon instead, and the difference is
+the **upfront**, `protectionPv - coupon * riskyAnnuity`. Collapsing the
+sums on a flat curve gives the rule of thumb every desk carries -- the
+**credit triangle** `S ~ h * (1 - R)`: a 300bp spread at 40% recovery
+means h of roughly 5% per year. The bridge back to bonds is the
+**Z-spread** (`credit/CreditSpreads.java`): the constant z added to
+every point of the risk-free curve that reprices the bond,
+`price = sum cf_i * exp(-(z(t_i) + z) * t_i)` -- credit-plus-liquidity
+compensation with the curve shape stripped out, unlike a naive yield
+spread over one government point.
+
+*Real-life case:* a PM sees the same issuer's 5-year bond at a Z-spread
+of 350bp while 5-year CDS protection costs 280bp. That gap,
+`zSpread - cdsParSpread`, is the **CDS-bond basis** (here negative from
+the CDS side's view -- the bond is cheap relative to protection): buy
+the bond, buy CDS, and in theory collect 70bp a year with default risk
+insured away. In practice the trade is short funding -- it blew through
+repo constraints spectacularly in 2008 -- which is exactly why the basis
+persists and why the number is a risk premium, not free money.
+
+**Commodities: the curve eats the spot view.** A commodity futures
+curve in **contango** slopes up (deferred above spot); in
+**backwardation** it slopes down. `commodities/CommodityCurve.java`
+turns the shape into the number a position actually earns, the
+annualized **roll yield**:
+
+```
+rollYield = ln(F_near / F_far) / (t_far - t_near)
+```
+
+positive in backwardation (rolling down the curve pays the long),
+negative in contango (every monthly roll sells cheap and buys rich).
+The shape itself comes from storage arbitrage -- **cash-and-carry**:
+
+```
+F = S * exp((r + u - y) * t)
+```
+
+with storage cost u and **convenience yield** y (the value of holding
+the physical -- heating oil before a cold snap); `impliedCarry` inverts
+this to read the market's `u - y` off the quotes. *Real-life case:* the
+USO oil fund in 2020. Retail investors bought it as a bet on spot oil
+recovering. Spot oil DID recover -- and the fund still lost heavily,
+because deep contango charged the long roll yield month after month.
+Over a decade the roll term, not the spot view, has dominated most
+commodity index returns; it is the single most misunderstood fact about
+the asset class.
+
+**Indexes: the arithmetic behind "the market was up 1%".**
+`markets/IndexConstruction.java` implements the three weighting schemes
+that produce three different markets from the same stocks:
+**cap-weighted** (weight = float-adjusted market cap share --
+self-rebalancing, since a stock that doubles doubles its own weight with
+no trading), **price-weighted** (the Dow's historical accident: a $400
+stock moves the index 8x as much as a $50 one regardless of company
+size), and **equal-weighted** (1/N -- a small-cap tilt that must trade
+every rebalance to stay equal). A level series survives membership and
+share changes through the **divisor**: `level = sum(price * shares *
+float) / divisor`, and on any change the divisor rescales so the level
+is continuous -- `newDivisor = oldDivisor * newAggregate /
+oldAggregate` -- so the index only ever moves for price reasons. The
+cost of any scheme is `turnover(w1, w2) = 0.5 * sum |w1 - w2|`, the
+one-way fraction of the portfolio that must trade. *Real-life case:* a
+fund tracking an equal-weight index computes the turnover between this
+quarter's weights and 1/N, multiplies by its impact model's cost per
+dollar traded, and knows its tracking bleed BEFORE the rebalance --
+which is how equal-weight products decide between exact replication and
+optimized sampling.
+
+**Private markets: returns without prices.** Private equity breaks the
+usual machinery on purpose: no daily prices, cash flows the manager (not
+the investor) times, and NAVs that are appraisals.
+`markets/PrivateMarketAnalytics.java` is the toolkit for that world.
+**IRR** -- the rate that zeroes `sum cf_t / (1+irr)^t` -- is
+money-weighted, so it rewards the manager's cash-flow timing, which a
+time-weighted return deliberately ignores; that is why PE quotes IRR and
+mutual funds must not. The multiples cross-check it: **TVPI** =
+(distributions + NAV) / contributions, **DPI** = distributions /
+contributions, **RVPI** = NAV / contributions -- and DPI is the honest
+one, because you cannot spend RVPI. Benchmarking against "the S&P
+returned X%" is meaningless for irregular cash flows, so **Kaplan-Schoar
+PME** grows every flow forward at the index's return and takes
+`(FV(distributions) + NAV) / FV(contributions)`: above 1, the fund beat
+buying the index with the same cash flows on the same dates. Finally,
+appraisal NAVs are AR(1)-smoothed versions of true returns, which
+understates volatility and correlation to public markets --
+**volatility laundering**. Geltner desmoothing inverts it:
+
+```
+r_true_t = (r_obs_t - phi * r_obs_{t-1}) / (1 - phi)
+```
+
+*Real-life case:* an endowment's PE sleeve reports 8% volatility against
+public equity's 16%, and the optimizer wants to triple the allocation.
+Desmooth the NAV series first (phi fitted from the reported returns' own
+autocorrelation) and the honest volatility comes back near public-market
+levels -- the diversification was an artifact of the appraisal lag, and
+the allocation decision changes accordingly.
 
 ### 11. Backtesting honestly
 
@@ -14291,3 +14447,231 @@ If a term here is unfamiliar, Parts I–III above teach all of them from
 zero; [COOKBOOK.md](COOKBOOK.md) has runnable recipes for the workflows
 these questions come from; [ULTRA_LOW_LATENCY.md](ULTRA_LOW_LATENCY.md) is
 the deep end of Round 5.
+
+---
+
+## Appendix -- The formula reference
+
+The library's headline formulas, one line of math and one line of
+meaning each, in the exact conventions the code implements (signs and
+factors verified against the class named -- when the code's convention
+differs from a textbook's, the code's is what is written here).
+
+**Options and exotics**
+
+- `d1 = (ln(S/K) + (r - q + sigma^2/2) T) / (sigma sqrt(T))`,
+  `d2 = d1 - sigma sqrt(T)`;
+  `call = S e^{-qT} N(d1) - K e^{-rT} N(d2)` -- the Black-Scholes
+  vanilla; the code's `carry` parameter IS the yield q (dividend yield
+  for equities, foreign rate for FX), not the net cost-of-carry.
+  `pricing/BlackScholes.java`.
+- `call = e^{-rT} (F N(d1) - K N(d2))`,
+  `d1 = (ln(F/K) + sigma^2 T/2) / (sigma sqrt(T))` -- Black-76 on a
+  forward: discounting and carry separate cleanly, the quoting standard
+  for futures options, caps and swaptions. `pricing/Black76.java`.
+- `call - put = S e^{-qT} - K e^{-rT} = e^{-rT} (F - K)` -- put-call
+  parity, model-free; the swaption version `payer - receiver =
+  annuity * (F - K)` is pinned in `rates/RatesOptions.java`.
+- `sigma^2 = sigma1^2 + sigma2^2 - 2 rho sigma1 sigma2` -- Margrabe: an
+  exchange option is a vanilla on the RATIO of two assets, priced with
+  the spread's variance and zero strike. `pricing/ExchangeOption.java`.
+- `sigma_K^2 = sigma1^2 - 2 rho sigma1 sigma2 f + sigma2^2 f^2`,
+  `f = F2 / (F2 + K)` -- Kirk's approximation: treat `F2 + K` as one
+  lognormal leg, then Margrabe; exact in the K = 0 limit.
+  `pricing/ExchangeOption.java`.
+- `F_quanto = S exp((r_d - q - rho sigma_S sigma_FX) T)` -- the quanto
+  drift correction: fixing the conversion rate shifts the forward by the
+  asset-FX covariance; the payoff's vol stays sigma_S.
+  `pricing/QuantoOption.java`.
+- `sigma^2 = (2/T) sum_i (dK_i / K_i^2) e^{rT} Q(K_i)
+  - (1/T) (F/K0 - 1)^2` -- the variance-swap / VIX replication: a
+  1/K^2-weighted strip of OTM options IS realized variance, no model
+  assumed. `volatility/VolatilityIndex.java`,
+  `pricing/VarianceSwap.java`.
+- `K_vol ~ sqrt(E[V]) - Var(V) / (8 E[V]^{3/2})` -- Brockhaus-Long: a
+  vol swap strikes BELOW the root of the variance strike (Jensen), by an
+  amount that needs a vol-of-vol model -- why vol swaps are not
+  model-free. `pricing/VarianceSwap.java`.
+- Garman-Kohlhagen is Black-Scholes with `q = r_foreign` -- an FX option
+  is an option on an asset whose "dividend" is the foreign interest
+  rate. `pricing/BlackScholes.java` (carry = foreign rate).
+- `sigma_impl(f, k) ~ alpha / (fk)^{(1-beta)/2} * z/x(z) * (1 +
+  correction * T)` -- Hagan's SABR lognormal implied-vol expansion:
+  beta fixed by convention, (alpha, rho, nu) calibrated to the smile.
+  `pricing/SabrModel.java`.
+- `dv = kappa (theta - v) dt + sigma_v sqrt(v) dW2`,
+  `d<W1,W2> = rho dt` -- Heston stochastic variance; priced by
+  integrating the "little trap" characteristic function (Albrecher et
+  al.), stable at long maturities; Feller ratio
+  `2 kappa theta / sigma_v^2 >= 1` keeps v strictly positive.
+  `pricing/Heston.java`.
+- `u = e^{sigma sqrt(dt)}`, `d = 1/u`,
+  `p = (e^{(r-q) dt} - d) / (u - d)` -- the CRR binomial tree's
+  risk-neutral up-probability; converges to Black-Scholes as dt -> 0.
+  `pricing/BinomialTree.java`.
+
+**Volatility models**
+
+- `h_t = omega + alpha r_{t-1}^2 + beta h_{t-1}` -- GARCH(1,1);
+  persistence `alpha + beta`, unconditional variance
+  `omega / (1 - alpha - beta)`; fitted with variance targeting
+  `omega = sigma_bar^2 (1 - alpha - beta)`. `volatility/Garch11.java`.
+- `h_t = omega + (alpha + gamma 1{r_{t-1} < 0}) r_{t-1}^2 +
+  beta h_{t-1}` -- GJR-GARCH: down moves add gamma extra variance (the
+  leverage effect); persistence `alpha + gamma/2 + beta`.
+  `volatility/GjrGarch11.java`.
+- `ln h_t = omega + beta ln h_{t-1} + alpha (|z_{t-1}| - sqrt(2/pi)) +
+  gamma z_{t-1}` -- EGARCH: log variance needs no positivity
+  constraints, gamma carries the asymmetry. `volatility/Egarch11.java`.
+- `h_t = lambda h_{t-1} + (1 - lambda) r_{t-1}^2` -- RiskMetrics EWMA:
+  GARCH with no mean reversion, one parameter.
+  `volatility/EwmaVolatility.java`.
+- `RV_{t+1} = c + b_d RV_t + b_w RV_{t-4:t} + b_m RV_{t-21:t}` -- HAR-RV
+  (Corsi): tomorrow's realized variance regressed on daily, weekly and
+  monthly averages -- the long-memory workhorse.
+  `volatility/HarRv.java`.
+- `BV ~ (pi/2) sum |r_t| |r_{t-1}|` -- bipower variation: products of
+  CONSECUTIVE absolute returns are jump-robust (a jump enters once, not
+  squared); RV minus BV isolates the jump part.
+  `microstructure/JumpRobustVolatility.java`.
+- `beta = Cov(r_a, r_m) / Var(r_m)`;
+  `sigma_a^2 = beta^2 sigma_m^2 + sigma_eps^2` -- realized beta and the
+  variance decomposition identity; R^2 is the systematic share.
+  `volatility/VolatilityDecomposition.java`, `risk/RiskMetrics.java`.
+
+**Risk**
+
+- `VaR = z_c * sqrt(w' Sigma w)` -- delta-normal VaR: the Gaussian loss
+  quantile of a linear book. `risk/VarEngine.java`.
+- `q_loss(p) = -mu + sigma (z_p + (z_p^2 - 1) s/6)` -- the
+  Cornish-Fisher quantile (s = loss skew) for delta-gamma books: short
+  gamma fattens the loss tail and the expansion prices that in.
+  `risk/VarEngine.java`.
+- `ES = sigma * phi(z_c) / (1 - c)` -- Gaussian expected shortfall in
+  closed form; the Cornish-Fisher version multiplies by
+  `(1 + z_c s/6)` and reduces to this exactly at zero gamma.
+  `risk/VarEngine.java`.
+- `VaR_p = u + (beta/xi) (((1-p) / (N_u/n))^{-xi} - 1)`;
+  `ES = (VaR + beta - xi u) / (1 - xi)` -- the GPD tail (peaks over
+  threshold u): extrapolate quantiles BEYOND the sample along the fitted
+  tail; xi >= 1 means the tail mean does not exist and the code refuses.
+  `risk/ExtremeValueTheory.java`.
+- `marginal_i = (Sigma w)_i / sigma_p`;
+  `component_i = w_i * marginal_i`, `sum_i component_i = sigma_p` --
+  Euler risk allocation: components sum EXACTLY to portfolio risk, and a
+  hedge's component is negative. `risk/ComponentVar.java`.
+- `Sigma* = delta * mu I + (1 - delta) S`, `delta = bbar^2 / d^2` --
+  Ledoit-Wolf shrinkage: pull the noisy sample covariance toward the
+  scaled identity, with intensity chosen from the data itself.
+  `risk/CovarianceShrinkage.java`.
+- `f* = mu / sigma^2` -- the (continuous) Kelly fraction; nobody bets
+  full Kelly, and `halfKelly` is the practitioner's standard.
+  `backtest/portfolio/PositionSizing.java`.
+
+**Performance and honesty**
+
+- `Sharpe = (mean(r) * periods - rf) / (stdev(r) * sqrt(periods))`;
+  Sortino replaces stdev with downside deviation below the MAR;
+  `IR = active return / tracking error` -- the ratio family.
+  `risk/RiskMetrics.java`, `backtest/BenchmarkComparison.java`.
+- `PSR = N((SR - SR*) sqrt(n-1) / sqrt(1 - g3 SR + (g4-1)/4 SR^2))` --
+  probabilistic Sharpe: the chance the TRUE Sharpe beats SR*, with the
+  estimator's variance widened by skew g3 and kurtosis g4 (raw, not
+  excess). `backtest/validation/SharpeValidation.java`.
+- `SR* = sd * ((1-gamma_E) z_{1-1/K} + gamma_E z_{1-1/(K e)})` -- the
+  expected best Sharpe of K zero-skill trials (gamma_E = Euler's
+  constant); the deflated Sharpe is the PSR against THIS benchmark
+  instead of zero. `backtest/validation/SharpeValidation.java`.
+- `n* = 1 + (1 - g3 SR + (g4-1)/4 SR^2) (z_conf / (SR - SR*))^2` --
+  minimum track record length: how many periods of this performance
+  before the PSR clears confidence.
+  `backtest/validation/SharpeValidation.java`.
+
+**Execution and microstructure**
+
+- `x_j = X sinh(kappa (T - t_j)) / sinh(kappa T)`,
+  `cosh(kappa tau) = 1 + lambda sigma^2 tau^2 / (2 etaTilde)` with
+  `etaTilde = eta - gamma tau/2` -- Almgren-Chriss: the urgency kappa
+  balances impact cost against variance risk; kappa -> 0 recovers TWAP.
+  `microstructure/AlmgrenChriss.java`.
+- `impact = Y * sigma_daily * sqrt(Q / ADV)` -- the square-root impact
+  law: cost scales with the root of size, in daily-vol units.
+  `microstructure/MarketImpactModel.java`.
+- `dp = lambda q + noise`, `lambda = E[q dp] / E[q^2]` -- Kyle's lambda:
+  price impact per unit of signed volume, LEARNED from the tape by
+  regression through the origin. `microstructure/KylesLambda.java`.
+- `p / (1 + p)` -- the classic POV bug: target participation p measured
+  against volume INCLUDING your own fills converges to p/(1+p), not p;
+  the ledger must exclude own fills. `execution/PovTracker.java`.
+
+**Market making and hedging**
+
+- `r = mid - q gamma sigma^2 tau`;
+  `delta_total = gamma sigma^2 tau + (2/gamma) ln(1 + gamma/kappa)` --
+  Avellaneda-Stoikov: reservation price shades against inventory q, the
+  optimal spread adds a liquidity term from the fill-intensity decay
+  kappa. `trading/AvellanedaStoikov.java`.
+- `band = ((3/2) k S Gamma^2 / lambda)^{1/3}` -- Whalley-Wilmott: the
+  no-trade band around delta under proportional cost k; the cube root is
+  why the band is so insensitive to its inputs -- and you rehedge to the
+  band EDGE, not the center. `hedging/WhalleyWilmott.java`.
+
+**Rates**
+
+- `D_mod = D_mac / (1 + y/f)`; `DV01 = D_mod * price * 1e-4`; convexity
+  is the second-order term that makes duration hedges drift -- the bond
+  sensitivity ladder. `rates/BondPricer.java`.
+- `y(t) = b0 + b1 (1 - e^{-x})/x + b2 ((1 - e^{-x})/x - e^{-x})`,
+  `x = t / lambda` -- Nelson-Siegel: level, slope and curvature loadings
+  (lambda here is a TIME constant; some texts write x = lambda t).
+  `rates/NelsonSiegel.java`.
+- `parRate = (1 - DF(T)) / annuity`, `annuity = sum DF(t_i)`;
+  `payerPv = annuity * (parRate - K)` -- the single-curve swap
+  identities; the float leg is worth `1 - DF(T)` with no forecasting.
+  `rates/SwapPricer.java`.
+- `F = (DF(start) - DF(end)) / annuity`;
+  `swaption = annuity * Black76(F, K, sigma, T_expiry, rate = 0)` --
+  the annuity-numeraire form: all discounting lives in the annuity,
+  which is why the Black-76 leg is called with rate zero.
+  `rates/RatesOptions.java`.
+
+**Credit**
+
+- `Q(t) = exp(-integral_0^t h(s) ds)` -- survival from the hazard rate;
+  piecewise-constant h makes it a product of exponentials, exact.
+  `credit/CreditCurve.java`.
+- `parSpread = protectionPv / riskyAnnuity`;
+  `upfront = protectionPv - coupon * riskyAnnuity` -- the CDS two-leg
+  identities; the risky annuity is the desk's spread-DV01.
+  `credit/CdsPricer.java`.
+- `S ~ h (1 - R)` -- the credit triangle: spread, hazard and recovery
+  determine each other on a flat curve; 300bp at 40% recovery means
+  h ~ 5%. `credit/CreditCurve.java`.
+- `price = sum cf_i exp(-(z(t_i) + z) t_i)` -- the Z-spread z: one
+  constant shift of the whole risk-free curve that reprices the bond;
+  `zSpread - cdsParSpread` is the CDS-bond basis.
+  `credit/CreditSpreads.java`.
+
+**Commodities, indexes and private markets**
+
+- `rollYield = ln(F_near / F_far) / (t_far - t_near)` -- annualized roll
+  yield, positive in backwardation: the return component the curve
+  shape, not the spot view, pays. `commodities/CommodityCurve.java`.
+- `F = S exp((r + u - y) t)` -- cash-and-carry: storage cost u and
+  convenience yield y set the curve; `ln(F/S)/t - r` reads the implied
+  `u - y` off the quotes. `commodities/CommodityCurve.java`.
+- `sum_t cf_t / (1 + irr)^t = 0` -- IRR, the money-weighted return
+  (contributions negative, distributions positive); no sign change, no
+  IRR, and the code throws rather than inventing one.
+  `markets/PrivateMarketAnalytics.java`.
+- `PME = (FV(distributions) + NAV) / FV(contributions)` -- Kaplan-Schoar
+  public-market equivalent, every flow grown at the index; above 1 beats
+  buying the index on the fund's own dates.
+  `markets/PrivateMarketAnalytics.java`.
+- `r_true_t = (r_obs_t - phi r_obs_{t-1}) / (1 - phi)` -- Geltner
+  desmoothing: invert the AR(1) appraisal filter and the laundered
+  volatility comes back. `markets/PrivateMarketAnalytics.java`.
+- `level = sum(price * shares * float) / divisor`;
+  `newDivisor = oldDivisor * newAgg / oldAgg`;
+  `turnover = 0.5 sum |w1 - w2|` -- index continuity and the cost of a
+  weighting scheme. `markets/IndexConstruction.java`.

@@ -65,16 +65,31 @@ public final class GlobalRiskAggregator implements AutoCloseable {
         this.monitor.start();
     }
 
+    private boolean[] killedBeforeTrip;
+
     private void monitorLoop() {
         while (running) {
             double gross = grossNotional();
             lastGross = gross;
             if (!tripped && gross > maxGrossNotional) {
-                setKilled(true);
+                // Snapshot which gates were ALREADY killed (ops holds, a
+                // second breaker): recovery must not clear a kill this
+                // aggregator did not set. A kill placed DURING our trip is
+                // indistinguishable from ours (kill(true) is idempotent) —
+                // stated limitation; pre-existing holds are preserved.
+                killedBeforeTrip = new boolean[gates.size()];
+                for (int i = 0; i < gates.size(); i++) {
+                    killedBeforeTrip[i] = gates.get(i).isKilled();
+                    gates.get(i).kill(true);
+                }
                 tripped = true;
                 trips++;
             } else if (tripped && gross < resumeNotional) {
-                setKilled(false);
+                for (int i = 0; i < gates.size(); i++) {
+                    if (!killedBeforeTrip[i]) {
+                        gates.get(i).kill(false);
+                    }
+                }
                 tripped = false;
             }
             LockSupport.parkNanos(pollIntervalNanos);
@@ -97,12 +112,6 @@ public final class GlobalRiskAggregator implements AutoCloseable {
             }
         }
         return gross;
-    }
-
-    private void setKilled(boolean killed) {
-        for (HftRiskGate gate : gates) {
-            gate.kill(killed);
-        }
     }
 
     /** Whether the firm-wide breaker is currently tripped. */

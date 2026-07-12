@@ -22,6 +22,20 @@ public final class MidPegTracker {
      * @param repriceThreshold minimum absolute peg move before repricing
      */
     public MidPegTracker(Side side, double offset, double limitPrice, double repriceThreshold) {
+        if (!Double.isFinite(offset)) {
+            throw new IllegalArgumentException("offset must be finite, got " + offset);
+        }
+        // NaN disables the limit by contract; anything else must be finite.
+        if (limitPrice == Double.POSITIVE_INFINITY || limitPrice == Double.NEGATIVE_INFINITY) {
+            throw new IllegalArgumentException("limitPrice must be finite or NaN to disable");
+        }
+        // A negative or NaN threshold makes every quote "beyond threshold":
+        // the peg reprices constantly and burns the queue priority it
+        // exists to protect.
+        if (!(repriceThreshold >= 0) || repriceThreshold == Double.POSITIVE_INFINITY) {
+            throw new IllegalArgumentException(
+                    "repriceThreshold must be >= 0 and finite, got " + repriceThreshold);
+        }
         this.side = side;
         this.offset = offset;
         this.limitPrice = limitPrice;

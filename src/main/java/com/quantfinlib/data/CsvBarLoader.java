@@ -43,6 +43,12 @@ public final class CsvBarLoader {
             throw new IllegalArgumentException("empty CSV");
         }
         String headerLine = lines.getFirst().replace("﻿", "");   // strip BOM
+        // Delimiter is a FILE-level fact: a semicolon-delimited file is the
+        // European convention, where the comma is the DECIMAL separator —
+        // exactly the character the US-convention number parser strips.
+        // Detect once from the header (quotes cannot contain the header
+        // names we match on).
+        boolean semicolon = headerLine.indexOf(';') >= 0;
         String[] headers = splitCsv(headerLine);
         int tsCol = -1, oCol = -1, hCol = -1, lCol = -1, cCol = -1, vCol = -1;
         for (int i = 0; i < headers.length; i++) {
@@ -77,11 +83,11 @@ public final class CsvBarLoader {
             minTs = Math.min(minTs, ts);
             maxTs = Math.max(maxTs, ts);
             bars.add(new Bar(ts,
-                    parseNumber(cells[oCol]),
-                    parseNumber(cells[hCol]),
-                    parseNumber(cells[lCol]),
-                    parseNumber(cells[cCol]),
-                    vCol >= 0 && vCol < cells.length ? parseNumber(cells[vCol]) : 0));
+                    parseNumber(cells[oCol], semicolon),
+                    parseNumber(cells[hCol], semicolon),
+                    parseNumber(cells[lCol], semicolon),
+                    parseNumber(cells[cCol], semicolon),
+                    vCol >= 0 && vCol < cells.length ? parseNumber(cells[vCol], semicolon) : 0));
         }
         if (bars.isEmpty()) {
             throw new IllegalArgumentException("CSV has a header but no data rows");
@@ -151,7 +157,22 @@ public final class CsvBarLoader {
 
     /** Numeric parse tolerant of vendor thousands separators ("1,234.5"). */
     static double parseNumber(String value) {
-        return Double.parseDouble(value.trim().replace(",", ""));
+        return parseNumber(value, false);
+    }
+
+    /**
+     * Locale-aware numeric parse. US convention (comma files): the comma is
+     * a thousands separator and is stripped ("1,234.5"). European
+     * convention (semicolon files): the DOT is the thousands separator and
+     * the COMMA is the decimal point ("1.234,56") — stripping commas there
+     * would silently read 1,6 as 16, corrupting every value by 10x.
+     */
+    static double parseNumber(String value, boolean europeanDecimals) {
+        String v = value.trim();
+        if (europeanDecimals) {
+            return Double.parseDouble(v.replace(".", "").replace(',', '.'));
+        }
+        return Double.parseDouble(v.replace(",", ""));
     }
 
     /**

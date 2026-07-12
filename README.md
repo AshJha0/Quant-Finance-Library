@@ -7,7 +7,7 @@
 **quantfinlib** is a production-ready quantitative finance platform for the JVM that unifies
 risk management, portfolio optimization, machine learning, technical analysis, strategy
 development, market screening, Monte Carlo simulation, reporting, and algorithmic research
-in a single Java library — for multi-asset workflows (FX, equities, commodities, and more).
+in a single Java library — for multi-asset workflows (equities, FX, rates, credit, commodities, and more).
 
 Built for quantitative researchers, algorithmic traders, developers, fintech teams, and
 financial professionals: focus on building winning strategies while the platform handles
@@ -44,7 +44,8 @@ java -cp target/classes com.quantfinlib.examples.LiveTradingDemo
 # → open http://localhost:8080
 ```
 
-**The full trading pipeline in one line** — everything here serves one flow:
+**The full trading pipeline in one line** — everything here serves one flow,
+across equities, FX, rates, credit and commodities:
 
 > **Alpha discovery → signal generation → nested validation → out-of-sample
 > scoring → selection → risk-managed sizing → portfolio constraints →
@@ -59,6 +60,26 @@ impact + spread. Each stage maps to a package — the walkthrough lives in
 [docs/LEARN.md §8c](docs/LEARN.md) and Diagram 19 of
 [docs/DIAGRAMS.md](docs/DIAGRAMS.md).
 
+## The mathematics
+
+Fifteen headline identities the library implements (and tests), one line each:
+
+- `C = S e^(-qT) N(d1) - K e^(-rT) N(d2)` -- Black-Scholes-Merton call with continuous carry (`pricing.BlackScholes`)
+- `sigma^2 = (2/T) sum (dK_i/K_i^2) e^(rT) Q(K_i) - (1/T)(F/K0 - 1)^2` -- model-free variance, the VIX replication (`volatility.VolatilityIndex`)
+- `component_i = w_i (Sigma w)_i z / sigma_p`, `sum_i component_i = VaR_p` exactly -- Euler VaR allocation (`risk.ComponentVar`)
+- `spread ~ h (1 - R)` -- the credit triangle: par spread as hazard times loss-given-default (`credit.CreditCurve`)
+- `price = sum cf_i e^(-(z(t_i) + z) t_i)` -- the Z-spread: one constant shift that reprices the bond (`credit.CreditSpreads`)
+- `roll = ln(F_near/F_far) / (T_far - T_near)` -- annualized roll yield, positive in backwardation (`commodities.CommodityCurve`)
+- `u - y = ln(F(t)/S)/t - r` -- implied storage-minus-convenience carry from the futures curve (`commodities.CommodityCurve`)
+- `PME = (FV(distributions) + NAV) / FV(contributions)` at index growth -- Kaplan-Schoar public-market equivalent (`markets.PrivateMarketAnalytics`)
+- `r_true_t = (r_obs_t - phi r_obs_{t-1}) / (1 - phi)` -- Geltner desmoothing of appraisal returns (`markets.PrivateMarketAnalytics`)
+- `f* = mu / sigma^2` -- the Kelly fraction (`backtest.portfolio.PositionSizing`)
+- `x_j = X sinh(kappa(T - t_j)) / sinh(kappa T)` -- the Almgren-Chriss optimal execution schedule (`microstructure.AlmgrenChriss`)
+- `DSR = PSR(SR*)` with `SR* = E[max SR of K noise trials]` -- the deflated Sharpe ratio (`backtest.validation.SharpeValidation`)
+- `parRate = (1 - DF(T)) / sum DF(t_i)` -- the single-curve par swap rate (`rates.SwapPricer`)
+- `DV01 ~ annuity x 1bp` -- payer-swap PV per +1bp zero-curve shift, bump-and-reprice (`rates.SwapPricer`)
+- `train = [0, t0 - h) U [t1 + h + embargo, n)` -- the purged K-fold arithmetic that stops label leaks (`backtest.validation.PurgedKFold`)
+
 **New to finance or low-latency engineering?** Start with
 [docs/LEARN.md](docs/LEARN.md) — a from-zero tutorial that teaches every
 concept in this library in plain language (order books, market making,
@@ -71,7 +92,7 @@ room](docs/LEARN.md#part-iv--the-exercise-room) — 500 practice questions
 the way trading desks actually pose them, each with an in-depth model
 answer and the class in this library that implements it.
 
-**Learn by task, not by API**: [docs/COOKBOOK.md](docs/COOKBOOK.md) — one hundred complete
+**Learn by task, not by API**: [docs/COOKBOOK.md](docs/COOKBOOK.md) — one hundred and five complete
 recipes under ~30 lines each, from "backtest your CSV" through survivorship-honest
 factor research and nanosecond market making to portfolio-level execution,
 a central-risk-book day, a pairs trade, a market-risk afternoon, and a
@@ -915,9 +936,20 @@ com.quantfinlib
 │                 membership, delisting/merger events, CSV interchange format)
 ├── feed          WebSocketFeed (live exchange data -> HFT bus), BinanceTradeParser
 ├── rates         YieldCurve (bootstrap, forwards), BondPricer (duration, DV01),
+│                 SwapPricer (par rate, payer/receiver PV, bump DV01),
 │                 ShortRateModels (Vasicek/CIR/Hull-White), KeyRateDurations,
 │                 NelsonSiegel (level/slope/curvature fit), RatesOptions
 │                 (Black-76 swaptions + cap/floor strips, parities pinned)
+├── credit        CreditCurve (hazard-rate bootstrap from CDS par spreads,
+│                 survival probabilities, the credit triangle), CdsPricer
+│                 (legs, par spread, upfront on the standard coupon),
+│                 CreditSpreads (bond Z-spread + the CDS-bond basis)
+├── commodities   CommodityCurve (futures curve: contango/backwardation,
+│                 annualized roll yield, implied storage-minus-convenience
+│                 carry -- the roll executes via execution.FuturesRollAlgo)
+├── markets       IndexConstruction (cap/price/equal weights, divisor
+│                 continuity, turnover), PrivateMarketAnalytics (IRR,
+│                 TVPI/DPI/RVPI, Kaplan-Schoar PME, Geltner desmoothing)
 ├── volatility    EwmaVolatility, Garch11 (MLE fit + forecasts),
 │                 GjrGarch11 (leverage-effect asymmetry), Egarch11
 │                 (log-variance, leverage as a sign),

@@ -200,7 +200,10 @@ public final class HftRiskGate {
 
     /** Single-writer counter (the checking thread); released for readers. */
     private void bumpRejection(int reason) {
-        LONGS.setRelease(rejections, reason, (long) LONGS.get(rejections, reason) + 1);
+        // Atomic add, matching onFill's discipline: two checking threads on
+        // one gate must not lose rejection counts (off the reject fast path
+        // anyway — the caller already has its answer).
+        LONGS.getAndAdd(rejections, reason, 1L);
     }
 
     public static String reasonName(int code) {

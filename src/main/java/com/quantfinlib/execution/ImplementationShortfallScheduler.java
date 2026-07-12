@@ -41,6 +41,10 @@ public final class ImplementationShortfallScheduler {
                                 + " shorten the horizon");
             }
         }
+        if (durationMillis < 0 || durationMillis > Long.MAX_VALUE / weights.length) {
+            throw new IllegalArgumentException(
+                    "durationMillis out of range for " + weights.length + " slices");
+        }
         long parent = Math.round(params.totalShares());
         long[] quantities = VwapScheduler.allocateProportionally(parent, weights);
         List<Slice> out = new ArrayList<>(weights.length);

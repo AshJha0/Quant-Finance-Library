@@ -24,6 +24,10 @@ public final class VwapScheduler {
         if (volumeProfile.length == 0 || totalQty <= 0) {
             throw new IllegalArgumentException("need positive quantity and a non-empty profile");
         }
+        if (durationMillis < 0 || durationMillis > Long.MAX_VALUE / volumeProfile.length) {
+            throw new IllegalArgumentException(
+                    "durationMillis out of range for " + volumeProfile.length + " slices");
+        }
         long[] quantities = allocateProportionally(totalQty, volumeProfile);
         List<Slice> out = new ArrayList<>(volumeProfile.length);
         for (int i = 0; i < volumeProfile.length; i++) {

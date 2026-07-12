@@ -2043,10 +2043,95 @@ intraday reset, stated in diagram 12's narration and enforced here.
 
 ---
 
+## 51. The credit stack -- spreads to survival curves
+
+The credit analogue of diagram 16's rates stack: CDS quotes bootstrap
+into hazard rates, hazards integrate into survival probabilities, and
+the same two legs that solved the bootstrap then price any contract --
+with the bond market's Z-spread closing the relative-value loop.
+
+```mermaid
+flowchart TD
+    QUOTES51["CDS par spread quotes<br/>1y / 3y / 5y / 7y + recovery R<br/>(single-R market convention)"]
+    DISC51["rates.YieldCurve<br/>risk-free discounting DF(t)"]
+    BOOT51["CreditCurve.bootstrap<br/>walk pillars short to long; bisect<br/>the ONE hazard that reprices this<br/>maturity to zero upfront --<br/>bracket-checked, impossible<br/>quotes throw"]
+    HAZ51["piecewise-constant h(t)<br/>survival Q(t) = exp(-integral h) --<br/>exact product of exponentials;<br/>credit triangle: spread ~ h(1-R)"]
+    LEGS51["CdsPricer legs<br/>riskyAnnuity = sum dt DF Q<br/>+ accrual-on-default term<br/>protection = (1-R) sum DF dQ"]
+    PAR51["parSpread = protection / annuity<br/>upfront(S_c) = protection -<br/>S_c * annuity<br/>(standard 100bp coupon:<br/>positive = buyer pays points)"]
+    BOND51["the same name's BOND:<br/>CreditSpreads.zSpread -- the one<br/>constant shift z over the whole<br/>govt curve that reprices the<br/>dirty price"]
+    BASIS51["CDS-bond basis =<br/>zSpread - parSpread<br/>negative basis: buy bond + buy<br/>protection -- a funding trade,<br/>not free money (2008)"]
+
+    QUOTES51 --> BOOT51
+    DISC51 --> BOOT51
+    DISC51 --> BOND51
+    BOOT51 --> HAZ51
+    HAZ51 --> LEGS51
+    LEGS51 --> PAR51
+    PAR51 --> BASIS51
+    BOND51 --> BASIS51
+```
+
+Everything downstream of the bootstrap reuses the exact discretization
+that solved it (quarterly grid, accrual-on-default half-period), so the
+round trip par-in, par-out holds at 1e-10 -- `CreditTest` pins it. The
+risky annuity doubles as the desk's risky DV01, which is why it has its
+own accessor instead of living inside the premium leg. Recipes 101 and
+102 run both branches of this picture end to end.
+
+---
+
+## 52. One pipeline, five asset classes
+
+Diagram 19's eight stages do not change per asset class -- only the
+instrument layer at the front does. Signals come from asset-specific
+curve and factor objects; validation, sizing and the honesty statistics
+are deliberately asset-agnostic; execution specializes again at the
+door of the market.
+
+```mermaid
+flowchart LR
+    subgraph INSTR52["stages 1-2: discovery + signals (per asset class)"]
+        EQ52["EQUITIES<br/>alpha.Factors<br/>markets.IndexConstruction<br/>pricing.DividendSchedule"]
+        FX52["FX<br/>fx.SwapPointsCurve<br/>fx.FxVolSurface<br/>fx.CrossRateEngine"]
+        RT52["RATES<br/>rates.YieldCurve<br/>rates.SwapPricer<br/>rates.NelsonSiegel"]
+        CR52["CREDIT<br/>credit.CreditCurve<br/>credit.CdsPricer<br/>credit.CreditSpreads (z, basis)"]
+        CM52["COMMODITIES<br/>commodities.CommodityCurve<br/>(roll yield + implied carry)"]
+    end
+    subgraph VALID52["stages 3-5: validation + selection (shared)"]
+        WF52["PurgedKFold + WalkForwardAnalyzer<br/>SharpeValidation (deflated)<br/>OverfitProbability (PBO)"]
+    end
+    subgraph SIZE52["stages 6-7: sizing + constraints (shared)"]
+        RISK52["PositionSizing (Kelly / vol target)<br/>PortfolioConstruction (neutralize, budget)<br/>VarEngine + ComponentVar<br/>markets.PrivateMarketAnalytics<br/>(the LP lens on the result)"]
+    end
+    subgraph EXEC52["stage 8: optimal execution (per market structure)"]
+        EX52["BenchmarkExecutor + AdaptiveSor (equities)<br/>LpRouter (FX quote streams)<br/>SpreadExecutionAlgo (curve trades)<br/>FuturesRollAlgo (the commodity roll)"]
+    end
+
+    EQ52 --> WF52
+    FX52 --> WF52
+    RT52 --> WF52
+    CR52 --> WF52
+    CM52 --> WF52
+    WF52 --> RISK52
+    RISK52 --> EX52
+```
+
+The design rule the grid encodes: an honesty statistic that knows what
+asset class it is grading is an honesty statistic you can shop. Purging,
+deflation and PBO see only return series; Kelly and the VaR allocation
+see only moments and weights. The asset class re-enters exactly twice --
+where prices become signals (each curve object speaks its own market's
+convention) and where targets become orders (an order book, a quote
+stream and a calendar-spread roll are different doors). Recipes 101-105
+walk the new instrument column; diagram 19 remains the stage-by-stage
+map of the middle.
+
+---
+
 ## Where to go next
 
 - [LEARN.md](LEARN.md) — the from-zero tutorial: every concept in these diagrams, explained for beginners
 - [ARCHITECTURE.md](ARCHITECTURE.md) — the package → classes → tests map and design invariants
 - [ULTRA_LOW_LATENCY.md](ULTRA_LOW_LATENCY.md) — the four-tier latency stack, honestly bounded
-- [COOKBOOK.md](COOKBOOK.md) — one hundred runnable recipes across these flows
+- [COOKBOOK.md](COOKBOOK.md) — one hundred and five runnable recipes across these flows
 - `README.md` — capability tour with runnable examples and all measured numbers

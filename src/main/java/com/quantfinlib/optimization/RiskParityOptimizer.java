@@ -36,7 +36,8 @@ public final class RiskParityOptimizer {
         double[] w = new double[n];
         java.util.Arrays.fill(w, 1.0 / n);
 
-        for (int iter = 0; iter < 10_000; iter++) {
+        boolean converged = false;
+        for (int iter = 0; iter < 10_000 && !converged; iter++) {
             double[] marginal = MathUtils.matVec(covariance, w);
             double portVar = MathUtils.dot(w, marginal);
             double target = portVar / n;
@@ -52,9 +53,13 @@ public final class RiskParityOptimizer {
             for (int i = 0; i < n; i++) {
                 w[i] /= sum;
             }
-            if (maxDeviation < 1e-10) {
-                break;
-            }
+            converged = maxDeviation < 1e-10;
+        }
+        if (!converged) {
+            // Refuse rather than hand back a stalled iterate as if it were
+            // the ERC solution (same stance as HedgeOptimizer).
+            throw new IllegalStateException(
+                    "equal-risk-contribution fixed point did not converge in 10000 iterations");
         }
         double ret = MathUtils.dot(expectedReturns, w);
         double vol = Math.sqrt(MathUtils.quadraticForm(w, covariance));

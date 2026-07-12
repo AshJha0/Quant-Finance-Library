@@ -96,6 +96,12 @@ public final class MathUtils {
     }
 
     public static double dot(double[] a, double[] b) {
+        if (a.length != b.length) {
+            // Localize the error here rather than truncating silently or
+            // throwing AIOOBE three frames deep in a risk calculation.
+            throw new IllegalArgumentException(
+                    "length mismatch: " + a.length + " vs " + b.length);
+        }
         double s = 0;
         for (int i = 0; i < a.length; i++) {
             s += a[i] * b[i];
@@ -116,8 +122,15 @@ public final class MathUtils {
         return dot(w, matVec(m, w));
     }
 
-    /** Sample covariance of two equally-sized series. */
+    /** Sample covariance of two equally-sized series (n >= 2). */
     public static double covariance(double[] a, double[] b) {
+        if (a.length != b.length) {
+            throw new IllegalArgumentException(
+                    "length mismatch: " + a.length + " vs " + b.length);
+        }
+        if (a.length < 2) {
+            throw new IllegalArgumentException("need at least 2 observations, got " + a.length);
+        }
         double ma = mean(a), mb = mean(b), s = 0;
         for (int i = 0; i < a.length; i++) {
             s += (a[i] - ma) * (b[i] - mb);
