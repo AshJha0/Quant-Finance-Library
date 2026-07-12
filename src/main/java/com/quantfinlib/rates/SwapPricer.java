@@ -20,10 +20,11 @@ package com.quantfinlib.rates;
  * worth par at inception, i.e. {@code 1 - DF(T)} per unit notional —
  * which is exactly why the par rate has that closed form. DV01 is the
  * bump-and-reprice sensitivity to a parallel 1bp shift of the zero
- * curve: for a fresh par swap it approximately equals
- * {@code annuity * 1bp * notional}, the number a rates desk quotes risk
- * in (and the tests pin that approximation). A swap struck at the par
- * rate must PV to zero — an identity, tested at 1e-12.</p>
+ * curve: for a fresh par swap on a flat cc curve it is
+ * {@code annuity * e^z * 1bp * notional} (the tests pin exactly that;
+ * the desk shorthand {@code annuity * 1bp} is the sensitivity to the
+ * SIMPLE par rate, a different derivative, ~e^z away). A swap struck at
+ * the par rate must PV to zero — an identity, tested at 1e-12.</p>
  *
  * <p>Stated simplifications: single curve (no OIS/projection split),
  * annual fixed leg, spot start. Research lane, deterministic.</p>

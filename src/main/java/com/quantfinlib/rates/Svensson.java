@@ -32,10 +32,14 @@ import com.quantfinlib.util.MathUtils;
  * shorter-dated one. Betas are NOT sign-constrained: an inverted or
  * double-dipped curve is data, not an error.</p>
  *
- * <p>With b3 = 0 the model IS Nelson-Siegel, so Svensson never fits worse
- * than NS in-sample (tested); the price is two more parameters — on sparse
- * or single-hump curves prefer NS and let {@code InformationCriteria}
- * referee. Research lane.</p>
+ * <p>With b3 = 0 the model IS Nelson-Siegel, so with the lambdas free
+ * Svensson can always match NS in-sample; the two FITTERS search different
+ * lambda grids (NS: 80 nodes 1-D; here: 50 nodes 2-D with lambda1 &lt; 10),
+ * so on data whose best single lambda falls between this grid's nodes NS
+ * can win by a grid-granularity sliver (rmse differences at the 1e-8
+ * level, tested to agree within tolerance). The price of the extra hump is
+ * two more parameters — on sparse or single-hump curves prefer NS and let
+ * {@code InformationCriteria} referee. Research lane.</p>
  */
 public final class Svensson {
 
