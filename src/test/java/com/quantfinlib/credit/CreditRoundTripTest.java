@@ -51,6 +51,26 @@ class CreditRoundTripTest {
     }
 
     @Test
+    void bootstrapRepricesEveryPillarOnASlopedDiscountCurveToo() {
+        // Every other credit pin discounts at a FLAT curve, which a
+        // DF-handling bug could hide behind; an upward-sloping curve makes
+        // each period's discount factor distinct, so repricing all pillars
+        // to 1e-12 exercises the discounting for real.
+        YieldCurve sloped = YieldCurve.ofZeroRates(
+                new double[]{1, 2, 3, 5, 7, 10},
+                new double[]{0.020, 0.024, 0.027, 0.030, 0.032, 0.033});
+        int[] tenors = {1, 3, 5, 7, 10};
+        double[] spreads = {0.008, 0.011, 0.014, 0.015, 0.016};
+        CreditCurve curve = CreditCurve.bootstrap(tenors, spreads, 0.40, sloped);
+        for (int i = 0; i < tenors.length; i++) {
+            assertEquals(spreads[i], CdsPricer.parSpread(curve, sloped, tenors[i]), 1e-12,
+                    tenors[i] + "y must reprice on the sloped curve");
+            assertEquals(0.0, CdsPricer.upfront(curve, sloped, spreads[i], tenors[i]), 1e-14,
+                    "par coupon means zero upfront at " + tenors[i] + "y");
+        }
+    }
+
+    @Test
     void creditTriangleErrorShrinksWithTheSpreadLevel() {
         // The triangle S = h*(1-R) is the flat-curve zeroth-order identity;
         // the discretization/accrual correction is O(spread), so the
@@ -131,6 +151,12 @@ class CreditRoundTripTest {
                 () -> CdsPricer.parSpread(curve, d, 0));                   // zero maturity
         assertThrows(IllegalArgumentException.class,
                 () -> CdsPricer.upfront(curve, d, -0.01, 5));              // negative coupon
+        // Below one quarterly grid step the leg sums are EMPTY: par spread
+        // would be 0/0 = NaN. The gate throws instead of leaking it.
+        assertThrows(IllegalArgumentException.class,
+                () -> CdsPricer.parSpread(curve, d, 0.1));                 // sub-grid maturity
+        assertThrows(IllegalArgumentException.class,
+                () -> CdsPricer.riskyAnnuity(curve, d, 0.2));              // sub-grid maturity
     }
 
     // -------------------------------------------------------------- z-spread

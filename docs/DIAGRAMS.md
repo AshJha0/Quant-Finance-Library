@@ -272,14 +272,24 @@ flowchart TD
     PROD["market data producer(s)"] --> S1 & S2 & SN
 
     subgraph S1["Shard 0 (own thread pair)"]
-        B1["bus"] --> G1["gate"] --> W1["gateway → venue"]
+        B1["bus"]
+        G1["gate"]
+        W1["gateway → venue"]
     end
     subgraph S2["Shard 1"]
-        B2["bus"] --> G2["gate"] --> W2["gateway → venue"]
+        B2["bus"]
+        G2["gate"]
+        W2["gateway → venue"]
     end
     subgraph SN["Shard N-1"]
-        BN["bus"] --> GN["gate"] --> WN["gateway → venue"]
+        BN["bus"]
+        GN["gate"]
+        WN["gateway → venue"]
     end
+
+    B1 --> G1 --> W1
+    B2 --> G2 --> W2
+    BN --> GN --> WN
 
     ENG["ShardedTradingEngine<br/>symbol → shard routing (frozen at start);<br/>a symbol may live on several shards<br/>(cross co-location)"] --- S1 & S2 & SN
 
@@ -433,29 +443,30 @@ certified — stated, not hidden.
 flowchart LR
     subgraph INPUTS["1-3 data → factors"]
         DATA["collection + cleaning<br/>CorporateActions · SeriesAligner<br/>YieldCurve bootstrap ·<br/>LiquidityMeasures (bars only)"]
-        DATA --> FACTORS["risk factors<br/>Pca (how many are REAL?)<br/>crb.CentralRiskBook<br/>(the worked decomposition)"]
+        FACTORS["risk factors<br/>Pca (how many are REAL?)<br/>crb.CentralRiskBook<br/>(the worked decomposition)"]
     end
     subgraph MODELS["4-7 models"]
         PRICE["pricing<br/>BlackScholes · Black76 · Heston<br/>Vasicek/CIR/Hull-White · trees · MC"]
         GREEKS["sensitivities<br/>delta/gamma/vega/theta/rho<br/>vanna · volga · cross-gamma<br/>DV01 · key-rate durations"]
         VOL["volatility<br/>EWMA · GARCH · GJR · EGARCH<br/>HAR-RV · bipower · Heston"]
         DEP["dependence<br/>Spearman/Kendall · PCA<br/>Gaussian + t copulas"]
-        PRICE --> GREEKS
     end
     subgraph RISK["8-11 risk numbers"]
         VAR["VaR/ES, five flavors<br/>delta-normal · MC · delta-gamma<br/>historical · FULL REVALUATION"]
         TAIL["tail: EVT/POT/GPD<br/>(refuses infinite means)"]
         STRESS["stress + REVERSE stress<br/>('what breaks us, at how many σ?')"]
         BT["backtests: Kupiec ·<br/>Christoffersen · traffic light"]
-        VAR --> TAIL
-        VAR --> STRESS
-        VAR --> BT
     end
     subgraph REG["12-14 the wrap"]
         FRTB["FRTB: ES 97.5 liquidity cascade<br/>+ PLAT zones (MAR32/33-styled)"]
         PROD["production: dashboards ·<br/>Checkpoint · reports"]
-        FRTB --> PROD
     end
+    DATA --> FACTORS
+    PRICE --> GREEKS
+    VAR --> TAIL
+    VAR --> STRESS
+    VAR --> BT
+    FRTB --> PROD
     FACTORS --> PRICE
     FACTORS --> VOL
     FACTORS --> DEP
@@ -2288,7 +2299,7 @@ flowchart TD
     subgraph LEAVES57["Rules leaves -- predicates over bar index i"]
         CA57["crossAbove(fast, slow)<br/>prev bar <= AND this bar >"]
         CB57["crossBelow(fast, slow)"]
-        TH57["isAbove(rsi, 70) /<br/>isBelow(rsi, 30)<br/>(threshold, level state)"]
+        TH57["aboveValue(rsi, 70) /<br/>belowValue(rsi, 30)<br/>(threshold, level state)"]
     end
     subgraph COMBINE57["boolean combinators"]
         AND57["Rule.and"]
@@ -2313,7 +2324,7 @@ read values at `i` and `i-1` -- never `i+1` -- so a rule cannot peek at the
 future by construction. Second, cross rules require the previous bar to sit on
 the other side (`<=`/`>=`), so a series that *opens* above the level does not
 count as a cross; that is the classic off-by-one that fires a phantom
-"breakout" on bar 0 of every backtest. Threshold rules like `isAbove` model a
+"breakout" on bar 0 of every backtest. Threshold rules like `aboveValue` model a
 state ("RSI is above 70 now") rather than an event. NaN warm-up bars satisfy
 nothing, and `and`/`or`/`not` preserve that all the way to
 `StrategyBuilder.build`.
@@ -2598,8 +2609,8 @@ flowchart LR
 ```
 
 The layout is the message -- there is no parse step. `OrderFlyweight` exposes
-`BLOCK_LENGTH = 44` and constants like `ORDER_ID_OFFSET`, `PRICE_OFFSET`, and
-`TIMESTAMP_OFFSET`, and each accessor is a single typed read/write against the
+`BLOCK_LENGTH = 44`, keeps each field's offset as a named internal constant
+(`ORDER_ID_OFFSET`, `PRICE_OFFSET`, `TIMESTAMP_OFFSET`), and each accessor is a single typed read/write against the
 wrapped `ByteBuffer` at its offset, so encoding a `NewOrderSingle`-equivalent
 allocates nothing. The three padding bytes at offset 17 are the detail worth
 seeing: `side` is one byte at offset 16, and without the pad the following

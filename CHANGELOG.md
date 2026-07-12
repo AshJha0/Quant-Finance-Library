@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+- **Deep verification round over the whole expansion** (three parallel
+  verifiers: every formula vs method bodies, adversarial code/test
+  review with measurement probes, fresh doc samples):
+  - Fix: `CdsPricer` threw nothing for maturities below the quarterly
+    grid step and returned `parSpread = 0/0 = NaN` (empty leg sums);
+    now gated with `IllegalArgumentException` per the house
+    NaN-rejecting rule, pinned by two new assertions.
+  - All 223 documented formula statements verified against source
+    (175 appendix entries, 33 README table rows, 15 identities);
+    8 doc fixes, headline: the CIP forward was documented in
+    continuous-compounding form while `ForwardCurve` deliberately uses
+    simple deposit rates — docs now state the code's convention.
+    Also: caplet strip includes the first period, FRTB IMCC ratio is
+    FLOORED at 1 (not capped), CEM PFE carries the (0.4+0.6*NGR)
+    scaling, affine bond form generalized to A(T)e^{-B(T)r}.
+  - Replication identities re-derived by compiled probes: credit
+    bootstrap reprice 5.9e-17 on a sloped curve, structured-note
+    replications exact to 0.0, Kemna-Vorst = vanilla BS at one fixing
+    to 1.8e-15, MonteCarloTradeShuffle vs exhaustive permutation
+    enumeration exact; new sloped-discount-curve bootstrap test.
+  - Two overstated javadoc claims corrected (Svensson "never fits
+    worse than NS" — disproven by a planted lambda=10 counterexample,
+    now states the grid-granularity caveat; SwapPricer DV01 wording
+    aligned with the annuity*e^z pin).
+  - 12 more recipes compiled AND executed (zero defects found);
+    20 more Q501-1000 citations deep-verified; Q986 had bled a
+    feature from a different project (order-book user_orders restore)
+    — replaced with the real TickCapture/TickFileReader replay;
+    mermaid lint extended to old diagrams (9 edges in diagrams 9/14
+    moved outside subgraph blocks); every CHANGELOG count re-measured
+    and confirmed. Suite now 1091/1091.
 - **The exercise room doubled: Q1-1000** — 500 new practice questions
   (Q501-1000) in `docs/LEARN.md` Part IV, changing the camera angle
   from concept to workday: data/feed/FIX/venue incidents, risk-gate and

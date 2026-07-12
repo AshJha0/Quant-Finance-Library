@@ -21023,7 +21023,7 @@ Nelson-Siegel fits the curve with three factors -- level, slope and a single cur
 
 Choose on two axes: does it fit today's curve, and can rates go negative. Vasicek is the simplest -- mean-reverting Gaussian short rate -- with a closed-form bond price, but it has two flaws for a live book: it does not automatically reprice the current curve (it is an equilibrium model, not a fitted one), and being Gaussian it lets rates go arbitrarily negative. CIR fixes the negativity by putting a square-root diffusion on the rate, so volatility vanishes as the rate approaches zero and the process is pushed back up -- but only if the Feller condition holds. The Feller condition, `2ab >= sigma^2` (twice mean-reversion times long-run level at least the vol squared), is exactly the guarantee that the CIR process stays STRICTLY positive and never touches zero; violate it and the model can hit and stick at zero, which breaks the strict-positivity you chose CIR for. Hull-White is the practical desk choice: it is Vasicek made time-inhomogeneous so it fits the CURRENT term structure exactly by construction -- essential for a book you mark against today's curve -- at the cost of allowing negative rates like Vasicek. So: Hull-White when you must reprice today's curve (most trading books), CIR when strict positivity matters and Feller holds, Vasicek as the teaching baseline.
 
-*In this library:* `rates/ShortRateModels.java` -- `vasicekBond`/`vasicekYield`, `cirBond` with `cirFeller(a, b, sigma)` returning the `2ab - sigma^2` margin that must be non-negative, and `hullWhiteBond(curve, ...)` which takes the current `YieldCurve` so it fits today's term structure.
+*In this library:* `rates/ShortRateModels.java` -- `vasicekBond`/`vasicekYield`, `cirBond` with `cirFeller(a, b, sigma)` returning the `2ab / sigma^2` ratio that must be at least 1, and `hullWhiteBond(curve, ...)` which takes the current `YieldCurve` so it fits today's term structure.
 
 ### 785. "A bondholder says convexity is on their side. On a callable bond a client says the opposite. Reconcile, with the number that governs it."
 
@@ -25150,7 +25150,7 @@ breaches it in microseconds). Match the limit's clock to the risk's speed.
 ### 985. "How do you make documentation survive review? Docs rot faster than code."
 
 You make the documentation executable, so a stale doc fails the build like stale
-code fails a test. This library's rule is compile-and-run: the 100
+code fails a test. This library's rule is compile-and-run: the 300
 `docs/COOKBOOK.md` recipes are real code paths, the Part IV answers each point
 at a class you can open and a number you can re-derive, and the review
 methodology fact-checks by compiling and running, not by reading. A prose claim
@@ -25174,9 +25174,9 @@ is almost always. Three concrete places this library pays for determinism. (1)
 **Prices as scaled longs**, never doubles, on the whole feed-to-order path: a
 long is a hair slower to carry than a double in some ops but reproduces exactly,
 and rounding errors in prices are how you fail audits. (2) **Deterministic
-snapshot restore** -- the order book rebuilds `user_orders` in a defined order so
-two restores of the same snapshot are identical, chosen over a faster
-nondeterministic rebuild. (3) **Model-based equivalence tests** demand the fast
+session replay** -- `data/TickCapture.java` records every tick through the bus so
+`TickFileReader` replays the identical event sequence run after run, chosen over
+lossy sampling that would be cheaper to write. (3) **Model-based equivalence tests** demand the fast
 order book and the readable one reach IDENTICAL state on identical inputs -- the
 fast path is allowed to be faster but not to be different. The rule: speed that
 changes the answer run-to-run is not speed, it is a bug you have not caught yet.
@@ -25363,7 +25363,7 @@ the trust the others only assert.
 *In this library:* `risk/VarBacktest.java` (the coverage/independence test),
 backed by `risk/VarEngine.java` and `risk/PnlAttribution.java`.
 
-### 995. "How do the 500-formula appendix and the pipeline tie the whole thing together?"
+### 995. "How do the 175-formula appendix and the pipeline tie the whole thing together?"
 
 They are the two ends of one bridge: the appendix is the WHY, the pipeline is the
 HOW, and every appendix answer points at the class in the pipeline that runs it,
@@ -25902,14 +25902,16 @@ differs from a textbook's, the code's is what is written here).
   spanning an ex-date are worth measurably less than the yield
   approximation says. `pricing/DividendSchedule.java` (adjustedSpot,
   forward, europeanPrice).
-- `F = S e^{(r_d - r_f) T}`; `points = F - S` -- covered interest
-  parity: the forward is spot grown at the rate DIFFERENTIAL, and FX
-  forwards trade as points, not outrights. Inverting the quoted points
-  gives the implied carry `(1/T) ln(F/S)` -- when it diverges from
-  actual deposit rates, that gap is the cross-currency basis, not free
-  money. `pricing/ForwardCurve.java` (theoreticalForward,
-  forwardPoints, impliedRateDifferential), `fx/SwapPointsCurve.java`
-  (impliedCarry).
+- `F = S (1 + r_d T) / (1 + r_f T)`; `points = F - S` -- covered
+  interest parity from SIMPLE deposit rates (the convention deposits
+  are quoted in), and FX forwards trade as points, not outrights.
+  Inverting the quoted points gives the implied carry `(1/T) ln(F/S)`
+  in CONTINUOUS form -- mixing the two compounding conventions
+  manufactures a spurious ~12bp "basis" at 1y/5% that is convention,
+  not arbitrage; the real gap to deposit rates is the cross-currency
+  basis, not free money. `pricing/ForwardCurve.java`
+  (theoreticalForward, forwardPoints, impliedRateDifferential),
+  `fx/SwapPointsCurve.java` (impliedCarry).
 - `A/B * B/C = A/C` (shared middle currency),
   `A/C / B/C = A/B` (shared quote currency) -- the two cross-rate
   compositions that cover every triangulation (EURUSD * USDJPY =
@@ -25918,7 +25920,8 @@ differs from a textbook's, the code's is what is written here).
   spread you actually pay. `fx/CrossRateEngine.java`,
   `pricing/TriangularArbitrage.java` (impliedCrossMid).
 - `edge = max(ac.bid - ab.ask * bc.ask, ab.bid * bc.bid - ac.ask)`
-  (in bps of mid) -- triangular arbitrage on DEALABLE bid/ask quotes:
+  (each path in bps of its own buy-leg cost) -- triangular arbitrage
+  on DEALABLE bid/ask quotes:
   both round-trip paths checked, positive means executable edge
   before fees. Using mids instead of dealable sides is the classic
   false-positive generator. `pricing/TriangularArbitrage.java`
@@ -25993,8 +25996,9 @@ differs from a textbook's, the code's is what is written here).
   `f_i = (DF(t_{i-1})/DF(t_i) - 1)/tau` -- a cap is a strip of
   independent caplets, each a Black-76 call on that period's SIMPLE
   forward rate, fixing at the period start. Pitfall: the first period
-  is already fixed and is excluded -- a cap on a known rate is not an
-  option. `rates/RatesOptions.java` (cap, floor).
+  is already fixed at T = 0, so its caplet carries no optionality --
+  the code includes it at discounted intrinsic value.
+  `rates/RatesOptions.java` (cap, floor).
 
 **Curve and bond mechanics**
 
@@ -26052,9 +26056,10 @@ differs from a textbook's, the code's is what is written here).
   given default. Assumes exposure and default are independent -- no
   wrong-way risk, which UNDERSTATES CVA exactly when exposure grows
   as the counterparty weakens. `credit/CvaApproximator.java` (cva).
-- `PFE = max(0, netMtm) + sum notional * addOn(tenor)` -- the
-  current-exposure-method potential future exposure: net current
-  exposure per netting set plus BIS-style notional add-ons by tenor
+- `exposure = max(0, netMtm)
+  + (0.4 + 0.6 NGR) sum |notional| addOn(tenor)` -- the
+  current-exposure-method total exposure: net current
+  exposure per netting set plus NGR-scaled BIS-style notional add-ons by tenor
   bucket (FX: 1% under 1y, 5% for 1-5y, 7.5% beyond). Crude by
   construction -- an add-on table cannot see offsetting trades'
   correlation. `risk/CounterpartyExposureTracker.java`
@@ -26100,9 +26105,9 @@ differs from a textbook's, the code's is what is written here).
 - `IMCC = ES_current * (ES_stressed,reduced / ES_current,reduced)` --
   FRTB stress calibration: anchor today's ES to the worst historical
   period, using the reduced factor set observable in both windows as
-  the bridge. Pitfall: the ratio blows up when the reduced set
-  explains too little of the full ES -- the regulation caps that
-  ratio for a reason. `risk/FrtbEs.java` (stressCalibratedEs).
+  the bridge. The ratio is FLOORED at 1 (MAR33.6) -- a stressed period
+  calmer than today must never discount capital.
+  `risk/FrtbEs.java` (stressCalibratedEs).
 - `dx* = -(L / (delta' Sigma delta)) Sigma delta`;
   `sigmas = L / sqrt(delta' Sigma delta)` -- reverse stress: the
   MOST PROBABLE factor move that produces target loss L on a linear
@@ -26214,7 +26219,8 @@ differs from a textbook's, the code's is what is written here).
   costs. Complements win rate: a 90% win rate with profit factor 0.9
   is a losing strategy that feels like winning.
   `backtest/PerformanceAnalytics.java` (compute).
-- `expectancy = W * avgWin - (1 - W) * avgLoss`;
+- `expectancy = W * avgWin - L * avgLoss` (L the loss rate;
+  scratch trades count in neither);
   `payoff = avgWin / avgLoss` -- the per-trade edge and the trade
   signature. A 40% win rate needs payoff above 1.5 for positive
   expectancy -- the arithmetic that kills most "high win rate"
@@ -26552,9 +26558,10 @@ differs from a textbook's, the code's is what is written here).
   in existence. `simulation/MonteCarloSimulator.java` (simulate).
 - Antithetic variates: run each path with z and -z and average --
   the payoff's monotone-in-z component cancels, roughly halving
-  variance for free. Deterministic seeding makes every price
-  reproducible and every test exact. `pricing/Autocallable.java`
-  (price), `simulation/MonteCarloSimulator.java`.
+  variance for free (`pricing/Autocallable.java`, price).
+  Deterministic per-path seeding makes every price reproducible and
+  every test exact (`simulation/MonteCarloSimulator.java`, which is
+  plain Monte Carlo, no antithetics).
 - `A = L L'` (lower-triangular L) -- the Cholesky factorization that
   turns independent Gaussians into correlated ones (`x = L z`). A
   non-positive-definite input FAILS LOUDLY: pairwise-estimated

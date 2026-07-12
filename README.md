@@ -84,7 +84,7 @@ Fifteen headline identities the library implements (and tests), one line each:
 
 Beyond the headline identities: the formulas the library is built around -- one line each, in
 the exact conventions the code implements. The full teaching version
-(symbol legends, pitfalls, ~170 entries) is the appendix of
+(symbol legends, pitfalls, ~175 entries) is the appendix of
 [docs/LEARN.md](docs/LEARN.md).
 
 | Formula | What it is | Class |
@@ -105,7 +105,7 @@ the exact conventions the code implements. The full teaching version
 | `sigma_yz^2 = sigma_o^2 + k sigma_c^2 + (1-k) sigma_rs^2` | Yang-Zhang range volatility -- gap-aware, drift-free | `volatility/RangeVolatility` |
 | `DF(t) = e^{-z(t) t}`; `DF_n = (1 - s_n A_{n-1})/(1 + s_n)` | Discount factors and the par-swap bootstrap | `rates/YieldCurve` |
 | `parRate = (1 - DF(T)) / annuity` | The single-curve swap identity | `rates/SwapPricer` |
-| `P = e^{A(T) - B(T) r}` | Affine bond price -- Vasicek/CIR/Hull-White short rates | `rates/ShortRateModels` |
+| `P = A(T) e^{-B(T) r}` | Affine bond price -- Vasicek/CIR/Hull-White short rates | `rates/ShortRateModels` |
 | `z(t) = b0 + b1 f1 + b2 f2 + b3 f2'` | Nelson-Siegel-Svensson curve fit (the ECB's daily form) | `rates/Svensson` |
 | `DV01 = modDuration * price * 1e-4` | The bond risk number desks actually add up | `rates/BondPricer` |
 | `S ~ h (1 - R)` | The credit triangle: spread = hazard x loss given default | `credit/CreditCurve` |
@@ -121,7 +121,7 @@ the exact conventions the code implements. The full teaching version
 | `microprice = I ask + (1-I) bid`, `I = bidSz/(bidSz+askSz)` | The size-weighted fair value inside the spread | `orderbook/BookAnalytics` |
 | `VPIN = mean |buyV - sellV| / bucketV` | Flow toxicity in volume time | `microstructure/Vpin` |
 | `dx = kappa(theta - x)dt + sigma dW`; `halfLife = ln2/kappa` | Ornstein-Uhlenbeck -- the engine under every pairs trade | `microstructure/OrnsteinUhlenbeck` |
-| `F = S e^{(r_d - r_f) T}` | Covered interest parity -- FX forwards and points | `pricing/ForwardCurve`, `fx/SwapPointsCurve` |
+| `F = S (1 + r_d T)/(1 + r_f T)` | Covered interest parity on simple deposit rates -- FX forwards and points | `pricing/ForwardCurve`, `fx/SwapPointsCurve` |
 
 **New to finance or low-latency engineering?** Start with
 [docs/LEARN.md](docs/LEARN.md) — a from-zero tutorial that teaches every
