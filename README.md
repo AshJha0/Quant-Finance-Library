@@ -825,7 +825,7 @@ com.quantfinlib
 │                 limit/market/IOC/FOK/post-only), BookPrimitives (shared
 │                 bitmap-scan + open-addressing map), BookAnalytics, Side
 ├── alpha         Factor research pipeline: Factors (9 signals), SignalEvaluator
-│                 (IC/IR/turnover), AlphaValidation (walk-forward, CV, Monte
+│                 (IC/IR/turnover + quantile returns), AlphaValidation (walk-forward, CV, Monte
 │                 Carlo, sensitivity), AlphaBacktester (cost-aware),
 │                 PortfolioConstruction (sizing, budgets, neutrality),
 │                 AlphaReport (decay, attribution, rolling metrics),
@@ -866,7 +866,11 @@ com.quantfinlib
 │                 DigitalOption, TouchOption, BarrierOption, DividendSchedule,
 │                 IncrementalGreeks (tick-path delta-gamma updates),
 │                 VarianceSwap (model-free strike + MTM + vol-swap convexity),
-│                 ExchangeOption (Margrabe + Kirk spread), QuantoOption
+│                 ExchangeOption (Margrabe + Kirk spread), QuantoOption,
+│                 AsianOption (exact geometric + Turnbull-Wakeman arithmetic),
+│                 StructuredNotes (reverse convertible, capital-protected
+│                 note + participation solver, discount certificate —
+│                 each pinned equal to its bond+vanilla replication)
 ├── hedging       DeltaHedger, GreekHedger, MinimumVarianceHedge, FxHedger,
 │                 PairsHedger, HedgingSimulator (Monte Carlo hedging error)
 ├── execution     BenchmarkExecutor (dynamic VWAP/TWAP/Arrival/IS/Close/Open/POV
@@ -938,12 +942,14 @@ com.quantfinlib
 ├── rates         YieldCurve (bootstrap, forwards), BondPricer (duration, DV01),
 │                 SwapPricer (par rate, payer/receiver PV, bump DV01),
 │                 ShortRateModels (Vasicek/CIR/Hull-White), KeyRateDurations,
-│                 NelsonSiegel (level/slope/curvature fit), RatesOptions
+│                 NelsonSiegel (level/slope/curvature fit), Svensson
+│                 (double-hump NSS fit, nests NS), RatesOptions
 │                 (Black-76 swaptions + cap/floor strips, parities pinned)
 ├── credit        CreditCurve (hazard-rate bootstrap from CDS par spreads,
 │                 survival probabilities, the credit triangle), CdsPricer
 │                 (legs, par spread, upfront on the standard coupon),
-│                 CreditSpreads (bond Z-spread + the CDS-bond basis)
+│                 CreditSpreads (bond Z-spread + the CDS-bond basis),
+│                 CvaApproximator (unilateral CVA: EE x bucket PD x DF x LGD)
 ├── commodities   CommodityCurve (futures curve: contango/backwardation,
 │                 annualized roll yield, implied storage-minus-convenience
 │                 carry -- the roll executes via execution.FuturesRollAlgo)
@@ -955,7 +961,9 @@ com.quantfinlib
 │                 (log-variance, leverage as a sign),
 │                 HarRv (Corsi realized-vol forecasting benchmark),
 │                 VolatilityIndex (VIX-style model-free fear gauge),
-│                 VolatilityDecomposition (systematic vs idiosyncratic)
+│                 VolatilityDecomposition (systematic vs idiosyncratic),
+│                 RangeVolatility (Parkinson/GK/Rogers-Satchell/Yang-Zhang),
+│                 InformationCriteria (AIC/BIC model referee)
 ├── trading       OrderGateway, PaperTradingGateway (risk-gated paper venue),
 │                 fast lane: HftRiskGate, OrderRingBuffer, HftOrderGateway,
 │                 HftQuoter (streaming market maker) + AvellanedaStoikov
@@ -964,7 +972,8 @@ com.quantfinlib
 │                 LastLookGate (symmetric maker-side price check),
 │                 ShardedTradingEngine + GlobalRiskAggregator (scale-out)
 ├── fix           FIX 4.4 engine: FixMessage codec, FixSession (initiator/acceptor,
-│                 logon/heartbeat/logout), NewOrderSingle, ExecutionReport,
+│                 logon/heartbeat/logout, ResetSeqNumFlag(141) reset-on-logon),
+│                 NewOrderSingle, ExecutionReport,
 │                 garbage-free hot path: FixOrderEncoder, FixExecReportView,
 │                 FixMarketDataView (35=W/X tiered quotes)
 ├── dsl           Rule, Rules, StrategyBuilder

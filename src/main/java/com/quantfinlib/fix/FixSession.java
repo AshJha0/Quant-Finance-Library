@@ -35,11 +35,23 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * the {@code initiate}/{@code accept} overloads for sequence-number
  * continuation across restarts, with ResendRequests serviced from messages
  * sent before the reconnect.</p>
+ *
+ * <p>ResetSeqNumFlag(141): {@link Config#withResetOnLogon()} makes the
+ * initiator send 141=Y and restart both counters at 1; receiving a Logon
+ * with 141=Y (and 34=1, per spec) resets the inbound expectation to 1 and —
+ * on the side that did not initiate the reset — the outbound counter too,
+ * persisted, with the acceptor confirming 141=Y back. This is the standard
+ * escape hatch when the two sides' stores have diverged: without it a fresh
+ * peer's seq 1 reads as "too low" against a durable store and the session
+ * dies on sight. One stated caveat: the message store is not wiped on reset,
+ * so until an old sequence number is naturally overwritten, a post-reset
+ * ResendRequest could replay a pre-reset message stored under it — reset
+ * into a fresh store when replay purity matters.</p>
  */
 public final class FixSession implements AutoCloseable {
 
     public record Config(String senderCompId, String targetCompId, int heartbeatSeconds,
-                         String username, String password) {
+                         String username, String password, boolean resetOnLogon) {
 
         public Config {
             if (heartbeatSeconds < 1) {
@@ -48,12 +60,31 @@ public final class FixSession implements AutoCloseable {
         }
 
         public Config(String senderCompId, String targetCompId, int heartbeatSeconds) {
-            this(senderCompId, targetCompId, heartbeatSeconds, null, null);
+            this(senderCompId, targetCompId, heartbeatSeconds, null, null, false);
+        }
+
+        public Config(String senderCompId, String targetCompId, int heartbeatSeconds,
+                      String username, String password) {
+            this(senderCompId, targetCompId, heartbeatSeconds, username, password, false);
         }
 
         /** Adds Username(553)/Password(554) to the initiator's Logon. */
         public Config withCredentials(String username, String password) {
-            return new Config(senderCompId, targetCompId, heartbeatSeconds, username, password);
+            return new Config(senderCompId, targetCompId, heartbeatSeconds, username, password,
+                    resetOnLogon);
+        }
+
+        /**
+         * Initiator sends ResetSeqNumFlag(141)=Y on Logon and restarts BOTH
+         * sequence counters at 1 (persisted) — the standard clean-slate
+         * reconnect when the two sides' stores have diverged beyond repair.
+         * The peer, per FIX 4.4, resets its own counters and confirms with
+         * 141=Y; any store history is abandoned, so messages sent before the
+         * reset are no longer recoverable by ResendRequest.
+         */
+        public Config withResetOnLogon() {
+            return new Config(senderCompId, targetCompId, heartbeatSeconds, username, password,
+                    true);
         }
     }
 
@@ -128,6 +159,7 @@ public final class FixSession implements AutoCloseable {
     private long expectedIncomingSeq;     // reader thread only
     private boolean resendPending;        // reader thread only
     private long resendTriggerSeq;        // reader thread only
+    private final boolean sentResetLogon; // this side initiated the 141=Y reset
     private final Thread readerThread;
     private final Thread heartbeatThread;
 
@@ -141,6 +173,15 @@ public final class FixSession implements AutoCloseable {
         this.listener = listener;
         this.acceptor = acceptor;
         this.store = store;
+        // An initiator configured for reset-on-logon starts BOTH counters at
+        // 1 before any thread runs (its Logon goes out as 34=1, 141=Y) and
+        // persists the reset so a crash mid-handshake cannot resurrect the
+        // abandoned numbers.
+        this.sentResetLogon = !acceptor && config.resetOnLogon();
+        if (sentResetLogon) {
+            store.saveOutgoingSeq(1);
+            store.saveIncomingSeq(1);
+        }
         this.outgoingSeq = store.nextOutgoingSeq();
         this.expectedIncomingSeq = store.expectedIncomingSeq();
         this.readerThread = new Thread(this::readerLoop,
@@ -168,6 +209,9 @@ public final class FixSession implements AutoCloseable {
         FixMessage.Builder logon = FixMessage.builder(FixMessage.LOGON)
                 .field(FixMessage.ENCRYPT_METHOD, "0")
                 .field(FixMessage.HEART_BT_INT, config.heartbeatSeconds());
+        if (config.resetOnLogon()) {
+            logon.field(FixMessage.RESET_SEQ_NUM_FLAG, "Y");
+        }
         if (config.username() != null) {
             logon.field(FixMessage.USERNAME, config.username());
         }
@@ -410,6 +454,16 @@ public final class FixSession implements AutoCloseable {
             handleSequenceReset(m);
             return;
         }
+        // Logon with ResetSeqNumFlag(141)=Y — which the spec requires to carry
+        // 34=1 — restarts both sides at 1. Apply BEFORE seqnum validation: the
+        // whole point is that the peer's fresh seq 1 would otherwise read as
+        // "too low" against a durable store and disconnect the session the
+        // flag exists to save.
+        if (FixMessage.LOGON.equals(type) && seq == 1
+                && "Y".equals(m.getString(FixMessage.RESET_SEQ_NUM_FLAG, "N"))
+                && !"Y".equals(m.getString(FixMessage.POSS_DUP_FLAG, "N"))) {
+            applyLogonSeqReset();
+        }
         if (seq > expectedIncomingSeq) {
             // Gap: ask for a resend and drop this message — it will be redelivered.
             listener.onSequenceGap(expectedIncomingSeq, seq);
@@ -438,9 +492,15 @@ public final class FixSession implements AutoCloseable {
             case FixMessage.LOGON -> {
                 if (!established) {
                     if (acceptor) {
-                        send(FixMessage.builder(FixMessage.LOGON)
+                        FixMessage.Builder reply = FixMessage.builder(FixMessage.LOGON)
                                 .field(FixMessage.ENCRYPT_METHOD, "0")
-                                .field(FixMessage.HEART_BT_INT, config.heartbeatSeconds()));
+                                .field(FixMessage.HEART_BT_INT, config.heartbeatSeconds());
+                        if ("Y".equals(m.getString(FixMessage.RESET_SEQ_NUM_FLAG, "N"))) {
+                            // Confirm the reset: our reply is the peer's proof
+                            // that its 141=Y was honored, sent as 34=1.
+                            reply.field(FixMessage.RESET_SEQ_NUM_FLAG, "Y");
+                        }
+                        send(reply);
                     }
                     established = true;
                     logonLatch.countDown();
@@ -508,6 +568,26 @@ public final class FixSession implements AutoCloseable {
             advanceIncoming(newSeqNo);
         }
         // Stale resets (PossDup replays of old gap-fills) are ignored.
+    }
+
+    /**
+     * ResetSeqNumFlag(141)=Y received on a Logon: expect the peer from 1
+     * again, abandon any in-flight gap recovery, and — unless WE initiated
+     * the reset (our own outbound counter already restarted at 1 and has
+     * moved on: the peer's confirming Logon must not rewind it) — restart
+     * the outbound counter at 1 too, persisted.
+     */
+    private void applyLogonSeqReset() {
+        if (!sentResetLogon) {
+            synchronized (writeLock) {
+                outgoingSeq = 1;
+                store.saveOutgoingSeq(outgoingSeq);
+            }
+        }
+        resendPending = false;
+        resendTriggerSeq = 0;
+        expectedIncomingSeq = 1;
+        store.saveIncomingSeq(1);
     }
 
     private void advanceIncoming(long newExpected) {

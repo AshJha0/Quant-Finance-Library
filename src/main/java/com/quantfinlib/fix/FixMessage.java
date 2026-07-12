@@ -53,6 +53,7 @@ public final class FixMessage {
     public static final int TEST_REQ_ID = 112;
     public static final int ORIG_SENDING_TIME = 122;
     public static final int GAP_FILL_FLAG = 123;
+    public static final int RESET_SEQ_NUM_FLAG = 141;
     public static final int EXEC_TYPE = 150;
     public static final int LEAVES_QTY = 151;
     public static final int SESSION_REJECT_REASON = 373;

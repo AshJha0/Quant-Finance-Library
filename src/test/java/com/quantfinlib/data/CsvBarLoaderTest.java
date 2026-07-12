@@ -88,6 +88,33 @@ class CsvBarLoaderTest {
     }
 
     @Test
+    void parsesEuropeanSemicolonFilesWithDecimalCommas() {
+        // German-convention export: semicolon delimiter, comma decimals,
+        // dot thousands separators. 1,5 is one-and-a-half, 1.200 is 1200.
+        BarSeries s = CsvBarLoader.parse(List.of(
+                "Date;Open;High;Low;Close;Volume",
+                "2024-01-02;100,25;102,5;99,5;101,75;1.200.000",
+                "2024-01-03;101,75;104,0;101,0;103,5;950.000"), "EU");
+        assertEquals(2, s.size());
+        assertEquals(100.25, s.open(0), 0.0);
+        assertEquals(101.75, s.close(0), 0.0);
+        assertEquals(1_200_000, s.volume(0), 0.0);
+        assertEquals(950_000, s.volume(1), 0.0);
+    }
+
+    @Test
+    void quotedSemicolonInACommaHeaderDoesNotFlipTheDecimalConvention() {
+        // A US comma file whose extra column name contains a quoted ';'
+        // must stay US: "1,234.5" is 1234.5, not European 1.2345.
+        BarSeries s = CsvBarLoader.parse(List.of(
+                "Date,Open,High,Low,Close,Volume,\"Notes;Flags\"",
+                "2024-01-02,\"1,234.5\",\"1,240.0\",\"1,230.0\",\"1,238.5\",1000,x;y"), "US");
+        assertEquals(1, s.size());
+        assertEquals(1234.5, s.open(0), 0.0);
+        assertEquals(1238.5, s.close(0), 0.0);
+    }
+
+    @Test
     void rejectsMalformedFiles() {
         assertThrows(IllegalArgumentException.class,
                 () -> CsvBarLoader.parse(List.of(), "X"));

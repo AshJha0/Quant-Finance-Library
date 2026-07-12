@@ -72,13 +72,24 @@ public final class DarkPoolSimulator {
         long remaining = quantity;
         if (!Double.isNaN(mid)) {
             LinkedList<Resting> contra = side == Side.BUY ? sells : buys;
-            // Aggregate crossable quantity first: only slices that satisfy
-            // each resting order's own MEQ count toward it.
+            // Dry-run the exact time-priority consumption below to learn the
+            // aggregate quantity that would actually execute. A static scan
+            // against the ORIGINAL remaining overcounts: a later resting
+            // order's MEQ can become unsatisfiable once earlier fills shrink
+            // the remainder, and crossing on the inflated total would
+            // violate the INCOMING order's aggregate MEQ.
             long crossable = 0;
+            long dryRemaining = remaining;
             for (Resting r : contra) {
-                if (Math.min(remaining, r.qty) >= r.minQty) {
-                    crossable += Math.min(remaining, r.qty);
+                if (dryRemaining == 0) {
+                    break;
                 }
+                long fill = Math.min(dryRemaining, r.qty);
+                if (fill < r.minQty) {
+                    continue;
+                }
+                crossable += fill;
+                dryRemaining -= fill;
             }
             if (crossable >= minExecutionQty) {
                 Iterator<Resting> it = contra.iterator();

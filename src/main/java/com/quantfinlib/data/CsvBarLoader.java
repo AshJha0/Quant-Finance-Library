@@ -46,10 +46,12 @@ public final class CsvBarLoader {
         // Delimiter is a FILE-level fact: a semicolon-delimited file is the
         // European convention, where the comma is the DECIMAL separator —
         // exactly the character the US-convention number parser strips.
-        // Detect once from the header (quotes cannot contain the header
-        // names we match on).
-        boolean semicolon = headerLine.indexOf(';') >= 0;
-        String[] headers = splitCsv(headerLine);
+        // Detect once from the header, counting only semicolons OUTSIDE
+        // quotes: a quoted extra-column name containing ';' in a comma file
+        // must not flip the whole file to European decimals.
+        boolean semicolon = containsUnquoted(headerLine, ';');
+        char delimiter = semicolon ? ';' : ',';
+        String[] headers = splitCsv(headerLine, delimiter);
         int tsCol = -1, oCol = -1, hCol = -1, lCol = -1, cCol = -1, vCol = -1;
         for (int i = 0; i < headers.length; i++) {
             String h = headers[i].trim().toLowerCase(Locale.ROOT);
@@ -76,7 +78,7 @@ public final class CsvBarLoader {
             if (line.isEmpty()) {
                 continue;
             }
-            String[] cells = splitCsv(line);
+            String[] cells = splitCsv(line, delimiter);
             String rawTs = cells[tsCol].trim();
             allNumeric &= rawTs.chars().allMatch(Character::isDigit);
             long ts = parseTimestamp(rawTs);
@@ -121,11 +123,21 @@ public final class CsvBarLoader {
     }
 
     /**
-     * RFC-4180-style field split: comma/semicolon delimiters, double quotes
+     * RFC-4180-style field split on the comma delimiter; double quotes
      * protect embedded delimiters, {@code ""} escapes a quote inside a
      * quoted field.
      */
     static String[] splitCsv(String line) {
+        return splitCsv(line, ',');
+    }
+
+    /**
+     * RFC-4180-style field split on ONE delimiter. Splitting a semicolon
+     * file on commas too would shred its decimal commas ("100,25" is one
+     * number, not two cells) — the delimiter is a file-level fact decided
+     * once from the header, never per line.
+     */
+    static String[] splitCsv(String line, char delimiter) {
         List<String> out = new ArrayList<>();
         StringBuilder current = new StringBuilder();
         boolean quoted = false;
@@ -144,7 +156,7 @@ public final class CsvBarLoader {
                 }
             } else if (c == '"') {
                 quoted = true;
-            } else if (c == ',' || c == ';') {
+            } else if (c == delimiter) {
                 out.add(current.toString());
                 current.setLength(0);
             } else {
@@ -153,6 +165,20 @@ public final class CsvBarLoader {
         }
         out.add(current.toString());
         return out.toArray(new String[0]);
+    }
+
+    /** Whether {@code c} occurs outside RFC-4180 double-quoted regions. */
+    static boolean containsUnquoted(String line, char c) {
+        boolean quoted = false;
+        for (int i = 0; i < line.length(); i++) {
+            char ch = line.charAt(i);
+            if (ch == '"') {
+                quoted = !quoted;   // "" inside quotes toggles twice: net unchanged
+            } else if (ch == c && !quoted) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Numeric parse tolerant of vendor thousands separators ("1,234.5"). */
