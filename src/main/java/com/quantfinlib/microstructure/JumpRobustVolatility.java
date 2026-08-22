@@ -6,7 +6,7 @@ import com.quantfinlib.util.MathUtils;
  * Jump-robust streaming volatility. A squared-return estimator (the one
  * inside {@code SignalEngine}) cannot tell a news gap from diffusion: one
  * headline print enters as r² and reads as a volatility regime shift for
- * the estimator's whole memory. Bipower variation (Barndorff-Nielsen &
+ * the estimator's whole memory. Bipower variation (Barndorff-Nielsen &amp;
  * Shephard, 2004) fixes this with a beautifully simple trick: use the
  * product of CONSECUTIVE absolute returns, {@code (π/2)·|rₜ|·|rₜ₋₁|},
  * instead of r². Diffusion moves both factors together, so the product

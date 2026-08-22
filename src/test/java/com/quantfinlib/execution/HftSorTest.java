@@ -44,6 +44,20 @@ class HftSorTest {
     }
 
     @Test
+    void nanFeeVenueIsExcludedRatherThanPoisoningSelection() {
+        HftSor sor = new HftSor(2);
+        sor.venueQuote(0, 0, 0, 10_000, 500);   // best raw ask, but fee is NaN
+        sor.venueQuote(1, 0, 0, 10_005, 500);   // worse raw ask, but valid fee
+        sor.fee(0, Double.NaN);
+        sor.fee(1, 0.0);
+        long[] out = new long[2];
+        long routed = sor.route(Side.BUY, 400, Integer.MAX_VALUE, out);
+        assertEquals(400, routed, "the good venue must still receive the order");
+        assertEquals(0, out[0], "the NaN-fee venue must never win selection");
+        assertEquals(400, out[1]);
+    }
+
+    @Test
     void limitPriceExcludesVenuesBeyondIt() {
         HftSor sor = new HftSor(2);
         sor.venueQuote(0, 0, 0, 10_000, 100);

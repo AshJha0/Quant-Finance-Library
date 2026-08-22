@@ -96,7 +96,8 @@ public final class HftSor {
                 int px = buy ? askTick[v] : bidTick[v];
                 long sz = buy ? askSize[v] : bidSize[v];
                 if (sz <= 0 || px == (buy ? NO_ASK : NO_BID)
-                        || (buy ? px > limitTick : px < limitTick)) {
+                        || (buy ? px > limitTick : px < limitTick)
+                        || Double.isNaN(feeTicks[v])) {
                     continue;
                 }
                 double allIn = buy ? px + feeTicks[v] : px - feeTicks[v];

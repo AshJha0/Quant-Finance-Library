@@ -88,16 +88,14 @@ class FxVolSurfaceTest {
     void timeInterpolationIsLinearInTotalVariance() {
         FxVolSurface s = surface();
         double tMid = 0.5;
-        double f = s.forwardAt(tMid);
-        double k = f; // zero log-moneyness at tMid
         // The surface evaluates each bracketing smile at the TARGET expiry's
         // log-moneyness (here 0), i.e. at each pillar's own forward.
         double vLo = s.vol(T, s.forwardAt(T));
         double vHi = s.vol(1.0, s.forwardAt(1.0));
         double wExpected = vLo * vLo * T + (vHi * vHi * 1.0 - vLo * vLo * T) * (tMid - T) / (1.0 - T);
-        assertEquals(Math.sqrt(wExpected / tMid), s.vol(tMid, k), 1e-12);
+        assertEquals(Math.sqrt(wExpected / tMid), s.vol(tMid, s.forwardAt(tMid)), 1e-12);
         // Outside the quoted range: flat in the boundary smile.
-        assertEquals(s.vol(T, k), s.vol(0.05, k), 1e-12);
+        assertEquals(s.vol(T, s.forwardAt(tMid)), s.vol(0.05, s.forwardAt(tMid)), 1e-12);
     }
 
     @Test
@@ -128,5 +126,36 @@ class FxVolSurfaceTest {
         // An unattainable premium-adjusted delta is reported, not silently clamped.
         assertThrows(IllegalArgumentException.class,
                 () -> FxVolSurface.strikeForDelta(F, ATM, T, 0.999, true, true));
+    }
+
+    @Test
+    void addRejectsRrBfCombinationThatProducesNonPositiveWingVol() {
+        // atm=0.01, bf=0.0, rr=-0.02 -> 25-delta call wing = atm + bf + rr/2 = -0.01.
+        assertThrows(IllegalArgumentException.class,
+                () -> FxVolSurface.builder().add(T, F, 0.01, -0.02, 0.0));
+    }
+
+    @Test
+    void strikeForDeltaAcceptsPaDeltaNearTheTrueContinuousPeak() {
+        // The sampled 200-point grid used to under-estimate the true peak of
+        // the premium-adjusted call delta; a delta just inside the true peak
+        // (found here via a fine independent scan) must now be accepted
+        // instead of being spuriously rejected as "unattainable".
+        double sv = ATM * Math.sqrt(T);
+        double lo = F * Math.exp(-8 * sv);
+        double hi = F * Math.exp(8 * sv);
+        double bestVal = -1;
+        for (int i = 0; i <= 200_000; i++) {
+            double k = lo * Math.pow(hi / lo, i / 200_000.0);
+            double d2 = Math.log(F / k) / sv - 0.5 * sv;
+            double v = (k / F) * MathUtils.normCdf(d2);
+            if (v > bestVal) {
+                bestVal = v;
+            }
+        }
+        double target = bestVal - 1e-5; // just inside the true peak
+        double k = FxVolSurface.strikeForDelta(F, ATM, T, target, true, true);
+        double d2 = Math.log(F / k) / sv - 0.5 * sv;
+        assertEquals(target, (k / F) * MathUtils.normCdf(d2), 1e-6);
     }
 }

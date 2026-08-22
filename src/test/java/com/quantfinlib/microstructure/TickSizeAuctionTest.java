@@ -3,6 +3,7 @@ package com.quantfinlib.microstructure;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -43,7 +44,7 @@ class TickSizeAuctionTest {
         assertEquals(10.10, s.roundDown(10.10), 1e-9);
         assertEquals(10.10, s.roundUp(10.10), 1e-9);
         assertTrue(s.isOnTick(10.10));
-        assertTrue(!s.isOnTick(10.13));
+        assertFalse(s.isOnTick(10.13));
     }
 
     @Test
@@ -112,7 +113,7 @@ class TickSizeAuctionTest {
 
         // Identical volume and surplus at both candidates → reference decides.
         Auction b = new Auction()
-                .addBuy(101, 100).addBuy(100, 0 + 1) // 1-lot to make 100 a candidate
+                .addBuy(101, 100).addBuy(100, 1) // 1-lot to make 100 a candidate
                 .addSell(99, 101);
         Auction.Result rb = b.uncross(99.0);
         assertTrue(rb.price() <= 100); // pulled toward the reference side
@@ -127,8 +128,31 @@ class TickSizeAuctionTest {
         // Market buy sweeps: at 101 supply 600 vs demand 500 → 500 matched.
         assertEquals(101, r.price());
         assertEquals(500, r.volume());
-        // Market-only book has no candidate price: no uncross.
-        assertNull(new Auction().addMarketBuy(10).addMarketSell(10).uncross(100));
+    }
+
+    @Test
+    void pureMarketOrderBookClearsAtReferencePrice() {
+        // Opening-auction edge case: every order is market-on-open, so there
+        // are no limit prices at all. The market buy/sell quantities still
+        // trivially cross and must clear at the reference price rather than
+        // returning no-match.
+        Auction equal = new Auction().addMarketBuy(10).addMarketSell(10);
+        Auction.Result rEqual = equal.uncross(100);
+        assertEquals(100, rEqual.price());
+        assertEquals(10, rEqual.volume());
+        assertEquals(0, rEqual.imbalance());
+
+        // Unequal market quantities: matched volume is the min of the two,
+        // with the surplus reported on the heavier side.
+        Auction imbalanced = new Auction().addMarketBuy(15).addMarketSell(10);
+        Auction.Result rImbalanced = imbalanced.uncross(50);
+        assertEquals(50, rImbalanced.price());
+        assertEquals(10, rImbalanced.volume());
+        assertEquals(5, rImbalanced.imbalance());
+        assertTrue(rImbalanced.hasBuySurplus());
+
+        // A one-sided market-only book still has no cross.
+        assertNull(new Auction().addMarketBuy(10).uncross(100));
     }
 
     @Test

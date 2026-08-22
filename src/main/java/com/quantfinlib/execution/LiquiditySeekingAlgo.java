@@ -60,7 +60,7 @@ public final class LiquiditySeekingAlgo {
             }
         }
 
-        /** 10% spread tolerance, vol regime < 0.5, impact < 5 bps, 25% clips, floor from 70%. */
+        /** 10% spread tolerance, vol regime &lt; 0.5, impact &lt; 5 bps, 25% clips, floor from 70%. */
         public static Config defaults() {
             return new Config(0.10, 0.5, 5.0, 0.25, 0.7);
         }

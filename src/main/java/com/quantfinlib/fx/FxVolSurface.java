@@ -3,6 +3,7 @@ package com.quantfinlib.fx;
 import com.quantfinlib.util.MathUtils;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -83,6 +84,23 @@ public final class FxVolSurface {
             if (expiryYears <= 0 || forward <= 0 || atmVol <= 0) {
                 throw new IllegalArgumentException("expiry, forward and atm vol must be > 0");
             }
+            boolean tenDelta = !Double.isNaN(rr10);
+            // Derived wing vols must themselves be valid vols — an adversarial
+            // rr/bf combination relative to atm can otherwise drive a wing
+            // negative (or zero) and let it enter the surface as a garbage
+            // pillar, only sometimes caught later by the unrelated
+            // strikes-increasing check.
+            double v25c = atmVol + bf25 + rr25 / 2;
+            double v25p = atmVol + bf25 - rr25 / 2;
+            double v10c = tenDelta ? atmVol + bf10 + rr10 / 2 : Double.NaN;
+            double v10p = tenDelta ? atmVol + bf10 - rr10 / 2 : Double.NaN;
+            if (!(v25c > 0) || !Double.isFinite(v25c) || !(v25p > 0) || !Double.isFinite(v25p)
+                    || (tenDelta && (!(v10c > 0) || !Double.isFinite(v10c)
+                        || !(v10p > 0) || !Double.isFinite(v10p)))) {
+                throw new IllegalArgumentException(
+                        "rr/bf combination produces a non-positive wing vol at expiry "
+                                + expiryYears + " — check rr/bf signs and magnitudes");
+            }
             quotes.add(new Quote(expiryYears, forward, atmVol, rr25, bf25, rr10, bf10));
             return this;
         }
@@ -97,7 +115,7 @@ public final class FxVolSurface {
             if (quotes.isEmpty()) {
                 throw new IllegalStateException("at least one expiry quote required");
             }
-            quotes.sort((a, b) -> Double.compare(a.t, b.t));
+            quotes.sort(Comparator.comparingDouble(Quote::t));
             int n = quotes.size();
             double[] ts = new double[n];
             double[] fwds = new double[n];
@@ -187,12 +205,50 @@ public final class FxVolSurface {
             // then bisect to its right.
             double peak = lo;
             double peakVal = -1;
+            int peakIdx = 0;
             for (int i = 0; i <= 200; i++) {
                 double k = lo * Math.pow(hi / lo, i / 200.0);
                 double v = paCallDelta(forward, k, sv);
                 if (v > peakVal) {
                     peakVal = v;
                     peak = k;
+                    peakIdx = i;
+                }
+            }
+            // The grid only brackets the true (continuous) maximum; refine it
+            // with a few golden-section steps in log-strike around the best
+            // grid point so peakVal isn't a slight under-estimate of the
+            // true peak, which would spuriously reject attainable deltas
+            // right at the edge of the range.
+            {
+                double logLo = Math.log(lo * Math.pow(hi / lo, Math.max(0, peakIdx - 1) / 200.0));
+                double logHi = Math.log(lo * Math.pow(hi / lo, Math.min(200, peakIdx + 1) / 200.0));
+                double gr = (Math.sqrt(5) - 1) / 2;
+                double a = logLo, b = logHi;
+                double c = b - gr * (b - a);
+                double d = a + gr * (b - a);
+                double fc = paCallDelta(forward, Math.exp(c), sv);
+                double fd = paCallDelta(forward, Math.exp(d), sv);
+                for (int i = 0; i < 60; i++) {
+                    if (fc > fd) {
+                        b = d;
+                        d = c;
+                        fd = fc;
+                        c = b - gr * (b - a);
+                        fc = paCallDelta(forward, Math.exp(c), sv);
+                    } else {
+                        a = c;
+                        c = d;
+                        fc = fd;
+                        d = a + gr * (b - a);
+                        fd = paCallDelta(forward, Math.exp(d), sv);
+                    }
+                }
+                double refinedK = Math.exp(0.5 * (a + b));
+                double refinedVal = paCallDelta(forward, refinedK, sv);
+                if (refinedVal > peakVal) {
+                    peakVal = refinedVal;
+                    peak = refinedK;
                 }
             }
             if (delta > peakVal) {

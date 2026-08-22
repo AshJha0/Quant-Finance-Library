@@ -1,22 +1,12 @@
-﻿<?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+﻿<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
-
     <groupId>com.quantfinlib</groupId>
     <artifactId>quant-finance-library</artifactId>
     <version>1.17.0</version>
     <packaging>jar</packaging>
-
     <name>Quant-Finance-Library</name>
-    <description>
-        quantfinlib: production-ready quantitative finance platform unifying risk management,
-        portfolio optimization, machine learning, technical analysis, strategy development,
-        market screening, Monte Carlo simulation, reporting, and algorithmic research.
-    </description>
+    <description> quantfinlib: production-ready quantitative finance platform unifying risk management, portfolio optimization, machine learning, technical analysis, strategy development, market screening, Monte Carlo simulation, reporting, and algorithmic research. </description>
     <url>https://github.com/AshJha0/Quant-Finance-Library</url>
-
     <licenses>
         <license>
             <name>MIT License</name>
@@ -24,7 +14,6 @@
             <distribution>repo</distribution>
         </license>
     </licenses>
-
     <developers>
         <developer>
             <id>AshJha0</id>
@@ -32,25 +21,22 @@
             <url>https://github.com/AshJha0</url>
         </developer>
     </developers>
-
     <scm>
         <url>https://github.com/AshJha0/Quant-Finance-Library</url>
         <connection>scm:git:https://github.com/AshJha0/Quant-Finance-Library.git</connection>
         <developerConnection>scm:git:https://github.com/AshJha0/Quant-Finance-Library.git</developerConnection>
         <tag>HEAD</tag>
     </scm>
-
     <properties>
         <maven.compiler.release>24</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <junit.version>5.11.4</junit.version>
         <jmh.version>1.37</jmh.version>
     </properties>
-
     <dependencies>
-        <!-- Zero runtime dependencies: the core library is pure JDK for minimal
-             footprint and predictable ultra-low-latency behavior.
-             JUnit and JMH are test-scope only. -->
+        <!--  Zero runtime dependencies: the core library is pure JDK for minimal
+                     footprint and predictable ultra-low-latency behavior.
+                     JUnit and JMH are test-scope only.  -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
@@ -70,7 +56,6 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
-
     <build>
         <plugins>
             <plugin>
@@ -78,7 +63,7 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.13.0</version>
                 <configuration>
-                    <!-- JMH benchmark generation (test sources only use it). -->
+                    <!--  JMH benchmark generation (test sources only use it).  -->
                     <annotationProcessorPaths>
                         <path>
                             <groupId>org.openjdk.jmh</groupId>
@@ -110,8 +95,8 @@
                 <artifactId>jacoco-maven-plugin</artifactId>
                 <version>0.8.13</version>
                 <configuration>
-                    <!-- Demos/benchmarks are run manually, not unit-tested;
-                         excluding them keeps the coverage number honest. -->
+                    <!--  Demos/benchmarks are run manually, not unit-tested;
+                                             excluding them keeps the coverage number honest.  -->
                     <excludes>
                         <exclude>com/quantfinlib/examples/**</exclude>
                     </excludes>
@@ -142,6 +127,9 @@
                         <goals>
                             <goal>jar-no-fork</goal>
                         </goals>
+                        <configuration>
+                            <classifier>sources</classifier>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>
@@ -164,12 +152,11 @@
             </plugin>
         </plugins>
     </build>
-
     <profiles>
-        <!-- Maven Central publishing: inert in normal builds/CI; activate
-             explicitly with `mvn -P central-release deploy` once the Central
-             Portal account, com.quantfinlib namespace and GPG key exist —
-             the exact steps live in docs/PUBLISHING.md. -->
+        <!--  Maven Central publishing: inert in normal builds/CI; activate
+                     explicitly with `mvn -P central-release deploy` once the Central
+                     Portal account, com.quantfinlib namespace and GPG key exist —
+                     the exact steps live in docs/PUBLISHING.md.  -->
         <profile>
             <id>central-release</id>
             <build>
