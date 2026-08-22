@@ -30,13 +30,55 @@ public final class SmartOrderRouter {
     }
 
     public static RoutingPlan route(Side side, long quantity, List<VenueQuote> venues, boolean preferDark) {
+        return route(side, quantity, venues, preferDark, sideDefaultLimit(side));
+    }
+
+    /**
+     * As {@link #route(Side, long, List, boolean)}, but skips any venue
+     * whose price would violate {@code limitPrice} (through-the-limit on
+     * the relevant side) — the double-price analogue of {@link
+     * HftSor#route}'s {@code limitTick}.
+     *
+     * @param limitPrice worst acceptable raw (pre-fee) price; pass {@code
+     *                    Double.POSITIVE_INFINITY} (buy) / {@code
+     *                    Double.NEGATIVE_INFINITY} (sell) for pure market
+     */
+    public static RoutingPlan route(Side side, long quantity, List<VenueQuote> venues, boolean preferDark,
+                                    double limitPrice) {
+        return route(side, quantity, venues, preferDark, limitPrice, 0, Long.MAX_VALUE);
+    }
+
+    /**
+     * As {@link #route(Side, long, List, boolean, double)}, additionally
+     * excluding any venue whose quote is stale — the same treatment a NaN
+     * or zero-size venue already gets, mirroring {@link HftSor#venueDown}
+     * as the way a dead/frozen feed is kept from receiving child orders.
+     *
+     * @param nowNanos         current time, same clock as {@link
+     *                         VenueQuote#lastUpdateNanos}
+     * @param maxQuoteAgeNanos a venue is excluded when {@code nowNanos -
+     *                         quote.lastUpdateNanos() > maxQuoteAgeNanos};
+     *                         pass {@link Long#MAX_VALUE} to disable the
+     *                         staleness check
+     */
+    public static RoutingPlan route(Side side, long quantity, List<VenueQuote> venues, boolean preferDark,
+                                    double limitPrice, long nowNanos, long maxQuoteAgeNanos) {
+        if (quantity < 0) {
+            throw new IllegalArgumentException("quantity must be >= 0");
+        }
         int sign = side.sign();
         List<Candidate> candidates = new ArrayList<>(venues.size());
         for (VenueQuote v : venues) {
             double price = v.dark() ? v.mid() : (side == Side.BUY ? v.ask() : v.bid());
             long size = side == Side.BUY ? v.askSize() : v.bidSize();
-            if (size <= 0 || Double.isNaN(price)) {
+            if (size <= 0 || Double.isNaN(price) || !Double.isFinite(v.feeBps())) {
                 continue;
+            }
+            if (nowNanos - v.lastUpdateNanos() > maxQuoteAgeNanos) {
+                continue;                    // stale quote, excluded from routing
+            }
+            if (sign > 0 ? price > limitPrice : price < limitPrice) {
+                continue;                    // through the limit
             }
             double allIn = price * (1 + sign * v.feeBps() / 1e4);
             candidates.add(new Candidate(v, price, allIn, size));
@@ -64,5 +106,9 @@ public final class SmartOrderRouter {
         long routed = quantity - remaining;
         return new RoutingPlan(legs, routed, remaining,
                 routed == 0 ? Double.NaN : allInNotional / routed);
+    }
+
+    private static double sideDefaultLimit(Side side) {
+        return side == Side.BUY ? Double.POSITIVE_INFINITY : Double.NEGATIVE_INFINITY;
     }
 }

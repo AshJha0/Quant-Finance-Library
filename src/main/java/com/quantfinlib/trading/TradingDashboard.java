@@ -16,7 +16,7 @@ import java.util.concurrent.Executors;
 /**
  * Zero-dependency live trading dashboard (JDK {@code com.sun.net.httpserver}):
  * serves a self-refreshing HTML page and a JSON status endpoint with the
- * paper-trading account (cash, equity, realized P&L, positions, rejections)
+ * paper-trading account (cash, equity, realized P&amp;L, positions, rejections)
  * and any attached latency histograms — the whole live loop, observable in a
  * browser.
  */

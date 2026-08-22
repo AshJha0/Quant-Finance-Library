@@ -189,7 +189,7 @@ public final class MathUtils {
     }
 
     /**
-     * Inverse standard normal CDF (Acklam's approximation, |error| < 1.15e-9).
+     * Inverse standard normal CDF (Acklam's approximation, |error| &lt; 1.15e-9).
      */
     public static double normInv(double p) {
         if (p <= 0 || p >= 1) {

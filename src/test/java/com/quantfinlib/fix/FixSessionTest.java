@@ -17,6 +17,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -240,9 +241,9 @@ class FixSessionTest {
             }
             assertTrue(wire.toString().contains("35=1"),
                     "silence must escalate to a TestRequest before the kill: " + wire);
-            assertTrue(venueEvents.disconnectReason != null,
+            assertNotNull(venueEvents.disconnectReason,
                     "a peer that ignores the TestRequest gets disconnected");
-            assertTrue(!venue.isEstablished(), "the session is DOWN, not zombified");
+            assertFalse(venue.isEstablished(), "the session is DOWN, not zombified");
         }
     }
 
@@ -327,6 +328,39 @@ class FixSessionTest {
         assertTrue(clientEvents.disconnectReason.contains("too low"),
                 clientEvents.disconnectReason);
         assertFalse(client.isEstablished());
+    }
+
+    @Test
+    void resendRequestIsServicedWhileAnInboundGapIsStillOpen() throws Exception {
+        // BUG PIN: gap recovery depends on the peer's ResendRequest being
+        // serviced even while OUR OWN inbound gap is still unresolved — a
+        // RESEND_REQUEST must never be dropped by the seq > expected branch.
+        connect(30);
+        client.sendNewOrderSingle("ord-1", "EURUSD", Side.BUY, 100, 1.0851,
+                NewOrderSingle.TIF_DAY);   // client outgoing seq now at 2 (stored for replay)
+        awaitTrue(() -> venueEvents.orders.size() == 1, "order not received");
+
+        // Venue jumps ahead, opening a gap on the client's inbound side.
+        venue.forceOutgoingSeq(50);
+        venue.send(FixMessage.builder(FixMessage.HEARTBEAT));
+        assertTrue(clientEvents.gap.await(5, TimeUnit.SECONDS), "gap not detected");
+
+        // While that gap is still open, the venue explicitly asks the client
+        // to resend its own messages. This must be serviced despite the
+        // client's unresolved inbound gap.
+        venue.forceOutgoingSeq(51);
+        venue.send(FixMessage.builder(FixMessage.RESEND_REQUEST)
+                .field(FixMessage.BEGIN_SEQ_NO, 2)
+                .field(FixMessage.END_SEQ_NO, 0));
+
+        assertTrue(clientEvents.resendServed.await(5, TimeUnit.SECONDS),
+                "RESEND_REQUEST dropped while an inbound gap was in progress");
+        assertEquals(2, clientEvents.resendBegin.get());
+        // The client's own gap-triggered RESEND_REQUEST (sent in response to the
+        // venue's seq jump) consumes outgoing seq 3, so by the time the venue's
+        // explicit RESEND_REQUEST is serviced the true "last sent" seq is 3 —
+        // that's what an END_SEQ_NO=0 ("to whatever you have") request resolves to.
+        assertEquals(3, clientEvents.resendEnd.get());
     }
 
     @Test

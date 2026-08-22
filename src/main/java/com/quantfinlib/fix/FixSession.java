@@ -343,6 +343,10 @@ public final class FixSession implements AutoCloseable {
         logoutSent = true;
         send(FixMessage.builder(FixMessage.LOGOUT));
         try {
+            // Peer didn't ack Logout in time; close the socket anyway —
+            // this is best-effort teardown, not a hard failure like
+            // awaitEstablished()'s logon timeout, so the boolean result
+            // is deliberately not checked further.
             logoutLatch.await(2, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -474,8 +478,12 @@ public final class FixSession implements AutoCloseable {
                         .field(FixMessage.BEGIN_SEQ_NO, expectedIncomingSeq)
                         .field(FixMessage.END_SEQ_NO, 0));
             }
-            // Session-critical messages still act despite the gap.
-            if (!(FixMessage.LOGON.equals(type) || FixMessage.LOGOUT.equals(type))) {
+            // Session-critical messages still act despite the gap: LOGON/LOGOUT
+            // for the handshake, and RESEND_REQUEST because gap recovery on
+            // both sides depends on the peer's resend requests being serviced
+            // even while our own inbound gap is still open.
+            if (!(FixMessage.LOGON.equals(type) || FixMessage.LOGOUT.equals(type)
+                    || FixMessage.RESEND_REQUEST.equals(type))) {
                 return;
             }
         } else if (seq < expectedIncomingSeq) {

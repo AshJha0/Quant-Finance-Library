@@ -90,7 +90,17 @@ public final class Auction {
         // executable-volume function only changes at these points.
         double[] candidates = distinctLimits();
         if (candidates.length == 0) {
-            return null;
+            // No limit orders at all — e.g. a pure market-on-open book.
+            // Executable volume can't vary with price in that case (market
+            // orders are eligible regardless of p), so the only candidate
+            // worth checking is the reference price itself.
+            long demand = eligibleQuantity(buys, referencePrice, true);
+            long supply = eligibleQuantity(sells, referencePrice, false);
+            long volume = Math.min(demand, supply);
+            if (volume == 0) {
+                return null;
+            }
+            return new Result(referencePrice, volume, demand - supply);
         }
         Result best = null;
         for (double p : candidates) {

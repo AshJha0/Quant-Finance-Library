@@ -62,7 +62,7 @@ public final class FxTierBook {
     // ------------------------------------------------------------------
 
     /**
-     * Replaces one tier of one LP's ladder ({@code tier} < maxTiers). Call
+     * Replaces one tier of one LP's ladder ({@code tier} &lt; maxTiers). Call
      * {@link #tierCount} after the last tier of an update so partially
      * written ladders are never visible to queries from the same thread's
      * later logic.

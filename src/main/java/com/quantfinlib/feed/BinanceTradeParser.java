@@ -34,10 +34,15 @@ public final class BinanceTradeParser implements FeedParser {
                 return null;
             }
             String symbol = extractString(payload, "s");
-            double price = Double.parseDouble(extractString(payload, "p"));
-            double size = Double.parseDouble(extractString(payload, "q"));
+            String priceStr = extractString(payload, "p");
+            String sizeStr = extractString(payload, "q");
             long time = extractLong(payload, "T");
-            if (symbol == null || price <= 0 || size < 0) {
+            if (symbol == null || priceStr == null || sizeStr == null || time < 0) {
+                return null;
+            }
+            double price = Double.parseDouble(priceStr);
+            double size = Double.parseDouble(sizeStr);
+            if (price <= 0 || size < 0) {
                 return null;
             }
             return new FeedTrade(symbol, price, size, time);
@@ -57,17 +62,31 @@ public final class BinanceTradeParser implements FeedParser {
         return end < 0 ? null : json.substring(start, end);
     }
 
+    /**
+     * Returns the field's numeric value, or {@code -1} if the field is
+     * missing or its value is not a parseable non-negative integer — the
+     * caller treats {@code -1} as "malformed, reject" rather than defaulting
+     * to a spurious timestamp of 0 (epoch), which would look like a valid,
+     * stale tick to downstream consumers.
+     */
     private static long extractLong(String json, String key) {
         String marker = "\"" + key + "\":";
         int start = json.indexOf(marker);
         if (start < 0) {
-            return 0;
+            return -1;
         }
         start += marker.length();
         int end = start;
         while (end < json.length() && (Character.isDigit(json.charAt(end)))) {
             end++;
         }
-        return Long.parseLong(json.substring(start, end));
+        if (end == start) {
+            return -1;   // no digits found: missing/unparseable value
+        }
+        try {
+            return Long.parseLong(json.substring(start, end));
+        } catch (NumberFormatException e) {
+            return -1;
+        }
     }
 }

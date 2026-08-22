@@ -44,6 +44,12 @@ public final class VwapScheduler {
         int n = weights.length;
         double sum = 0;
         for (double w : weights) {
+            if (!Double.isFinite(w)) {
+                // A NaN/Infinity weight poisons the shared sum to NaN, which
+                // silently degrades the integer allocation into a flat
+                // uniform split instead of following the volume profile.
+                throw new IllegalArgumentException("non-finite weight: " + w);
+            }
             if (w < 0) {
                 throw new IllegalArgumentException("negative weight: " + w);
             }
@@ -70,7 +76,7 @@ public final class VwapScheduler {
         }
         java.util.Arrays.sort(order, (a, b) -> Double.compare(fractions[b], fractions[a]));
         for (int k = 0; k < remainder; k++) {
-            out[order[(int) (k % n)]]++;
+            out[order[k % n]]++;
         }
         return out;
     }

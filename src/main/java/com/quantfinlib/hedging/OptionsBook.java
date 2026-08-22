@@ -8,7 +8,7 @@ import java.util.List;
 
 /**
  * An options book on one underlying: aggregate Greeks across positions,
- * spot×vol scenario grids, and delta-gamma-vega-theta P&L explain — the
+ * spot×vol scenario grids, and delta-gamma-vega-theta P&amp;L explain — the
  * risk view a desk runs, not a single option.
  *
  * <p>Positions carry their own implied vols (smile-aware if fed from
@@ -28,7 +28,7 @@ public final class OptionsBook {
                              double theta, double rho) {
     }
 
-    /** First/second-order attribution of a P&L move. */
+    /** First/second-order attribution of a P&amp;L move. */
     public record PnlExplain(double actualPnl, double deltaPnl, double gammaPnl,
                              double vegaPnl, double thetaPnl, double unexplained) {
     }
@@ -113,8 +113,8 @@ public final class OptionsBook {
     }
 
     /**
-     * Spot×vol scenario P&L grid (full revaluation, no time decay):
-     * {@code grid[i][j]} = P&L at spot shifted by {@code spotShiftsPct[i]}
+     * Spot×vol scenario P&amp;L grid (full revaluation, no time decay):
+     * {@code grid[i][j]} = P&amp;L at spot shifted by {@code spotShiftsPct[i]}
      * (fraction, 0.05 = +5%) and vol shifted by {@code volShiftsAbs[j]}
      * (absolute, 0.02 = +2 vol points).
      */
@@ -130,7 +130,7 @@ public final class OptionsBook {
     }
 
     /**
-     * Delta-gamma-vega-theta P&L explain versus full revaluation: how much of
+     * Delta-gamma-vega-theta P&amp;L explain versus full revaluation: how much of
      * the actual move the Greeks account for, and what is left unexplained
      * (higher-order and cross terms).
      */
