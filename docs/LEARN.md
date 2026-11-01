@@ -12911,8 +12911,10 @@ distribution, not a single Greek, is what a desk's hedging policy is
 actually choosing.
 
 *In this library:* `hedging/DeltaHedger.java` (path-level ledger:
-rebalance count, costs, final P&L = replication error; delta band and
-per-trade bps configurable), `hedging/HedgingSimulator.java` (parallel
+rebalance count, costs, carry earned on the hedge position (the
+dividend yield or foreign rate, without which the mean replication P&L
+is biased by roughly the dividends on the delta), final P&L =
+replication error; delta band and per-trade bps configurable), `hedging/HedgingSimulator.java` (parallel
 Monte Carlo across thousands of paths producing the full
 `HedgingErrorDistribution` -- vary band and frequency and watch
 1/sqrt(n) appear).
@@ -12920,9 +12922,15 @@ Monte Carlo across thousands of paths producing the full
 ### 437. "How wide should your delta no-trade band be? Derive the shape of the answer."
 
 Whalley-Wilmott answered it with asymptotic stochastic control: for
-proportional transaction costs k and risk aversion lambda, the optimal
-no-trade band around the Black-Scholes delta is `band = ((3/2) k S
-Gamma^2 / lambda)^{1/3}`. The structure is readable: more gamma means
+proportional transaction costs k and exponential-utility risk aversion
+lambda, the optimal no-trade half-width around the Black-Scholes delta
+is `band = ((3/2) e^{-r(T-t)} k S Gamma^2 / lambda)^{1/3}` (Whalley and
+Wilmott 1997, Mathematical Finance 7(3)). The discount factor is there
+because costs paid today are compared with terminal wealth; it is close
+to 1 for short-dated books. Units matter: k is a fraction of traded
+notional, S and Gamma are per share, and lambda is in 1/currency, so for
+a book measured in dollars a realistic lambda is of order 1/(capital at
+risk), e.g. 1e-6, not 1. The structure is readable: more gamma means
 delta churns faster, so the band widens with Gamma^2 (do not chase a
 delta that will chase itself back); higher costs widen it (trade
 less when trading is expensive); higher risk aversion narrows it. The
@@ -12941,7 +12949,9 @@ spends visibly less in costs, and the gap widens exactly where gamma
 is large -- short-dated, near-the-money books.
 
 *In this library:* `hedging/WhalleyWilmott.java` -- the cube-root band
-formula with the javadoc making both the 8x-to-2x insensitivity point
+formula (`bandHalfWidth`, with an overload taking the rate and time to
+expiry for the discount factor, and the units of lambda documented),
+the javadoc making both the 8x-to-2x insensitivity point
 and the hedge-to-nearest-edge policy argument; plug it into
 `hedging/DeltaHedger.java` / `HedgingSimulator.java` to score it
 against naive bands.
