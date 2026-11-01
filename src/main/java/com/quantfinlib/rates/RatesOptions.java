@@ -5,10 +5,10 @@ import com.quantfinlib.pricing.Black76;
 import com.quantfinlib.pricing.BlackScholes.OptionType;
 
 /**
- * RATES VOLATILITY products priced off the curve — the bridge between
- * {@link YieldCurve} (where forwards and discount factors live) and
- * {@code pricing.Black76} (the market-standard lognormal quoter for
- * anything written on a forward rate).
+ * Rates volatility products priced off the curve: the bridge between
+ * {@link YieldCurve} (where forwards and discount factors live) and the
+ * option models on a forward rate, {@code pricing.Black76} (lognormal and
+ * shifted lognormal) and {@code pricing.Bachelier} (normal).
  *
  * <ul>
  *   <li><b>Swaption</b> — an option on a forward-starting swap. The

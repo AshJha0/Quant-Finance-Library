@@ -1,9 +1,9 @@
 package com.quantfinlib.pricing;
 
-import java.util.Random;
+import java.util.SplittableRandom;
 
 /**
- * Autocallable note pricer — the flagship equity structured product: a
+ * Autocallable note pricer, the most common equity structured product: a
  * note that pays a fat coupon and redeems early ("autocalls") the first
  * observation date the underlier closes at or above the autocall
  * barrier. If it survives to maturity, the principal is protected UNLESS
@@ -24,7 +24,7 @@ import java.util.Random;
  *       {@code notional × S_T/S₀} — the equity loss.</li>
  * </ul>
  *
- * <p><b>Model honesty.</b> Monte Carlo under Black-Scholes GBM with flat
+ * <p><b>Model limits.</b> Monte Carlo under Black-Scholes GBM with flat
  * volatility and rates — the standard first pricer, NOT a desk-grade
  * one: real autocall books are priced on local/stochastic vol because
  * the knock-in put is deeply smile-sensitive (feed a vol appropriate to
@@ -70,7 +70,7 @@ public final class Autocallable {
         // fail HERE, not surface as a NaN price later. The knock-in must
         // sit at or below the autocall (protection above the early-redemption
         // trigger is unreachable); its relation to the COUPON barrier is
-        // deliberately free — structures place it on either side.
+        // left free — structures place it on either side.
         if (!(notional > 0) || notional == Double.POSITIVE_INFINITY
                 || observationYears.length == 0
                 || !(autocallBarrier > 0) || autocallBarrier == Double.POSITIVE_INFINITY
@@ -130,7 +130,7 @@ public final class Autocallable {
             prevT = observationYears[i];
         }
 
-        Random rnd = new Random(seed);
+        SplittableRandom rnd = new SplittableRandom(seed);
         double[] gaussians = new double[n];
         double sum = 0;
         for (int p = 0; p < paths; p++) {
