@@ -7,4 +7,7 @@
  * that the two produce identical values, so a strategy backtested on batch
  * arrays behaves the same on streaming updates.
  */
+@NullMarked
 package com.quantfinlib.indicators;
+
+import org.jspecify.annotations.NullMarked;

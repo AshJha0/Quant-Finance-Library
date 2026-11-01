@@ -7,4 +7,7 @@
  * {@link com.quantfinlib.regulatory.MarketQualityMetrics}
  * (quoted/effective/realized spread, price impact, order-to-trade ratio).
  */
+@NullMarked
 package com.quantfinlib.regulatory;
+
+import org.jspecify.annotations.NullMarked;

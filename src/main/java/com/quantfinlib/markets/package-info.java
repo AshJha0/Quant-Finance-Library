@@ -14,4 +14,7 @@
  * the appraisal smoothing that understates private-market risk.
  * Research lane, deterministic.</p>
  */
+@NullMarked
 package com.quantfinlib.markets;
+
+import org.jspecify.annotations.NullMarked;

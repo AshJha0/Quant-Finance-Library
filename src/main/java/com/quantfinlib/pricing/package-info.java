@@ -35,4 +35,7 @@
  * exchange-option cross-gamma, checked against finite differences of the
  * first-order Greeks).
  */
+@NullMarked
 package com.quantfinlib.pricing;
+
+import org.jspecify.annotations.NullMarked;

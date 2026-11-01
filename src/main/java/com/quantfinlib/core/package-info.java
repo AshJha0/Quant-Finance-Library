@@ -9,4 +9,7 @@
  *
  * <p>See {@code docs/ARCHITECTURE.md} for the full package map.</p>
  */
+@NullMarked
 package com.quantfinlib.core;
+
+import org.jspecify.annotations.NullMarked;

@@ -12,4 +12,7 @@
  * the CDS par spread to form the cds-bond basis. Research lane;
  * discretization choices stated on each class.
  */
+@NullMarked
 package com.quantfinlib.credit;
+
+import org.jspecify.annotations.NullMarked;

@@ -29,4 +29,7 @@
  * book to {@link com.quantfinlib.risk.VarEngine} for VaR/ES and prices
  * the diversification benefit of running risk centrally.</p>
  */
+@NullMarked
 package com.quantfinlib.crb;
+
+import org.jspecify.annotations.NullMarked;

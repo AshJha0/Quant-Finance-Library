@@ -6,4 +6,7 @@
  * published jar is runnable ({@code java -jar quant-finance-library-*.jar}).
  * Exit codes: 0 success, 1 usage error, 2 execution failure.
  */
+@NullMarked
 package com.quantfinlib.cli;
+
+import org.jspecify.annotations.NullMarked;

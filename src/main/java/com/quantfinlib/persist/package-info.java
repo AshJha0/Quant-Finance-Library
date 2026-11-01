@@ -25,4 +25,7 @@
  * price ladder moves. Restoring it would attribute yesterday's icebergs
  * to today's unrelated levels.</p>
  */
+@NullMarked
 package com.quantfinlib.persist;
+
+import org.jspecify.annotations.NullMarked;

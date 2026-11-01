@@ -5,4 +5,7 @@
  * {@code init(BarSeries)} and are allocation-free per bar; use them as
  * baselines and as templates for custom strategies.
  */
+@NullMarked
 package com.quantfinlib.backtest.strategies;
+
+import org.jspecify.annotations.NullMarked;

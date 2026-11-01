@@ -10,4 +10,7 @@
  * (session volume profiles) and {@link com.quantfinlib.ml.AnomalyDetector}
  * (quote stuffing, price spikes).
  */
+@NullMarked
 package com.quantfinlib.ml;
+
+import org.jspecify.annotations.NullMarked;

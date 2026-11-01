@@ -16,4 +16,7 @@
  * with {@link com.quantfinlib.data.UniverseCsvLoader} as its documented CSV
  * interchange format for user-supplied membership/lifecycle data.
  */
+@NullMarked
 package com.quantfinlib.data;
+
+import org.jspecify.annotations.NullMarked;
