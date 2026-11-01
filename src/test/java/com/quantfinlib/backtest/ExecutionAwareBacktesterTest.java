@@ -155,7 +155,7 @@ class ExecutionAwareBacktesterTest {
         // Exit parent carries the same reason.
         ParentOrder exitParent = r.parentOrders().get(1);
         assertEquals(Trade.REASON_STOP_LOSS, exitParent.reason());
-        assertEquals(exitParent.filledQty(), t.quantity(), 1e-9);
+        assertEquals((double) exitParent.filledQty(), t.quantity(), 1e-9);
     }
 
     @Test

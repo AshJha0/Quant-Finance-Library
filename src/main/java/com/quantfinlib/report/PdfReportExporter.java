@@ -70,8 +70,10 @@ public final class PdfReportExporter implements ReportExporter {
                 .append(" /Root 1 0 R >>\nstartxref\n").append(xrefOffset).append("\n%%EOF\n");
         write(out, xref.toString());
 
-        if (path.getParent() != null) {
-            Files.createDirectories(path.getParent());
+        Path parent = path.getParent();
+
+        if (parent != null) {
+            Files.createDirectories(parent);
         }
         Files.write(path, out.toByteArray());
     }

@@ -159,7 +159,7 @@ public final class SignalEngine {
             return;
         }
         double mid = 0.5 * (bid + ask);
-        microprice[symbolId] = FairValueEngine.microprice(bid, ask, bidSize, askSize);
+        microprice[symbolId] = FairValueEngine.microprice(bid, ask, (double) bidSize, (double) askSize);
 
         if (hasMid[symbolId]) {
             long dt = timestampNanos - prevMidTime[symbolId];

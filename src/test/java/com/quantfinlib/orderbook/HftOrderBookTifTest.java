@@ -153,7 +153,7 @@ class HftOrderBookTifTest {
             long tradedBefore = resting[0];
             long booked = totalBooked(b);
             Side side = rnd.nextBoolean() ? Side.BUY : Side.SELL;
-            long qty = 1 + rnd.nextInt(400);
+            long qty = 1L + rnd.nextInt(400);
             int limit = MIN + rnd.nextInt(MAX - MIN + 1);
             long filled = b.submitFok(side, limit, qty, 999);
             if (filled == 0) {
@@ -209,7 +209,7 @@ class HftOrderBookTifTest {
     private static void tifChurn(HftOrderBook b, java.util.SplittableRandom rnd, int i) {
         Side side = rnd.nextBoolean() ? Side.BUY : Side.SELL;
         int tick = MIN + rnd.nextInt(MAX - MIN + 1);
-        long qty = 1 + rnd.nextInt(60);
+        long qty = 1L + rnd.nextInt(60);
         switch (i & 3) {
             case 0 -> b.submitPostOnly(side, tick, qty, i);
             case 1 -> b.submitIoc(side, tick, qty, i);

@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.ReadableByteChannel;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Venue side of the binary order channel: decodes {@link OrderFlyweight}
@@ -25,8 +26,8 @@ public final class BinaryOrderReceiver implements AutoCloseable {
     private final int[] kind = new int[1];
     private final Thread readerThread;
     private volatile boolean running = true;
-    private volatile long ordersReceived;
-    private volatile long skippedMessages;
+    private final AtomicLong ordersReceived = new AtomicLong();
+    private final AtomicLong skippedMessages = new AtomicLong();
     private volatile String failureReason;
 
     public BinaryOrderReceiver(ReadableByteChannel channel, OrderListener listener) {
@@ -42,12 +43,12 @@ public final class BinaryOrderReceiver implements AutoCloseable {
     }
 
     public long ordersReceived() {
-        return ordersReceived;
+        return ordersReceived.get();
     }
 
     /** Frames of other templates, skipped by block length. */
     public long skippedMessages() {
-        return skippedMessages;
+        return skippedMessages.get();
     }
 
     /** Non-null once the reader stopped on a protocol or I/O error. */
@@ -80,7 +81,7 @@ public final class BinaryOrderReceiver implements AutoCloseable {
                         order.wrap(buffer, position);
                         listener.onOrder(order.orderId(), order.symbolId(), order.side(),
                                 order.quantity(), order.price(), order.timestampNanos());
-                        ordersReceived = ordersReceived + 1;
+                        ordersReceived.incrementAndGet();
                     } else if (k == -2) {
                         listener.onOrder(buffer.getLong(position + SbeFrames.V1_ORDER_ID),
                                 buffer.getInt(position + SbeFrames.V1_ORDER_SYMBOL),
@@ -89,9 +90,9 @@ public final class BinaryOrderReceiver implements AutoCloseable {
                                 buffer.getLong(position + SbeFrames.V1_ORDER_QTY),
                                 buffer.getDouble(position + SbeFrames.V1_ORDER_PRICE),
                                 buffer.getLong(position + SbeFrames.V1_ORDER_TS));
-                        ordersReceived = ordersReceived + 1;
+                        ordersReceived.incrementAndGet();
                     } else {
-                        skippedMessages = skippedMessages + 1;
+                        skippedMessages.incrementAndGet();
                     }
                     buffer.position(position + length);
                 }

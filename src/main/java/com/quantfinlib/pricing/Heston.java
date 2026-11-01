@@ -110,7 +110,7 @@ public final class Heston {
         double sum = 0;
         for (int i = 0; i <= steps; i++) {
             double u = i * h + 1e-9;       // dodge the u=0 singularity of the integrand
-            double weight = (i == 0 || i == steps) ? 1 : (i % 2 == 1 ? 4 : 2);
+            double weight = (i == 0 || i == steps) ? 1 : ((i & 1) == 1 ? 4 : 2);
             sum += weight * integrand(u, logMoneyness, t, p, first);
         }
         return 0.5 + (h / 3) * sum / Math.PI;

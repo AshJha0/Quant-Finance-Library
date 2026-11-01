@@ -61,7 +61,11 @@ public final class MonteCarloTradeShuffle {
     private MonteCarloTradeShuffle() {
     }
 
-    /** @param trades the strategy's completed trades, &ge; 2; @param shuffles &ge; 100 */
+    /**
+     * @param trades   the strategy's completed trades, at least 2
+     * @param shuffles number of shuffles, at least 100
+     * @param seed     random seed
+     */
     public static Result analyze(List<Trade> trades, int shuffles, long seed) {
         int n = trades.size();
         if (n < 2) {

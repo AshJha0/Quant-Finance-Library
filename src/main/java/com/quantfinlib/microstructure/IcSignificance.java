@@ -30,7 +30,7 @@ public final class IcSignificance {
             return 0;
         }
         double decay = 1 - alpha;
-        double sumW = 1 - Math.pow(decay, samples);
+        double sumW = 1 - Math.pow(decay, (double) samples);
         double sumW2 = alpha * (1 - Math.pow(decay, 2.0 * samples)) / (2 - alpha);
         return sumW * sumW / sumW2;
     }

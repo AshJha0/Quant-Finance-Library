@@ -48,7 +48,7 @@ public final class ShardedTradingEngine implements AutoCloseable {
     // Frozen into arrays at start() so the publish hot path is array-only.
     private volatile int[][] routeShards;
     private int[][] routeIds;
-    private boolean started;
+    private volatile boolean started;
 
     /**
      * @param shardCount        independent stacks (2 threads each: consumer + venue)

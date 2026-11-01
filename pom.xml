@@ -106,6 +106,8 @@
                 <version>3.14.0</version>
                 <configuration>
                     <showWarnings>true</showWarnings>
+                    <!-- Any javac lint warning fails the build. -->
+                    <failOnWarning>true</failOnWarning>
                     <compilerArgs>
                         <!-- All lint categories as warnings. "processing" is off
                              because the JMH processor runs on main sources too and
@@ -246,7 +248,7 @@
                 <artifactId>maven-javadoc-plugin</artifactId>
                 <version>3.11.3</version>
                 <configuration>
-                    <doclint>none</doclint>
+                    <doclint>all,-missing</doclint>
                     <quiet>true</quiet>
                 </configuration>
                 <executions>
@@ -283,8 +285,11 @@
             </build>
         </profile>
         <!-- Static analysis: Error Prone (as a javac plugin) and SpotBugs.
-             Findings are reported as warnings; the build does not fail on
-             them yet. Run with: ./mvnw -Panalysis -DskipTests verify -->
+             Error Prone style checks are reported as warnings; the checks
+             listed below as ERROR (concurrency, numeric and ignored-result
+             defects) fail the build. SpotBugs fails the build on any Medium
+             or High finding not excluded in spotbugs-exclude.xml.
+             Run with: ./mvnw -Panalysis -DskipTests clean verify -->
         <profile>
             <id>analysis</id>
             <build>
@@ -294,12 +299,14 @@
                         <artifactId>maven-compiler-plugin</artifactId>
                         <configuration>
                             <fork>true</fork>
+                            <!-- Error Prone style warnings are advisory here. -->
+                            <failOnWarning>false</failOnWarning>
                             <compilerArgs combine.children="append">
                                 <arg>-XDcompilePolicy=simple</arg>
                                 <arg>--should-stop=ifError=FLOW</arg>
                                 <arg>-Xmaxwarns</arg>
                                 <arg>10000</arg>
-                                <arg>-Xplugin:ErrorProne -XepAllErrorsAsWarnings -XepDisableWarningsInGeneratedCode -XepExcludedPaths:.*/generated-test-sources/.*</arg>
+                                <arg>-Xplugin:ErrorProne -XepAllErrorsAsWarnings -XepDisableWarningsInGeneratedCode -XepExcludedPaths:.*/generated-test-sources/.* -Xep:NonAtomicVolatileUpdate:ERROR -Xep:IntLongMath:ERROR -Xep:NarrowCalculation:ERROR -Xep:FutureReturnValueIgnored:ERROR -Xep:UnusedVariable:ERROR -Xep:IdentityBinaryExpression:ERROR -Xep:LongDoubleConversion:ERROR -Xep:LongFloatConversion:ERROR -Xep:ReferenceEquality:ERROR -Xep:InvalidInlineTag:ERROR</arg>
                                 <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED</arg>
                                 <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED</arg>
                                 <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED</arg>
@@ -327,7 +334,7 @@
                         <configuration>
                             <effort>Max</effort>
                             <threshold>Medium</threshold>
-                            <failOnError>false</failOnError>
+                            <failOnError>true</failOnError>
                             <xmlOutput>true</xmlOutput>
                             <excludeFilterFile>${project.basedir}/spotbugs-exclude.xml</excludeFilterFile>
                         </configuration>

@@ -70,7 +70,7 @@ public final class QueuePositionEstimator {
             return;
         }
         ahead = Math.max(0, ahead - tradedQty);
-        levelSize = Math.max(ownQty, levelSize - tradedQty);
+        levelSize = Math.max((double) ownQty, levelSize - tradedQty);
     }
 
     /**

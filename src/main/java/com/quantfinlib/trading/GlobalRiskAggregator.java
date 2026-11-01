@@ -1,6 +1,7 @@
 package com.quantfinlib.trading;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.LockSupport;
 
 /**
@@ -42,7 +43,7 @@ public final class GlobalRiskAggregator implements AutoCloseable {
     private volatile boolean tripped;
     private volatile double lastGross;
     private volatile int lastUnpriced;
-    private volatile long trips;
+    private final AtomicLong trips = new AtomicLong();
     private boolean[] killedBeforeTrip;
 
     private GlobalRiskAggregator(List<HftRiskGate> gates, double maxGrossNotional,
@@ -90,7 +91,7 @@ public final class GlobalRiskAggregator implements AutoCloseable {
         double gross = grossNotional(unpriced);
         lastGross = gross;
         lastUnpriced = unpriced[0];
-        boolean breach = gross > maxGrossNotional || unpriced[0] > 0 || gross != gross;
+        boolean breach = gross > maxGrossNotional || unpriced[0] > 0 || Double.isNaN(gross);
         if (!tripped && breach) {
             // Remember which gates were already killed (ops holds, another
             // breaker): recovery must not clear a kill this aggregator did
@@ -102,7 +103,7 @@ public final class GlobalRiskAggregator implements AutoCloseable {
                 gates.get(i).kill(true);
             }
             tripped = true;
-            trips++;
+            trips.incrementAndGet();
         } else if (tripped && gross < resumeNotional && unpriced[0] == 0) {
             for (int i = 0; i < gates.size(); i++) {
                 if (!killedBeforeTrip[i]) {
@@ -157,7 +158,7 @@ public final class GlobalRiskAggregator implements AutoCloseable {
     }
 
     public long tripCount() {
-        return trips;
+        return trips.get();
     }
 
     /** Stops the monitor; gates keep whatever kill state they last had. */

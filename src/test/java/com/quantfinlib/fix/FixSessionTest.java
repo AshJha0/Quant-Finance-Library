@@ -43,11 +43,9 @@ class FixSessionTest {
         final CountDownLatch resendServed = new CountDownLatch(1);
         final AtomicLong resendBegin = new AtomicLong(-1);
         final AtomicLong resendEnd = new AtomicLong(-1);
-        volatile FixSession session;
 
         @Override
         public void onLogon(FixSession s) {
-            session = s;
             logon.countDown();
         }
 

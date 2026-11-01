@@ -338,7 +338,7 @@ public final class AlphaBacktester {
             if (target == null) {
                 return;
             }
-            double cost = 0;
+            double cost;
             double com = 0;
             double spr = 0;
             double slp = 0;
