@@ -16,17 +16,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the suite. Three distinct jobs:
  *
  * <ul>
- *   <li><b>Throughput floors</b> — regression tripwires, NOT benchmarks:
- *       the floors sit ~20× below desktop-measured numbers (bus 9–12M/s,
+ *   <li><b>Throughput floors</b>: regression tripwires, not benchmarks.
+ *       The floors sit ~20× below desktop-measured numbers (bus 9–12M/s,
  *       gateway 21M/s, book 12M/s), so slow shared CI runners never flake,
- *       while an accidental lock, allocation or O(n) slip on a hot path —
- *       the mistakes that cost an order of magnitude — fails the build.
+ *       while an accidental lock, allocation or O(n) slip on a hot path
+ *       (the mistakes that cost an order of magnitude) fails the build.
  *       Real numbers come from the committed benchmarks, not from here.</li>
  *   <li><b>Soak</b> — sustained mixed load with a heap-stability assertion:
  *       steady-state hot paths must not grow the heap (leaks and slow
  *       allocation drips surface here, complementing the per-thread
  *       allocation-counter proofs).</li>
- *   <li><b>Overload</b> — deliberately undersized rings under a burst:
+ *   <li><b>Overload</b> — intentionally undersized rings under a burst:
  *       the contract is degrade-and-count (publish returns false, submits
  *       return 0, counters tick), never throw, and full recovery once the
  *       burst passes.</li>
@@ -174,7 +174,7 @@ class LoadAndSoakTest {
 
     @Test
     void overloadDegradesGracefullyAndRecovers() throws Exception {
-        // Deliberately tiny rings under a blast: the contract is that
+        // Intentionally tiny rings under a blast: the contract is that
         // nothing throws, drops are visible in counters, and the system
         // serves normal traffic again the moment the burst ends.
         HftRiskGate gate = openGate();
@@ -188,7 +188,7 @@ class LoadAndSoakTest {
             gateway.start();
             bus.start();
 
-            // Blast without pacing: many publishes MUST fail (ring 64 deep).
+            // Blast without pacing: many publishes must fail (ring 64 deep).
             long refused = 0;
             for (int i = 0; i < 100_000; i++) {
                 if (!bus.publish(id, 1.0850, 1e6, i)) {

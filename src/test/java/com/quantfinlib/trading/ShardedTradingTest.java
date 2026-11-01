@@ -42,7 +42,7 @@ class ShardedTradingTest {
                 2, 1 << 12, 1 << 12, 64, false, ShardedTradingTest::openGate)) {
             int eurusd = engine.registerSymbol("EURUSD", 0);
             int gbpusd = engine.registerSymbol("GBPUSD", 1);
-            // The cross-leg pattern: USDJPY duplicated into BOTH shards.
+            // The cross-leg pattern: USDJPY duplicated into both shards.
             int usdjpy = engine.registerSymbol("USDJPY", 0, 1);
 
             AtomicLong shard0Ticks = new AtomicLong();
@@ -119,7 +119,7 @@ class ShardedTradingTest {
             assertFalse(aggregator.isTripped());
             assertEquals(90_000, aggregator.grossNotional(), 1e-9);
 
-            // +20k pushes gross to 110k: the breaker must trip EVERY gate.
+            // +20k pushes gross to 110k: the breaker must trip every gate.
             gate0.onFill(0, Side.BUY, 200);
             awaitTrue(aggregator::isTripped);
             assertEquals(HftRiskGate.REJECT_KILLED, gate0.check(0, Side.BUY, 1, 100));
