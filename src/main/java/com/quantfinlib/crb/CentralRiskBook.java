@@ -137,6 +137,11 @@ public final class CentralRiskBook {
      * today's (far − near) must close out at tomorrow's, so its P&amp;L
      * per +1.0 move in the market's far−near differential is
      * {@code −baseNotional} — points widening HURTS the buy-sell.
+     *
+     * <p>The quote-leg imbalance {@code B·(far − near)} is booked at face,
+     * undiscounted and without its value date; the risk report therefore
+     * measures it on undiscounted notional. For long-dated swaps discount
+     * the imbalance before booking if the report must be on present value.</p>
      */
     public void bookFxSwap(String desk, String pair, double baseNotional,
                            double nearRate, double farRate) {
@@ -158,6 +163,8 @@ public final class CentralRiskBook {
      * both legs — with the non-deliverable notional tracked per pair
      * (settlement is cash in the deliverable currency; what fixes at the
      * fixing is the RATE, and until then the book is exposed).
+     * Both legs are booked at face (undiscounted, date-blind); see
+     * {@link #bookFxSwap} for what that means for the report.
      */
     public void bookNdf(String desk, String pair, double baseNotional, double fwdRate) {
         requireDesk(desk);
@@ -319,6 +326,27 @@ public final class CentralRiskBook {
      * same contract as {@link VarEngine}. The headline number is the
      * diversification benefit: standalone desk VaRs minus the netted
      * book's VaR, i.e. what running the risk CENTRALLY is worth.
+     *
+     * <p>VaR and ES are second order ({@link VarEngine#deltaGammaVar},
+     * {@link VarEngine#deltaGammaEs}, Cornish-Fisher). Dollar gamma is not
+     * an exposure to a factor return of its own, so the {@code EQGAMMA:} and
+     * {@code FXGAMMA:} rows are taken out of the linear vector and placed in
+     * the gamma matrix on their underlying factors, with factor returns read
+     * as relative moves:</p>
+     * <ul>
+     *   <li>{@code EQGAMMA:s} with dollar gamma G per 1% (G = Γ·S²/100)
+     *       adds {@code ½·100·G·r_s²}, i.e. {@code Γ[EQ:s][EQ:s] += 100·G};</li>
+     *   <li>{@code FXGAMMA:BBBQQQ} adds {@code ½·100·G·(r_BBB − r_QQQ)²}
+     *       on the two {@code CCY:} factors (the pair's relative move is the
+     *       difference of the two currencies' moves against the reporting
+     *       currency); G is in quote-currency units, so the report is in
+     *       one currency only when the quote currency is the reporting one
+     *       or the caller has converted.</li>
+     * </ul>
+     * <p>The covariance rows of the gamma factors are not used and may be
+     * zero. Vega rows ({@code EQVEGA:}, {@code FXVEGA:}) stay linear: their
+     * factor return is the change in implied vol in points. For a book
+     * without options the result equals delta-normal VaR exactly.</p>
      */
     public CrbReport report(double[][] covariance, double confidence) {
         int n = registry.size();
@@ -327,13 +355,17 @@ public final class CentralRiskBook {
                     + " over factors().name(i) in registry order");
         }
         double[] netVec = netExposures();
-        double bookVar = VarEngine.deltaNormalVar(netVec, covariance, confidence);
-        double bookEs = VarEngine.deltaNormalEs(netVec, covariance, confidence);
+        double[][] gammaMap = new double[n][n];
+        double[] linear = splitGamma(netVec, gammaMap);
+        double bookVar = VarEngine.deltaGammaVar(linear, gammaMap, covariance, confidence);
+        double bookEs = VarEngine.deltaGammaEs(linear, gammaMap, covariance, confidence);
         double standalone = 0;
         for (double[] d : deskNet.values()) {
             double[] full = new double[n];
             System.arraycopy(d, 0, full, 0, Math.min(d.length, n));
-            standalone += VarEngine.deltaNormalVar(full, covariance, confidence);
+            double[][] g = new double[n][n];
+            double[] lin = splitGamma(full, g);
+            standalone += VarEngine.deltaGammaVar(lin, g, covariance, confidence);
         }
         double sumNet = 0;
         double sumGross = 0;
@@ -347,11 +379,49 @@ public final class CentralRiskBook {
     }
 
     /**
+     * Moves dollar-gamma rows into a gamma matrix on their underlying
+     * factors (see {@link #report}); returns the linear exposure vector.
+     */
+    private double[] splitGamma(double[] exposures, double[][] gammaOut) {
+        double[] linear = exposures.clone();
+        for (int i = 0; i < exposures.length; i++) {
+            String name = registry.name(i);
+            double g = exposures[i];
+            if (name.startsWith("EQGAMMA:")) {
+                linear[i] = 0;
+                if (g != 0) {
+                    int u = registry.idIfPresent("EQ:" + name.substring(8));
+                    if (u < 0) {
+                        throw new IllegalStateException("no EQ factor for " + name);
+                    }
+                    gammaOut[u][u] += 100 * g;
+                }
+            } else if (name.startsWith("FXGAMMA:")) {
+                linear[i] = 0;
+                if (g != 0) {
+                    String pair = name.substring(8);
+                    int b = registry.idIfPresent("CCY:" + pair.substring(0, 3));
+                    int q = registry.idIfPresent("CCY:" + pair.substring(3, 6));
+                    if (b < 0 || q < 0) {
+                        throw new IllegalStateException("no CCY factors for " + name);
+                    }
+                    double h = 100 * g;
+                    gammaOut[b][b] += h;
+                    gammaOut[q][q] += h;
+                    gammaOut[b][q] -= h;
+                    gammaOut[q][b] -= h;
+                }
+            }
+        }
+        return linear;
+    }
+
+    /**
      * @param grossExposure    Σ over factors of gross booked notional
      * @param netExposure      Σ over factors of |netted| notional
      * @param nettingEfficiency 1 − net/gross
-     * @param var              delta-normal VaR of the netted book
-     * @param es               delta-normal ES of the netted book
+     * @param var              delta-gamma (Cornish-Fisher) VaR of the netted book
+     * @param es               delta-gamma (Cornish-Fisher) ES of the netted book
      * @param standaloneDeskVar Σ of per-desk standalone VaRs
      * @param diversificationBenefit standaloneDeskVar − var: what central
      *                               netting is worth in VaR terms
