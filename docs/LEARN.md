@@ -17573,21 +17573,28 @@ to pass -- mid moved less than `minMove` AND the last quote is
 younger than the interval -- and nothing is ever younger than 0 ns,
 so conflation is disabled entirely. This exact trap is documented as
 a pitfall on the method. The symptoms follow mechanically: every
-tick requotes (venue message-rate warning -- the throttle's
-territory), and during the storm the venue holds a backlog of stale
-quotes, so a new shaded bid can cross the not-yet-replaced old ask
--- the self-cross is the venue-side symptom of the library-side
-typo. The correct spelling for move-gated conflation is
-`withMinMove(twoPips)`, which sets the interval effectively infinite
-so the move gate alone decides -- the documented fan-out control
-that makes dense synthetic-cross books scale (measured: a 2-pip gate
-suppressing ~99% of updates ran ~8x the throughput of
-quote-everything). The monitoring tell that catches it in seconds:
+tick requotes, which is a cancel/replace per side per tick and a venue
+message-rate warning (the throttle's territory). The self-cross needs
+a second ingredient, because the current quoter keeps at most one
+working order per side, requotes by replace, defers while a replace is
+still in flight, and never sends a side that would cross the BBO it
+was given. A self-cross therefore means either an older quoter that
+stacked a fresh pair of orders on every tick (stale asks were still
+resting when the new shaded bid went out), or a venue adapter that
+does not honour cancels and replaces (`OrderListener.onCancel` and
+`onReplace` have default methods; an adapter that does not override
+them leaves the old orders working). The correct spelling for
+move-gated conflation is `withMinMove(twoPips)`, which sets the
+interval effectively infinite so the move gate alone decides -- the
+documented fan-out control that makes dense synthetic-cross books
+scale. The monitoring tell that catches it in seconds:
 `suppressedUpdates()` flat at zero on a live quoter is never right.
 
 *In this library:* `trading/HftQuoter.java` (`Config.withConflation`
 -- the "Pitfall: minIntervalNanos = 0 disables conflation entirely"
-javadoc; `withMinMove`; `suppressedUpdates`).
+javadoc; `withMinMove`; `suppressedUpdates`, `replaces`, `deferredSides`),
+`trading/OrderListener.java` (the cancel and replace methods an adapter
+must override).
 
 ### 619. "Halted symbol reopens in five minutes and you have a two-sided obligation from the open. Script the reopen."
 
@@ -17698,31 +17705,31 @@ for precision with priority, and the markout review sends the bill.
 estimation), `execution/VenueScorecard.java` (the markout that
 prices the toxicity).
 
-### 623. "A developer added 'one small feature' to the quote path. Run the 592 ns budget audit."
+### 623. "A developer added 'one small feature' to the quote path. Run the latency budget audit."
 
 Start from the measured decomposition, because the budget has no
-slack pool: tick-to-two-sided-quote p50 is 592 ns end to end --
-conflation check, skew from an acquire-read of the gate's position,
-grid snap, and TWO gate-checks-plus-ring-publishes (one per side,
-risk check ~3 ns each, ring publish ~40 ns each), riding on the
-~204 ns publish-to-strategy hand-off. The audit is three questions.
+slack pool: tick-to-two-sided-quote is conflation check, skew from an
+acquire-read of the gate's position, grid snap, and up to two
+gate-checks-plus-ring-publishes (one per side), riding on the
+publish-to-strategy hand-off. The measured figures for each stage are
+in `docs/BENCHMARKS.md`. The audit is three questions.
 Does it allocate? Any String, boxing, iterator, lambda capture, or
 varargs on the path fails the per-thread allocation-counter test --
 which is a TEST, so the answer is not a matter of opinion. Does it
 add cross-thread state? Then it needs the VarHandle discipline, not
 a lock. What did it measure? Re-run `HftQuoterBenchmark` and compare
-p50 AND p99 (912 ns baseline) -- p50 catches added work, p99 catches
-added variance, and the tails are where quoting money dies. The
-cultural rule from the gate's own history applies: when a correct
-feature costs nanoseconds, keep it and write the number down
-(correct-but-3ns beat fast-but-wrong); when a convenience feature
-costs nanoseconds, it moves to the warm lane. "Small" is a claim
+p50 and p99 against the baseline in `docs/BENCHMARKS.md` -- p50
+catches added work, p99 catches added variance, and the tails are
+where quoting money dies. The rule from the gate's own history
+applies: when a correctness feature costs nanoseconds (the NaN price
+check, open-order exposure), keep it and write the number down; when
+a convenience feature costs nanoseconds, it moves to the warm lane. "Small" is a claim
 about the diff, not about the latency -- only the benchmark knows.
 
 *In this library:* `trading/HftQuoter.java` + `HftRiskGate.java`
-(the audited path), `examples/HftQuoterBenchmark.java`,
-`docs/ULTRA_LOW_LATENCY.md` (592/912 ns, ~40 ns publish, the
-correct-but-3ns story).
+(the audited path), `examples/HftQuoterBenchmark.java` (in the
+separate examples jar), `docs/BENCHMARKS.md` (the measured figures),
+`docs/ULTRA_LOW_LATENCY.md` (the tuning).
 
 ### 624. "P&L is flat but volume is huge: the hedger keeps crossing the spread the quoter just earned. Referee the fight."
 
@@ -17740,14 +17747,16 @@ quoter's fills actually produced; (2) separation of scales -- the
 skew should do the routine unwinding (passive, earns spread) and
 the band only catch tail accumulations (aggressive, pays spread):
 band >> quoteSize, `skewPerUnit` sized so expected inventory decay
-outruns expected inflow; (3) cooldown at least the ack round-trip so
-one breach produces one hedge, not a stack. The health metric is
+outruns expected inflow; (3) the hedger already sends one hedge at a
+time and waits for the venue to finish with it, so one breach
+produces one hedge, not a stack; `minHedgeIntervalNanos` then spaces
+hedges so the skew gets a chance to work first. The health metric is
 the ratio `hedgesSubmitted / quoteUpdates` -- a market-making book
 hedging on every few quotes is not making markets, it is paying
 both sides of its own spread.
 
-*In this library:* `trading/AutoHedger.java` ("register after the
-strategy/quoter listeners"; band-edge + cooldown design),
+*In this library:* `trading/AutoHedger.java` ("register ... after the
+quoter"; band-edge hedging, one working hedge per symbol),
 `trading/HftQuoter.java` (`skewPerUnit`, fills close the loop via
 the gate's position).
 
@@ -17810,9 +17819,12 @@ unchanged"; "calibrate gamma with the inventory unit fixed first").
 ### 627. "The strategy made 40% in paper last month. Before anyone celebrates: list what the paper fill model is NOT charging you for."
 
 Read the fill logic and enumerate its kindnesses. Market orders fill
-at the touch, instantly, at FULL size -- no queue, no partial fills,
-no latency between decision and execution, and your size never moves
-the market (no impact, the dominant real cost at size). Resting
+at the touch, instantly, up to the displayed size (when quotes come in
+through the sized `onQuote` overload; the two-argument overload means
+unlimited size), with any remainder cancelled -- no queue, no latency
+between decision and execution, and the displayed size is the only
+limit, so your order never moves the price beyond the touch (no
+impact, the dominant real cost at size). Resting
 limits fill the moment the market crosses, sometimes at a price
 BETTER than the market (a BUY resting at 100.05 fills at
 min(limit, ask) when the ask gaps through) -- in production someone
@@ -17829,21 +17841,24 @@ institutional cost model (half-spread + impact by the square-root
 law, per-symbol ADV and vol) is where those get estimated honestly.
 
 *In this library:* `trading/PaperTradingGateway.java` (`onQuote`
-crossing logic, fill-at-touch, full-size fills),
+crossing logic, fill-at-touch up to displayed size, no latency or
+queue model),
 `backtest/TradeCostModel.java` (`institutional` -- the four-part
 honest model).
 
 ### 628. "Order-to-venue latency spiked 40x this afternoon. Attribute it: the ring, the venue thread, or the box?"
 
 Decompose along the path. The submit side is the trading thread:
-gate check (~3 ns) plus one ring publish -- if `submit` returned 0
-the ring was FULL (`ringFullCount` climbing), which is backpressure,
-not latency: the venue side stopped draining. The hand-off is where
+gate check, optional throttle, a state-table slot, an exposure
+reservation and one ring publish. If `submit` returned 0 the ring was
+FULL (`ringFullCount` climbing), which is backpressure, not latency:
+the venue side stopped draining. A negative return is a rejection
+code, including `-REJECT_GATEWAY_DOWN` if the venue thread has died. The hand-off is where
 the 40x usually lives: the venue thread's wait strategy is either
 busy-spin (`Thread.onSpinWait` -- sub-microsecond hand-off, costs a
 core) or park (`LockSupport.parkNanos(200)` -- and a PARKED thread's
-wake is at the mercy of the OS scheduler: microseconds typically,
-100-500 us max outliers observed on an untuned Windows box). If the
+wake is at the mercy of the OS scheduler, which on Windows means the
+system timer tick). If the
 lane was switched from spin to park to "save a core," there is your
 40x. Then the box: run the `HiccupMonitor` alongside -- if its
 histogram shows matching stalls, GC/safepoints/scheduler ate the
@@ -17855,8 +17870,8 @@ sawtooth that looks like latency and is not (Q636).
 
 *In this library:* `trading/HftOrderGateway.java` (`busySpin` vs
 `parkNanos(200)`, `ringFullCount`, batch-updated `delivered`),
-`util/HiccupMonitor.java`, `docs/ULTRA_LOW_LATENCY.md` (Windows
-outliers, wait-strategy trade).
+`util/HiccupMonitor.java`, `docs/ULTRA_LOW_LATENCY.md` (wait-strategy
+trade), `docs/BENCHMARKS.md` (measured hand-off figures).
 
 ### 629. "After a session reconnect, positions are exactly double the real book. The venue replayed execution reports. Whose bug is it?"
 
@@ -17874,7 +17889,10 @@ wired stack never shows the replay to the position book at all. The
 incident therefore has three findings: (1) the ack path fed raw
 venue messages to `onFill` without the session dedup in front; (2)
 the fix is wiring, not gate hardening -- put the sequence/PossDup
-handling between wire and book; (3) the recovery is Q601's
+handling between wire and book, and dedupe fills on ExecID
+(`FixExecReportView.ExecIdDeduplicator`) as the backstop, since a
+power loss can make your own side re-request reports it had already
+applied; (3) the recovery is Q601's
 procedure: freeze, diff against the clearer, adjust through
 `onFill`. The layering lesson generalizes: each layer's guarantee
 is explicit, and "the gate will probably handle it" is how doubles
@@ -17971,13 +17989,13 @@ construction: shards never touch each other's state, so shard 3
 being slow is about shard 3's inputs, threads, or core -- not about
 contention with 0/1/2. Check in order. Input skew: is a hot symbol
 routed there? Fan-out is per-symbol -- multi-shard registration
-duplicates a leg's feed into a second shard (one extra ring publish,
-~40 ns), so a busy leg co-located for a cross can double one
+duplicates a leg's feed into a second shard (one extra ring publish
+per tick), so a busy leg co-located for a cross can double one
 shard's tick load. Ring health: shard 3's bus drop count -- a full
 ring means its consumer is not keeping up, which is a symptom, not
 a cause. Cores: each shard runs two threads (consumer + venue);
 with spin-wait enabled, N shards plus the producer must fit the
-box -- the measured plateau (Q634) came from exactly this
+box -- the throughput plateau (Q634) comes from exactly this
 oversubscription, and the OS deciding shard 3's consumer shares a
 core with something is your 30%. And audit the OBSERVERS: the
 war story in the latency doc is a probe that put one synchronized
@@ -17993,21 +18011,23 @@ war story, oversubscription plateau).
 
 ### 634. "Management wants 4x throughput from 4 shards. Show them the measured curve and explain the plateau."
 
-The measured curve on the 12-logical-core desktop, 300 symbols all
-quoted two-sided per tick: 1 shard = 4.3M ticks/s; 2 shards = 6.2M
-(+46%); 4 shards plateau at 6.7M. Not 4x -- and the reasons are
-counted, not guessed. First, the plateau is NOT contention:
-cross-shard drops stayed ~0, which is the shared-nothing promise
-holding. It is core oversubscription -- four shards is eight
-spinning threads plus the producer on twelve logical cores, and
-spin-waiters that share cores stop being spin-waiters -- plus the
-SINGLE producer: one thread fans every tick to its hosting shards,
-and at some shard count the producer itself is the serial section
-(Amdahl, wearing a ring buffer). So the honest scaling pitch has
-three tiers: on this box, 2 shards is the sweet spot; on a tuned
-box with a pinned core pair per shard, scaling approaches k-times
-(the documented Tier 3 claim); beyond that, partition the PRODUCER
-too -- one producer per disjoint symbol set is explicitly supported.
+Bring the measured shard-scaling figures from `docs/BENCHMARKS.md`
+rather than a projection: throughput rises from one shard to two and
+then flattens well short of k-times. The reasons can be counted, not
+guessed. First, the plateau is not contention: the per-shard miss
+counters (`publishMissMask`, the bus drop counts) stay near zero,
+which is the shared-nothing promise holding. It is core
+oversubscription -- each shard is two threads (consumer and venue),
+so four spinning shards plus the producer can exceed the box's
+logical cores, and spin-waiters that share cores stop being
+spin-waiters -- plus the SINGLE producer: one thread fans every tick
+to its hosting shards, and at some shard count the producer itself is
+the serial section (Amdahl, wearing a ring buffer). So the scaling
+pitch has three tiers: on an untuned box, the knee comes as soon as
+threads outnumber free cores; on a tuned box with a pinned core pair
+per shard, scaling can approach k-times; beyond that, partition the
+PRODUCER too -- one producer per disjoint symbol set is explicitly
+supported.
 The meta-lesson for the meeting: the library ships the measurement
 machinery precisely so this conversation is about a curve, not a
 slogan -- "shared-nothing scales" is true and still has a knee, and
@@ -18015,8 +18035,8 @@ knowing where yours is beats projecting from the brochure.
 
 *In this library:* `trading/ShardedTradingEngine.java` (per-shard
 threads, single-producer `publish`, one-producer-per-symbol-set
-note), `docs/ULTRA_LOW_LATENCY.md` (4.3M/6.2M/6.7M and the plateau
-attribution).
+note), `docs/BENCHMARKS.md` (the measured curve),
+`docs/ULTRA_LOW_LATENCY.md` (the plateau attribution).
 
 ### 635. "Symbol X outgrew shard 1 and the desk wants it moved to shard 3 -- live, before the US open. Can you?"
 
@@ -18032,7 +18052,7 @@ while ticks flow is a distributed transaction the fast lane
 deliberately does not carry. The operational plays, in order of
 preference: (1) pre-placement -- symbols can be registered on
 MULTIPLE shards from day one (the cross co-location tool; the cost
-is one extra ring publish, ~40 ns per tick), so a symbol you
+is one extra ring publish per tick), so a symbol you
 SUSPECT will grow gets registered on both, and "the move" becomes
 flipping which shard's listeners act on it; (2) the scheduled
 restart -- re-register the topology in the maintenance window,
@@ -18043,7 +18063,7 @@ apologize for; it is why the publish path has no locks.
 
 *In this library:* `trading/ShardedTradingEngine.java`
 (`registerSymbol` -- "register symbols before start()"; routing
-frozen at `start()`; multi-shard registration and its ~40 ns cost).
+frozen at `start()`; multi-shard registration and its one-publish cost).
 
 ### 636. "The dashboard says 1,204,867 orders; the gateway's delivered counter says 1,204,611. Compliance wants to know which is lying."
 
@@ -18106,11 +18126,13 @@ references FLOWING from the market-data thread, not seeded statics
 -- verify a live `setReferencePrice` tick, else the collar is a
 hole (Q603/Q611). (2) Kill switch drill: actually trip the
 aggregator against a test cap, watch every gate reject with
-REJECT_KILLED, watch hysteretic resume clear only its own kills --
+REJECT_KILLED, confirm the venue adapter received the cancel-all and
+the resting orders came back CANCELED, watch hysteretic resume clear
+only its own kills --
 a breaker you have never fired is a hope, not a control. (3)
 Throttle set to the venue's message-rate contract; confirm
 `throttledCount` is wired to an alarm. (4) Counters to the
-dashboard: all seven rejection reasons by name, `ringFullCount`,
+dashboard: every rejection reason by name (`HftRiskGate.reasonName`), `ringFullCount`,
 `hedgesRejected`, `suppressedUpdates` -- the Q609 vitals must be
 visible before the first order, not after the first incident. (5)
 Performance evidence on the PROD box: benchmarks re-run
@@ -18178,7 +18200,8 @@ compile to plain store and plain load -- the cost is only a
 compiler-reordering fence); multi-writer slots (fills) use
 `getAndAdd`, paying the lock-prefixed instruction only where lost
 updates are possible. The reply ends with the receipt: re-running
-the benchmark after the change is how the ~3 ns claim survived it.
+the benchmark after the change is how the cost was measured and
+written down (`docs/BENCHMARKS.md`) rather than assumed.
 
 *In this library:* `trading/HftRiskGate.java` (the Threading javadoc
 -- a tutorial on exactly this; `LONGS`/`DOUBLES`/`BOOLEANS`
@@ -18186,13 +18209,10 @@ arrayElementVarHandles; `onFill` getAndAdd vs release counters).
 
 ### 641. "A cleanup PR deletes 'seven unused padding fields' from the order ring. Nothing fails. Why do you block it anyway?"
 
-Because the fields are load-bearing precisely by being unused. The
-ring's head and tail are `PaddedSequence` -- an AtomicLong extended
-with seven volatile longs -- and the producer-side `cachedHead` and
-consumer-side `cachedTail` sit behind their own `hp1..hp7` /
-`tp1..tp7` pads, all annotated `@SuppressWarnings("unused")`. Their
-job is geometry: they space hot variables onto separate cache
-lines. Delete them and the trading thread's tail and the venue
+Because unused padding can be doing real work, and this PR is the
+reason the current ring does not rely on it. An older version spaced
+head, tail and the cached copies with seven unused long fields each.
+Delete them and the trading thread's tail and the venue
 thread's head can share a 64-byte line; every release store by one
 core invalidates the line under the other -- false sharing -- and
 the submit path inherits a coherence round-trip per operation under
@@ -18201,14 +18221,20 @@ functionally invisible -- every test passes, every value is
 correct, only the LATENCY changed, and only under concurrent load.
 The only witnesses are the benchmark and the load-floor tests,
 which is exactly why perf-sensitive structures keep benchmarks as
-release gates (Q623) and why the pads carry the annotation and a
-comment explaining themselves: the annotation is a message to
-future cleanup PRs, and this PR is the reason the message exists.
-Block it, then add the comment anywhere it was missing.
+release gates (Q623). Field padding has a second weakness: it relies
+on HotSpot keeping declaration order, which the JVM specification
+does not promise, and padding an `AtomicLong` subclass pads only after
+the value. So the rings now keep head, tail and the two cached
+sequences in `StridedSequences`, one `long[]` with a 128-byte stride
+per counter (a cache line plus the adjacent line Intel's spatial
+prefetcher pulls in), which no cleanup can remove without deleting the
+class. Block the PR; if the structure still uses field padding, move
+it to the strided array.
 
-*In this library:* `trading/OrderRingBuffer.java` (`PaddedSequence`,
-the padded `cachedHead`/`cachedTail` with the false-sharing comment,
-`@SuppressWarnings("unused")`).
+*In this library:* `trading/OrderRingBuffer.java` (head, tail,
+cached head and cached tail in one `StridedSequences`),
+`marketdata/StridedSequences.java` (the layout rationale in its
+javadoc), `marketdata/TickRingBuffer.java` (the same layout).
 
 ### 642. "The aggregator calls kill(true). The desk asks: 'so when does trading actually stop?' Answer precisely."
 
@@ -18227,13 +18253,20 @@ answer is "within about one poll interval plus one check" -- the
 documented trade that keeps per-order checks per-shard and
 nanosecond-cheap while the firm-wide cap is a circuit breaker, not
 a per-order gate. Completeness, the part desks forget: the kill
-stops NEW submissions at the gate; orders already published into
-the ring still drain to the venue thread, and orders already AT
-the venue keep resting -- recalling those is cancel traffic your
-venue adapter owns. A kill switch is a tap, not a vacuum.
+stops new submissions at the gate, and each `HftOrderGateway` on that
+gate reacts on its venue thread. It sends `onCancelAll` for every
+symbol to its venue listeners and marks any new order still queued
+in the ring REJECTED (releasing its exposure), so no new order reaches
+the venue after the cancel-all. Orders at the venue stop resting only
+when the venue processes the cancels, so "trading has stopped" is
+confirmed by the CANCELED reports, not by the flag. That last step
+depends on the adapter: `OrderListener.onCancelAll` has a default
+method, and an adapter that does not override it receives the
+cancel-all and does nothing.
 
 *In this library:* `trading/HftRiskGate.java` (`kill` setRelease,
-killed as first acquire check), `trading/GlobalRiskAggregator.java`
+killed as first acquire check, `killEpoch`), `trading/HftOrderGateway.java`
+(cancel-all and queue suppression on kill), `trading/GlobalRiskAggregator.java`
 (1 ms poll, "circuit breaker, not a per-order gate").
 
 ### 643. "Onboarding wants symbol number 4,097 on a gate sized for 4,096. What are the options, and why is there no resize()?"
@@ -18279,14 +18312,17 @@ inside its own constructor (the classic JMM sin). The same shape
 repeats across the lane, which is what makes it a discipline rather
 than a fix: the gateway takes listeners before `start()`; the
 sharded engine registers symbols before `start()` and freezes
-routing AT `start()`; the gate configures limits single-threaded at
-setup. One sentence for the code review: build it, publish it,
+routing AT `start()`; and `GlobalRiskAggregator` is created through a
+static `start(...)` factory precisely so its monitor thread is started
+after the object is fully constructed (an earlier constructor started
+the thread itself). One sentence for the code review: build it, publish it,
 THEN animate it -- construction and concurrency never overlap.
 
 *In this library:* `fix/FixSession.java` (constructor comment
 "before any thread runs"; threads started in `initiate`/`accept`),
 `trading/HftOrderGateway.java` and `ShardedTradingEngine.java`
-(setup-then-start), `trading/HftRiskGate.java` (setup-time config).
+(setup-then-start), `trading/GlobalRiskAggregator.java` (`start`
+factory).
 
 ### 645. "Why does the release pipeline run a whole session under Epsilon GC when the allocation-counter tests already pass?"
 
@@ -18307,20 +18343,20 @@ The demands Epsilon makes are exactly what the lane already
 provides -- allocation confined to startup/setup, the heap sized as
 an explicit allowance for the research/reporting lane, and in some
 shops a scheduled daily restart in the maintenance window. The
-committed receipt: the venue-book session completed under Epsilon
--- 5.6M orders, and the collector never ran once.
+receipt to keep is the run itself: the session completed under
+Epsilon with a flat heap after warm-up.
 
 *In this library:* `docs/ULTRA_LOW_LATENCY.md` (the Epsilon section
--- flags, "dying loudly beats trading slowly", the 5.6M-order run),
+-- flags, "dying loudly beats trading slowly"),
 allocation-counter tests across `src/test/.../trading/`.
 
 ### 646. "This week's benchmark is 30% off last week's. Machine or code? Give the protocol, not a guess."
 
-First, know which number moved. The docs record the asymmetry:
-throughput varies more with thermal and scheduler state than the
-latency PERCENTILES do -- the committed runs span 15-21M orders/s
-across sessions on the same code. So a 30% throughput move with
-flat p50 is the box talking; a moved p50 is code until proven
+First, know which number moved. Throughput varies more with thermal
+and scheduler state than the latency percentiles do, so repeated runs
+of the same code already spread noticeably (see the run-to-run figures
+in `docs/BENCHMARKS.md`). So a 30% throughput move with flat p50 is
+the box talking; a moved p50 is code until proven
 otherwise. The protocol: (1) fix the workload -- replay the same
 captured tick session, because live-ish input changes are a code
 change you did not make; (2) run the `HiccupMonitor` alongside --
@@ -18337,8 +18373,9 @@ succeed, ship noise as a win, and the next thermal mood will
 un-ship it.
 
 *In this library:* `util/HiccupMonitor.java`, `data/TickCapture.java`
-(fixed replayable workload), `docs/ULTRA_LOW_LATENCY.md` (15-21M
-variance note, measurement discipline, safepoint log correlation).
+(fixed replayable workload), `docs/ULTRA_LOW_LATENCY.md` (measurement
+discipline, safepoint log correlation), `docs/BENCHMARKS.md` (run-to-run
+spread).
 
 ### 647. "The hiccup histogram spikes line up exactly with your log statements. Explain the mechanism and the fix."
 
@@ -18422,9 +18459,9 @@ and "why not make EVERYTHING ultra-low-latency"),
 
 ### 650. "When do you say NO to a feature on the hot path -- and what do you offer instead?"
 
-The economics first: the 592 ns quote path has no slack pool --
-every component is already counted (skew read, grid snap, two ~3 ns
-gate checks, two ~40 ns ring publishes), so a hot-path feature is
+The economics first: the quote path has no slack pool -- every
+component is already counted (skew read, grid snap, two gate checks,
+two ring publishes; figures in `docs/BENCHMARKS.md`), so a hot-path feature is
 not borrowing spare capacity, it is a permanent tax on every tick,
 forever, paid out of reaction time. Say no when any of these hold:
 it allocates and cannot be made not to; it wants shared mutable
@@ -18443,7 +18480,7 @@ lane where its cost is a rounding error instead of a tax" -- and
 when it truly must be hot, Q639's review with a benchmark receipt
 is the price of admission.
 
-*In this library:* `docs/ULTRA_LOW_LATENCY.md` (the 592 ns
+*In this library:* `docs/ULTRA_LOW_LATENCY.md` (the path
 decomposition; `execution.AdaptiveSor.route` "allocates its plan by
 design and belongs to the caller's slow(er) loop"),
 `trading/HftQuoter.java` (the path being defended).
@@ -18519,8 +18556,10 @@ but raises Arrival/IS urgency -- documented in the class javadoc).
 
 The uncomfortable truth first: 10% of nothing is nothing, and POV makes
 no completion promise -- it promises a participation *rate*, and the
-market controls the volume. If the name trades 40,000 shares by 2pm,
-your ledger allows 4,000, and the minimum-slice clamp may hold even
+market controls the volume. If others trade 40,000 shares by 2pm,
+your ledger allows about 4,444 (the target is `p / (1 - p)` times
+others' volume, so that your share of total volume is 10%), and the
+minimum-slice clamp may hold even
 those back (a 30-share child after every odd-lot print is message cost
 and signaling, not progress). So the parent is behaving correctly; the
 mandate is what's starving. The options are all mandate changes and all
@@ -18532,7 +18571,9 @@ residual and say so early. The worst move is silently exceeding the
 participation cap to look busy -- the cap *is* the client's instruction.
 
 *In this library:* `execution/PovTracker.java` (`dueQuantity`, the
-`[minSlice, maxSlice]` clamps, market volume excluding own fills) and
+`p / (1 - p)` target, sent-but-unfilled children counted via
+`onChildSent`/`onChildDone`, the `[minSlice, maxSlice]` clamps, market
+volume excluding own fills) and
 `execution/LiquiditySeekingAlgo.java` (the opportunistic alternative
 with a completion floor).
 
@@ -18595,12 +18636,16 @@ weights before the realized return updates them, so the learner cannot
 grade its own homework. Persistently positive (intraday, roughly
 0.02-0.10) means real signal; an IC hovering at zero means the weights
 found noise, and the urgency knob for that alpha should have been zero.
-The fix is a live gate, not a one-time check: urgency sensitivity stays
-at zero until the IC earns it, and drops back when the IC decays. An
+The fix is a live gate, not a one-time check, and it has to test
+significance rather than sign: a true-zero learner shows IC > 0 half
+the time. `normalizedPrediction` returns 0 until the out-of-sample IC
+exceeds two standard errors of the EWMA correlation under the null
+(`IcSignificance`) and the track record is at least one IC memory
+long, and drops back to 0 when the IC decays. An
 ungated alpha input on an execution algo is a cost machine.
 
 *In this library:* `microstructure/OnlineAlphaLearner.java`
-(`outOfSampleIC` -- "gate any use of the learned alpha on that number"),
+(`outOfSampleIC`, and `normalizedPrediction` gated on IC significance),
 `execution/BenchmarkExecutor.java` (`alphaUrgency`, 0 disables), and
 `microstructure/SignalEngine.java` (the composite is "a scaffold for
 research, not a validated alpha").
@@ -18704,9 +18749,10 @@ tranche and reloads when it fills, so one resting parent can print a
 long sequence of fills at a level -- and any pace logic keyed to raw
 tape volume reads that sequence as "the market got busy" and
 accelerates into it. For POV this is the self-referential trap in its
-purest form: measured against the total tape your own prints inflate
-the denominator, participation reads p/(1+p) instead of p, and the
-controller speeds up to chase flow it is generating. The cure is
+purest form: the target is `p / (1 - p)` times other people's volume,
+so if your own prints are fed in as "market volume" every fill raises
+the target that produced it, and the controller speeds up to chase
+flow it is generating. The cure is
 definitional and must be wired in, not bolted on: the volume ledger
 counts *other people's* trading only, so every own fill goes to the
 executed side of the ledger and never to the market-volume side. That
@@ -18719,7 +18765,7 @@ size at your level -- yours.
 
 *In this library:* `execution/IcebergOrder.java` (tranche reload on
 fill), `execution/PovTracker.java` (market volume excludes own fills;
-the p/(1+p) derivation is in the javadoc), and
+the `p / (1 - p)` derivation is in the javadoc), and
 `execution/BenchmarkExecutor.java` (`onFill` vs `onMarketVolume` are
 separate entry points for exactly this reason).
 
