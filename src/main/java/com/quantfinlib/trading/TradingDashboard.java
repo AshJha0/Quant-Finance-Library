@@ -22,6 +22,9 @@ import java.util.concurrent.Executors;
  */
 public final class TradingDashboard implements AutoCloseable {
 
+    /** Private monitor for lifecycle and registration; never exposed to callers. */
+    private final Object lock = new Object();
+
     private final HttpServer server;
     private final PaperTradingGateway gateway;
     private final Map<String, LatencyRecorder> latencyRecorders = new LinkedHashMap<>();
@@ -55,9 +58,11 @@ public final class TradingDashboard implements AutoCloseable {
     }
 
     /** Attaches a latency histogram to the status payload (call before or after start). */
-    public synchronized TradingDashboard attachLatency(String name, LatencyRecorder recorder) {
-        latencyRecorders.put(name, recorder);
-        return this;
+    public TradingDashboard attachLatency(String name, LatencyRecorder recorder) {
+        synchronized (lock) {
+            latencyRecorders.put(name, recorder);
+            return this;
+        }
     }
 
     public void start() {
@@ -98,7 +103,7 @@ public final class TradingDashboard implements AutoCloseable {
             first = false;
         }
         json.append("},\"latency\":{");
-        synchronized (this) {
+        synchronized (lock) {
             first = true;
             for (Map.Entry<String, LatencyRecorder> e : latencyRecorders.entrySet()) {
                 LatencyRecorder r = e.getValue();

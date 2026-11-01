@@ -59,6 +59,9 @@ import java.util.concurrent.ThreadFactory;
  */
 public final class HftOrderGateway implements AutoCloseable {
 
+    /** Private monitor for lifecycle and registration; never exposed to callers. */
+    private final Object lock = new Object();
+
     private static final OrderListener[] NO_LISTENERS = new OrderListener[0];
 
     // Trading-thread counters.
@@ -166,35 +169,41 @@ public final class HftOrderGateway implements AutoCloseable {
     // Setup (cold path)
     // ------------------------------------------------------------------
 
-    public synchronized void addOrderListener(OrderListener listener) {
-        OrderListener[] next = Arrays.copyOf(listeners, listeners.length + 1);
-        next[next.length - 1] = listener;
-        listeners = next;
+    public void addOrderListener(OrderListener listener) {
+        synchronized (lock) {
+            OrderListener[] next = Arrays.copyOf(listeners, listeners.length + 1);
+            next[next.length - 1] = listener;
+            listeners = next;
+        }
     }
 
-    public synchronized void start() {
-        if (running) {
-            return;
+    public void start() {
+        synchronized (lock) {
+            if (running) {
+                return;
+            }
+            running = true;
+            venueThread = threadFactory.newThread(this::venueLoop);
+            venueThread.setUncaughtExceptionHandler((t, e) -> {
+                venueDead = true;
+                recordFailure(e);
+            });
+            venueThread.start();
         }
-        running = true;
-        venueThread = threadFactory.newThread(this::venueLoop);
-        venueThread.setUncaughtExceptionHandler((t, e) -> {
-            venueDead = true;
-            recordFailure(e);
-        });
-        venueThread.start();
     }
 
     /** Stops the venue thread after draining queued messages. */
-    public synchronized void stop() {
-        running = false;
-        if (venueThread != null) {
-            try {
-                venueThread.join(5_000);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+    public void stop() {
+        synchronized (lock) {
+            running = false;
+            if (venueThread != null) {
+                try {
+                    venueThread.join(5_000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                venueThread = null;
             }
-            venueThread = null;
         }
     }
 
@@ -206,12 +215,14 @@ public final class HftOrderGateway implements AutoCloseable {
      * @param factory thread factory
      * @return this gateway
      */
-    public synchronized HftOrderGateway threadFactory(ThreadFactory factory) {
-        if (factory == null) {
-            throw new IllegalArgumentException("factory is required");
+    public HftOrderGateway threadFactory(ThreadFactory factory) {
+        synchronized (lock) {
+            if (factory == null) {
+                throw new IllegalArgumentException("factory is required");
+            }
+            this.threadFactory = factory;
+            return this;
         }
-        this.threadFactory = factory;
-        return this;
     }
 
     /**

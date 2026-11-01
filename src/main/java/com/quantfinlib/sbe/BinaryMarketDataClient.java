@@ -36,6 +36,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public final class BinaryMarketDataClient implements AutoCloseable {
 
+    /** Private monitor for lifecycle and registration; never exposed to callers. */
+    private final Object lock = new Object();
+
     private final ReadableByteChannel channel;
     private final HftMarketDataBus bus;
     private final ByteBuffer buffer;
@@ -79,20 +82,24 @@ public final class BinaryMarketDataClient implements AutoCloseable {
      * @param factory thread factory
      * @return this client
      */
-    public synchronized BinaryMarketDataClient threadFactory(ThreadFactory factory) {
-        if (factory == null) {
-            throw new IllegalArgumentException("factory is required");
+    public BinaryMarketDataClient threadFactory(ThreadFactory factory) {
+        synchronized (lock) {
+            if (factory == null) {
+                throw new IllegalArgumentException("factory is required");
+            }
+            this.threadFactory = factory;
+            return this;
         }
-        this.threadFactory = factory;
-        return this;
     }
 
-    public synchronized void start() {
-        if (readerThread != null) {
-            return;
+    public void start() {
+        synchronized (lock) {
+            if (readerThread != null) {
+                return;
+            }
+            readerThread = threadFactory.newThread(this::readLoop);
+            readerThread.start();
         }
-        readerThread = threadFactory.newThread(this::readLoop);
-        readerThread.start();
     }
 
     public long messagesDecoded() {
