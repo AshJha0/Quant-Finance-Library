@@ -22355,7 +22355,7 @@ a hazard curve from the name's CDS par spreads: the credit triangle
 rule of thumb, spread roughly equals hazard times (1 - recovery), says
 a 300bp spread on a 40% recovery name implies a hazard of about 5% a
 year, so the expected annual loss is hazard times (1 - R), roughly the
-spread back again; which is the key fact: a fairly priced CDS pays
+spread back again. That is the key fact: a fairly priced CDS pays
 you exactly your expected loss and no more, so the "carry" is
 compensation, not free money. The trade only earns a positive
 default-adjusted return if you think the market's implied hazard is too
