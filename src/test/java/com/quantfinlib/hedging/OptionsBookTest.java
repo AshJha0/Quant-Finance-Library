@@ -59,7 +59,8 @@ class OptionsBookTest {
         OptionsBook.PnlExplain explain = book.pnlExplain(100.5, 0.005, 1.0 / 252);
 
         double explained = explain.deltaPnl() + explain.gammaPnl()
-                + explain.vegaPnl() + explain.thetaPnl();
+                + explain.vegaPnl() + explain.vannaPnl() + explain.volgaPnl()
+                + explain.thetaPnl();
         assertEquals(explain.actualPnl(), explained + explain.unexplained(), 1e-9);
         // Greeks capture the vast majority of a small move.
         assertTrue(Math.abs(explain.unexplained()) < 0.05 * Math.abs(explain.actualPnl()) + 1e-6,
@@ -77,5 +78,31 @@ class OptionsBookTest {
         assertTrue(Math.abs(explain.unexplained()) > 0,
                 "large move should have higher-order residual");
         assertTrue(explain.actualPnl() < 0);   // short straddle loses on the crash
+    }
+
+    @Test
+    void vannaAndVolgaMatchFiniteDifferencesOfThePricer() {
+        double s = 100, k = 110, r = 0.03, q = 0.01, vol = 0.25, t = 0.75;
+        double[] vv = OptionsBook.vannaVolga(s, k, r, q, vol, t);
+        double hs = 1e-3, hv = 1e-4;
+        double vanna = (vega(s + hs, k, r, q, vol, t) - vega(s - hs, k, r, q, vol, t)) / (2 * hs);
+        double volga = (vega(s, k, r, q, vol + hv, t) - vega(s, k, r, q, vol - hv, t)) / (2 * hv);
+        assertEquals(vanna, vv[0], 1e-6);
+        assertEquals(volga, vv[1], 1e-5);
+    }
+
+    @Test
+    void secondOrderTermsShrinkTheResidualOfAJointSpotVolMove() {
+        OptionsBook book = new OptionsBook(100, 0.02, 0.0)
+                .addOption("otm call", OptionType.CALL, 115, 0.5, -10, 0.22);
+        OptionsBook.PnlExplain e = book.pnlExplain(103, 0.03, 0);
+        double firstOrderResidual = e.unexplained() + e.vannaPnl() + e.volgaPnl();
+        assertTrue(Math.abs(e.unexplained()) < 0.25 * Math.abs(firstOrderResidual),
+                "vanna/volga should explain most of the delta-gamma-vega residual: "
+                        + e.unexplained() + " vs " + firstOrderResidual);
+    }
+
+    private static double vega(double s, double k, double r, double q, double vol, double t) {
+        return com.quantfinlib.pricing.BlackScholes.vega(s, k, r, q, vol, t);
     }
 }

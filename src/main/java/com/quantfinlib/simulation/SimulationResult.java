@@ -1,5 +1,6 @@
 package com.quantfinlib.simulation;
 
+import com.quantfinlib.risk.TailRisk;
 import com.quantfinlib.util.MathUtils;
 
 import java.util.Arrays;
@@ -41,21 +42,31 @@ public final class SimulationResult {
         return 1 - probabilityOfProfit();
     }
 
-    /** VaR at the given confidence as a positive loss fraction of the initial value. */
+    /**
+     * VaR at the given confidence as a positive loss fraction of the initial
+     * value (0 if the quantile is a gain): the lower empirical quantile of
+     * the loss fractions {@code (V0 − V_T)/V0}, as defined in {@link TailRisk}.
+     */
     public double valueAtRisk(double confidence) {
-        double q = MathUtils.percentileSorted(sortedFinals, 1 - confidence);
-        return Math.max(0, (initialValue - q) / initialValue);
+        return Math.max(0, TailRisk.varSorted(lossFractions(), confidence));
     }
 
-    /** CVaR: average loss fraction in the tail beyond the VaR quantile. */
+    /**
+     * Expected shortfall (CVaR) as a positive loss fraction: the
+     * Acerbi-Tasche tail mean of {@link TailRisk}, which uses the same tail
+     * as {@link #valueAtRisk} and is never below it.
+     */
     public double conditionalValueAtRisk(double confidence) {
-        int tail = Math.max(1, (int) Math.floor((1 - confidence) * sortedFinals.length));
-        double sum = 0;
-        for (int i = 0; i < tail; i++) {
-            sum += sortedFinals[i];
+        return Math.max(0, TailRisk.expectedShortfallSorted(lossFractions(), confidence));
+    }
+
+    private double[] lossFractions() {
+        int n = sortedFinals.length;
+        double[] losses = new double[n];
+        for (int i = 0; i < n; i++) {
+            losses[i] = (initialValue - sortedFinals[n - 1 - i]) / initialValue;
         }
-        double avgTail = sum / tail;
-        return Math.max(0, (initialValue - avgTail) / initialValue);
+        return losses;
     }
 
     /** Two-sided confidence interval of terminal value, e.g. level = 0.90 → [p5, p95]. */
