@@ -21,12 +21,12 @@ package com.quantfinlib.marketdata;
  * ASCII bytes ({@link #packStock}) so the hot path never touches
  * {@link String}.</p>
  *
- * <p>Prices are unsigned 32-bit integers with four implied decimals — i.e.
+ * <p>Prices are unsigned 32-bit integers with four implied decimals, i.e.
  * the raw value <em>is</em> the price in 0.0001 ticks, which plugs straight
  * into tick-indexed books like {@code L3BookBuilder}. <b>Domain limit</b>:
  * this library's tick-indexed pipeline is signed-{@code int} throughout, so
  * prices above 2³¹−1 ticks ($214,748.36) decode negative and are dropped by
- * band checks downstream — symbols above that price (BRK.A territory) need
+ * band checks downstream. Symbols above that price (BRK.A territory) need
  * a coarser tick or a scaled feed, the same constraint as
  * {@code HftOrderBook}'s ladder.</p>
  *

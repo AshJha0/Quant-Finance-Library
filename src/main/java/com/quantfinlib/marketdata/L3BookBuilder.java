@@ -5,9 +5,9 @@ import com.quantfinlib.orderbook.Side;
 /**
  * Participant-side full-depth (L3) book builder: reconstructs a venue's book
  * from an ITCH-style event stream (add / execute / cancel / delete / replace)
- * and answers the questions an execution engine actually asks — best
+ * and answers the questions an execution engine actually asks (best
  * bid/ask, depth, and <b>exactly how many shares are queued ahead of my
- * order</b> — with zero allocation on every event.
+ * order</b>) with zero allocation on every event.
  *
  * <p>Same engineering as {@code orderbook.HftOrderBook} (dense tick ladder,
  * occupancy bitmaps, pooled intrusive nodes, open-addressing ref map with
