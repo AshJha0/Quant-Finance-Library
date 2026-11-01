@@ -75,6 +75,24 @@ public interface FixSessionStore {
         saveIncomingSeq(1);
     }
 
+    /** Value of {@link #sessionStartMillis()} for a store that has not recorded a session period. */
+    long UNKNOWN_SESSION_START = Long.MIN_VALUE;
+
+    /**
+     * Start (epoch milliseconds) of the session period the stored sequence
+     * numbers belong to, as recorded by {@link #saveSessionStartMillis}; a
+     * {@link FixSession} with a {@link FixSessionSchedule} compares it with the
+     * current period and rolls the store when they differ. The default store
+     * records nothing and returns {@link #UNKNOWN_SESSION_START}.
+     */
+    default long sessionStartMillis() {
+        return UNKNOWN_SESSION_START;
+    }
+
+    /** Records the session period the sequence numbers belong to; a no-op by default. */
+    default void saveSessionStartMillis(long epochMillis) {
+    }
+
     /** Fresh in-memory store keeping the last 100 000 application messages. */
     static FixSessionStore inMemory() {
         return new InMemory(100_000);
@@ -94,6 +112,7 @@ public interface FixSessionStore {
         private long nextOutgoing = 1;
         private long expectedIncoming = 1;
         private long firstRetained = 1;
+        private long sessionStart = UNKNOWN_SESSION_START;
 
         public InMemory(int maxRetained) {
             if (maxRetained < 1) {
@@ -142,6 +161,16 @@ public interface FixSessionStore {
         @Override
         public synchronized long firstRetainedSeq() {
             return firstRetained;
+        }
+
+        @Override
+        public synchronized long sessionStartMillis() {
+            return sessionStart;
+        }
+
+        @Override
+        public synchronized void saveSessionStartMillis(long epochMillis) {
+            sessionStart = epochMillis;
         }
 
         @Override
