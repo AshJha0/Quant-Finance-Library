@@ -91,7 +91,7 @@ class PositionLedgerTest {
             for (int i = 0; i < 300; i++) {
                 px += rng.nextGaussian();
                 Side side = rng.nextBoolean() ? Side.BUY : Side.SELL;
-                long q = 1 + rng.nextInt(40);
+                long q = 1L + rng.nextInt(40);
                 assertTrue(l.onFill(i, 0, 0, 0, side, q, px));
                 cash -= side.sign() * q * px;
                 pos += side.sign() * q;

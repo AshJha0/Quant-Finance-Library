@@ -298,7 +298,7 @@ public final class FixSession implements AutoCloseable {
     private final FixSessionSchedule schedule;    // null: always open, never rolls
     private final boolean useNextExpected;
     private long ourLogonSeq = -1;                // guarded by writeLock
-    private long pendingLogonSeq;                 // reader only: peer Logon number consumed after its 789 replay
+    private volatile long pendingLogonSeq;        // peer Logon number consumed after its 789 replay
 
     private FixSession(Socket socket, OutputStream out, Config config, Listener listener,
                        boolean acceptor, FixSessionStore store, FixClock clock) throws IOException {

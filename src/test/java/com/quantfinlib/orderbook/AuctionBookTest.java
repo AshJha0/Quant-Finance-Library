@@ -216,7 +216,7 @@ class AuctionBookTest {
             int n = 1 + rng.nextInt(30);
             for (int i = 0; i < n; i++) {
                 int side = rng.nextInt(2);
-                long q = 1 + rng.nextInt(50);
+                long q = 1L + rng.nextInt(50);
                 if (rng.nextInt(8) == 0) {
                     b.submitMarket(side == 0 ? Side.BUY : Side.SELL, q);
                     orders.add(new long[]{side, -1, q});
