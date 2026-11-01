@@ -382,7 +382,10 @@ public final class AlphaValidation {
             used++;
             nullSum += icNull;
             nullSq += icNull * icNull;
-            if (Math.abs(icNull) >= Math.abs(observed)) {
+            // Relative tolerance: a draw that reproduces the observed set of
+            // ICs in a different order differs only by summation rounding
+            // and must count as "as extreme".
+            if (Math.abs(icNull) >= Math.abs(observed) - 1e-12 * Math.max(1, Math.abs(observed))) {
                 asExtreme++;
             }
         }
