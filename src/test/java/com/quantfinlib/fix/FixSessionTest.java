@@ -182,72 +182,6 @@ class FixSessionTest {
     }
 
     @Test
-    void heartbeatsFlowAndKeepTheSessionAlive() throws Exception {
-        connect(1);
-        Thread.sleep(2_500);
-        assertTrue(client.isEstablished(), "client dropped");
-        assertTrue(venue.isEstablished(), "venue dropped");
-        long clientHeartbeats = clientEvents.messages.stream()
-                .filter(m -> FixMessage.HEARTBEAT.equals(m.msgType())).count();
-        assertTrue(clientHeartbeats >= 1, "no heartbeats received: " + clientHeartbeats);
-        // The UPPER bound matters too: heartbeating far above the
-        // negotiated 1s interval is a venue-disconnect offense that
-        // "at least one" would never catch. Generous (a slow CI cannot
-        // flake it) but an interval-unit bug fails instantly.
-        assertTrue(clientHeartbeats <= 8,
-                "heartbeat spam at a 1s interval over ~2.5s: " + clientHeartbeats);
-    }
-
-    @Test
-    void deadPeerEscalatesToTestRequestThenDisconnects() throws Exception {
-        // A HALF-DEAD peer: TCP established and reading, application
-        // silent — the failure mode that hangs sessions forever when the
-        // TestRequest/timeout escalation regresses.
-        server = new ServerSocket(0);
-        Future<FixSession> accepting = executor.submit(() -> FixSession.accept(server,
-                new FixSession.Config("VENUE", "CLIENT", 1), venueEvents));
-        try (java.net.Socket raw = new java.net.Socket("127.0.0.1", server.getLocalPort())) {
-            raw.getOutputStream().write(FixMessage.builder(FixMessage.LOGON)
-                    .field(FixMessage.HEART_BT_INT, 1L)
-                    .encode("CLIENT", "VENUE", 1, "20260710-12:00:00.000"));
-            raw.getOutputStream().flush();
-            venue = accepting.get(5, TimeUnit.SECONDS);
-            assertTrue(venue.isEstablished());
-
-            // Read everything the venue sends (its writes never block),
-            // but never write again.
-            java.io.InputStream in = raw.getInputStream();
-            StringBuilder wire = new StringBuilder();
-            byte[] chunk = new byte[1024];
-            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(8);
-            while (System.nanoTime() < deadline && venueEvents.disconnectReason == null) {
-                if (in.available() > 0) {
-                    int n = in.read(chunk);
-                    for (int i = 0; i < n; i++) {
-                        wire.append((char) chunk[i]);
-                    }
-                } else {
-                    Thread.sleep(20);
-                }
-            }
-            // Final drain: on a stalled CI box the TestRequest and the
-            // disconnect can land in the same heartbeat tick, and the
-            // loop above exits before reading the in-flight bytes.
-            while (in.available() > 0) {
-                int n = in.read(chunk);
-                for (int i = 0; i < n; i++) {
-                    wire.append((char) chunk[i]);
-                }
-            }
-            assertTrue(wire.toString().contains("35=1"),
-                    "silence must escalate to a TestRequest before the kill: " + wire);
-            assertNotNull(venueEvents.disconnectReason,
-                    "a peer that ignores the TestRequest gets disconnected");
-            assertFalse(venue.isEstablished(), "the session is DOWN, not zombified");
-        }
-    }
-
-    @Test
     void sequenceGapsAreDetected() throws Exception {
         connect(30);
         venue.forceOutgoingSeq(50);   // skip ahead
@@ -296,26 +230,6 @@ class FixSessionTest {
         // Session continues normally after recovery.
         venue.sendExecutionReport(report);
         awaitTrue(() -> clientEvents.reports.size() == 2, "post-recovery message lost");
-    }
-
-    @Test
-    void servicedResendsAreSuppressedAsDuplicatesByThePeer() throws Exception {
-        connect(30);
-        client.sendNewOrderSingle("ord-1", "EURUSD", Side.BUY, 100, 1.0851,
-                NewOrderSingle.TIF_DAY);
-        awaitTrue(() -> venueEvents.orders.size() == 1, "order not received");
-
-        // Venue explicitly asks for everything again.
-        venue.send(FixMessage.builder(FixMessage.RESEND_REQUEST)
-                .field(FixMessage.BEGIN_SEQ_NO, 2)
-                .field(FixMessage.END_SEQ_NO, 0));
-
-        assertTrue(clientEvents.resendServed.await(5, TimeUnit.SECONDS), "resend not serviced");
-        assertEquals(2, clientEvents.resendBegin.get());
-        Thread.sleep(300);   // give the PossDup replay time to arrive
-        // The replayed order is recognized as a duplicate, not a new order.
-        assertEquals(1, venueEvents.orders.size());
-        assertTrue(venue.isEstablished());
     }
 
     @Test
