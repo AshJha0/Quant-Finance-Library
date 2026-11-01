@@ -24780,8 +24780,10 @@ score it cross-sectionally: `alpha/Factors.java` builds the signals,
 regressions that turn a factor into a priced return, `alpha/SignalEvaluator.java`
 reads off IC and decay. (2) **Honest validation** -- `backtest/validation/PurgedKFold.java`
 with an embargo so the label leak does not flatter it, then
-`backtest/validation/OverfitProbability.java` for the deflated Sharpe and
-`backtest/validation/WalkForwardAnalyzer.java` for out-of-sample stability.
+`backtest/validation/SharpeValidation.java` for the deflated Sharpe,
+`backtest/validation/OverfitProbability.java` for the probability of
+backtest overfitting, and `backtest/validation/WalkForwardAnalyzer.java`
+for out-of-sample stability.
 (3) **Backtest with costs** -- `backtest/Backtester.java` with a
 `backtest/TradeCostModel.java`, then `backtest/BenchmarkComparison.java` and
 `backtest/DrawdownAnalytics.java` so the edge is measured against something
@@ -24791,14 +24793,16 @@ that cannot be gamed. (4) **Sizing** -- forecasts into weights via
 -- `microstructure/VolumeCurve.java` and `microstructure/SignalEngine.java`
 feed `execution/PortfolioExecutor.java` and
 `execution/ImplementationShortfallScheduler.java` to turn a basket into a
-schedule. (6) **Pre-trade gate** -- `trading/HftRiskGate.java` says yes/no in
-~3ns. (7) **Encode and hand off** -- `fix/FixOrderEncoder.java` writes the
+schedule. (6) **Pre-trade gate** -- `trading/HftRiskGate.java` says yes/no with
+no allocation, and `trading/HftOrderGateway.java` reserves the order's
+exposure. (7) **Encode and hand off** -- `fix/FixOrderEncoder.java` writes the
 `35=D`, `trading/OrderRingBuffer.java` carries it to the venue thread.
 (8) **Fill back** -- `fix/ExecutionReport.java` / `fix/FixExecReportView.java`
 book it. Every arrow is a class you can open.
 
 *In this library:* the reading order in Part III step 7-9 walks exactly this
-spine; `examples/LiveTradingDemo.java` runs a shortened version live.
+spine; `examples/LiveTradingDemo.java` (in the separate `examples`
+jar) runs a shortened version live.
 
 ### 952. "Now do the same for a credit strategy -- discovery to a hedged position."
 
@@ -24896,7 +24900,8 @@ membership by `data/PointInTimeUniverse.java` -- the freeze that guarantees
 you only used data available on the decision date. That frozen panel trains
 the factor (`alpha/Factors.java`) and fits the execution models. Going live,
 the SAME symbol keys flow through `marketdata/SymbolRegistry.java`, prices
-arrive as scaled longs on `marketdata/HftMarketDataBus.java`, the order is
+arrive as primitive doubles on `marketdata/HftMarketDataBus.java` (decoded
+once from the integer mantissas on the wire), the order is
 encoded by `fix/FixOrderEncoder.java`, and the fill returns through
 `fix/ExecutionReport.java`. Lineage means you can point at any live P&L number
 and walk it back to the exact frozen bar that justified the position -- and
@@ -24939,8 +24944,9 @@ day without becoming the volume -- bounded by participation in
 **Risk/limit capacity**: the position and VaR caps in
 `trading/HftRiskGate.java` and `risk/VarEngine.java`. The binding constraint is
 usually alpha capacity for a real edge and execution capacity for a fast one;
-system throughput (`trading/ShardedTradingEngine.java` at ~2.3M ticks/s per
-shard) is almost never the limit for a fundamental strategy. Reporting one
+system throughput (`trading/ShardedTradingEngine.java`, measured per shard
+in `docs/BENCHMARKS.md`) is almost never the limit for a fundamental
+strategy. Reporting one
 number without naming which stage bound it is the classic error.
 
 *In this library:* `microstructure/MarketImpactModel.java`,
@@ -25023,7 +25029,7 @@ stack. But execution becomes **scheduled benchmark trading against a fixing or
 a close**, not microsecond routing: `execution/WmrFixingScheduler.java` for an
 FX benchmark, `execution/VwapScheduler.java` over a day for a rebalance. The
 gate is a slower pre-trade check (`risk/PreTradeLimitChecker.java`) rather than
-a 3ns hot-path boolean. The lesson: the hot lane is an equities/FX-microstructure
+an allocation-free hot-path check. The lesson: the hot lane is an equities/FX-microstructure
 answer to a latency problem other asset classes do not have -- reuse the
 research and risk spine, drop the ring buffer.
 
@@ -25099,13 +25105,13 @@ A discrepancy is only a problem when it exceeds the buckets that explain it.
 ### 966. "Latency regressed. It could be the feed, the strategy, or the gate. Isolate it without guessing."
 
 Latency is additive along the hot path, so instrument the segments and diff
-against the budget, not against a hunch. The path is: decode
-(`marketdata/ItchCodec.java` or `fix/FixMarketDataView.java`) -> bus handoff
-(`marketdata/HftMarketDataBus.java`) -> signal update
-(`microstructure/SignalEngine.java`) -> gate (`trading/HftRiskGate.java`, ~3ns)
--> encode (`fix/FixOrderEncoder.java`, ~100ns) -> ring buffer
+against the budget, not against a hunch. The path is decode
+(`marketdata/ItchCodec.java` or `fix/FixMarketDataView.java`), then the bus
+handoff (`marketdata/HftMarketDataBus.java`), the signal update
+(`microstructure/SignalEngine.java`), the gate (`trading/HftRiskGate.java`),
+the encode (`fix/FixOrderEncoder.java`) and the ring buffer
 (`trading/OrderRingBuffer.java`). Each has a known budget (Part II section 17
-lists them). A **feed** regression shows up as decode time or, more often, as
+walks the path; the measured figures are in `docs/BENCHMARKS.md`). A **feed** regression shows up as decode time or, more often, as
 GC pauses from an allocation that crept into the parse -- the allocation-counter
 tests exist to catch exactly that. A **strategy** regression is signal-update
 time growing because someone added a feature to the hot path that belongs in
@@ -25120,22 +25126,25 @@ across three subsystems is how you spend a week.
 ### 967. "A checkpoint restore changed model, scorecard, AND session behavior at once. What happened?"
 
 A checkpoint touches every model that learns across days, so a bad restore is a
-correlated failure by design -- and the cause is almost always the honest/dishonest
-state boundary. `persist/Checkpoint.java` restores LEARNED state (volume curves,
+correlated failure by design -- and the cause is almost always the boundary
+between learned and intraday state. `persist/Checkpoint.java` restores LEARNED state (volume curves,
 venue fill rates, alpha weights) and deliberately does NOT restore intraday
 state (today's running totals, a pending spike). If a model wrote intraday state
 into its `writeState` by mistake, restore brings yesterday's half-finished
 counters back: the `microstructure/VolumeCurve.java` starts mid-day,
 `execution/VenueScorecard.java` resumes with stale EWMA fill rates that route to
 the wrong venue, and if session/sequence state leaked in, `fix/FixSession.java`
-comes up with a wrong `NextExpectedSeqNum`. All three move together because they
-all read the same file. The fix is per-model: audit each `writeState` to confirm
+comes up with a wrong expected sequence number (session state does not
+belong in a model checkpoint at all; the FIX store keeps its own journal and
+sequence page). All three move together because they all read the same file. The fix is per-model: audit each `writeState` to confirm
 it serializes only slow-learned state, and confirm the first line of every
 `readState` validates the header before trusting the bytes.
 
 *In this library:* `persist/Checkpoint.java` (the boundary), plus the
-`writeState`/`readState` pair on `microstructure/VolumeCurve.java`,
-`execution/VenueScorecard.java`, and `fix/FileSessionStore.java`.
+`writeState`/`readState` pair on `microstructure/VolumeCurve.java` and
+`execution/VenueScorecard.java`; `fix/FileSessionStore.java` persists
+session state separately and should never be restored from a model
+checkpoint.
 
 ### 968. "Walk the overnight learning loop end to end: learn, checkpoint, restore."
 
@@ -25145,12 +25154,12 @@ Three phases, one file, one invariant. **Learn (intraday)**: as ticks arrive,
 turning realized returns into alpha weights, and `execution/VenueScorecard.java`
 updates EWMA fill rates per venue. **Checkpoint (EOD)**:
 `persist/Checkpoint.java`'s writer calls each model's `writeState` into named
-sections of one file, written to a temp path and atomically renamed -- a crash
+sections of one file, written to a temp path, forced to the device and
+atomically renamed, then the directory forced -- a crash or power loss
 mid-save corrupts nothing, yesterday's file survives. **Restore (next open)**:
 the reader calls each model's `readState`; learned state returns, intraday state
-does not, because it belonged to yesterday. The invariant that makes it
-production-grade rather than a toy is that atomicity plus the honest-time
-boundary: the desk starts smart (no relearning half-blind until lunch) but not
+does not, because it belonged to yesterday. What makes it
+trustworthy is atomicity plus the learned-versus-intraday boundary: the desk starts smart (no relearning half-blind until lunch) but not
 stale (no yesterday's pending spike leaking into today's first quote).
 
 *In this library:* `persist/Checkpoint.java` orchestrates;
@@ -25292,10 +25301,14 @@ boolean -- and the hot path only ever READS one boolean
 new orders," which is the point, but the design bounds the collateral damage
 three ways. First, it is per-gate, so you can scope the kill to the breaching
 shard or symbol group, not literally the whole firm, if the breach is local.
-Second, it kills NEW risk -- it does not force liquidation, so it does not turn a
-limit breach into a fire sale. Third, because the aggregator is an observer and
-not on the hot path, tripping it costs the fast lane nothing and un-tripping it
-is a config action, not a redeploy. The `microstructure/CircuitBreakers.java`
+Second, it stops new risk and pulls resting orders -- each gateway sends a
+cancel-all to its venue and drops queued new orders -- but it does not force
+liquidation of positions, so it does not turn a limit breach into a fire
+sale. Third, because the aggregator is an observer and not on the hot path,
+tripping it costs the fast lane nothing, and recovery is automatic and
+hysteretic: trading resumes once gross falls below `cap * resumeFraction`
+and nothing is unpriced, while kills the aggregator did not set stay in
+place. The `microstructure/CircuitBreakers.java`
 LULD logic is the market-structure analogue: halt, do not liquidate. Blast
 radius is "stop new risk everywhere," never "dump everything."
 
@@ -25317,12 +25330,17 @@ state, a reconnect replays fills as new. Second line: the fill book,
 duplicate, not append it. Third line: the position the gate
 (`trading/HftRiskGate.java`) tracks must be reconciled against acknowledged
 fills, so a double-count shows up as a gate-vs-fill break (Q964's method).
+The second line matters more than it looks, because the session cannot
+promise exactly-once on its own: the inbound sequence number is written
+without a disk force, so after a power loss your side re-requests messages
+it had already applied, and they come back as PossDup replays.
 Diagnose by asking which defense was bypassed: a `PossDup` fill booked as new is
 a session/store failure; a unique-ID fill booked twice is a book-side keying
 bug. The two are different fixes on different subsystems.
 
 *In this library:* `fix/FixSession.java` + `fix/FileSessionStore.java` (PossDup
-and persisted sequence numbers), `fix/FixExecReportView.java` (exec-ID keying),
+and persisted sequence numbers), `fix/FixExecReportView.java` and its
+`ExecIdDeduplicator` (exec-ID keying),
 `trading/HftRiskGate.java` (the position that must reconcile).
 
 ## Judgment & design (Q977-Q989)
