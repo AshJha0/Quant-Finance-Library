@@ -3067,8 +3067,8 @@ System.out.println(Math.abs(ki + ko - vanilla));   // ~1e-16
 `BarrierOption.price(type, direction, knock, spot, strike, barrier, rebate,
 rate, carry, vol, t)` covers all eight single-barrier types with a cash
 rebate, including reverse barriers such as an up-and-out call with H above
-K; the values are pinned to Haug's table 4-13. A barrier already breached at
-inception throws. Monitoring is continuous; for discrete monitoring apply
+K; the values are pinned to Haug's table 4-13. With the barrier already breached,
+`price` returns the vanilla (knock-in) or the rebate (knock-out); the named methods throw. Monitoring is continuous; for discrete monitoring apply
 the Broadie-Glasserman-Kou (1997) shift `H exp(±0.5826 sigma sqrt(dt))` to
 the barrier yourself. All prices use flat vol: for a smile-consistent
 number, pull the vol at the relevant strike region from `FxVolSurface`
