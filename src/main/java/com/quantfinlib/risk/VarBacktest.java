@@ -18,6 +18,9 @@ import com.quantfinlib.util.MathUtils;
  * </ul>
  *
  * A p-value below the chosen significance (e.g. 0.05) rejects the model.
+ *
+ * <p>{@link #acerbiSzekelyZ2} backtests expected shortfall, which FRTB makes
+ * the capital measure and which an exception count alone cannot validate.</p>
  */
 public final class VarBacktest {
 
@@ -123,6 +126,54 @@ public final class VarBacktest {
 
         return new VarBacktestResult(n, x, p * n, observedRate,
                 kupiec, kupiecP, independence, independenceP, cc, ccP);
+    }
+
+    /** Acerbi-Szekely (2014) Z2 at the 5% level, T = 250, 97.5% ES. */
+    public static final double Z2_THRESHOLD_5PCT = -0.70;
+    /** Acerbi-Szekely (2014) Z2 at the 0.01% level, T = 250, 97.5% ES. */
+    public static final double Z2_THRESHOLD_001PCT = -1.80;
+
+    /**
+     * The Acerbi-Szekely (2014, "Backtesting expected shortfall", Risk,
+     * December) unconditional ES test statistic
+     *
+     * <pre>  Z2 = 1 − Σ_t L_t·1{L_t &gt; VaR_t} / (T·(1−c)·ES_t)</pre>
+     *
+     * with losses {@code L_t = −r_t}. Under a correct ES forecast
+     * E[Z2] = 0; a negative value means realised tail losses exceed the
+     * forecast ES. The paper's simulations give thresholds that are nearly
+     * independent of the return distribution for T = 250 and c = 97.5%:
+     * {@link #Z2_THRESHOLD_5PCT} = −0.70 and {@link #Z2_THRESHOLD_001PCT} =
+     * −1.80 (the analogue of the Basel amber and red zones). For other
+     * settings the p-value must be simulated under the model.
+     *
+     * @param returns      realised returns
+     * @param varForecasts VaR forecasts, positive loss fractions
+     * @param esForecasts  ES forecasts at the same confidence, positive
+     * @param confidence   e.g. 0.975
+     */
+    public static double acerbiSzekelyZ2(double[] returns, double[] varForecasts,
+                                         double[] esForecasts, double confidence) {
+        int n = returns.length;
+        if (varForecasts.length != n || esForecasts.length != n || n < 1) {
+            throw new IllegalArgumentException("need aligned, non-empty returns/VaR/ES");
+        }
+        if (!(confidence > 0 && confidence < 1)) {
+            throw new IllegalArgumentException("confidence must be in (0,1)");
+        }
+        double alpha = 1 - confidence;
+        double sum = 0;
+        for (int t = 0; t < n; t++) {
+            if (!Double.isFinite(returns[t]) || !Double.isFinite(varForecasts[t])
+                    || !(esForecasts[t] > 0) || esForecasts[t] == Double.POSITIVE_INFINITY) {
+                throw new IllegalArgumentException("non-finite input or ES <= 0 at " + t);
+            }
+            double loss = -returns[t];
+            if (loss > varForecasts[t]) {
+                sum += loss / esForecasts[t];
+            }
+        }
+        return 1 - sum / (n * alpha);
     }
 
     /** {@code count · ln(probability)} with the 0·ln(0) = 0 convention. */
