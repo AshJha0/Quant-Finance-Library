@@ -13,8 +13,8 @@ import com.quantfinlib.util.MathUtils;
  * <pre>  call = df · [F·Φ(d₁) − K·Φ(d₂)],   d₁ = (ln(F/K) + σ²T/2)/(σ√T)</pre>
  *
  * <p>Equivalent to {@link BlackScholes} with {@code carry = 0} and
- * spot = forward — a test pins that identity — but the market quotes
- * these instruments IN Black-76 terms (a "cap vol" or a "futures option
+ * spot = forward (a test pins that identity), but the market quotes
+ * these instruments in Black-76 terms (a "cap vol" or a "futures option
  * vol" is a Black-76 σ), so the model deserves its own front door.
  * Static, allocation-free, NaN-transparent inputs produce NaN outputs
  * (research-lane pricing convention, matching BlackScholes).</p>

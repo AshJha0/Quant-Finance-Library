@@ -10,8 +10,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Asian options pinned by their limits: one fixing IS vanilla
- * Black-Scholes (exact), zero vol IS discounted intrinsic on the forward
+ * Asian options pinned by their limits: one fixing is vanilla
+ * Black-Scholes (exact), zero vol is discounted intrinsic on the forward
  * average (hand computation), AM-GM orders arithmetic above geometric,
  * and averaging cheapens the call versus its vanilla cousin.
  */
@@ -36,7 +36,7 @@ class AsianOptionTest {
 
     @Test
     void averagingCheapensTheCallVersusVanilla() {
-        // The average has less variance AND (with r > q) a lower forward
+        // The average has less variance and (with r > q) a lower forward
         // than the terminal price: the ATM Asian call must be worth less.
         double vanilla = BlackScholes.price(CALL, S, 100, R, Q, VOL, T);
         double geo = AsianOption.geometricPrice(CALL, S, 100, R, Q, VOL, T, 12);

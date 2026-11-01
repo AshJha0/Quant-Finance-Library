@@ -19,7 +19,7 @@ class StructuredClosedFormsTest {
     @Test
     void margrabeWithConstantSecondAssetIsABlackScholesCall() {
         // sigma2 = 0, q1 = 0: asset 2 is a bond worth S2 at expiry — the
-        // exchange option IS a vanilla call struck at S2 with rate q2.
+        // exchange option is a vanilla call struck at S2 with rate q2.
         double m = ExchangeOption.margrabe(100, 95, 0.0, 0.03, 0.25, 0.0, 0.5, 1.0);
         double bs = BlackScholes.price(OptionType.CALL, 100, 95, 0.03, 0.0, 0.25, 1.0);
         assertEquals(bs, m, 1e-12);

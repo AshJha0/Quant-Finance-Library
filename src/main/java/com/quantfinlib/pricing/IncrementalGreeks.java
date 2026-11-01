@@ -5,8 +5,8 @@ import com.quantfinlib.pricing.BlackScholes.OptionType;
 /**
  * Tick-frequency Greek estimation without tick-frequency repricing: a full
  * Black-Scholes evaluation anchors the position, and every tick updates
- * price/delta by the delta-gamma Taylor expansion — a handful of multiplies,
- * zero allocation — while the anchor is refreshed off the hot path.
+ * price/delta by the delta-gamma Taylor expansion (a handful of multiplies,
+ * zero allocation) while the anchor is refreshed off the hot path.
  *
  * <pre>
  *   price(S, t) ≈ price₀ + Δ₀·(S−S₀) + ½·Γ₀·(S−S₀)² + Θ₀·(t − t₀)

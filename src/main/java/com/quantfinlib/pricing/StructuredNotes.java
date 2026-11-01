@@ -11,20 +11,20 @@ import com.quantfinlib.pricing.BlackScholes.OptionType;
  * must equal its replicating portfolio to machine precision).
  *
  * <ul>
- *   <li><b>Reverse convertible</b> — par bond + fat coupon, but the
- *       investor has sold a put struck at K: if S_T &lt; K they receive
+ *   <li><b>Reverse convertible</b>: par bond + fat coupon, but the
+ *       investor has sold a put struck at K. If S_T &lt; K they receive
  *       shares worth {@code S_T/K} of par instead of par.
  *       {@code value = (par + coupon) * DF(T) - (par/K) * put(K)}. The
- *       "9% coupon" is put premium in disguise — the whole product in
- *       one sentence. (The knock-in variant needs a down-and-in put,
- *       which this library does not yet price closed-form — stated, not
- *       approximated.)</li>
- *   <li><b>Capital-protected note</b> — {@code protection * par} floor
+ *       "9% coupon" is put premium in disguise; that is the whole product
+ *       in one sentence. (The knock-in variant needs a down-and-in put,
+ *       which this library does not yet price closed-form, so it is not
+ *       approximated here.)</li>
+ *   <li><b>Capital-protected note</b>: {@code protection * par} floor
  *       plus {@code participation} of the upside:
  *       {@code value = protection * par * DF(T) +
  *       participation * (par/S0) * call(S0)}. The issuer's real product
  *       decision is the participation rate the budget affords:
- *       {@link #participationFor} inverts the pricing for it — low
+ *       {@link #participationFor} inverts the pricing for it. Low
  *       rates or high vol mean thin participation, which is why these
  *       notes flourish when rates are high and die when they are
  *       zero.</li>
