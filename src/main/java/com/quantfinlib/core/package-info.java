@@ -7,6 +7,14 @@
  * copying; callers must not modify them. Every analytics module consumes these; nothing in
  * this package depends on anything else.
  *
+ * <p>The library exception types live here too:
+ * {@link com.quantfinlib.core.QuantFinException} marks a fault in external
+ * input, implemented by {@link com.quantfinlib.core.WireProtocolException}
+ * (an {@code IllegalStateException}), {@link com.quantfinlib.core.MalformedDataException}
+ * and {@link com.quantfinlib.core.ConfigurationException} (both
+ * {@code IllegalArgumentException}s), each extending the JDK type its sites
+ * threw before 2.1.</p>
+ *
  * <p>See {@code docs/ARCHITECTURE.md} for the full package map.</p>
  */
 @NullMarked

@@ -1,5 +1,6 @@
 package com.quantfinlib.sbe;
 
+import com.quantfinlib.core.WireProtocolException;
 import java.nio.ByteBuffer;
 
 /**
@@ -53,7 +54,7 @@ final class SbeFrames {
         }
         int schema = MessageHeader.schemaId(buffer, pos);
         if (schema != MessageHeader.SCHEMA_ID) {
-            throw new IllegalStateException("unknown schema id " + schema
+            throw new WireProtocolException("unknown schema id " + schema
                     + " (template " + MessageHeader.templateId(buffer, pos) + ") on binary stream");
         }
         int block = MessageHeader.blockLength(buffer, pos);
@@ -65,7 +66,7 @@ final class SbeFrames {
             default -> 0;
         };
         if (block < needed || block > MAX_BLOCK_LENGTH) {
-            throw new IllegalStateException("template " + template + " with block length "
+            throw new WireProtocolException("template " + template + " with block length "
                     + block + " (version " + MessageHeader.version(buffer, pos) + ")");
         }
         kind[0] = template;

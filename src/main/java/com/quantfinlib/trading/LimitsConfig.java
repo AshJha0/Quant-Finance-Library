@@ -1,5 +1,6 @@
 package com.quantfinlib.trading;
 
+import com.quantfinlib.core.ConfigurationException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -55,26 +56,26 @@ public record LimitsConfig(long maxOrderQuantity, double maxOrderNotional, long 
         positive("maxOrderNotional", maxOrderNotional);
         positive("maxPositionQuantity", maxPositionQuantity);
         if (priceCollarPct != Double.MAX_VALUE && !(priceCollarPct > 0 && priceCollarPct <= 1)) {
-            throw new IllegalArgumentException("priceCollarPct must be in (0, 1] or unlimited: "
+            throw new ConfigurationException("priceCollarPct must be in (0, 1] or unlimited: "
                     + priceCollarPct);
         }
         positive("maxDailyNotional", maxDailyNotional);
         positive("maxDailyOrders", maxDailyOrders);
         positive("maxDailyLoss", maxDailyLoss);
         if (duplicateWindowNanos < 0) {
-            throw new IllegalArgumentException("duplicateWindowNanos must be >= 0: " + duplicateWindowNanos);
+            throw new ConfigurationException("duplicateWindowNanos must be >= 0: " + duplicateWindowNanos);
         }
     }
 
     private static void positive(String key, long v) {
         if (v <= 0) {
-            throw new IllegalArgumentException(key + " must be > 0: " + v);
+            throw new ConfigurationException(key + " must be > 0: " + v);
         }
     }
 
     private static void positive(String key, double v) {
         if (!(v > 0) || Double.isInfinite(v)) {
-            throw new IllegalArgumentException(key + " must be finite and > 0 (or unlimited): " + v);
+            throw new ConfigurationException(key + " must be finite and > 0 (or unlimited): " + v);
         }
     }
 
@@ -154,7 +155,7 @@ public record LimitsConfig(long maxOrderQuantity, double maxOrderNotional, long 
     /**
      * Parses the text format.
      *
-     * @throws IllegalArgumentException naming the line and key for a syntax
+     * @throws ConfigurationException (an IllegalArgumentException) naming the line and key for a syntax
      *         error, an unknown, repeated or missing key, or a value out of range
      */
     public static LimitsConfig parse(String text) {
@@ -172,20 +173,20 @@ public record LimitsConfig(long maxOrderQuantity, double maxOrderNotional, long 
             }
             int eq = line.indexOf('=');
             if (eq <= 0) {
-                throw new IllegalArgumentException("line " + (i + 1) + ": expected key = value");
+                throw new ConfigurationException("line " + (i + 1) + ": expected key = value");
             }
             String key = line.substring(0, eq).strip();
             String value = line.substring(eq + 1).strip();
             if (!KEYS.contains(key)) {
-                throw new IllegalArgumentException("line " + (i + 1) + ": unknown key " + key);
+                throw new ConfigurationException("line " + (i + 1) + ": unknown key " + key);
             }
             if (values.putIfAbsent(key, value) != null) {
-                throw new IllegalArgumentException("line " + (i + 1) + ": repeated key " + key);
+                throw new ConfigurationException("line " + (i + 1) + ": repeated key " + key);
             }
         }
         for (String k : KEYS) {
             if (!values.containsKey(k)) {
-                throw new IllegalArgumentException("missing key " + k);
+                throw new ConfigurationException("missing key " + k);
             }
         }
         return new LimitsConfig(
@@ -208,7 +209,7 @@ public record LimitsConfig(long maxOrderQuantity, double maxOrderNotional, long 
         try {
             return Long.parseLong(v);
         } catch (NumberFormatException e) {
-            throw new IllegalArgumentException(key + ": not an integer: " + v, e);
+            throw new ConfigurationException(key + ": not an integer: " + v, e);
         }
     }
 
@@ -220,11 +221,11 @@ public record LimitsConfig(long maxOrderQuantity, double maxOrderNotional, long 
         try {
             double d = Double.parseDouble(v);
             if (!Double.isFinite(d)) {
-                throw new IllegalArgumentException(key + ": not a finite number: " + v);
+                throw new ConfigurationException(key + ": not a finite number: " + v);
             }
             return d;
         } catch (NumberFormatException e) {
-            throw new IllegalArgumentException(key + ": not a number: " + v, e);
+            throw new ConfigurationException(key + ": not a number: " + v, e);
         }
     }
 
@@ -233,7 +234,7 @@ public record LimitsConfig(long maxOrderQuantity, double maxOrderNotional, long 
         return switch (v) {
             case "true" -> true;
             case "false" -> false;
-            default -> throw new IllegalArgumentException(key + ": expected true or false: " + v);
+            default -> throw new ConfigurationException(key + ": expected true or false: " + v);
         };
     }
 }
