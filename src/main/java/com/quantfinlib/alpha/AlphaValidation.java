@@ -4,33 +4,32 @@ import com.quantfinlib.util.MathUtils;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Random;
+import java.util.SplittableRandom;
 
 /**
- * Validation for alpha factors — the overfitting defense, run before any
- * capital-weighted conclusion is drawn:
+ * Validation for alpha factors, run before any capital-weighted conclusion:
  *
  * <ul>
- *   <li><b>Walk-forward</b> — pick the best factor variant on a training
- *       window by in-sample IC, measure it on the following unseen window,
- *       roll forward. The IS→OOS gap is the overfitting, measured.</li>
- *   <li><b>K-fold (blocked) cross-validation</b> — the IC recomputed on k
- *       contiguous time blocks. Time-series data forbids shuffled folds
- *       (they leak adjacent bars across the train/test line), so blocks it
- *       is; a factor that only works in one block is a regime story, not a
- *       signal.</li>
- *   <li><b>Monte Carlo robustness</b> — a permutation test: re-pair score
- *       dates with return dates at random to build the null distribution
- *       of mean IC, and report where the observed value falls. This asks
- *       the right question ("could this IC arise from no relationship?")
- *       without any normality assumption.</li>
- *   <li><b>Parameter sensitivity</b> — mean IC across a parameter sweep,
- *       plus the worst drop between adjacent parameters. A real effect
- *       degrades smoothly as parameters move; a spike at exactly one value
- *       is the signature of a lucky backtest.</li>
+ *   <li><b>Walk-forward</b>: pick the best candidate on a training window by
+ *       in-sample IC, measure it on the next unseen window, roll forward.
+ *       Folds are weighted by their number of IC observations, the
+ *       stitched out-of-sample IC series gets a Newey-West t-stat, and the
+ *       in-sample winner is haircut by the expected maximum of N null
+ *       candidates.</li>
+ *   <li><b>Blocked cross-validation</b>: the IC recomputed on k contiguous
+ *       time blocks; a factor that only works in one block is a regime
+ *       story.</li>
+ *   <li><b>Permutation nulls</b> ({@link NullModel}): the cross-sectional
+ *       label permutation tests predictive power; the circular block shift
+ *       keeps every autocorrelation; the date permutation is a diagnostic
+ *       for whether the ranking varies over time.</li>
+ *   <li><b>Parameter sensitivity</b>: mean IC across an ordered sweep and
+ *       the drop from the best value to its worse neighbour.</li>
  * </ul>
  */
 public final class AlphaValidation {
+
+    private static final double EULER_GAMMA = 0.5772156649015329;
 
     private AlphaValidation() {
     }
@@ -39,37 +38,67 @@ public final class AlphaValidation {
     // Walk-forward
     // ------------------------------------------------------------------
 
-    /** One walk-forward fold: what was chosen, and how it did out of sample. */
+    /**
+     * One walk-forward fold.
+     *
+     * @param inSampleObservations  training-window IC dates of the chosen candidate
+     * @param outOfSampleObservations test-window IC dates (NaN IC when 0)
+     * @param selectionBias         expected maximum in-sample mean IC of the
+     *                              fold's candidates under the null (0 for one candidate)
+     */
     public record Fold(int trainStart, int testStart, int testEnd,
-                       String chosenFactor, double inSampleIc, double outOfSampleIc) {
+                       String chosenFactor, double inSampleIc, double outOfSampleIc,
+                       int inSampleObservations, int outOfSampleObservations,
+                       double selectionBias) {
     }
 
-    /** All folds plus the aggregate in-sample vs out-of-sample comparison. */
+    /**
+     * All folds plus the aggregate in-sample vs out-of-sample comparison.
+     *
+     * @param meanInSampleIc    observation-weighted mean training IC of the winners
+     * @param meanOutOfSampleIc observation-weighted mean test IC (equal to
+     *                          the mean of {@code outOfSampleIcSeries})
+     * @param outOfSampleIcSeries every test-window IC of the chosen candidates, in order
+     * @param outOfSampleTStat  Newey-West t-stat of that series (automatic lag)
+     * @param meanSelectionBias observation-weighted mean of the folds' selection bias
+     */
     public record WalkForwardResult(List<Fold> folds, double meanInSampleIc,
-                                    double meanOutOfSampleIc) {
+                                    double meanOutOfSampleIc, double[] outOfSampleIcSeries,
+                                    double outOfSampleTStat, double meanSelectionBias) {
 
-        /** OOS/IS efficiency: below ~0.5 the selection is mostly fitting noise. */
+        /**
+         * OOS/IS efficiency, NaN when the in-sample IC is not positive.
+         * Below about 0.5 the selection is mostly fitting noise.
+         */
         public double efficiency() {
-            return meanInSampleIc == 0 ? 0 : meanOutOfSampleIc / meanInSampleIc;
+            return meanInSampleIc > 0 ? meanOutOfSampleIc / meanInSampleIc : Double.NaN;
+        }
+
+        /** In-sample IC net of the expected best-of-N luck. */
+        public double deflatedInSampleIc() {
+            return meanInSampleIc - meanSelectionBias;
         }
     }
 
     /**
      * Rolls a train/test split across the sample: each fold picks the
      * candidate with the best training-window mean IC and scores it on the
-     * next {@code testBars} unseen bars.
+     * next {@code testBars} bars.
      *
-     * <p>Evaluation dates lie on ONE global grid ({@code startIndex},
-     * stepping by the horizon) shared by every fold: consecutive folds'
-     * training windows overlap by {@code trainBars − testBars}, so scoring
-     * per fold would recompute the same (candidate, date) work up to
-     * {@code trainBars/testBars} times — instead the whole IC matrix is
-     * computed once (forward returns shared across candidates, too) and
-     * folds average slices of it. Window containment still holds: a date
-     * contributes to a window only when its ENTIRE forward window fits
-     * inside it.</p>
+     * <p>Evaluation dates lie on one grid ({@code startIndex}, stepping by
+     * the horizon) shared by every fold, and the IC matrix is computed once.
+     * A date contributes to a window only when its whole forward window fits
+     * inside it, so training ICs never see test-window returns.</p>
      *
-     * @param candidates the factor variants competing (e.g. one factor
+     * <p>Selection bias: with N candidates whose training mean ICs are
+     * independent draws from {@code N(0, se²)} under the null, the expected
+     * maximum is {@code se·((1−γ)Φ⁻¹(1−1/N) + γΦ⁻¹(1−1/(Ne)))} (Bailey and
+     * López de Prado 2014, J. Portfolio Management 40(5), eq. 6), with
+     * {@code se} the standard error of the winner's training mean IC.
+     * Neighbouring parameter values are correlated, so the effective N is
+     * smaller and this haircut is an upper bound.</p>
+     *
+     * @param candidates the competing variants (for example one factor
      *                   across a lookback grid)
      */
     public static WalkForwardResult walkForward(AlphaContext ctx, List<AlphaFactor> candidates,
@@ -83,41 +112,70 @@ public final class AlphaValidation {
         double[][] ic = icMatrix(ctx, candidates, dates, horizon);
 
         List<Fold> folds = new ArrayList<>();
-        double isSum = 0;
-        double oosSum = 0;
+        List<Double> oosSeries = new ArrayList<>();
+        double isWeighted = 0;
+        double biasWeighted = 0;
+        int isWeight = 0;
         for (int trainStart = startIndex;
              trainStart + trainBars + testBars <= ctx.bars();
              trainStart += testBars) {
             int testStart = trainStart + trainBars;
             int testEnd = testStart + testBars;
-            // Model selection happens STRICTLY inside the training window:
-            // only dates whose forward window fits before testStart count.
-            AlphaFactor best = null;
+            int best = -1;
             double bestIc = Double.NEGATIVE_INFINITY;
             for (int c = 0; c < candidates.size(); c++) {
-                double mean = windowMean(ic[c], dates, trainStart, testStart, horizon);
-                // NaN (factor entirely in warm-up over this window) never wins.
+                double mean = windowStats(ic[c], dates, trainStart, testStart, horizon)[0];
                 if (!Double.isNaN(mean) && mean > bestIc) {
                     bestIc = mean;
-                    best = candidates.get(c);
+                    best = c;
                 }
             }
-            if (best == null) {
+            if (best < 0) {
                 throw new IllegalArgumentException(
                         "no candidate produced a training IC in fold starting at " + trainStart
-                                + " — factor warm-up likely exceeds the training window");
+                                + "; factor warm-up likely exceeds the training window");
             }
-            double oos = windowMean(ic[candidates.indexOf(best)], dates,
-                    testStart, testEnd, horizon);
-            folds.add(new Fold(trainStart, testStart, testEnd, best.name(), bestIc, oos));
-            isSum += bestIc;
-            oosSum += oos;
+            double[] is = windowStats(ic[best], dates, trainStart, testStart, horizon);
+            int isN = (int) is[2];
+            double se = isN > 1 ? is[1] / Math.sqrt(isN) : 0;
+            double bias = expectedMaxOfNulls(candidates.size(), se);
+            double oosSum = 0;
+            int oosN = 0;
+            for (int d = 0; d < dates.length; d++) {
+                int t = dates[d];
+                if (t >= testStart && t + horizon < testEnd && !Double.isNaN(ic[best][d])) {
+                    oosSeries.add(ic[best][d]);
+                    oosSum += ic[best][d];
+                    oosN++;
+                }
+            }
+            folds.add(new Fold(trainStart, testStart, testEnd, candidates.get(best).name(),
+                    bestIc, oosN == 0 ? Double.NaN : oosSum / oosN, isN, oosN, bias));
+            isWeighted += bestIc * isN;
+            biasWeighted += bias * isN;
+            isWeight += isN;
         }
         if (folds.isEmpty()) {
             throw new IllegalArgumentException("sample too short for one train+test fold");
         }
-        return new WalkForwardResult(List.copyOf(folds),
-                isSum / folds.size(), oosSum / folds.size());
+        double[] oos = new double[oosSeries.size()];
+        for (int i = 0; i < oos.length; i++) {
+            oos[i] = oosSeries.get(i);
+        }
+        double oosMean = oos.length == 0 ? Double.NaN : MathUtils.mean(oos);
+        double oosT = oos.length < 3 ? Double.NaN
+                : NeweyWest.tStat(oos, NeweyWest.automaticLag(oos));
+        return new WalkForwardResult(List.copyOf(folds), isWeighted / isWeight, oosMean, oos,
+                oosT, biasWeighted / isWeight);
+    }
+
+    /** Expected maximum of {@code n} iid N(0, se²) draws; 0 for n = 1. */
+    static double expectedMaxOfNulls(int n, double se) {
+        if (n < 2 || se <= 0) {
+            return 0;
+        }
+        return se * ((1 - EULER_GAMMA) * MathUtils.normInv(1 - 1.0 / n)
+                + EULER_GAMMA * MathUtils.normInv(1 - 1.0 / (n * Math.E)));
     }
 
     /** Evaluation dates: startIndex, stepping by horizon, forward window in-sample. */
@@ -134,10 +192,7 @@ public final class AlphaValidation {
         return dates;
     }
 
-    /**
-     * Per-candidate IC at every grid date, computed ONCE: forward returns
-     * are candidate-independent and shared across the whole sweep.
-     */
+    /** Per-candidate IC at every grid date, computed once. */
     private static double[][] icMatrix(AlphaContext ctx, List<AlphaFactor> candidates,
                                        int[] dates, int horizon) {
         double[][] ic = new double[candidates.size()][dates.length];
@@ -150,25 +205,35 @@ public final class AlphaValidation {
         return ic;
     }
 
-    /** Mean IC over grid dates whose whole forward window fits in [from, to). */
-    private static double windowMean(double[] ic, int[] dates, int from, int to, int horizon) {
+    /**
+     * {mean, sample std, count} of the ICs at grid dates whose whole forward
+     * window fits in [from, to); mean NaN when empty.
+     */
+    private static double[] windowStats(double[] ic, int[] dates, int from, int to, int horizon) {
         double sum = 0;
+        double sq = 0;
         int n = 0;
         for (int d = 0; d < dates.length; d++) {
             int t = dates[d];
             if (t >= from && t + horizon < to && !Double.isNaN(ic[d])) {
                 sum += ic[d];
+                sq += ic[d] * ic[d];
                 n++;
             }
         }
-        return n == 0 ? Double.NaN : sum / n;
+        if (n == 0) {
+            return new double[]{Double.NaN, Double.NaN, 0};
+        }
+        double mean = sum / n;
+        double var = n > 1 ? Math.max(0, (sq - n * mean * mean) / (n - 1)) : 0;
+        return new double[]{mean, Math.sqrt(var), n};
     }
 
     // ------------------------------------------------------------------
     // Blocked cross-validation
     // ------------------------------------------------------------------
 
-    /** Per-block ICs with their dispersion — consistency across regimes. */
+    /** Per-block ICs with their dispersion: consistency across regimes. */
     public record CrossValidationResult(double[] blockIcs, double meanIc, double icStd) {
 
         /** Fraction of blocks where the IC kept the overall sign. */
@@ -189,9 +254,8 @@ public final class AlphaValidation {
 
     /**
      * Splits the evaluation range into {@code k} contiguous blocks and
-     * recomputes the mean IC inside each. (Stateless factors have nothing
-     * to fit, so this is a pure consistency check — the honest reading of
-     * "cross-validation" for unfitted signals.)
+     * recomputes the mean IC inside each. Stateless factors have nothing to
+     * fit, so this is a consistency check rather than a fit/test split.
      */
     public static CrossValidationResult crossValidate(AlphaContext ctx, AlphaFactor factor,
                                                       int horizon, int startIndex, int k) {
@@ -210,37 +274,76 @@ public final class AlphaValidation {
     }
 
     // ------------------------------------------------------------------
-    // Monte Carlo robustness (permutation test)
+    // Permutation nulls
     // ------------------------------------------------------------------
 
-    /** Observed mean IC against its permutation null distribution. */
-    public record RobustnessResult(double observedMeanIc, double pValue,
-                                   double nullMean, double nullStd, int trials) {
+    /** Which link the null distribution destroys. */
+    public enum NullModel {
+        /**
+         * Within each date, permute the symbol labels of the forward-return
+         * vector. Destroys the cross-sectional score/return link while
+         * keeping both marginals and every time-series dependence. This is
+         * the test of predictive power, and the default.
+         */
+        CROSS_SECTIONAL,
+        /**
+         * Pair the scores of date {@code d} with the returns of date
+         * {@code (d + k) mod D} for every shift {@code k = 1..D−1} (an exact
+         * enumeration). Keeps the persistence of both sides. A static
+         * ranking against a persistent drift is invariant under the shift,
+         * so p is near 1 for it: this asks whether the timing of the signal
+         * carries information beyond a fixed ranking.
+         */
+        CIRCULAR_SHIFT,
+        /**
+         * Random permutation of score dates against return dates. A
+         * diagnostic for time variation of the ranking, not a test of
+         * predictive power: slow factors (value, quality, low volatility,
+         * 12-1 momentum) get p near 1 under it whatever their skill.
+         */
+        DATE_PERMUTATION
     }
 
     /**
-     * Permutation test on the score/return pairing: per trial, scores from
-     * date {@code tᵢ} are paired with forward returns from a shuffled date
-     * {@code tⱼ}, destroying any true predictive link while preserving both
-     * marginal distributions. The p-value is the fraction of trials whose
-     * |mean IC| reaches the observed |mean IC| (two-sided, add-one
-     * smoothed so p is never exactly 0).
+     * Observed mean IC against its null distribution.
      *
-     * <p><b>Deliberate conservatism</b>: a signal whose scores never change
-     * over time (a static ranking) is invariant under date permutation, so
-     * it earns p ≈ 1 regardless of its in-sample IC — correctly so, because
-     * a time-invariant cross-section against persistent drifts is one
-     * effective observation, however many dates it is sampled on. Only
-     * signals whose time variation aligns with return variation can earn a
-     * small p here.</p>
+     * @param trials number of null draws actually used (for
+     *               {@link NullModel#CIRCULAR_SHIFT}, {@code D − 1})
      */
+    public record RobustnessResult(double observedMeanIc, double pValue,
+                                   double nullMean, double nullStd, int trials,
+                                   NullModel nullModel) {
+    }
+
+    /** {@link #monteCarloRobustness(AlphaContext, AlphaFactor, int, int, int, long, NullModel)} with the cross-sectional null. */
     public static RobustnessResult monteCarloRobustness(AlphaContext ctx, AlphaFactor factor,
                                                         int horizon, int startIndex,
                                                         int trials, long seed) {
+        return monteCarloRobustness(ctx, factor, horizon, startIndex, trials, seed,
+                NullModel.CROSS_SECTIONAL);
+    }
+
+    /**
+     * Permutation test of the mean rank IC on the non-overlapping grid
+     * ({@code startIndex}, stepping by {@code horizon}). The p-value is the
+     * add-one smoothed fraction of null draws whose |mean IC| reaches the
+     * observed |mean IC| (two-sided; Phipson and Smyth 2010, Stat. Appl.
+     * Genet. Mol. Biol. 9(1)).
+     *
+     * <p>The cross-sectional null treats symbols as exchangeable within a
+     * date; strongly correlated names (one sector driving a small panel)
+     * make the null slightly too narrow.</p>
+     *
+     * @param trials random draws, at least 10 (ignored by the exact
+     *               circular shift)
+     */
+    public static RobustnessResult monteCarloRobustness(AlphaContext ctx, AlphaFactor factor,
+                                                        int horizon, int startIndex,
+                                                        int trials, long seed,
+                                                        NullModel model) {
         if (trials < 10) {
             throw new IllegalArgumentException("need at least 10 trials");
         }
-        // Precompute per-date scores and forward returns once.
         List<double[]> scores = new ArrayList<>();
         List<double[]> forwards = new ArrayList<>();
         for (int t = startIndex; t + horizon < ctx.bars(); t += horizon) {
@@ -252,52 +355,115 @@ public final class AlphaValidation {
             throw new IllegalArgumentException("too few evaluation dates for a permutation test");
         }
         double observed = meanIcOf(scores, forwards, identity(dates));
-
-        Random rng = new Random(seed);
+        SplittableRandom rng = new SplittableRandom(seed);
+        int draws = model == NullModel.CIRCULAR_SHIFT ? dates - 1 : trials;
         double nullSum = 0;
         double nullSq = 0;
         int asExtreme = 0;
+        int used = 0;
         int[] perm = identity(dates);
-        for (int trial = 0; trial < trials; trial++) {
-            shuffle(perm, rng);
-            double icNull = meanIcOf(scores, forwards, perm);
+        for (int trial = 0; trial < draws; trial++) {
+            double icNull = switch (model) {
+                case DATE_PERMUTATION -> {
+                    shuffle(perm, rng);
+                    yield meanIcOf(scores, forwards, perm);
+                }
+                case CIRCULAR_SHIFT -> {
+                    for (int d = 0; d < dates; d++) {
+                        perm[d] = (d + trial + 1) % dates;
+                    }
+                    yield meanIcOf(scores, forwards, perm);
+                }
+                case CROSS_SECTIONAL -> crossSectionalNull(scores, forwards, rng);
+            };
+            if (Double.isNaN(icNull)) {
+                continue;
+            }
+            used++;
             nullSum += icNull;
             nullSq += icNull * icNull;
             if (Math.abs(icNull) >= Math.abs(observed)) {
                 asExtreme++;
             }
         }
-        double nullMean = nullSum / trials;
-        double nullVar = nullSq / trials - nullMean * nullMean;
-        // Add-one smoothing: with T trials the resolution is 1/(T+1).
-        double p = (asExtreme + 1.0) / (trials + 1.0);
-        return new RobustnessResult(observed, p, nullMean, Math.sqrt(Math.max(0, nullVar)), trials);
+        if (used == 0) {
+            throw new IllegalArgumentException("no null draw produced an IC");
+        }
+        double nullMean = nullSum / used;
+        double nullVar = nullSq / used - nullMean * nullMean;
+        double p = (asExtreme + 1.0) / (used + 1.0);
+        return new RobustnessResult(observed, p, nullMean, Math.sqrt(Math.max(0, nullVar)),
+                used, model);
+    }
+
+    /** Mean IC with each date's forward returns permuted across symbols. */
+    private static double crossSectionalNull(List<double[]> scores, List<double[]> forwards,
+                                             SplittableRandom rng) {
+        double sum = 0;
+        int n = 0;
+        for (int d = 0; d < scores.size(); d++) {
+            double[] s = scores.get(d);
+            double[] f = forwards.get(d);
+            // Permute only among names alive on both sides, so the number of
+            // complete pairs (and the IC's sampling variance) is unchanged.
+            int k = 0;
+            int[] idx = new int[s.length];
+            for (int i = 0; i < s.length; i++) {
+                if (!Double.isNaN(s[i]) && !Double.isNaN(f[i])) {
+                    idx[k++] = i;
+                }
+            }
+            if (k < 3) {
+                continue;
+            }
+            double[] xs = new double[k];
+            double[] ys = new double[k];
+            for (int j = 0; j < k; j++) {
+                xs[j] = s[idx[j]];
+                ys[j] = f[idx[j]];
+            }
+            for (int j = k - 1; j > 0; j--) {
+                int r = rng.nextInt(j + 1);
+                double tmp = ys[j];
+                ys[j] = ys[r];
+                ys[r] = tmp;
+            }
+            double ic = SignalEvaluator.spearman(xs, ys);
+            if (!Double.isNaN(ic)) {
+                sum += ic;
+                n++;
+            }
+        }
+        return n == 0 ? Double.NaN : sum / n;
     }
 
     // ------------------------------------------------------------------
     // Parameter sensitivity
     // ------------------------------------------------------------------
 
-    /** IC across the sweep plus the worst adjacent-parameter drop. */
-    public record SensitivityResult(String[] names, double[] meanIcs, double worstNeighborDrop) {
+    /**
+     * IC across the sweep.
+     *
+     * @param worstNeighborDrop  best mean IC minus the lower of its immediate
+     *                           neighbours' mean ICs (0 when the best is
+     *                           flanked by equal values)
+     * @param largestAdjacentJump largest |IC difference| between any two
+     *                           adjacent candidates
+     */
+    public record SensitivityResult(String[] names, double[] meanIcs, double worstNeighborDrop,
+                                    double largestAdjacentJump) {
 
         /** The candidate with the best mean IC. */
         public String best() {
-            int best = 0;
-            for (int i = 1; i < meanIcs.length; i++) {
-                if (meanIcs[i] > meanIcs[best]) {
-                    best = i;
-                }
-            }
-            return names[best];
+            return names[bestIndex(meanIcs)];
         }
     }
 
     /**
-     * Evaluates each candidate (an ORDERED parameter sweep — neighbors in
-     * the list must be neighbors in parameter space) and reports the worst
-     * IC drop between adjacent candidates. Small drop = plateau = robust;
-     * large drop = the chosen parameter is a lucky spike.
+     * Evaluates each candidate of an ordered sweep (neighbours in the list
+     * are neighbours in parameter space) and reports how far the IC falls
+     * when the chosen parameter moves one step. Small drop = plateau; large
+     * drop = the chosen value is a spike.
      */
     public static SensitivityResult parameterSensitivity(AlphaContext ctx,
                                                          List<AlphaFactor> sweep,
@@ -305,21 +471,37 @@ public final class AlphaValidation {
         if (sweep.size() < 2) {
             throw new IllegalArgumentException("a sweep needs at least 2 candidates");
         }
-        // Shared grid + shared forward returns across the sweep — the same
-        // caching walkForward uses: forward returns are candidate-free.
         int[] dates = grid(ctx, startIndex, horizon);
         double[][] icByCandidate = icMatrix(ctx, sweep, dates, horizon);
         String[] names = new String[sweep.size()];
         double[] ics = new double[sweep.size()];
         for (int i = 0; i < sweep.size(); i++) {
             names[i] = sweep.get(i).name();
-            ics[i] = windowMean(icByCandidate[i], dates, startIndex, ctx.bars(), horizon);
+            ics[i] = windowStats(icByCandidate[i], dates, startIndex, ctx.bars(), horizon)[0];
         }
-        double worstDrop = 0;
+        int b = bestIndex(ics);
+        double worstNeighbour = Double.POSITIVE_INFINITY;
+        if (b > 0) {
+            worstNeighbour = Math.min(worstNeighbour, ics[b - 1]);
+        }
+        if (b < ics.length - 1) {
+            worstNeighbour = Math.min(worstNeighbour, ics[b + 1]);
+        }
+        double jump = 0;
         for (int i = 1; i < ics.length; i++) {
-            worstDrop = Math.max(worstDrop, Math.abs(ics[i] - ics[i - 1]));
+            jump = Math.max(jump, Math.abs(ics[i] - ics[i - 1]));
         }
-        return new SensitivityResult(names, ics, worstDrop);
+        return new SensitivityResult(names, ics, ics[b] - worstNeighbour, jump);
+    }
+
+    private static int bestIndex(double[] ics) {
+        int best = 0;
+        for (int i = 1; i < ics.length; i++) {
+            if (ics[i] > ics[best] || Double.isNaN(ics[best])) {
+                best = i;
+            }
+        }
+        return best;
     }
 
     // ------------------------------------------------------------------
@@ -328,10 +510,8 @@ public final class AlphaValidation {
 
     /**
      * Mean rank IC over {@code [from, toExclusive)}, stepping by the horizon.
-     * The ENTIRE forward window {@code (t, t+horizon]} must fit inside the
-     * range: letting it spill past {@code toExclusive} would leak test-window
-     * returns into training-window ICs — the walk-forward selection would
-     * peek at exactly the data it claims not to see.
+     * The whole forward window {@code (t, t+horizon]} must fit inside the
+     * range, so a training window never reads test-window returns.
      */
     static double meanIc(AlphaContext ctx, AlphaFactor factor, int from, int toExclusive,
                          int horizon) {
@@ -371,7 +551,7 @@ public final class AlphaValidation {
     }
 
     /** Fisher-Yates in place. */
-    private static void shuffle(int[] a, Random rng) {
+    private static void shuffle(int[] a, SplittableRandom rng) {
         for (int i = a.length - 1; i > 0; i--) {
             int j = rng.nextInt(i + 1);
             int tmp = a[i];

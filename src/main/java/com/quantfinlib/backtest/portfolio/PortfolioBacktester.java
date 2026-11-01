@@ -1,5 +1,6 @@
 package com.quantfinlib.backtest.portfolio;
 
+import com.quantfinlib.backtest.FillPolicy;
 import com.quantfinlib.backtest.PerformanceAnalytics;
 import com.quantfinlib.backtest.PerformanceMetrics;
 import com.quantfinlib.backtest.TradeCostModel;
@@ -39,39 +40,120 @@ import java.util.Set;
  *       total return and cash drag is real.</li>
  * </ul>
  *
- * <p>Feed this overload <b>unadjusted</b> prices (dividends are cash here —
+ * <p>Feed this overload <b>unadjusted</b> prices (dividends are cash here;
  * adjusted prices would double-count them) aligned via
  * {@code SeriesAligner.unionForwardFill}; the forward-filled ghost bars of a
  * dead symbol are harmless because its position terminates at the event.
- * The engine cannot remove the bias in the <em>data</em>: the universe and
- * delisting returns must come from a point-in-time dataset that includes
- * dead tickers.</p>
+ * Signals, however, must not be computed on unadjusted prices: a 2:1 split
+ * reads as a −50% return. The
+ * {@linkplain #run(PortfolioStrategy, Map, Map, Config, PointInTimeUniverse, Map)
+ * price-pair overload} hands the strategy an adjusted copy for signals
+ * ({@link PortfolioStrategy#init(Map, Map)}) while the engine trades,
+ * values and pays dividends on the unadjusted series. The engine cannot
+ * remove the bias in the <em>data</em>: the universe and delisting returns
+ * must come from a point-in-time dataset that includes dead tickers.</p>
+ *
+ * <p><b>Fill timing.</b> Target weights are decided at a bar's close and
+ * filled according to {@link Config#fillPolicy()}: at the next bar's open
+ * (default), the next bar's close, or the decision bar's own close
+ * ({@code CLOSE}, the optimistic zero-latency mode). Next-open orders are
+ * sized against the portfolio value marked at that open. Lifecycle events
+ * and dividends of the fill bar are processed first; dead and non-member
+ * names are not traded. A decision on the last bar under a next-bar policy
+ * is dropped.</p>
+ *
+ * <p><b>Financing</b> ({@link Config#withFinancing}) accrues each bar on
+ * the book held over it: interest on positive cash (short proceeds sit in
+ * cash, so the short rebate is implicit), a margin rate on negative cash,
+ * and a borrow fee on short notional, per symbol or by default. Without it
+ * shorts, cash and leverage are free and a 150/50 book shows the same
+ * equity as an unlevered one.</p>
  */
 public final class PortfolioBacktester {
 
     /**
+     * Financing terms, all annual.
+     *
+     * @param cashRate          rate earned on positive cash (0.03 = 3%)
+     * @param marginRate        rate paid on negative cash (leverage)
+     * @param defaultBorrowBps  borrow fee on short notional, bps per year
+     * @param borrowBpsBySymbol per-symbol borrow fee overrides (hard-to-borrow names)
+     */
+    public record Financing(double cashRate, double marginRate, double defaultBorrowBps,
+                            Map<String, Double> borrowBpsBySymbol) {
+
+        public Financing {
+            if (!Double.isFinite(cashRate) || marginRate < 0 || defaultBorrowBps < 0) {
+                throw new IllegalArgumentException("invalid financing terms");
+            }
+            borrowBpsBySymbol = Map.copyOf(borrowBpsBySymbol);
+        }
+
+        /** No financing: cash, leverage and shorts are free. */
+        public static Financing none() {
+            return new Financing(0, 0, 0, Map.of());
+        }
+
+        double borrowBps(String symbol) {
+            return borrowBpsBySymbol.getOrDefault(symbol, defaultBorrowBps);
+        }
+
+        boolean isNone() {
+            return cashRate == 0 && marginRate == 0 && defaultBorrowBps == 0
+                    && borrowBpsBySymbol.isEmpty();
+        }
+    }
+
+    /**
      * {@code costModel}, when set, supersedes the flat {@code commissionRate}
-     * for every trade (rebalances and forced index-drop sales alike) — the
-     * shared {@link TradeCostModel} seam that makes a run simultaneously
-     * survivorship-aware AND execution-aware. Null keeps the legacy flat
-     * commission behavior exactly.
+     * for every trade (rebalances and forced index-drop sales alike), the
+     * shared {@link TradeCostModel} seam that makes a run survivorship-aware
+     * and execution-aware at once. Null keeps the flat commission.
+     *
+     * @param fillPolicy when a decision fills (default {@code NEXT_OPEN})
+     * @param financing  cash, margin and borrow rates (default none)
      */
     public record Config(double initialCapital, double commissionRate,
                          int rebalanceEveryBars, int periodsPerYear,
-                         TradeCostModel costModel) {
+                         TradeCostModel costModel, FillPolicy fillPolicy, Financing financing) {
+
+        public Config {
+            if (fillPolicy == null || financing == null || rebalanceEveryBars < 1
+                    || periodsPerYear < 1 || commissionRate < 0) {
+                throw new IllegalArgumentException("invalid portfolio backtest config");
+            }
+        }
+
+        /** Next-open fills, no financing. */
+        public Config(double initialCapital, double commissionRate, int rebalanceEveryBars,
+                      int periodsPerYear, TradeCostModel costModel) {
+            this(initialCapital, commissionRate, rebalanceEveryBars, periodsPerYear, costModel,
+                    FillPolicy.NEXT_OPEN, Financing.none());
+        }
 
         public static Config defaults() {
             return new Config(1_000_000, 0.001, 1, 252, null);
         }
 
         public Config withRebalanceEvery(int bars) {
-            return new Config(initialCapital, commissionRate, bars, periodsPerYear, costModel);
+            return new Config(initialCapital, commissionRate, bars, periodsPerYear, costModel,
+                    fillPolicy, financing);
         }
 
         /** Pluggable per-trade costs (e.g. {@code TradeCostModel.institutional}). */
         public Config withCostModel(TradeCostModel model) {
             return new Config(initialCapital, commissionRate, rebalanceEveryBars,
-                    periodsPerYear, model);
+                    periodsPerYear, model, fillPolicy, financing);
+        }
+
+        public Config withFillPolicy(FillPolicy policy) {
+            return new Config(initialCapital, commissionRate, rebalanceEveryBars,
+                    periodsPerYear, costModel, policy, financing);
+        }
+
+        public Config withFinancing(Financing terms) {
+            return new Config(initialCapital, commissionRate, rebalanceEveryBars,
+                    periodsPerYear, costModel, fillPolicy, terms);
         }
 
         /** One-way trade fee for {@code notional} of {@code series} at bar {@code index}. */
@@ -89,7 +171,8 @@ public final class PortfolioBacktester {
     public record Result(double[] equityCurve, PerformanceMetrics metrics,
                          double totalCosts, double totalTurnoverNotional,
                          Map<String, Double> finalPositions,
-                         double dividendCashCredited, int lifecycleEventsApplied) {
+                         double dividendCashCredited, int lifecycleEventsApplied,
+                         double financingCost) {
     }
 
     /** Same-bar processing order for terminal events (see the run loop). */
@@ -127,6 +210,20 @@ public final class PortfolioBacktester {
     public static Result run(PortfolioStrategy strategy, Map<String, BarSeries> data, Config config,
                              PointInTimeUniverse universe,
                              Map<String, List<CorporateActions.CorporateAction>> cashDividends) {
+        return run(strategy, data, data, config, universe, cashDividends);
+    }
+
+    /**
+     * Survivorship-aware run on a price pair: {@code signalData} (split and
+     * dividend adjusted, for example via {@link CorporateActions#adjust}) is
+     * what the strategy sees for its signals; {@code data} (unadjusted) is
+     * what the engine trades, values and pays dividends on. Both maps must
+     * hold the same symbols on the same timeline.
+     */
+    public static Result run(PortfolioStrategy strategy, Map<String, BarSeries> data,
+                             Map<String, BarSeries> signalData, Config config,
+                             PointInTimeUniverse universe,
+                             Map<String, List<CorporateActions.CorporateAction>> cashDividends) {
         if (data.isEmpty()) {
             throw new IllegalArgumentException("no series supplied");
         }
@@ -141,7 +238,20 @@ public final class PortfolioBacktester {
                 throw new IllegalArgumentException("series must be index-aligned: " + s);
             }
         }
-        strategy.init(data);
+        if (!signalData.keySet().equals(data.keySet())) {
+            throw new IllegalArgumentException("signal and trade data must hold the same symbols");
+        }
+        for (String s : symbols) {
+            BarSeries sig = signalData.get(s);
+            if (sig.size() != n || sig.timestamp(0) != data.get(s).timestamp(0)
+                    || sig.timestamp(n - 1) != data.get(s).timestamp(n - 1)) {
+                throw new IllegalArgumentException("signal series misaligned with trade series: " + s);
+            }
+        }
+        strategy.init(signalData, data);
+        FillPolicy fillPolicy = config.fillPolicy();
+        Map<String, Double> pendingWeights = null;
+        double financingCost = 0;
 
         double cash = config.initialCapital();
         Map<String, Double> positions = new HashMap<>();   // signed quantities
@@ -165,6 +275,13 @@ public final class PortfolioBacktester {
 
         for (int i = 0; i < n; i++) {
             long now = clock.timestamp(i);
+
+            // 0) Financing accrued over (i-1, i] on the book held at close i-1.
+            if (i > 0 && !config.financing().isNone()) {
+                double charge = financingCharge(config, positions, data, cash, i - 1);
+                cash -= charge;
+                financingCost += charge;
+            }
 
             // 1) Cash dividends on the ex-date: holders receive, shorts pay.
             //    Processed BEFORE same-bar lifecycle events: the entitlement
@@ -245,31 +362,28 @@ public final class PortfolioBacktester {
                 }
             }
 
-            double portfolioValue = cash + marketValue(positions, data, i);
+            // 4) Fill orders decided on the previous bar.
+            if (pendingWeights != null && fillPolicy != FillPolicy.CLOSE) {
+                boolean atOpen = fillPolicy == FillPolicy.NEXT_OPEN;
+                double[] tc = rebalance(pendingWeights, symbols, data, positions, dead, universe,
+                        now, i, atOpen, cash, config);
+                cash = tc[0];
+                totalCosts += tc[1];
+                totalTurnover += tc[2];
+                pendingWeights = null;
+            }
 
+            // 5) Decide at this bar's close.
             if (i % config.rebalanceEveryBars() == 0) {
                 Map<String, Double> weights = strategy.targetWeights(i);
-                for (String symbol : symbols) {
-                    if (dead.contains(symbol)) {
-                        continue; // ghost bars of a dead security are untradeable
-                    }
-                    // Non-members are capped at weight 0: the strategy cannot
-                    // buy what is not in the universe at this date.
-                    boolean tradeable = universe == null || universe.isMember(symbol, now);
-                    double weight = tradeable ? weights.getOrDefault(symbol, 0.0) : 0.0;
-                    double close = data.get(symbol).close(i);
-                    double targetQty = weight * portfolioValue / close;
-                    double currentQty = positions.getOrDefault(symbol, 0.0);
-                    double delta = targetQty - currentQty;
-                    if (delta == 0) {
-                        continue;
-                    }
-                    double notional = Math.abs(delta) * close;
-                    double fee = config.fee(data.get(symbol), i, notional);
-                    cash -= delta * close + fee;
-                    totalCosts += fee;
-                    totalTurnover += notional;
-                    positions.put(symbol, targetQty);
+                if (fillPolicy == FillPolicy.CLOSE) {
+                    double[] tc = rebalance(weights, symbols, data, positions, dead, universe,
+                            now, i, false, cash, config);
+                    cash = tc[0];
+                    totalCosts += tc[1];
+                    totalTurnover += tc[2];
+                } else {
+                    pendingWeights = Map.copyOf(weights);
                 }
             }
             equity[i] = cash + marketValue(positions, data, i);
@@ -285,7 +399,63 @@ public final class PortfolioBacktester {
         PerformanceMetrics metrics = PerformanceAnalytics.compute(
                 equity, List.of(), config.periodsPerYear());
         return new Result(equity, metrics, totalCosts, totalTurnover, finalPositions,
-                dividendCash, eventsApplied);
+                dividendCash, eventsApplied, financingCost);
+    }
+
+    /**
+     * Trades every live, tradeable symbol to its target weight of the
+     * portfolio value marked at the fill point. Returns {cash, costs, turnover}.
+     */
+    private static double[] rebalance(Map<String, Double> weights, List<String> symbols,
+                                      Map<String, BarSeries> data, Map<String, Double> positions,
+                                      Set<String> dead, PointInTimeUniverse universe, long now,
+                                      int i, boolean atOpen, double cash, Config config) {
+        double portfolioValue = cash;
+        for (Map.Entry<String, Double> p : positions.entrySet()) {
+            BarSeries s = data.get(p.getKey());
+            portfolioValue += p.getValue() * (atOpen ? s.open(i) : s.close(i));
+        }
+        double costs = 0;
+        double turnover = 0;
+        for (String symbol : symbols) {
+            if (dead.contains(symbol)) {
+                continue; // ghost bars of a dead security are untradeable
+            }
+            // Non-members are capped at weight 0: the strategy cannot buy
+            // what is not in the universe at this date.
+            boolean tradeable = universe == null || universe.isMember(symbol, now);
+            double weight = tradeable ? weights.getOrDefault(symbol, 0.0) : 0.0;
+            BarSeries s = data.get(symbol);
+            double price = atOpen ? s.open(i) : s.close(i);
+            double targetQty = weight * portfolioValue / price;
+            double currentQty = positions.getOrDefault(symbol, 0.0);
+            double delta = targetQty - currentQty;
+            if (delta == 0) {
+                continue;
+            }
+            double notional = Math.abs(delta) * price;
+            double fee = config.fee(s, i, notional);
+            cash -= delta * price + fee;
+            costs += fee;
+            turnover += notional;
+            positions.put(symbol, targetQty);
+        }
+        return new double[]{cash, costs, turnover};
+    }
+
+    /** One bar of financing on the book held at close {@code i}. */
+    private static double financingCharge(Config config, Map<String, Double> positions,
+                                          Map<String, BarSeries> data, double cash, int i) {
+        Financing f = config.financing();
+        double perBar = 1.0 / config.periodsPerYear();
+        double charge = cash >= 0 ? -cash * f.cashRate() * perBar : -cash * f.marginRate() * perBar;
+        for (Map.Entry<String, Double> p : positions.entrySet()) {
+            if (p.getValue() < 0) {
+                double notional = -p.getValue() * data.get(p.getKey()).close(i);
+                charge += notional * f.borrowBps(p.getKey()) / 1e4 * perBar;
+            }
+        }
+        return charge;
     }
 
     private static double marketValue(Map<String, Double> positions,

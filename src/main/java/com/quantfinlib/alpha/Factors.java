@@ -23,11 +23,31 @@ import com.quantfinlib.screener.Fundamentals;
  * </ul>
  *
  * <p>All computations read only bars {@code <= index} (the no-look-ahead
- * contract) and cost O(window) per symbol per call — stateless by design so
- * factors are trivially safe to evaluate at arbitrary dates, at the price
- * of recomputing windows the streaming indicators would carry. EMAs are
- * truncated at 4× their period, where the dropped tail weight is
- * {@code (1−2/(p+1))^{4p} < 0.04%} — far below signal noise.</p>
+ * contract) and cost O(window) per symbol per call. They are stateless,
+ * so they can be evaluated at arbitrary dates, at the price of recomputing
+ * windows the streaming indicators would carry. EMAs are truncated at 4×
+ * their period and seeded with the first price of that window; the dropped
+ * tail weight is {@code (1−2/(p+1))^{4p} < 0.04%}.</p>
+ *
+ * <p><b>EMA definitions differ from {@code indicators.Indicators}.</b>
+ * {@code Indicators.ema} seeds with the SMA of the first {@code period}
+ * bars of the whole series and runs from bar 0; the factors here seed with
+ * the first price of a {@code 4×slow} window ending at the scored bar. The
+ * two converge as the seed's weight decays, but {@link #macd} and
+ * {@code Indicators.macd} are not the same number on short histories, in
+ * the same way {@link #rsi} (Cutler) is not Wilder's RSI.</p>
+ *
+ * <p><b>Cross-sectional preparation.</b> Raw technical scores are
+ * dominated by market and sector moves in trending regimes, and their rank
+ * IC then measures beta timing. {@link #winsorized}, {@link #standardized}
+ * and {@link #sectorNeutralized} are per-date decorators; {@link #prepared}
+ * applies them in the order that is correct for fat-tailed raw scores:
+ * winsorise the raw score, then z-score, then demean within sector.</p>
+ *
+ * <p><b>Fundamentals</b> are read through
+ * {@link AlphaContext#fundamentalsAsOf}: point-in-time with a
+ * {@link FundamentalsHistory}; with only a static snapshot they can be
+ * scored at the last bar and throw for every earlier bar.</p>
  */
 public final class Factors {
 
@@ -176,16 +196,21 @@ public final class Factors {
     // ------------------------------------------------------------------
 
     /**
-     * Value composite: the average of earnings yield ({@code 1/PE}) and
-     * book yield ({@code 1/PB}) — yields, not ratios, so "cheap" is high
-     * and negative-earnings names contribute a negative yield rather than
-     * a meaningless negative PE rank. NaN without fundamentals.
+     * Value composite: the average of earnings yield and book yield
+     * ({@code 1/PB}). Yields rather than ratios, so "cheap" is high and
+     * negative-earnings names contribute a negative yield rather than a
+     * meaningless negative P/E rank. The earnings yield is
+     * {@code eps / close(t)} when {@code eps} is known, so the price side is
+     * current; otherwise {@code 1/PE} as recorded. NaN without fundamentals.
      */
     public static AlphaFactor value() {
-        return fundamental("VALUE", f -> {
+        return fundamental("VALUE", (f, price) -> {
             double sum = 0;
             int n = 0;
-            if (!Double.isNaN(f.peRatio()) && f.peRatio() != 0) {
+            if (Double.isFinite(f.eps()) && price > 0) {
+                sum += f.eps() / price;
+                n++;
+            } else if (!Double.isNaN(f.peRatio()) && f.peRatio() != 0) {
                 sum += 1 / f.peRatio();
                 n++;
             }
@@ -204,7 +229,7 @@ public final class Factors {
      * quality-minus-junk shape (profitable AND conservatively financed).
      */
     public static AlphaFactor quality() {
-        return fundamental("QUALITY", f -> {
+        return fundamental("QUALITY", (f, price) -> {
             double roe = f.roe();
             double leverage = Double.isNaN(f.debtToEquity()) ? 0 : f.debtToEquity();
             return Double.isNaN(roe) ? Double.NaN : roe - 0.1 * leverage;
@@ -212,24 +237,33 @@ public final class Factors {
     }
 
     /**
-     * Low-volatility anomaly: {@code −σ(returns)} over the lookback —
-     * calm names score high. Ranking only needs the negative sign, not
-     * annualization.
+     * Low-volatility anomaly: {@code −σ(returns)} over the lookback, calm
+     * names scoring high. Ranking only needs the negative sign, not
+     * annualisation. Synthetic bars are excluded; NaN with fewer than two
+     * real bars in the window.
      */
     public static AlphaFactor lowVolatility(int lookback) {
         requireWindow(lookback > 1, "need lookback > 1");
         return named("LOW_VOL(" + lookback + ")", lookback + 1, (s, i) -> {
-            double mean = 0;
+            // Synthetic (forward-filled) bars are skipped: their zero
+            // returns would make a halted or illiquid name look calm.
+            double sum = 0;
+            double sumSq = 0;
+            int n = 0;
             for (int j = i - lookback + 1; j <= i; j++) {
-                mean += s.close(j) / s.close(j - 1) - 1;
+                if (s.isSynthetic(j)) {
+                    continue;
+                }
+                double r = s.close(j) / s.close(j - 1) - 1;
+                sum += r;
+                sumSq += r * r;
+                n++;
             }
-            mean /= lookback;
-            double var = 0;
-            for (int j = i - lookback + 1; j <= i; j++) {
-                double d = (s.close(j) / s.close(j - 1) - 1) - mean;
-                var += d * d;
+            if (n < 2) {
+                return Double.NaN;
             }
-            return -Math.sqrt(var / lookback);
+            double mean = sum / n;
+            return -Math.sqrt(Math.max(0, sumSq / n - mean * mean));
         });
     }
 
@@ -271,19 +305,187 @@ public final class Factors {
         };
     }
 
-    /** Wraps a fundamentals read; NaN for symbols without a snapshot. */
-    private static AlphaFactor fundamental(String name,
-                                           java.util.function.ToDoubleFunction<Fundamentals> f) {
+    /** Fundamental score kernel: fundamentals as of the bar plus that bar's close. */
+    @FunctionalInterface
+    private interface FundamentalFn {
+        double score(Fundamentals f, double price);
+    }
+
+    /**
+     * Wraps a point-in-time fundamentals read ({@link AlphaContext#fundamentalsAsOf});
+     * NaN for symbols with nothing published yet.
+     */
+    private static AlphaFactor fundamental(String name, FundamentalFn f) {
         return new AlphaFactor() {
             @Override
             public double[] scores(AlphaContext ctx, int index) {
                 double[] out = new double[ctx.symbolCount()];
                 for (int i = 0; i < out.length; i++) {
-                    Fundamentals fu = ctx.fundamentals(i);
-                    out[i] = fu == null || !ctx.isActive(i, index)
-                            ? Double.NaN : f.applyAsDouble(fu);
+                    if (!ctx.isActive(i, index)) {
+                        out[i] = Double.NaN;
+                        continue;
+                    }
+                    Fundamentals fu = ctx.fundamentalsAsOf(i, index);
+                    out[i] = fu == null ? Double.NaN : f.score(fu, ctx.series(i).close(index));
                 }
                 return out;
+            }
+
+            @Override
+            public String name() {
+                return name;
+            }
+        };
+    }
+
+    // ------------------------------------------------------------------
+    // Cross-sectional decorators (applied per date)
+    // ------------------------------------------------------------------
+
+    /**
+     * Clips each date's scores to the cross-sectional {@code p} and
+     * {@code 1 − p} quantiles (linear interpolation between order
+     * statistics), NaN entries untouched.
+     *
+     * @param p tail fraction in [0, 0.5), for example 0.01
+     */
+    public static AlphaFactor winsorized(AlphaFactor factor, double p) {
+        if (!(p >= 0 && p < 0.5)) {
+            throw new IllegalArgumentException("p must be in [0, 0.5)");
+        }
+        return decorate("WINSOR(" + factor.name() + "," + p + ")", factor, (ctx, s) -> {
+            double[] v = finite(s);
+            if (v.length < 2) {
+                return s;
+            }
+            java.util.Arrays.sort(v);
+            double lo = quantile(v, p);
+            double hi = quantile(v, 1 - p);
+            double[] out = s.clone();
+            for (int i = 0; i < out.length; i++) {
+                if (!Double.isNaN(out[i])) {
+                    out[i] = Math.max(lo, Math.min(hi, out[i]));
+                }
+            }
+            return out;
+        });
+    }
+
+    /**
+     * Cross-sectional z-score per date: {@code (s − mean)/sd} over the
+     * scored names (population sd); all-zero when the scores have no
+     * dispersion.
+     */
+    public static AlphaFactor standardized(AlphaFactor factor) {
+        return decorate("Z(" + factor.name() + ")", factor, (ctx, s) -> zScore(s));
+    }
+
+    /**
+     * Demeans scores within each sector per date, so the factor ranks
+     * names against their sector peers. Symbols missing from the map form
+     * their own singleton sector and score 0.
+     */
+    public static AlphaFactor sectorNeutralized(AlphaFactor factor,
+                                               java.util.Map<String, String> sectorBySymbol) {
+        return decorate("SECNEUT(" + factor.name() + ")", factor, (ctx, s) -> {
+            java.util.Map<String, double[]> sums = new java.util.HashMap<>();
+            String[] sector = new String[s.length];
+            for (int i = 0; i < s.length; i++) {
+                sector[i] = sectorBySymbol.getOrDefault(ctx.symbols().get(i),
+                        "\0UNKNOWN:" + ctx.symbols().get(i));
+                if (!Double.isNaN(s[i])) {
+                    double[] acc = sums.computeIfAbsent(sector[i], k -> new double[2]);
+                    acc[0] += s[i];
+                    acc[1]++;
+                }
+            }
+            double[] out = s.clone();
+            for (int i = 0; i < out.length; i++) {
+                if (!Double.isNaN(out[i])) {
+                    double[] acc = sums.get(sector[i]);
+                    out[i] -= acc[0] / acc[1];
+                }
+            }
+            return out;
+        });
+    }
+
+    /**
+     * The standard preparation chain: {@link #winsorized} at {@code p}, then
+     * {@link #standardized}, then {@link #sectorNeutralized} (skipped when
+     * {@code sectorBySymbol} is null).
+     */
+    public static AlphaFactor prepared(AlphaFactor factor, double p,
+                                       java.util.Map<String, String> sectorBySymbol) {
+        AlphaFactor f = standardized(winsorized(factor, p));
+        return sectorBySymbol == null ? f : sectorNeutralized(f, sectorBySymbol);
+    }
+
+    /** z-score over the non-NaN entries; NaN stays NaN. */
+    static double[] zScore(double[] s) {
+        double sum = 0;
+        int n = 0;
+        for (double v : s) {
+            if (!Double.isNaN(v)) {
+                sum += v;
+                n++;
+            }
+        }
+        double[] out = s.clone();
+        if (n == 0) {
+            return out;
+        }
+        double mean = sum / n;
+        double var = 0;
+        for (double v : s) {
+            if (!Double.isNaN(v)) {
+                var += (v - mean) * (v - mean);
+            }
+        }
+        double sd = Math.sqrt(var / n);
+        for (int i = 0; i < out.length; i++) {
+            if (!Double.isNaN(out[i])) {
+                out[i] = sd == 0 ? 0 : (out[i] - mean) / sd;
+            }
+        }
+        return out;
+    }
+
+    private static double[] finite(double[] s) {
+        int n = 0;
+        for (double v : s) {
+            if (!Double.isNaN(v)) {
+                n++;
+            }
+        }
+        double[] out = new double[n];
+        int k = 0;
+        for (double v : s) {
+            if (!Double.isNaN(v)) {
+                out[k++] = v;
+            }
+        }
+        return out;
+    }
+
+    /** Quantile of sorted data, linear between order statistics (Hyndman-Fan type 7). */
+    private static double quantile(double[] sorted, double q) {
+        double h = (sorted.length - 1) * q;
+        int lo = (int) Math.floor(h);
+        int hi = Math.min(sorted.length - 1, lo + 1);
+        return sorted[lo] + (h - lo) * (sorted[hi] - sorted[lo]);
+    }
+
+    @FunctionalInterface
+    private interface Transform {
+        double[] apply(AlphaContext ctx, double[] scores);
+    }
+
+    private static AlphaFactor decorate(String name, AlphaFactor inner, Transform transform) {
+        return new AlphaFactor() {
+            @Override
+            public double[] scores(AlphaContext ctx, int index) {
+                return transform.apply(ctx, inner.scores(ctx, index));
             }
 
             @Override

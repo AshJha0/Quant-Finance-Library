@@ -34,6 +34,14 @@ import java.util.Map;
  *
  * <p>Candidates also need {@code lookback} bars of history at the rebalance
  * bar; earlier bars produce an empty book (the engine holds cash).</p>
+ *
+ * <p><b>Prices.</b> Momentum is computed on the series passed to
+ * {@link #init}: they must be split and dividend adjusted, or a 2:1 split
+ * inside the window reads as −50% and the name is shorted. With the
+ * survivorship-aware engine, which needs unadjusted prices for cash
+ * accounting, use the price-pair overload
+ * {@code PortfolioBacktester.run(strategy, unadjusted, adjusted, ...)}: the
+ * strategy then receives the adjusted copy.</p>
  */
 public final class CrossSectionalMomentum implements PortfolioStrategy {
 

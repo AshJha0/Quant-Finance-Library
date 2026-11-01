@@ -45,7 +45,9 @@ public interface TradeCostModel {
 
     /**
      * The institutional four-component model. Impact needs trailing
-     * ADV/vol: bars before {@code impactWindow} charge the flat components
+     * ADV/vol from the bars before the trade bar
+     * ({@link MarketImpactModel#estimate}): bars up to {@code impactWindow}
+     * charge the flat components
      * only (rather than reading before bar 0), as do series without volume
      * data — documented degradation, never a crash.
      *
@@ -62,7 +64,7 @@ public interface TradeCostModel {
         }
         double flat = commissionBps + halfSpreadBps + slippageBps;
         return (series, index, notional) -> {
-            if (index < impactWindow) {
+            if (index <= impactWindow) {
                 return flat;
             }
             MarketImpactModel impact = MarketImpactModel.estimate(series, index, impactWindow);

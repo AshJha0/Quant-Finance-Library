@@ -185,7 +185,7 @@ class AlphaBacktesterReportTest {
             assertEquals(1.0, ic, 1e-9);
         }
         assertTrue(Double.isInfinite(persistent.halfLifeBars()));
-        assertTrue(persistent.format().contains("half-life"));
+        assertTrue(persistent.format().contains("holding-period IC"));
 
         // Fading: zigzag panel — mean reversion predicts the next bar
         // exactly (the zigzag flips), but two bars out the zigzag cancels
