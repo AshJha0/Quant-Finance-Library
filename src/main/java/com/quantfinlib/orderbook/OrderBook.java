@@ -11,23 +11,23 @@ import java.util.ArrayDeque;
 
 /**
  * Price-time-priority limit order book with continuous matching. Models order
- * placement, cancellation and execution so microstructure effects — spread
- * dynamics, queue priority, book sweeps — can be studied directly.
+ * placement, cancellation and execution so microstructure effects (spread
+ * dynamics, queue priority, book sweeps) can be studied directly.
  *
  * <p><b>Which lane this is in</b>: this is the <em>research-grade venue
- * model</em> — used by the microstructure fuzz tests, queue analytics and
- * simulations — not part of the measured low-latency path. The
+ * model</em>, used by the microstructure fuzz tests, queue analytics and
+ * simulations, and not part of the measured low-latency path. The
  * library's latency measurements are participant-side
  * (tick, strategy or quoter, risk gate, order ring, venue adapter; see
  * docs/BENCHMARKS.md). In that architecture matching happens at the exchange, not in this process, so no
  * order on the hot path ever touches this class. Internally it
  * favors clarity over allocation discipline ({@code TreeMap<Double,…>}
- * boxing, per-order objects, iterators) — adequate for simulation, and
- * exactly what a venue-grade core must not do. The venue-grade sibling is
- * {@link HftOrderBook} (dense integer-tick ladder, pooled intrusive nodes,
- * primitive id map, zero allocation) — and its correctness is defined BY
- * this class: a model-based equivalence test drives both books with
- * identical random operation streams and demands identical state.</p>
+ * boxing, per-order objects, iterators). That is adequate for simulation,
+ * and exactly what a venue-grade core must not do. The venue-grade sibling
+ * is {@link HftOrderBook} (dense integer-tick ladder, pooled intrusive
+ * nodes, primitive id map, zero allocation), and its correctness is
+ * defined by this class: a model-based equivalence test drives both books
+ * with identical random operation streams and demands identical state.</p>
  *
  * <p>Keeps message counters (orders, cancels, trades) for order-to-trade
  * ratio and surveillance analytics. Single-threaded by design: drive it from
