@@ -23,7 +23,7 @@ import com.quantfinlib.pricing.BlackScholes.OptionType;
  * allocation-light, and accurate to well past test tolerance for
  * practical parameter ranges.</p>
  *
- * <p><b>Honesty notes:</b> the Feller condition {@code 2κθ ≥ σᵥ²} keeps
+ * <p><b>Limits:</b> the Feller condition {@code 2κθ ≥ σᵥ²} keeps
  * the variance strictly positive; parameters violating it are accepted
  * (markets calibrate there constantly) but the Monte Carlo cross-check
  * in the tests uses full-truncation Euler for exactly that reason. No
@@ -219,7 +219,7 @@ public final class Heston {
         if (steps < 1 || paths < 1) {
             throw new IllegalArgumentException("need steps >= 1 and paths >= 1");
         }
-        java.util.Random rnd = new java.util.Random(seed);
+        java.util.random.RandomGenerator rnd = new java.util.SplittableRandom(seed);
         double dt = timeYears / steps;
         double sqrtDt = Math.sqrt(dt);
         double rhoBar = Math.sqrt(1 - p.rho() * p.rho());

@@ -131,4 +131,27 @@ class AsianOptionTest {
         assertThrows(IllegalArgumentException.class,
                 () -> AsianOption.arithmeticPrice(CALL, -1, 100, R, Q, VOL, T, 4));
     }
+
+    @Test
+    void linearTimeSecondMomentMatchesTheDoubleSum() {
+        // Brute-force Turnbull-Wakeman with the O(n^2) double sum.
+        double spot = 100, k = 97, r = 0.05, q = 0.02, vol = 0.35, t = 1.5;
+        for (int n : new int[]{1, 2, 7, 52, 365}) {
+            double h = t / n, g = r - q, m1 = 0, m2 = 0;
+            for (int i = 1; i <= n; i++) {
+                m1 += Math.exp(g * i * h);
+                for (int j = 1; j <= n; j++) {
+                    m2 += Math.exp(g * (i + j) * h + vol * vol * Math.min(i, j) * h);
+                }
+            }
+            m1 *= spot / n;
+            m2 *= spot * spot / ((double) n * n);
+            double sd = Math.sqrt(Math.log(m2 / (m1 * m1)));
+            double d1 = (Math.log(m1 / k) + 0.5 * sd * sd) / sd;
+            double ref = Math.exp(-r * t) * (m1 * com.quantfinlib.util.MathUtils.normCdf(d1)
+                    - k * com.quantfinlib.util.MathUtils.normCdf(d1 - sd));
+            assertEquals(ref, AsianOption.arithmeticPrice(BlackScholes.OptionType.CALL, spot, k, r, q,
+                    vol, t, n), 1e-12 * ref, "n=" + n);
+        }
+    }
 }

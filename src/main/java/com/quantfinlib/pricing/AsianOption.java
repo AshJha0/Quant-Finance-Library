@@ -35,9 +35,7 @@ import com.quantfinlib.util.MathUtils;
  *       ({@code Var[ln A] = ln(M2/M1^2)}). The approximation error is the
  *       distance of the true density from lognormal — small at practical
  *       vols, growing with vol^2 T; the moments themselves are exact. The
- *       double sum is O(n^2): fine for real fixing schedules (n &le; a few
- *       hundred), not a Monte Carlo replacement for n in the tens of
- *       thousands.</li>
+ *       double sum is evaluated in O(n) with suffix sums.</li>
  * </ul>
  *
  * <p>AM-GM guarantees {@code A >= G} pathwise, so an arithmetic CALL is
@@ -74,7 +72,7 @@ public final class AsianOption {
 
     /**
      * Arithmetic-average Asian price via Turnbull-Wakeman two-moment
-     * lognormal matching (see class doc; O(n^2) in the fixing count).
+     * lognormal matching (see class doc; O(n) in the fixing count).
      */
     public static double arithmeticPrice(BlackScholes.OptionType type, double spot, double strike,
                                          double rate, double carry, double vol, double timeYears,
@@ -88,11 +86,16 @@ public final class AsianOption {
             m1 += Math.exp(g * i * h);
         }
         m1 *= spot / n;
+        // M2 n^2/S^2 = sum_i e^{(2g+v^2) t_i} + 2 sum_i e^{(g+v^2) t_i} sum_{j>i} e^{g t_j},
+        // splitting the double sum at min(t_i, t_j) = t_i; the inner sums are
+        // suffix sums, so the whole moment is O(n).
+        double v2 = vol * vol;
+        double suffix = 0; // sum_{j>i} e^{g t_j}
         double m2 = 0;
-        for (int i = 1; i <= n; i++) {
-            for (int j = 1; j <= n; j++) {
-                m2 += Math.exp(g * (i + j) * h + vol * vol * Math.min(i, j) * h);
-            }
+        for (int i = n; i >= 1; i--) {
+            double t = i * h;
+            m2 += Math.exp((2 * g + v2) * t) + 2 * Math.exp((g + v2) * t) * suffix;
+            suffix += Math.exp(g * t);
         }
         m2 *= spot * spot / ((double) n * n);
         // Matched log-variance; guard the deterministic edge (vol = 0 makes

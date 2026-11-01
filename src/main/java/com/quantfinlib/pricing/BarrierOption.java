@@ -4,121 +4,175 @@ import com.quantfinlib.pricing.BlackScholes.OptionType;
 import com.quantfinlib.util.MathUtils;
 
 /**
- * Single-barrier vanilla options — continuously monitored knock-in /
- * knock-out — for the <em>regular</em> barrier configurations, priced in
- * closed form by the reflection principle (Reiner–Rubinstein, as in Hull):
+ * Continuously monitored single-barrier options: all eight in/out, up/down,
+ * call/put combinations, regular and reverse, with a cash rebate.
  *
- * <ul>
- *   <li><b>Down</b> barriers on <b>calls</b> with {@code H ≤ K} (barrier in
- *       the OTM region): down-and-in from the reflection formula,
- *       down-and-out from in–out parity {@code KO = vanilla − KI};</li>
- *   <li><b>Up</b> barriers on <b>puts</b> with {@code H ≥ K}, the mirror
- *       case.</li>
- * </ul>
+ * <p>Closed forms of Reiner and Rubinstein (1991), "Breaking down the
+ * barriers", Risk 4(8), in the notation of Haug (2007), <i>The Complete
+ * Guide to Option Pricing Formulas</i>, 2nd ed., section 4.17.1. With cost of
+ * carry b = r − q, μ = (b − σ²/2)/σ², λ = √(μ² + 2r/σ²) and</p>
  *
- * <p><b>Reverse</b> barriers (a barrier in the ITM region, e.g. an
- * up-and-out call) knock out exactly where the payoff is largest, need the
- * full eight-case decomposition, and their risk is dominated by the barrier
- * gamma — this class rejects them explicitly rather than pricing them
- * subtly wrong. Price those with {@code simulation.MonteCarloSimulator}
- * path pricing or a barrier-aware tree.</p>
+ * <pre>
+ *   x1 = ln(S/X)/(σ√T) + (1+μ)σ√T     x2 = ln(S/H)/(σ√T) + (1+μ)σ√T
+ *   y1 = ln(H²/(SX))/(σ√T) + (1+μ)σ√T y2 = ln(H/S)/(σ√T) + (1+μ)σ√T
+ *   z  = ln(H/S)/(σ√T) + λσ√T
+ * </pre>
  *
- * <p>No rebates. Conventions match {@link BlackScholes}: {@code carry} is
- * the continuous yield (foreign rate for FX, dividend yield for equities).
- * With {@code λ = (r − q + σ²/2)/σ²} and
- * {@code y = ln(H²/(S·K))/(σ√T) + λσ√T}, the down-and-in call is</p>
+ * <p>the building blocks A-F (φ = ±1 call/put, η = +1 down, −1 up) combine as
+ * in Haug's table: for instance an up-and-out call with X &lt; H is
+ * A − B + C − D + F. A knock-in rebate is paid at expiry if the barrier was
+ * never touched; a knock-out rebate is paid at the moment of the hit.</p>
  *
- * <pre>  c_di = S·e^{−qT}(H/S)^{2λ}·N(y) − K·e^{−rT}(H/S)^{2λ−2}·N(y − σ√T)</pre>
+ * <p>Conventions match {@link BlackScholes}: {@code carry} is the continuous
+ * yield q (foreign rate for FX), so b = rate − carry. If the barrier is
+ * already breached at {@code spot}, a knock-in is the vanilla and a knock-out
+ * pays its rebate now. Discrete monitoring is not modelled; the
+ * Broadie-Glasserman-Kou (1997) shift H·e^{±0.5826σ√Δt} is the usual
+ * correction and can be applied to {@code barrier} by the caller.</p>
  */
 public final class BarrierOption {
+
+    /** Barrier direction relative to spot. */
+    public enum Direction {
+        DOWN, UP
+    }
+
+    /** Whether the barrier activates or extinguishes the option. */
+    public enum Knock {
+        IN, OUT
+    }
 
     private BarrierOption() {
     }
 
-    /** Down-and-in call, {@code H ≤ min(S, K)}: alive only after the barrier trades. */
+    /**
+     * Price of a single-barrier option with a cash rebate.
+     *
+     * @param rebate cash amount: paid at expiry for an untouched knock-in,
+     *               at the hit for a knock-out; 0 for none
+     */
+    public static double price(OptionType type, Direction direction, Knock knock, double spot,
+                               double strike, double barrier, double rebate, double rate,
+                               double carry, double vol, double timeYears) {
+        if (!(spot > 0) || !(strike > 0) || !(barrier > 0) || !Double.isFinite(spot)
+                || !Double.isFinite(strike) || !Double.isFinite(barrier)) {
+            throw new IllegalArgumentException("spot, strike, barrier must be positive and finite");
+        }
+        if (!(rebate >= 0) || !Double.isFinite(rebate) || !Double.isFinite(rate)
+                || !Double.isFinite(carry) || !(vol >= 0) || !Double.isFinite(vol)
+                || Double.isNaN(timeYears)) {
+            throw new IllegalArgumentException("invalid rebate, rate, carry or vol");
+        }
+        boolean breached = direction == Direction.DOWN ? spot <= barrier : spot >= barrier;
+        if (breached) {
+            return knock == Knock.IN
+                    ? BlackScholes.price(type, spot, strike, rate, carry, vol, timeYears)
+                    : rebate;
+        }
+        if (timeYears <= 0) {
+            return knock == Knock.IN ? rebate : BlackScholes.intrinsic(type, spot, strike);
+        }
+        if (vol <= 0) {
+            throw new IllegalArgumentException("vol must be > 0 before expiry");
+        }
+        double t = timeYears;
+        double b = rate - carry;
+        double sig2 = vol * vol;
+        double sq = vol * Math.sqrt(t);
+        double mu = (b - 0.5 * sig2) / sig2;
+        double lam = Math.sqrt(mu * mu + 2 * rate / sig2);
+        double phi = type.sign();
+        double eta = direction == Direction.DOWN ? 1 : -1;
+        double x1 = Math.log(spot / strike) / sq + (1 + mu) * sq;
+        double x2 = Math.log(spot / barrier) / sq + (1 + mu) * sq;
+        double y1 = Math.log(barrier * barrier / (spot * strike)) / sq + (1 + mu) * sq;
+        double y2 = Math.log(barrier / spot) / sq + (1 + mu) * sq;
+        double z = Math.log(barrier / spot) / sq + lam * sq;
+        double sFwd = spot * Math.exp((b - rate) * t);
+        double kDf = strike * Math.exp(-rate * t);
+        double hs = barrier / spot;
+        double hs2mu1 = Math.pow(hs, 2 * (mu + 1));
+        double hs2mu = Math.pow(hs, 2 * mu);
+        double a = phi * sFwd * n(phi * x1) - phi * kDf * n(phi * x1 - phi * sq);
+        double bb = phi * sFwd * n(phi * x2) - phi * kDf * n(phi * x2 - phi * sq);
+        double c = phi * sFwd * hs2mu1 * n(eta * y1) - phi * kDf * hs2mu * n(eta * y1 - eta * sq);
+        double d = phi * sFwd * hs2mu1 * n(eta * y2) - phi * kDf * hs2mu * n(eta * y2 - eta * sq);
+        double e = rebate == 0 ? 0 : rebate * Math.exp(-rate * t)
+                * (n(eta * x2 - eta * sq) - hs2mu * n(eta * y2 - eta * sq));
+        double f = rebate == 0 ? 0 : rebate * (Math.pow(hs, mu + lam) * n(eta * z)
+                + Math.pow(hs, mu - lam) * n(eta * z - 2 * eta * lam * sq));
+        boolean call = type == OptionType.CALL;
+        boolean down = direction == Direction.DOWN;
+        boolean xAboveH = strike > barrier;
+        double v;
+        if (knock == Knock.IN) {
+            if (call && down) {
+                v = xAboveH ? c + e : a - bb + d + e;
+            } else if (call) {
+                v = xAboveH ? a + e : bb - c + d + e;
+            } else if (down) {
+                v = xAboveH ? bb - c + d + e : a + e;
+            } else {
+                v = xAboveH ? a - bb + d + e : c + e;
+            }
+        } else {
+            if (call && down) {
+                v = xAboveH ? a - c + f : bb - d + f;
+            } else if (call) {
+                v = xAboveH ? f : a - bb + c - d + f;
+            } else if (down) {
+                v = xAboveH ? a - bb + c - d + f : f;
+            } else {
+                v = xAboveH ? bb - d + f : a - c + f;
+            }
+        }
+        // Cancellation in the reverse cases can leave a few ulps below zero.
+        return Math.max(v, 0);
+    }
+
+    private static double n(double x) {
+        return MathUtils.normCdf(x);
+    }
+
+    /** Down-and-in call, no rebate. Throws if the barrier is at or above spot. */
     public static double downAndInCall(double spot, double strike, double barrier,
                                        double rate, double carry, double vol, double timeYears) {
-        validateDownCall(spot, strike, barrier);
-        if (timeYears <= 0) {
-            return 0; // never touched, expires worthless as a knock-in
-        }
-        return reflectionIn(OptionType.CALL, spot, strike, barrier, rate, carry, vol, timeYears);
+        requireAlive(spot, barrier, true);
+        return price(OptionType.CALL, Direction.DOWN, Knock.IN, spot, strike, barrier, 0,
+                rate, carry, vol, timeYears);
     }
 
-    /** Down-and-out call, {@code H ≤ min(S, K)}: dies if the barrier trades. */
+    /** Down-and-out call, no rebate. Throws if the barrier is at or above spot. */
     public static double downAndOutCall(double spot, double strike, double barrier,
                                         double rate, double carry, double vol, double timeYears) {
-        validateDownCall(spot, strike, barrier);
-        // In–out parity: holding both KI and KO replicates the vanilla.
-        return BlackScholes.price(OptionType.CALL, spot, strike, rate, carry, vol, timeYears)
-                - downAndInCall(spot, strike, barrier, rate, carry, vol, timeYears);
+        requireAlive(spot, barrier, true);
+        return price(OptionType.CALL, Direction.DOWN, Knock.OUT, spot, strike, barrier, 0,
+                rate, carry, vol, timeYears);
     }
 
-    /** Up-and-in put, {@code H ≥ max(S, K)}: the mirror of the down-and-in call. */
+    /** Up-and-in put, no rebate. Throws if the barrier is at or below spot. */
     public static double upAndInPut(double spot, double strike, double barrier,
                                     double rate, double carry, double vol, double timeYears) {
-        validateUpPut(spot, strike, barrier);
-        if (timeYears <= 0) {
-            return 0;
-        }
-        return reflectionIn(OptionType.PUT, spot, strike, barrier, rate, carry, vol, timeYears);
+        requireAlive(spot, barrier, false);
+        return price(OptionType.PUT, Direction.UP, Knock.IN, spot, strike, barrier, 0,
+                rate, carry, vol, timeYears);
     }
 
-    /** Up-and-out put, {@code H ≥ max(S, K)}. */
+    /** Up-and-out put, no rebate. Throws if the barrier is at or below spot. */
     public static double upAndOutPut(double spot, double strike, double barrier,
                                      double rate, double carry, double vol, double timeYears) {
-        validateUpPut(spot, strike, barrier);
-        return BlackScholes.price(OptionType.PUT, spot, strike, rate, carry, vol, timeYears)
-                - upAndInPut(spot, strike, barrier, rate, carry, vol, timeYears);
+        requireAlive(spot, barrier, false);
+        return price(OptionType.PUT, Direction.UP, Knock.OUT, spot, strike, barrier, 0,
+                rate, carry, vol, timeYears);
     }
 
-    /**
-     * The Reiner–Rubinstein knock-in value: the vanilla priced on the
-     * barrier-reflected path measure. Sign symmetry handles the put mirror.
-     */
-    private static double reflectionIn(OptionType type, double spot, double strike,
-                                       double barrier, double rate, double carry,
-                                       double vol, double t) {
-        int s = type.sign(); // +1 call (down barrier), −1 put (up barrier)
-        double lambda = (rate - carry + 0.5 * vol * vol) / (vol * vol);
-        double sq = vol * Math.sqrt(t);
-        double y = Math.log(barrier * barrier / (spot * strike)) / sq + lambda * sq;
-        double hs = barrier / spot;
-        return s * (spot * Math.exp(-carry * t) * Math.pow(hs, 2 * lambda)
-                        * MathUtils.normCdf(s * y)
-                - strike * Math.exp(-rate * t) * Math.pow(hs, 2 * lambda - 2)
-                        * MathUtils.normCdf(s * (y - sq)));
-    }
-
-    private static void validateDownCall(double spot, double strike, double barrier) {
-        validateCommon(spot, strike, barrier);
-        if (barrier >= spot) {
-            throw new IllegalArgumentException(
-                    "down barrier " + barrier + " already breached at spot " + spot);
-        }
-        if (barrier > strike) {
-            throw new IllegalArgumentException(
-                    "reverse barrier (H > K on a call) is not supported in closed form here — "
-                            + "price it with Monte Carlo or a barrier-aware tree");
-        }
-    }
-
-    private static void validateUpPut(double spot, double strike, double barrier) {
-        validateCommon(spot, strike, barrier);
-        if (barrier <= spot) {
-            throw new IllegalArgumentException(
-                    "up barrier " + barrier + " already breached at spot " + spot);
-        }
-        if (barrier < strike) {
-            throw new IllegalArgumentException(
-                    "reverse barrier (H < K on a put) is not supported in closed form here — "
-                            + "price it with Monte Carlo or a barrier-aware tree");
-        }
-    }
-
-    private static void validateCommon(double spot, double strike, double barrier) {
-        if (spot <= 0 || strike <= 0 || barrier <= 0) {
+    private static void requireAlive(double spot, double barrier, boolean down) {
+        if (!(spot > 0) || !(barrier > 0)) {
             throw new IllegalArgumentException("spot, strike, barrier must be > 0");
+        }
+        if (down ? barrier >= spot : barrier <= spot) {
+            throw new IllegalArgumentException((down ? "down" : "up") + " barrier " + barrier
+                    + " already breached at spot " + spot);
         }
     }
 }

@@ -3,7 +3,7 @@ package com.quantfinlib.pricing;
 import com.quantfinlib.pricing.BlackScholes.OptionType;
 
 /**
- * STRUCTURED NOTES — the retail shelf, priced the only honest way: by
+ * STRUCTURED NOTES — the retail shelf, priced by
  * DECOMPOSITION into the vanilla pieces this library already prices.
  * Every structured product is a bond plus options in a costume; the
  * costume is what the issuer charges for. Pricing by replication makes

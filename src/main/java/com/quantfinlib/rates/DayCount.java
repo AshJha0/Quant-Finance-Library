@@ -21,10 +21,17 @@ import java.time.temporal.ChronoUnit;
  * <p>The rule in practice: the convention is part of the INSTRUMENT (read
  * the term sheet), never a system-wide default. That is why
  * {@link BondPricer} and the curve utilities take a {@code DayCount}
- * argument instead of assuming one. 30/360's end-of-month adjustments
- * (the 31st treated as the 30th when the start is on the 30th) are the US
- * Bond Basis variant; other markets use slightly different 30/360 flavors
- * — stated here so nobody "fixes" the adjustment against ISDA 30E/360.</p>
+ * argument instead of assuming one.</p>
+ *
+ * <p>Definitions follow the 2006 ISDA Definitions, section 4.16:
+ * {@link #THIRTY_360} is 30/360 Bond Basis (4.16(f)), {@link #THIRTY_E_360}
+ * is 30E/360 Eurobond Basis (4.16(g)), {@link #THIRTY_E_360_ISDA} is
+ * 30E/360 (ISDA) (4.16(h)), {@link #ACT_ACT_ISDA} is 4.16(b).
+ * {@link #ACT_ACT_ICMA} (ICMA Rule 251, 4.16(c)) depends on the coupon period
+ * and frequency as well as the two dates: {@link BondPricer} handles it, and
+ * {@link #actActIcma(LocalDate, LocalDate, LocalDate, LocalDate, int)} computes
+ * it directly. BUS/252 (Brazil) needs a holiday calendar and is
+ * {@link #bus252(BusinessCalendar, LocalDate, LocalDate)}.</p>
  */
 public enum DayCount {
 
@@ -60,6 +67,57 @@ public enum DayCount {
         }
     },
 
+    /**
+     * 30E/360 (Eurobond Basis): both day numbers capped at 30, with no
+     * condition on the other date.
+     */
+    THIRTY_E_360 {
+        @Override
+        public double yearFraction(LocalDate start, LocalDate end) {
+            return thirty360(start, end, Math.min(start.getDayOfMonth(), 30),
+                    Math.min(end.getDayOfMonth(), 30));
+        }
+    },
+
+    /**
+     * 30E/360 (ISDA): a date on the last day of its month counts as the
+     * 30th, except that the termination date is left alone when it is the
+     * last day of February. The two-date form treats {@code end} as not
+     * being the termination date; use
+     * {@link #yearFraction(LocalDate, LocalDate, LocalDate)} for the final period.
+     */
+    THIRTY_E_360_ISDA {
+        @Override
+        public double yearFraction(LocalDate start, LocalDate end) {
+            return yearFraction(start, end, null);
+        }
+
+        @Override
+        public double yearFraction(LocalDate start, LocalDate end, LocalDate terminationDate) {
+            int d1 = isLastDayOfMonth(start) ? 30 : start.getDayOfMonth();
+            int d2 = end.getDayOfMonth();
+            boolean febTermination = end.equals(terminationDate) && end.getMonthValue() == 2;
+            if (isLastDayOfMonth(end) && !febTermination) {
+                d2 = 30;
+            }
+            return thirty360(start, end, d1, d2);
+        }
+    },
+
+    /**
+     * ACT/ACT ICMA — government bonds (US Treasuries, gilts, Bunds). Needs the
+     * coupon period, so the two-date form throws; use
+     * {@link #actActIcma(LocalDate, LocalDate, LocalDate, LocalDate, int)} or
+     * pass this constant to {@link BondPricer}.
+     */
+    ACT_ACT_ICMA {
+        @Override
+        public double yearFraction(LocalDate start, LocalDate end) {
+            throw new UnsupportedOperationException(
+                    "ACT/ACT ICMA needs the coupon period: use DayCount.actActIcma");
+        }
+    },
+
     /** ACT/ACT ISDA — government bonds and ISDA swap legs; leap-year exact. */
     ACT_ACT_ISDA {
         @Override
@@ -81,4 +139,55 @@ public enum DayCount {
 
     /** Year fraction from {@code start} (inclusive) to {@code end} (exclusive). */
     public abstract double yearFraction(LocalDate start, LocalDate end);
+
+    /**
+     * Year fraction when the convention depends on whether {@code end} is the
+     * termination (maturity) date. Only {@link #THIRTY_E_360_ISDA} uses it.
+     */
+    public double yearFraction(LocalDate start, LocalDate end, LocalDate terminationDate) {
+        return yearFraction(start, end);
+    }
+
+    /**
+     * ACT/ACT ICMA (ICMA Rule 251): days(start, end) / (frequency ×
+     * days(periodStart, periodEnd)), where [periodStart, periodEnd) is the
+     * regular (quasi-)coupon period containing [start, end). A full regular
+     * coupon period therefore has fraction exactly 1/frequency.
+     */
+    public static double actActIcma(LocalDate start, LocalDate end, LocalDate periodStart,
+                                    LocalDate periodEnd, int frequency) {
+        long periodDays = ChronoUnit.DAYS.between(periodStart, periodEnd);
+        if (periodDays <= 0 || frequency < 1) {
+            throw new IllegalArgumentException("need a positive reference period and frequency");
+        }
+        return ChronoUnit.DAYS.between(start, end) / (double) (frequency * periodDays);
+    }
+
+    /**
+     * BUS/252: business days d with start &lt;= d &lt; end on {@code calendar},
+     * divided by 252 (Brazilian DI and government bond convention, ANBIMA).
+     */
+    public static double bus252(BusinessCalendar calendar, LocalDate start, LocalDate end) {
+        if (end.isBefore(start)) {
+            return -bus252(calendar, end, start);
+        }
+        long n = 0;
+        for (LocalDate d = start; d.isBefore(end); d = d.plusDays(1)) {
+            if (calendar.isBusinessDay(d)) {
+                n++;
+            }
+        }
+        return n / 252.0;
+    }
+
+    private static boolean isLastDayOfMonth(LocalDate d) {
+        return d.getDayOfMonth() == d.lengthOfMonth();
+    }
+
+    private static double thirty360(LocalDate start, LocalDate end, int d1, int d2) {
+        int days = 360 * (end.getYear() - start.getYear())
+                + 30 * (end.getMonthValue() - start.getMonthValue())
+                + (d2 - d1);
+        return days / 360.0;
+    }
 }
