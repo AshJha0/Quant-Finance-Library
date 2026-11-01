@@ -16,6 +16,18 @@ public interface TradingStrategy {
 
     Signal onBar(int index);
 
+    /**
+     * Position-aware variant, called by {@link Backtester} with the quantity
+     * currently held (0 when flat, positive when long). Strategies whose
+     * entry and exit conditions can both hold on the same bar should
+     * override it and evaluate the exit first while long; otherwise a
+     * level-type entry rule masks every exit. The default ignores the
+     * position.
+     */
+    default Signal onBar(int index, double position) {
+        return onBar(index);
+    }
+
     /** Optional per-trade stop loss as a fraction (0 = disabled). */
     default double stopLossPct() {
         return 0;

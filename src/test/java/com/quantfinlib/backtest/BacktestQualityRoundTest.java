@@ -202,11 +202,12 @@ class BacktestQualityRoundTest {
         assertEquals(12 - 5, r.equityCurve().length);
         assertTrue(r.trades().isEmpty(), "signal before tradeFrom must be ignored");
 
-        // Signal at bar 6 IS acted on; force-closed at end of data.
+        // Signal at bar 6 IS acted on: it fills at bar 7's open (next-open
+        // default) and is force-closed at end of data.
         BacktestResult r2 = Backtester.run(new Script(6, -1), s,
                 BacktestConfig.defaults(), 5);
         assertEquals(1, r2.trades().size());
-        assertEquals(6, r2.trades().getFirst().entryIndex());
+        assertEquals(7, r2.trades().getFirst().entryIndex());
 
         assertThrows(IllegalArgumentException.class,
                 () -> Backtester.run(new Script(2, -1), s, BacktestConfig.defaults(), -1));
