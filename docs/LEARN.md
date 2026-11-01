@@ -6393,9 +6393,11 @@ consumer becomes stateful: lose one delta and your book is silently wrong
 forever, which is why sequence numbers and recovery (Q193) dominate feed
 engineering.
 
-*In this library:* `marketdata/ItchCodec.java` -- the ITCH 5.0-style
-message subset (add, execute, cancel, delete, replace, trade) with the
-exact big-endian field layouts; `marketdata/L3BookBuilder.java` is the
+*In this library:* `marketdata/ItchCodec.java` -- the ITCH 5.0 message
+subset a book needs (add, execute, execute with price, cancel, delete,
+replace, trade) plus system event, trading action, cross trade and
+broken trade, with the exact big-endian field layouts;
+`marketdata/L3BookBuilder.java` is the
 stateful consumer that turns the deltas back into a book.
 
 ### 189. "Walk me through the ITCH message types you need to maintain a full-depth book."
@@ -6405,20 +6407,30 @@ order on the book: reference number, side, shares, stock, price. **F** is
 the same add with MPID attribution (you can see WHICH member posted it).
 **E** (Order Executed) says shares were matched against a resting order --
 partial fills arrive as repeated E's decrementing the same reference.
+**C** (Order Executed With Price) is the same event at a price other
+than the displayed one (a cross, for instance), and it must remove the
+shares just like E; a handler that treats C as a print only leaves
+phantom liquidity on the book.
 **X** (Order Cancel) removes SOME shares (partial cancel); **D** (Order
 Delete) removes the order entirely. **U** (Replace) atomically retires one
 reference and creates a new one with new price/shares -- and the new
 reference goes to the **back of the queue**, which is why replace-vs-cancel
 economics matter to market makers. **P** (Trade, non-cross) reports an
 execution against non-displayed liquidity: it prints a trade but touches
-no displayed book state. Everything is fixed-length (A=36 bytes, F=40,
-E=31, X=23, D=19, U=35, P=44), big-endian, prices as unsigned 32-bit
+no displayed book state. Around these sit the state messages: **S**
+(System Event, start and end of messages and market hours) and **H**
+(Stock Trading Action: halted, paused, quotation only, trading), which
+decide whether the book you hold is tradable at all. Everything is
+fixed-length (A=36 bytes, F=40, E=31, C=36, X=23, D=19, U=35, P=44),
+big-endian, prices as unsigned 32-bit
 integers with four implied decimals, timestamps as 48-bit nanoseconds
 since midnight -- parseable with a handful of offset reads, no parser
 generator needed.
 
-*In this library:* `marketdata/ItchCodec.java` -- the seven type constants
-and `length(type)` table, plus a zero-allocation flyweight `View` whose
+*In this library:* `marketdata/ItchCodec.java` -- the type constants and
+the `length(type)` table for every ITCH 5.0 message, `complete(...)` to
+check that a whole message is in the buffer, plus a zero-allocation
+flyweight `View` whose
 type-specific getters `assert` the message type so a misdispatched read
 fails loudly in tests and costs nothing in production.
 
@@ -6440,8 +6452,12 @@ thread owns the book, which removes every lock and memory-ordering
 question from the hot path.
 
 *In this library:* `marketdata/L3BookBuilder.java` -- javadoc spells out
-the structure ("same engineering as `orderbook.HftOrderBook` ... but
-driven by the feed instead of by matching"); `L3BookBuilderTest.java`
+the structure (the same engineering as `orderbook.HftOrderBook`, driven
+by the feed instead of by matching); `onMessage` checks that the whole
+message is inside the buffer and skips and counts a short datagram
+(`truncatedCount()`) instead of throwing on the feed thread;
+`tradingState()`/`isTrading()` follow the H messages, and `clear()`
+empties the book for a snapshot rebuild. `L3BookBuilderTest.java`
 drives it with encoded ITCH messages.
 
 ### 191. "Your order is resting at 100.00. How many shares are ahead of you -- exactly, not approximately?"
@@ -6485,8 +6501,10 @@ quote, so feed loss and emptiness can never drift apart.
 
 *In this library:* `marketdata/Nbbo.java` -- `onVenueQuote` with the
 provably-no-change fast path (the comment walks the proof),
-`onVenueDown`, `nbbVenueBits`/`nboVenueBits`, and a listener that fires
-only when the inside actually changes.
+`onVenueDown`, `nbbVenueBits`/`nboVenueBits`, per-venue update times
+with `expireStale(now)` to drop quotes older than a maximum age (a venue
+whose feed silently stopped is otherwise still "at the inside"), and a
+listener that fires only when the inside actually changes.
 
 ### 193. "The consolidated bid is 100.02 and the consolidated ask is 100.01. What just happened?"
 
