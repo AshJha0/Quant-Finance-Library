@@ -39,11 +39,11 @@ class ReviewFixesRoundTest {
     @Test
     void overLimitPositionStillAcceptsRiskReducingOrders() {
         // Two 800-lot fills against a 1000 cap (each passed pre-fill);
-        // the gate must then accept a 500-lot reducing SELL even though
-        // |1600-500| is still above the cap — and keep rejecting adds.
+        // the gate must then accept a 500-lot reducing sell even though
+        // |1600-500| is still above the cap, and keep rejecting adds.
         // The gate does not reserve in-flight quantity: both orders are
-        // checked BEFORE either fills (each projects 800 <= 1000), then
-        // both fill — the classic route to an over-limit book.
+        // checked before either fills (each projects 800 <= 1000), then
+        // both fill. That is the classic route to an over-limit book.
         HftRiskGate gate = new HftRiskGate(4).maxPositionQuantity(1000);
         assertEquals(HftRiskGate.OK, gate.check(0, Side.BUY, 800, 100));
         assertEquals(HftRiskGate.OK, gate.check(0, Side.BUY, 800, 100));
@@ -121,7 +121,7 @@ class ReviewFixesRoundTest {
         assertEquals(180, SettlementRiskAnalyzer.peakExposure(legs, "CP"), 1e-9);
 
         // The discriminating case: T1's receive and T2's payment land on
-        // the SAME millisecond (t=3000). Worst case, our money left before
+        // the same millisecond (t=3000). Worst case, our money left before
         // theirs arrived: the peak must touch 100 + 80 = 180 — a
         // receipts-first tie-break would report only 100.
         List<SettlementRiskAnalyzer.SettlementLeg> tied = List.of(
