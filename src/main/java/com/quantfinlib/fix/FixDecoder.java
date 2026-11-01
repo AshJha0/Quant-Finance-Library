@@ -31,6 +31,9 @@ final class FixDecoder {
         if (firstSoh < 0) {
             return null;
         }
+        if (firstSoh + 2 >= length) {
+            return null;   // "9=" not yet received; never read stale bytes past length
+        }
         if (buffer[firstSoh + 1] != '9' || buffer[firstSoh + 2] != '=') {
             throw new IllegalStateException("stream corrupt: BodyLength not after BeginString");
         }

@@ -126,8 +126,13 @@ class FixPersistenceTest {
                     .field(FixMessage.END_SEQ_NO, 0));
             assertTrue(clientEvents2.resendServed.await(5, TimeUnit.SECONDS),
                     "resend from persistent store not serviced");
-            Thread.sleep(300);
-            assertEquals(1, venueEvents2.orders.size(), "PossDup replay not suppressed");
+            // TCP keeps order: once a later order arrives, the replays sent
+            // before it have been processed.
+            client2.sendNewOrderSingle("ord-3", "EURUSD", Side.SELL, 10, 1.0861,
+                    NewOrderSingle.TIF_DAY);
+            awaitTrue(() -> venueEvents2.orders.size() == 2, "post-resend order lost");
+            assertEquals("ord-3", venueEvents2.orders.get(1).clOrdId(),
+                    "PossDup replay of ord-1 not suppressed");
             assertTrue(venue2.isEstablished());
 
             client2.logout();

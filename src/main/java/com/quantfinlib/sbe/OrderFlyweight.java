@@ -5,37 +5,39 @@ import com.quantfinlib.orderbook.Side;
 import java.nio.ByteBuffer;
 
 /**
- * SBE-style flyweight codec for an order-entry message — the binary
- * counterpart of a FIX NewOrderSingle, at fixed offsets with zero
- * allocation and zero parsing (see {@link TradeFlyweight} for the pattern).
+ * SBE flyweight for an order-entry message (templateId 2, schema version
+ * 2), the binary counterpart of a FIX NewOrderSingle.
  *
- * <p>Wire layout (little-endian, 44 bytes; 3 bytes padding keep the 64-bit
- * fields naturally aligned):</p>
+ * <p>Layout: the 8-byte {@link MessageHeader}, then a 40-byte block with
+ * every 64-bit field at a multiple of 8 from the message start (version 1
+ * put them at offsets congruent to 4 mod 8):</p>
  * <pre>
- * offset  0  int32   messageType    = 2
- * offset  4  int64   orderId
- * offset 12  int32   symbolId
- * offset 16  int8    side           (0 = BUY, 1 = SELL)
- * offset 17  int8[3] padding
- * offset 20  int64   quantity
- * offset 28  double  price          (NaN = market order)
- * offset 36  int64   timestampNanos
+ * offset  8  int64  orderId
+ * offset 16  int64  quantity
+ * offset 24  int64  priceMantissa   ({@link Decimal64#NULL_MANTISSA} = market order)
+ * offset 32  int64  timestampNanos
+ * offset 40  int32  symbolId
+ * offset 44  int8   side            (0 = BUY, 1 = SELL)
+ * offset 45  int8   priceExponent
+ * offset 46  2 bytes padding
  * </pre>
  */
 public final class OrderFlyweight {
 
-    /** Message type discriminator at offset 0. */
-    public static final int MESSAGE_TYPE = 2;
-    /** Total encoded size in bytes. */
-    public static final int BLOCK_LENGTH = 44;
+    /** SBE templateId. */
+    public static final int TEMPLATE_ID = 2;
+    /** Body length in bytes, as written in the header. */
+    public static final int BLOCK_LENGTH = 40;
+    /** Header plus body. */
+    public static final int ENCODED_LENGTH = MessageHeader.ENCODED_LENGTH + BLOCK_LENGTH;
 
-    private static final int TYPE_OFFSET = 0;
-    private static final int ORDER_ID_OFFSET = 4;
-    private static final int SYMBOL_OFFSET = 12;
-    private static final int SIDE_OFFSET = 16;
-    private static final int QUANTITY_OFFSET = 20;
-    private static final int PRICE_OFFSET = 28;
-    private static final int TIMESTAMP_OFFSET = 36;
+    private static final int ORDER_ID = 8;
+    private static final int QUANTITY = 16;
+    private static final int PRICE = 24;
+    private static final int TIMESTAMP = 32;
+    private static final int SYMBOL = 40;
+    private static final int SIDE = 44;
+    private static final int PRICE_EXP = 45;
 
     private ByteBuffer buffer;
     private int offset;
@@ -46,40 +48,63 @@ public final class OrderFlyweight {
         return this;
     }
 
-    /** Encodes a full order message at the wrap position (writes the type header). */
+    /** Encodes header and body; {@code priceMantissa = NULL_MANTISSA} is a market order. */
     public OrderFlyweight encode(long orderId, int symbolId, Side side, long quantity,
-                                 double price, long timestampNanos) {
-        buffer.putInt(offset + TYPE_OFFSET, MESSAGE_TYPE);
-        buffer.putLong(offset + ORDER_ID_OFFSET, orderId);
-        buffer.putInt(offset + SYMBOL_OFFSET, symbolId);
-        buffer.put(offset + SIDE_OFFSET, (byte) (side == Side.BUY ? 0 : 1));
-        buffer.putLong(offset + QUANTITY_OFFSET, quantity);
-        buffer.putDouble(offset + PRICE_OFFSET, price);
-        buffer.putLong(offset + TIMESTAMP_OFFSET, timestampNanos);
+                                 long priceMantissa, int priceExponent, long timestampNanos) {
+        MessageHeader.write(buffer, offset, BLOCK_LENGTH, TEMPLATE_ID);
+        buffer.putLong(offset + ORDER_ID, orderId);
+        buffer.putLong(offset + QUANTITY, quantity);
+        buffer.putLong(offset + PRICE, priceMantissa);
+        buffer.putLong(offset + TIMESTAMP, timestampNanos);
+        buffer.putInt(offset + SYMBOL, symbolId);
+        buffer.put(offset + SIDE, (byte) (side == Side.BUY ? 0 : 1));
+        buffer.put(offset + PRICE_EXP, (byte) priceExponent);
+        buffer.putShort(offset + 46, (short) 0);
         return this;
     }
 
+    /** Encodes from a double price on the {@code 10^priceExponent} grid; NaN = market. */
+    public OrderFlyweight encode(long orderId, int symbolId, Side side, long quantity,
+                                 double price, int priceExponent, long timestampNanos) {
+        return encode(orderId, symbolId, side, quantity,
+                Decimal64.toMantissa(price, priceExponent), priceExponent, timestampNanos);
+    }
+
     public long orderId() {
-        return buffer.getLong(offset + ORDER_ID_OFFSET);
+        return buffer.getLong(offset + ORDER_ID);
     }
 
     public int symbolId() {
-        return buffer.getInt(offset + SYMBOL_OFFSET);
+        return buffer.getInt(offset + SYMBOL);
     }
 
     public Side side() {
-        return buffer.get(offset + SIDE_OFFSET) == 0 ? Side.BUY : Side.SELL;
+        return buffer.get(offset + SIDE) == 0 ? Side.BUY : Side.SELL;
     }
 
     public long quantity() {
-        return buffer.getLong(offset + QUANTITY_OFFSET);
+        return buffer.getLong(offset + QUANTITY);
     }
 
+    public long priceMantissa() {
+        return buffer.getLong(offset + PRICE);
+    }
+
+    public int priceExponent() {
+        return buffer.get(offset + PRICE_EXP);
+    }
+
+    /** True for a market order (null price). */
+    public boolean isMarket() {
+        return priceMantissa() == Decimal64.NULL_MANTISSA;
+    }
+
+    /** Price as a double; NaN for a market order. */
     public double price() {
-        return buffer.getDouble(offset + PRICE_OFFSET);
+        return Decimal64.toDouble(priceMantissa(), priceExponent());
     }
 
     public long timestampNanos() {
-        return buffer.getLong(offset + TIMESTAMP_OFFSET);
+        return buffer.getLong(offset + TIMESTAMP);
     }
 }

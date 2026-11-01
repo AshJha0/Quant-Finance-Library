@@ -14,16 +14,26 @@ final class FixParse {
 
     /**
      * Non-negative integer field (quantities, counts). Tolerates a zero
-     * fraction ("100.0"); a real fraction or a '-' sign fails loudly —
-     * negative quantities are protocol violations that must never parse
-     * into silent garbage.
+     * fraction ("100.0"); a real fraction, a '-' sign, any other non-digit,
+     * an empty value or more than 18 digits fails loudly: such values are
+     * protocol violations that must never parse into silent garbage.
      */
     static long parseLong(byte[] buf, int from, int to) {
+        if (from >= to) {
+            throw new IllegalArgumentException("empty integer field");
+        }
         long v = 0;
         for (int i = from; i < to; i++) {
             byte b = buf[i];
             if (b == '-') {
                 throw new IllegalArgumentException("negative quantity field");
+            }
+            if (b != '.' && (b < '0' || b > '9')) {
+                throw new IllegalArgumentException("non-digit 0x" + Integer.toHexString(b & 0xFF)
+                        + " in integer field");
+            }
+            if (i - from >= 18 && b != '.') {
+                throw new IllegalArgumentException("integer field longer than 18 digits");
             }
             if (b == '.') {
                 for (int j = i + 1; j < to; j++) {
@@ -66,11 +76,28 @@ final class FixParse {
     static long priceMantissa(byte[] buf, int from, int to) {
         boolean negative = from < to && buf[from] == '-';
         long mantissa = 0;
+        int digits = 0;
+        boolean dot = false;
         for (int i = negative ? from + 1 : from; i < to; i++) {
             byte b = buf[i];
-            if (b != '.') {
+            if (b == '.') {
+                if (dot) {
+                    throw new IllegalArgumentException("two decimal points in price field");
+                }
+                dot = true;
+            } else if (b < '0' || b > '9') {
+                throw new IllegalArgumentException("non-digit 0x" + Integer.toHexString(b & 0xFF)
+                        + " in price field");
+            } else {
+                digits++;
+                if (mantissa > (Long.MAX_VALUE - 9) / 10) {
+                    throw new IllegalArgumentException("price mantissa overflows a long");
+                }
                 mantissa = mantissa * 10 + (b - '0');
             }
+        }
+        if (digits == 0) {
+            throw new IllegalArgumentException("price field has no digits");
         }
         return negative ? -mantissa : mantissa;
     }
