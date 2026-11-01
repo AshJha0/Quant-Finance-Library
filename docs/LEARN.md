@@ -26980,8 +26980,8 @@ the code returns the deterministic limits rather than NaN.
   for 1 to 5y, 7.5% beyond). An add-on table cannot see the correlation
   of offsetting trades. `risk/CounterpartyExposureTracker.java`
   (currentExposure, potentialFutureExposure, addOnFactor); Basel
-  Committee, current exposure method: BCBS 128 (June 2006), Annex 4,
-  section VII, paragraphs 91-96, with the 0.4 + 0.6 NGR netting rule
+  Committee, current exposure method: BCBS 128 (June 2006), Annex 4
+  (current exposure method), with the 0.4 + 0.6 NGR netting rule
   from the April 1995 amendment on potential exposure (BCBS 18).
 
 **Risk engines**
