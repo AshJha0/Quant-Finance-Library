@@ -157,20 +157,174 @@ public final class AlphaBacktester {
     /**
      * Net and gross curves (one point per close from {@code startIndex}),
      * the cumulative fraction of equity each cost consumed, and turnover.
-     *
-     * @param financingDrag   cumulative net financing paid (negative when the book earned interest)
-     * @param meanTurnover    mean one-way turnover per rebalance decision
-     * @param meanTrackingGap mean over bars of {@code ½‖target − w‖₁} while a
-     *                        target was still being worked (0 without a participation cap)
      */
-    public record Result(double[] netEquity, double[] grossEquity, PerformanceMetrics netMetrics,
-                         PerformanceMetrics grossMetrics, double commissionDrag, double spreadDrag,
-                         double slippageDrag, double impactDrag, double financingDrag,
-                         double meanTurnover, double meanTrackingGap, FillPolicy fillPolicy) {
+    public static final class Result {
+        private final double[] netEquity;
+        private final double[] grossEquity;
+        private final PerformanceMetrics netMetrics;
+        private final PerformanceMetrics grossMetrics;
+        private final double commissionDrag;
+        private final double spreadDrag;
+        private final double slippageDrag;
+        private final double impactDrag;
+        private final double financingDrag;
+        private final double meanTurnover;
+        private final double meanTrackingGap;
+        private final FillPolicy fillPolicy;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         *
+         * @param financingDrag cumulative net financing paid (negative when the book earned interest)
+         * @param meanTurnover mean one-way turnover per rebalance decision
+         * @param meanTrackingGap mean over bars of {@code ½‖target − w‖₁} while a target was still being worked (0 without a participation cap)
+         */
+        public Result(double[] netEquity, double[] grossEquity, PerformanceMetrics netMetrics,
+                PerformanceMetrics grossMetrics, double commissionDrag, double spreadDrag,
+                double slippageDrag, double impactDrag, double financingDrag, double meanTurnover,
+                double meanTrackingGap, FillPolicy fillPolicy) {
+            this.netEquity = netEquity == null ? null : netEquity.clone();
+            this.grossEquity = grossEquity == null ? null : grossEquity.clone();
+            this.netMetrics = netMetrics;
+            this.grossMetrics = grossMetrics;
+            this.commissionDrag = commissionDrag;
+            this.spreadDrag = spreadDrag;
+            this.slippageDrag = slippageDrag;
+            this.impactDrag = impactDrag;
+            this.financingDrag = financingDrag;
+            this.meanTurnover = meanTurnover;
+            this.meanTrackingGap = meanTrackingGap;
+            this.fillPolicy = fillPolicy;
+        }
+
+        /** Element {@code i} of {@code netEquity}. */
+        public double netEquity(int i) {
+            return netEquity[i];
+        }
+
+        /** Length of {@code netEquity}. */
+        public int netEquityLength() {
+            return netEquity.length;
+        }
+
+        /** A fresh copy of {@code netEquity}. */
+        public double[] netEquityCopy() {
+            return netEquity == null ? null : netEquity.clone();
+        }
+
+        /** Element {@code i} of {@code grossEquity}. */
+        public double grossEquity(int i) {
+            return grossEquity[i];
+        }
+
+        /** Length of {@code grossEquity}. */
+        public int grossEquityLength() {
+            return grossEquity.length;
+        }
+
+        /** A fresh copy of {@code grossEquity}. */
+        public double[] grossEquityCopy() {
+            return grossEquity == null ? null : grossEquity.clone();
+        }
+
+        /** {@code netMetrics}. */
+        public PerformanceMetrics netMetrics() {
+            return netMetrics;
+        }
+
+        /** {@code grossMetrics}. */
+        public PerformanceMetrics grossMetrics() {
+            return grossMetrics;
+        }
+
+        /** {@code commissionDrag}. */
+        public double commissionDrag() {
+            return commissionDrag;
+        }
+
+        /** {@code spreadDrag}. */
+        public double spreadDrag() {
+            return spreadDrag;
+        }
+
+        /** {@code slippageDrag}. */
+        public double slippageDrag() {
+            return slippageDrag;
+        }
+
+        /** {@code impactDrag}. */
+        public double impactDrag() {
+            return impactDrag;
+        }
+
+        /** {@code financingDrag} (cumulative net financing paid (negative when the book earned interest)). */
+        public double financingDrag() {
+            return financingDrag;
+        }
+
+        /** {@code meanTurnover} (mean one-way turnover per rebalance decision). */
+        public double meanTurnover() {
+            return meanTurnover;
+        }
+
+        /** {@code meanTrackingGap}. */
+        public double meanTrackingGap() {
+            return meanTrackingGap;
+        }
+
+        /** {@code fillPolicy}. */
+        public FillPolicy fillPolicy() {
+            return fillPolicy;
+        }
 
         /** Total trading-cost drag (financing excluded). */
         public double totalCostDrag() {
             return commissionDrag + spreadDrag + slippageDrag + impactDrag;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Result o)) {
+                return false;
+            }
+            return java.util.Arrays.equals(netEquity, o.netEquity)
+                    && java.util.Arrays.equals(grossEquity, o.grossEquity)
+                    && java.util.Objects.equals(netMetrics, o.netMetrics)
+                    && java.util.Objects.equals(grossMetrics, o.grossMetrics)
+                    && Double.compare(commissionDrag, o.commissionDrag) == 0
+                    && Double.compare(spreadDrag, o.spreadDrag) == 0
+                    && Double.compare(slippageDrag, o.slippageDrag) == 0
+                    && Double.compare(impactDrag, o.impactDrag) == 0
+                    && Double.compare(financingDrag, o.financingDrag) == 0
+                    && Double.compare(meanTurnover, o.meanTurnover) == 0
+                    && Double.compare(meanTrackingGap, o.meanTrackingGap) == 0
+                    && java.util.Objects.equals(fillPolicy, o.fillPolicy);
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + java.util.Arrays.hashCode(netEquity);
+            h = 31 * h + java.util.Arrays.hashCode(grossEquity);
+            h = 31 * h + java.util.Objects.hashCode(netMetrics);
+            h = 31 * h + java.util.Objects.hashCode(grossMetrics);
+            h = 31 * h + Double.hashCode(commissionDrag);
+            h = 31 * h + Double.hashCode(spreadDrag);
+            h = 31 * h + Double.hashCode(slippageDrag);
+            h = 31 * h + Double.hashCode(impactDrag);
+            h = 31 * h + Double.hashCode(financingDrag);
+            h = 31 * h + Double.hashCode(meanTurnover);
+            h = 31 * h + Double.hashCode(meanTrackingGap);
+            h = 31 * h + java.util.Objects.hashCode(fillPolicy);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "Result[" + "netEquity=" + java.util.Arrays.toString(netEquity) + ", " + "grossEquity=" + java.util.Arrays.toString(grossEquity) + ", " + "netMetrics=" + netMetrics + ", " + "grossMetrics=" + grossMetrics + ", " + "commissionDrag=" + commissionDrag + ", " + "spreadDrag=" + spreadDrag + ", " + "slippageDrag=" + slippageDrag + ", " + "impactDrag=" + impactDrag + ", " + "financingDrag=" + financingDrag + ", " + "meanTurnover=" + meanTurnover + ", " + "meanTrackingGap=" + meanTrackingGap + ", " + "fillPolicy=" + fillPolicy + "]";
         }
     }
 

@@ -43,13 +43,13 @@ class ExactOptimizerTest {
         for (double w : expected) {
             assertTrue(w > 0);
         }
-        double[] w = new PortfolioOptimizer(MU, cov).minVolatility().weights();
+        double[] w = new PortfolioOptimizer(MU, cov).minVolatility().weightsCopy();
         for (int i = 0; i < 4; i++) {
             assertEquals(expected[i], w[i], 1e-8);
         }
         // The two-asset textbook case pinned exactly: 0.8 / 0.2.
         double[] two = new PortfolioOptimizer(new double[]{0.05, 0.1},
-                new double[][]{{0.01, 0}, {0, 0.04}}).minVolatility().weights();
+                new double[][]{{0.01, 0}, {0, 0.04}}).minVolatility().weightsCopy();
         assertEquals(0.8, two[0], 1e-12);
     }
 
@@ -64,7 +64,7 @@ class ExactOptimizerTest {
         for (double w : expected) {
             assertTrue(w > 0);
         }
-        double[] w = new PortfolioOptimizer(MU, COV).maxSharpe(rf).weights();
+        double[] w = new PortfolioOptimizer(MU, COV).maxSharpe(rf).weightsCopy();
         for (int i = 0; i < 4; i++) {
             assertEquals(expected[i], w[i], 1e-8);
         }
@@ -80,7 +80,7 @@ class ExactOptimizerTest {
         double[] mu = {0.08, 0.09, 0.03};
         double[][] cov = {{0.04, 0.01, 0.03}, {0.01, 0.05, 0.03}, {0.03, 0.03, 0.09}};
         double rf = 0.02;
-        double[] w = new PortfolioOptimizer(mu, cov).maxSharpe(rf).weights();
+        double[] w = new PortfolioOptimizer(mu, cov).maxSharpe(rf).weightsCopy();
         assertEquals(0, w[2], 1e-12);
         double[] two = normalisedSolve(new double[][]{{0.04, 0.01}, {0.01, 0.05}},
                 new double[]{0.06, 0.07});
@@ -113,7 +113,7 @@ class ExactOptimizerTest {
         PortfolioOptimizer.Allocation mid = f.get(4);
         assertEquals(target, mid.expectedReturn(), 1e-12);
         for (int i = 0; i < 4; i++) {
-            assertEquals(expected[i], mid.weights()[i], 1e-8);
+            assertEquals(expected[i], mid.weights(i), 1e-8);
         }
     }
 
@@ -130,7 +130,7 @@ class ExactOptimizerTest {
         double[] min = {0.1, 0.1, 0.1, 0.1};
         double[] max = {0.35, 0.35, 0.35, 0.35};
         double[] w = new ConstrainedPortfolioOptimizer(MU, COV).withBounds(min, max)
-                .minVolatility().weights();
+                .minVolatility().weightsCopy();
         assertEquals(1, sum(w), 1e-12);
         double[] grad = MathUtils.matVec(COV, w);
         // Free assets share one marginal variance ν; capped assets have
@@ -160,17 +160,17 @@ class ExactOptimizerTest {
 
     @Test
     void boundedTangencyEqualsUnboundedWhenBoundsAreSlack() {
-        double[] wFree = new PortfolioOptimizer(MU, COV).maxSharpe(0.02).weights();
+        double[] wFree = new PortfolioOptimizer(MU, COV).maxSharpe(0.02).weightsCopy();
         double[] wBox = new ConstrainedPortfolioOptimizer(MU, COV)
                 .withBounds(new double[4], new double[]{0.9, 0.9, 0.9, 0.9})
-                .maxSharpe(0.02).weights();
+                .maxSharpe(0.02).weightsCopy();
         for (int i = 0; i < 4; i++) {
             assertEquals(wFree[i], wBox[i], 1e-8);
         }
         // A punitive turnover penalty keeps the book exactly where it is.
         double[] current = {0.25, 0.25, 0.25, 0.25};
         double[] sticky = new ConstrainedPortfolioOptimizer(MU, COV)
-                .withTurnoverPenalty(current, 0.5).maxSharpe(0.02).weights();
+                .withTurnoverPenalty(current, 0.5).maxSharpe(0.02).weightsCopy();
         for (int i = 0; i < 4; i++) {
             assertEquals(0.25, sticky[i], 1e-9);
         }
@@ -184,14 +184,14 @@ class ExactOptimizerTest {
         double[][] cov = {{0.04, rho * 0.04, 0.0}, {rho * 0.04, 0.04, 0.0}, {0.0, 0.0, 0.01}};
         PortfolioOptimizer.Allocation a =
                 RiskParityOptimizer.equalRiskContribution(new double[3], cov);
-        double[] rc = RiskParityOptimizer.riskContributions(a.weights(), cov);
+        double[] rc = RiskParityOptimizer.riskContributions(a.weightsCopy(), cov);
         for (double c : rc) {
             assertEquals(1.0 / 3, c, 1e-10);
         }
         // Budgets other than equal.
         double[] b = {0.5, 0.3, 0.2};
         double[] w = RiskParityOptimizer.riskBudget(MU, COV, b.length == 3
-                ? new double[]{0.4, 0.3, 0.2, 0.1} : b).weights();
+                ? new double[]{0.4, 0.3, 0.2, 0.1} : b).weightsCopy();
         double[] rc2 = RiskParityOptimizer.riskContributions(w, COV);
         assertEquals(0.4, rc2[0], 1e-10);
         assertEquals(0.1, rc2[3], 1e-10);
@@ -205,9 +205,9 @@ class ExactOptimizerTest {
         BlackLitterman.Posterior post = BlackLitterman.posterior(tau, new double[][]{{sigma2}},
                 new double[]{pi}, new double[][]{{1}}, new double[]{q}, new double[]{omega});
         double prec = 1 / (tau * sigma2) + 1 / omega;
-        assertEquals((pi / (tau * sigma2) + q / omega) / prec, post.mean()[0], 1e-14);
-        assertEquals(1 / prec, post.meanCovariance()[0][0], 1e-15);
-        assertEquals(sigma2 + 1 / prec, post.returnCovariance()[0][0], 1e-15);
+        assertEquals((pi / (tau * sigma2) + q / omega) / prec, post.mean(0), 1e-14);
+        assertEquals(1 / prec, post.meanCovariance(0, 0), 1e-15);
+        assertEquals(sigma2 + 1 / prec, post.returnCovariance(0, 0), 1e-15);
     }
 
     @Test
@@ -237,9 +237,9 @@ class ExactOptimizerTest {
         double[][] m = MathUtils.inverse(prec);
         double[] mean = MathUtils.matVec(m, rhs);
         for (int i = 0; i < 4; i++) {
-            assertEquals(mean[i], post.mean()[i], 1e-12);
+            assertEquals(mean[i], post.mean(i), 1e-12);
             for (int j = 0; j < 4; j++) {
-                assertEquals(m[i][j], post.meanCovariance()[i][j], 1e-14);
+                assertEquals(m[i][j], post.meanCovariance(i, j), 1e-14);
             }
         }
         assertThrows(IllegalArgumentException.class, () -> BlackLitterman.posterior(tau, COV, pi,

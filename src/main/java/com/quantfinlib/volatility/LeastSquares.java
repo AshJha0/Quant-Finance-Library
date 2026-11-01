@@ -13,12 +13,65 @@ final class LeastSquares {
     private LeastSquares() {
     }
 
-    /**
-     * @param beta          coefficients
-     * @param hacStdErrors  Newey-West standard errors with {@code lags} lags
-     * @param residualVariance  sum of squared residuals / (n − k)
-     */
-    record Result(double[] beta, double[] hacStdErrors, double residualVariance) {
+    static final class Result {
+        private final double[] beta;
+        private final double[] hacStdErrors;
+        private final double residualVariance;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         *
+         * @param beta coefficients
+         * @param hacStdErrors Newey-West standard errors with {@code lags} lags
+         * @param residualVariance sum of squared residuals / (n − k)
+         */
+        Result(double[] beta, double[] hacStdErrors, double residualVariance) {
+            this.beta = beta;
+            this.hacStdErrors = hacStdErrors;
+            this.residualVariance = residualVariance;
+        }
+
+        /** {@code beta} (coefficients). */
+        double[] beta() {
+            return beta;
+        }
+
+        /** {@code hacStdErrors}. */
+        double[] hacStdErrors() {
+            return hacStdErrors;
+        }
+
+        /** {@code residualVariance} (sum of squared residuals / (n − k)). */
+        double residualVariance() {
+            return residualVariance;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Result o)) {
+                return false;
+            }
+            return java.util.Arrays.equals(beta, o.beta)
+                    && java.util.Arrays.equals(hacStdErrors, o.hacStdErrors)
+                    && Double.compare(residualVariance, o.residualVariance) == 0;
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + java.util.Arrays.hashCode(beta);
+            h = 31 * h + java.util.Arrays.hashCode(hacStdErrors);
+            h = 31 * h + Double.hashCode(residualVariance);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "Result[" + "beta=" + java.util.Arrays.toString(beta) + ", " + "hacStdErrors=" + java.util.Arrays.toString(hacStdErrors) + ", " + "residualVariance=" + residualVariance + "]";
+        }
     }
 
     /**

@@ -14,7 +14,7 @@ import java.util.Objects;
  * into a backtestable strategy with a fluent API.
  *
  * <pre>{@code
- * double[] close = series.closes();
+ * double[] close = series.closesCopy();
  * double[] fast = Indicators.ema(close, 12);
  * double[] slow = Indicators.ema(close, 26);
  *

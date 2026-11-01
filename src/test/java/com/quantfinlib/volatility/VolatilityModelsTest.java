@@ -56,8 +56,8 @@ class VolatilityModelsTest {
                 "persistence=" + fit.persistence());
         // Within three standard errors of the truth (the grid search this
         // replaced needed +-0.06 on alpha and +-35% on the variance).
-        assertEquals(0.08, fit.alpha(), 3 * mle.standardErrors()[1]);
-        assertEquals(0.90, fit.beta(), 3 * mle.standardErrors()[2]);
+        assertEquals(0.08, fit.alpha(), 3 * mle.standardErrors(1));
+        assertEquals(0.90, fit.beta(), 3 * mle.standardErrors(2));
         assertEquals(uncond, fit.unconditionalVariance(), uncond * 0.25);
         assertTrue(Double.isFinite(fit.logLikelihood()));
     }

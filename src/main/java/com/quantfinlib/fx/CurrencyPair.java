@@ -1,5 +1,6 @@
 package com.quantfinlib.fx;
 
+import com.quantfinlib.util.Immutable;
 import com.quantfinlib.rates.BusinessCalendar;
 
 import java.time.LocalDate;
@@ -34,6 +35,7 @@ import java.util.Locale;
  *       forward date is the last business day of the target month.</li>
  * </ul>
  */
+@Immutable
 public final class CurrencyPair {
 
     private final String base;

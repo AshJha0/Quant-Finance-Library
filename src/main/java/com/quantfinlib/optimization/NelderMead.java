@@ -20,7 +20,71 @@ import java.util.function.ToDoubleFunction;
 public final class NelderMead {
 
     /** Result: argmin, minimum, objective evaluations used. */
-    public record Result(double[] x, double value, int evaluations) {
+    public static final class Result {
+        private final double[] x;
+        private final double value;
+        private final int evaluations;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         */
+        public Result(double[] x, double value, int evaluations) {
+            this.x = x == null ? null : x.clone();
+            this.value = value;
+            this.evaluations = evaluations;
+        }
+
+        /** Element {@code i} of {@code x}. */
+        public double x(int i) {
+            return x[i];
+        }
+
+        /** Length of {@code x}. */
+        public int xLength() {
+            return x.length;
+        }
+
+        /** A fresh copy of {@code x}. */
+        public double[] xCopy() {
+            return x == null ? null : x.clone();
+        }
+
+        /** {@code value}. */
+        public double value() {
+            return value;
+        }
+
+        /** {@code evaluations}. */
+        public int evaluations() {
+            return evaluations;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Result o)) {
+                return false;
+            }
+            return java.util.Arrays.equals(x, o.x)
+                    && Double.compare(value, o.value) == 0
+                    && evaluations == o.evaluations;
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + java.util.Arrays.hashCode(x);
+            h = 31 * h + Double.hashCode(value);
+            h = 31 * h + Integer.hashCode(evaluations);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "Result[" + "x=" + java.util.Arrays.toString(x) + ", " + "value=" + value + ", " + "evaluations=" + evaluations + "]";
+        }
     }
 
     private NelderMead() {
@@ -60,7 +124,7 @@ public final class NelderMead {
             Result r = run(g, best, s, tol, maxEvals, evals);
             double gain = bestVal - r.value();
             if (r.value() <= bestVal) {
-                best = r.x();
+                best = r.xCopy();
                 bestVal = r.value();
             }
             if (gain <= tol * (1 + Math.abs(bestVal))) {

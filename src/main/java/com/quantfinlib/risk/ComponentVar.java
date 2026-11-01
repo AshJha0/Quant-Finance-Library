@@ -39,13 +39,85 @@ import com.quantfinlib.util.MathUtils;
  */
 public final class ComponentVar {
 
-    /**
-     * @param portfolioVar total delta-normal VaR (positive)
-     * @param components   per-position component VaR; sums exactly to
-     *                     {@code portfolioVar}; hedges are negative
-     * @param marginals    per-position marginal VaR (z · (Σw)_i / σ_p)
-     */
-    public record Allocation(double portfolioVar, double[] components, double[] marginals) {
+    public static final class Allocation {
+        private final double portfolioVar;
+        private final double[] components;
+        private final double[] marginals;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         *
+         * @param portfolioVar total delta-normal VaR (positive)
+         * @param components per-position component VaR; sums exactly to {@code portfolioVar}; hedges are negative
+         * @param marginals per-position marginal VaR (z · (Σw)_i / σ_p)
+         */
+        public Allocation(double portfolioVar, double[] components, double[] marginals) {
+            this.portfolioVar = portfolioVar;
+            this.components = components == null ? null : components.clone();
+            this.marginals = marginals == null ? null : marginals.clone();
+        }
+
+        /** {@code portfolioVar} (total delta-normal VaR (positive)). */
+        public double portfolioVar() {
+            return portfolioVar;
+        }
+
+        /** Element {@code i} of {@code components}. */
+        public double components(int i) {
+            return components[i];
+        }
+
+        /** Length of {@code components}. */
+        public int componentsLength() {
+            return components.length;
+        }
+
+        /** A fresh copy of {@code components}. */
+        public double[] componentsCopy() {
+            return components == null ? null : components.clone();
+        }
+
+        /** Element {@code i} of {@code marginals} (per-position marginal VaR (z · (Σw)_i / σ_p)). */
+        public double marginals(int i) {
+            return marginals[i];
+        }
+
+        /** Length of {@code marginals}. */
+        public int marginalsLength() {
+            return marginals.length;
+        }
+
+        /** A fresh copy of {@code marginals}. */
+        public double[] marginalsCopy() {
+            return marginals == null ? null : marginals.clone();
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Allocation o)) {
+                return false;
+            }
+            return Double.compare(portfolioVar, o.portfolioVar) == 0
+                    && java.util.Arrays.equals(components, o.components)
+                    && java.util.Arrays.equals(marginals, o.marginals);
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + Double.hashCode(portfolioVar);
+            h = 31 * h + java.util.Arrays.hashCode(components);
+            h = 31 * h + java.util.Arrays.hashCode(marginals);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "Allocation[" + "portfolioVar=" + portfolioVar + ", " + "components=" + java.util.Arrays.toString(components) + ", " + "marginals=" + java.util.Arrays.toString(marginals) + "]";
+        }
     }
 
     private ComponentVar() {

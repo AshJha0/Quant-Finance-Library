@@ -70,7 +70,7 @@ class ExecutionAwareBacktesterTest {
         double awareEnd = aware.backtest().metrics().finalEquity();
         assertEquals(classicEnd, awareEnd, classicEnd * 0.02,
                 "classic=" + classicEnd + " aware=" + awareEnd);
-        assertEquals(s.size(), aware.backtest().equityCurve().length);
+        assertEquals(s.size(), aware.backtest().equityCurveLength());
     }
 
     @Test
@@ -125,8 +125,8 @@ class ExecutionAwareBacktesterTest {
         }
         assertTrue(entryParent.fillDurationBars() >= 3);
         // Consecutive bars — the iceberg reloads every bar in a liquid market.
-        for (int k = 1; k < entryParent.fillBarIndices().length; k++) {
-            assertEquals(entryParent.fillBarIndices()[k - 1] + 1, entryParent.fillBarIndices()[k]);
+        for (int k = 1; k < entryParent.fillBarIndicesLength(); k++) {
+            assertEquals(entryParent.fillBarIndices(k - 1) + 1, entryParent.fillBarIndices(k));
         }
         assertTrue(entryParent.filledQty() >= 490);
     }
@@ -193,7 +193,7 @@ class ExecutionAwareBacktesterTest {
         // Only the tranches filled by bar 4 (bars 1-4 = 200 shares) round-tripped.
         assertEquals(200, t.quantity(), 1e-9);
         // Position is flat afterwards and stays flat.
-        double[] equity = r.backtest().equityCurve();
+        double[] equity = r.backtest().equityCurveCopy();
         assertEquals(equity[10], equity[29], 1e-9);
     }
 

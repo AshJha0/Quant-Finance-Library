@@ -15,7 +15,7 @@ class StrategyBuilderTest {
     @Test
     void dslStrategyBacktestsEndToEnd() {
         BarSeries s = BarSeries.of("CYCLE", TestData.sineTrend(600, 100, 0.02, 12, 80));
-        double[] close = s.closes();
+        double[] close = s.closesCopy();
         double[] fast = Indicators.sma(close, 5);
         double[] slow = Indicators.sma(close, 25);
 
@@ -29,7 +29,7 @@ class StrategyBuilderTest {
 
         assertEquals("SMA DSL", result.strategyName());
         assertTrue(result.trades().size() >= 2);
-        assertEquals(s.size(), result.equityCurve().length);
+        assertEquals(s.size(), result.equityCurveLength());
     }
 
     @Test

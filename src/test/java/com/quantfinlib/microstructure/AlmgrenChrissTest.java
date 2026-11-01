@@ -20,7 +20,7 @@ class AlmgrenChrissTest {
         assertEquals(0, twap.kappa(), 1e-12);
         // Linear holdings, equal trades.
         for (int j = 0; j < 25; j++) {
-            assertEquals(1_000_000.0 / 25, twap.trades()[j], 1e-6);
+            assertEquals(1_000_000.0 / 25, twap.trades(j), 1e-6);
         }
         // Closed-form TWAP cost: 0.5*gamma*X^2 + etaTilde*X^2/T.
         double tau = 5.0 / 25;
@@ -32,10 +32,10 @@ class AlmgrenChrissTest {
     @Test
     void trajectoryConservesSharesAndLiquidates() {
         AlmgrenChriss.Trajectory optimal = AlmgrenChriss.optimalTrajectory(BASE);
-        assertEquals(1_000_000, optimal.holdings()[0], 1e-6);
-        assertEquals(0, optimal.holdings()[25], 1e-9);
+        assertEquals(1_000_000, optimal.holdings(0), 1e-6);
+        assertEquals(0, optimal.holdings(25), 1e-9);
         double sum = 0;
-        for (double trade : optimal.trades()) {
+        for (double trade : optimal.tradesCopy()) {
             assertTrue(trade > 0, "monotone liquidation");
             sum += trade;
         }
@@ -47,9 +47,9 @@ class AlmgrenChrissTest {
         AlmgrenChriss.Trajectory optimal = AlmgrenChriss.optimalTrajectory(BASE);
         assertTrue(optimal.kappa() > 0);
         // First trade bigger than the last; holdings convex (below linear).
-        assertTrue(optimal.trades()[0] > optimal.trades()[24]);
+        assertTrue(optimal.trades(0) > optimal.trades(24));
         double linearMid = 1_000_000 * (1 - 12.0 / 25);
-        assertTrue(optimal.holdings()[12] < linearMid,
+        assertTrue(optimal.holdings(12) < linearMid,
                 "risk-averse trajectory must sit below TWAP");
     }
 

@@ -22,8 +22,81 @@ import java.util.function.ToDoubleFunction;
 public final class GridSearchOptimizer {
 
     /** One grid point: its parameters, metrics, objective and equity curve. */
-    public record Candidate(Map<String, Double> params, PerformanceMetrics metrics, double objective,
-                            double[] equityCurve) {
+    public static final class Candidate {
+        private final Map<String, Double> params;
+        private final PerformanceMetrics metrics;
+        private final double objective;
+        private final double[] equityCurve;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         */
+        public Candidate(Map<String, Double> params, PerformanceMetrics metrics, double objective,
+                double[] equityCurve) {
+            this.params = java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(params));
+            this.metrics = metrics;
+            this.objective = objective;
+            this.equityCurve = equityCurve == null ? null : equityCurve.clone();
+        }
+
+        /** {@code params}. */
+        public Map<String, Double> params() {
+            return params;
+        }
+
+        /** {@code metrics}. */
+        public PerformanceMetrics metrics() {
+            return metrics;
+        }
+
+        /** {@code objective}. */
+        public double objective() {
+            return objective;
+        }
+
+        /** Element {@code i} of {@code equityCurve}. */
+        public double equityCurve(int i) {
+            return equityCurve[i];
+        }
+
+        /** Length of {@code equityCurve}. */
+        public int equityCurveLength() {
+            return equityCurve.length;
+        }
+
+        /** A fresh copy of {@code equityCurve}. */
+        public double[] equityCurveCopy() {
+            return equityCurve == null ? null : equityCurve.clone();
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Candidate o)) {
+                return false;
+            }
+            return java.util.Objects.equals(params, o.params)
+                    && java.util.Objects.equals(metrics, o.metrics)
+                    && Double.compare(objective, o.objective) == 0
+                    && java.util.Arrays.equals(equityCurve, o.equityCurve);
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + java.util.Objects.hashCode(params);
+            h = 31 * h + java.util.Objects.hashCode(metrics);
+            h = 31 * h + Double.hashCode(objective);
+            h = 31 * h + java.util.Arrays.hashCode(equityCurve);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "Candidate[" + "params=" + params + ", " + "metrics=" + metrics + ", " + "objective=" + objective + ", " + "equityCurve=" + java.util.Arrays.toString(equityCurve) + "]";
+        }
     }
 
     private GridSearchOptimizer() {
@@ -41,7 +114,7 @@ public final class GridSearchOptimizer {
             double score = objective.applyAsDouble(result.metrics());
             out.add(new Candidate(params, result.metrics(),
                     Double.isFinite(score) ? score : Double.NEGATIVE_INFINITY,
-                    result.equityCurve()));
+                    result.equityCurveCopy()));
         }
         out.sort(Comparator.comparingDouble(Candidate::objective).reversed());
         return out;
@@ -71,7 +144,7 @@ public final class GridSearchOptimizer {
         }
         double[][] r = new double[m][];
         for (int i = 0; i < m; i++) {
-            double[] eq = ranked.get(i).equityCurve();
+            double[] eq = ranked.get(i).equityCurveCopy();
             r[i] = new double[eq.length - 1];
             for (int t = 1; t < eq.length; t++) {
                 r[i][t - 1] = eq[t - 1] == 0 ? 0 : eq[t] / eq[t - 1] - 1;

@@ -1,5 +1,6 @@
 package com.quantfinlib.rates;
 
+import com.quantfinlib.util.Immutable;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -25,6 +26,7 @@ import java.util.Set;
  * classic source of small unexplained cash breaks between two systems that
  * disagree about, say, Whit Monday.</p>
  */
+@Immutable
 public final class BusinessCalendar {
 
     /** Date roll conventions for payment dates landing on non-business days. */

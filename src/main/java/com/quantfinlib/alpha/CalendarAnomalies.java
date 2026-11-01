@@ -38,13 +38,144 @@ public final class CalendarAnomalies {
     /**
      * Per-day-of-week profile, indexed Monday = 0 … Sunday = 6. Days with
      * fewer than two observations report NaN t-stats and are not tested.
-     *
-     * @param tStat          Newey-West t-stat of each day's mean
-     * @param naiveTStat     iid t-stat (mean over sample-sd/√n)
-     * @param holmSignificant day survives Holm's correction across the tested days
      */
-    public record DayOfWeekProfile(double[] meanReturn, double[] tStat, int[] count,
-                                   double[] naiveTStat, boolean[] holmSignificant, int hacLag) {
+    public static final class DayOfWeekProfile {
+        private final double[] meanReturn;
+        private final double[] tStat;
+        private final int[] count;
+        private final double[] naiveTStat;
+        private final boolean[] holmSignificant;
+        private final int hacLag;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         *
+         * @param tStat Newey-West t-stat of each day's mean
+         * @param naiveTStat iid t-stat (mean over sample-sd/√n)
+         * @param holmSignificant day survives Holm's correction across the tested days
+         */
+        public DayOfWeekProfile(double[] meanReturn, double[] tStat, int[] count, double[] naiveTStat,
+                boolean[] holmSignificant, int hacLag) {
+            this.meanReturn = meanReturn == null ? null : meanReturn.clone();
+            this.tStat = tStat == null ? null : tStat.clone();
+            this.count = count == null ? null : count.clone();
+            this.naiveTStat = naiveTStat == null ? null : naiveTStat.clone();
+            this.holmSignificant = holmSignificant == null ? null : holmSignificant.clone();
+            this.hacLag = hacLag;
+        }
+
+        /** Element {@code i} of {@code meanReturn}. */
+        public double meanReturn(int i) {
+            return meanReturn[i];
+        }
+
+        /** Length of {@code meanReturn}. */
+        public int meanReturnLength() {
+            return meanReturn.length;
+        }
+
+        /** A fresh copy of {@code meanReturn}. */
+        public double[] meanReturnCopy() {
+            return meanReturn == null ? null : meanReturn.clone();
+        }
+
+        /** Element {@code i} of {@code tStat} (Newey-West t-stat of each day's mean). */
+        public double tStat(int i) {
+            return tStat[i];
+        }
+
+        /** Length of {@code tStat}. */
+        public int tStatLength() {
+            return tStat.length;
+        }
+
+        /** A fresh copy of {@code tStat}. */
+        public double[] tStatCopy() {
+            return tStat == null ? null : tStat.clone();
+        }
+
+        /** Element {@code i} of {@code count}. */
+        public int count(int i) {
+            return count[i];
+        }
+
+        /** Length of {@code count}. */
+        public int countLength() {
+            return count.length;
+        }
+
+        /** A fresh copy of {@code count}. */
+        public int[] countCopy() {
+            return count == null ? null : count.clone();
+        }
+
+        /** Element {@code i} of {@code naiveTStat} (iid t-stat (mean over sample-sd/√n)). */
+        public double naiveTStat(int i) {
+            return naiveTStat[i];
+        }
+
+        /** Length of {@code naiveTStat}. */
+        public int naiveTStatLength() {
+            return naiveTStat.length;
+        }
+
+        /** A fresh copy of {@code naiveTStat}. */
+        public double[] naiveTStatCopy() {
+            return naiveTStat == null ? null : naiveTStat.clone();
+        }
+
+        /** Element {@code i} of {@code holmSignificant} (day survives Holm's correction across the tested days). */
+        public boolean holmSignificant(int i) {
+            return holmSignificant[i];
+        }
+
+        /** Length of {@code holmSignificant}. */
+        public int holmSignificantLength() {
+            return holmSignificant.length;
+        }
+
+        /** A fresh copy of {@code holmSignificant}. */
+        public boolean[] holmSignificantCopy() {
+            return holmSignificant == null ? null : holmSignificant.clone();
+        }
+
+        /** {@code hacLag}. */
+        public int hacLag() {
+            return hacLag;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof DayOfWeekProfile o)) {
+                return false;
+            }
+            return java.util.Arrays.equals(meanReturn, o.meanReturn)
+                    && java.util.Arrays.equals(tStat, o.tStat)
+                    && java.util.Arrays.equals(count, o.count)
+                    && java.util.Arrays.equals(naiveTStat, o.naiveTStat)
+                    && java.util.Arrays.equals(holmSignificant, o.holmSignificant)
+                    && hacLag == o.hacLag;
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + java.util.Arrays.hashCode(meanReturn);
+            h = 31 * h + java.util.Arrays.hashCode(tStat);
+            h = 31 * h + java.util.Arrays.hashCode(count);
+            h = 31 * h + java.util.Arrays.hashCode(naiveTStat);
+            h = 31 * h + java.util.Arrays.hashCode(holmSignificant);
+            h = 31 * h + Integer.hashCode(hacLag);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "DayOfWeekProfile[" + "meanReturn=" + java.util.Arrays.toString(meanReturn) + ", " + "tStat=" + java.util.Arrays.toString(tStat) + ", " + "count=" + java.util.Arrays.toString(count) + ", " + "naiveTStat=" + java.util.Arrays.toString(naiveTStat) + ", " + "holmSignificant=" + java.util.Arrays.toString(holmSignificant) + ", " + "hacLag=" + hacLag + "]";
+        }
     }
 
     /**

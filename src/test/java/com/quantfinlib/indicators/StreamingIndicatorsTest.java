@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class StreamingIndicatorsTest {
 
     private static final double[] CLOSES =
-            TestData.gbmSeries("X", 500, 100, 0.08, 0.25, 99).closes();
+            TestData.gbmSeries("X", 500, 100, 0.08, 0.25, 99).closesCopy();
 
     private static void assertSame(double expected, double actual, int index, String what) {
         if (Double.isNaN(expected)) {
@@ -56,9 +56,9 @@ class StreamingIndicatorsTest {
         StreamingIndicators.Macd m = new StreamingIndicators.Macd(12, 26, 9);
         for (int i = 0; i < CLOSES.length; i++) {
             double line = m.update(CLOSES[i]);
-            assertSame(batch.line()[i], line, i, "MACD line");
-            assertSame(batch.signal()[i], m.signal(), i, "MACD signal");
-            assertSame(batch.histogram()[i], m.histogram(), i, "MACD histogram");
+            assertSame(batch.line(i), line, i, "MACD line");
+            assertSame(batch.signal(i), m.signal(), i, "MACD signal");
+            assertSame(batch.histogram(i), m.histogram(), i, "MACD histogram");
         }
     }
 

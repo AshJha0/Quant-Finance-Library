@@ -52,8 +52,100 @@ public final class AlmgrenChriss {
      * sold in interval j+1. Costs are in price·shares units versus the
      * arrival price.
      */
-    public record Trajectory(double[] holdings, double[] trades, double kappa,
-                             double expectedCost, double costVariance) {
+    public static final class Trajectory {
+        private final double[] holdings;
+        private final double[] trades;
+        private final double kappa;
+        private final double expectedCost;
+        private final double costVariance;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         */
+        public Trajectory(double[] holdings, double[] trades, double kappa, double expectedCost,
+                double costVariance) {
+            this.holdings = holdings == null ? null : holdings.clone();
+            this.trades = trades == null ? null : trades.clone();
+            this.kappa = kappa;
+            this.expectedCost = expectedCost;
+            this.costVariance = costVariance;
+        }
+
+        /** Element {@code i} of {@code holdings}. */
+        public double holdings(int i) {
+            return holdings[i];
+        }
+
+        /** Length of {@code holdings}. */
+        public int holdingsLength() {
+            return holdings.length;
+        }
+
+        /** A fresh copy of {@code holdings}. */
+        public double[] holdingsCopy() {
+            return holdings == null ? null : holdings.clone();
+        }
+
+        /** Element {@code i} of {@code trades}. */
+        public double trades(int i) {
+            return trades[i];
+        }
+
+        /** Length of {@code trades}. */
+        public int tradesLength() {
+            return trades.length;
+        }
+
+        /** A fresh copy of {@code trades}. */
+        public double[] tradesCopy() {
+            return trades == null ? null : trades.clone();
+        }
+
+        /** {@code kappa}. */
+        public double kappa() {
+            return kappa;
+        }
+
+        /** {@code expectedCost}. */
+        public double expectedCost() {
+            return expectedCost;
+        }
+
+        /** {@code costVariance}. */
+        public double costVariance() {
+            return costVariance;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Trajectory o)) {
+                return false;
+            }
+            return java.util.Arrays.equals(holdings, o.holdings)
+                    && java.util.Arrays.equals(trades, o.trades)
+                    && Double.compare(kappa, o.kappa) == 0
+                    && Double.compare(expectedCost, o.expectedCost) == 0
+                    && Double.compare(costVariance, o.costVariance) == 0;
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + java.util.Arrays.hashCode(holdings);
+            h = 31 * h + java.util.Arrays.hashCode(trades);
+            h = 31 * h + Double.hashCode(kappa);
+            h = 31 * h + Double.hashCode(expectedCost);
+            h = 31 * h + Double.hashCode(costVariance);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "Trajectory[" + "holdings=" + java.util.Arrays.toString(holdings) + ", " + "trades=" + java.util.Arrays.toString(trades) + ", " + "kappa=" + kappa + ", " + "expectedCost=" + expectedCost + ", " + "costVariance=" + costVariance + "]";
+        }
     }
 
     private AlmgrenChriss() {

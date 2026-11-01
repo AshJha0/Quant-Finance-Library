@@ -94,6 +94,10 @@ public final class AdaptiveSor {
      */
     public record RoutingDecision(List<RouteLeg> lit, List<RouteLeg> probes,
                                   long routedQty, long unrouted) {
+        public RoutingDecision {
+            lit = List.copyOf(lit);
+            probes = List.copyOf(probes);
+        }
     }
 
     private final VenueScorecard scorecard;

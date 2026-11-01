@@ -10,13 +10,106 @@ import com.quantfinlib.util.MathUtils;
  */
 public final class PairsHedger {
 
-    public record PairsAnalysis(
-            double hedgeRatio,       // units of B per unit of A (OLS beta)
-            double intercept,
-            double correlation,      // return correlation of the pair
-            double halfLifeBars,     // mean-reversion half-life (+INF if not mean-reverting)
-            double lastZScore,       // current spread z-score
-            double[] spread) {       // spread series: A - ratio*B - intercept
+    public static final class PairsAnalysis {
+        private final double hedgeRatio;
+        private final double intercept;
+        private final double correlation;
+        private final double halfLifeBars;
+        private final double lastZScore;
+        private final double[] spread;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         *
+         * @param hedgeRatio units of B per unit of A (OLS beta)
+         * @param correlation return correlation of the pair
+         * @param halfLifeBars mean-reversion half-life (+INF if not mean-reverting)
+         * @param lastZScore current spread z-score
+         */
+        public PairsAnalysis(double hedgeRatio, double intercept, double correlation, double halfLifeBars,
+                double lastZScore, double[] spread) {
+            this.hedgeRatio = hedgeRatio;
+            this.intercept = intercept;
+            this.correlation = correlation;
+            this.halfLifeBars = halfLifeBars;
+            this.lastZScore = lastZScore;
+            this.spread = spread == null ? null : spread.clone();
+        }
+
+        /** {@code hedgeRatio} (units of B per unit of A (OLS beta)). */
+        public double hedgeRatio() {
+            return hedgeRatio;
+        }
+
+        /** {@code intercept}. */
+        public double intercept() {
+            return intercept;
+        }
+
+        /** {@code correlation} (return correlation of the pair). */
+        public double correlation() {
+            return correlation;
+        }
+
+        /** {@code halfLifeBars} (mean-reversion half-life (+INF if not mean-reverting)). */
+        public double halfLifeBars() {
+            return halfLifeBars;
+        }
+
+        /** {@code lastZScore} (current spread z-score). */
+        public double lastZScore() {
+            return lastZScore;
+        }
+
+        /** Element {@code i} of {@code spread}. */
+        public double spread(int i) {
+            return spread[i];
+        }
+
+        /** Length of {@code spread}. */
+        public int spreadLength() {
+            return spread.length;
+        }
+
+        /** A fresh copy of {@code spread}. */
+        public double[] spreadCopy() {
+            return spread == null ? null : spread.clone();
+        }
+
+       // spread series: A - ratio*B - intercept
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof PairsAnalysis o)) {
+                return false;
+            }
+            return Double.compare(hedgeRatio, o.hedgeRatio) == 0
+                    && Double.compare(intercept, o.intercept) == 0
+                    && Double.compare(correlation, o.correlation) == 0
+                    && Double.compare(halfLifeBars, o.halfLifeBars) == 0
+                    && Double.compare(lastZScore, o.lastZScore) == 0
+                    && java.util.Arrays.equals(spread, o.spread);
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + Double.hashCode(hedgeRatio);
+            h = 31 * h + Double.hashCode(intercept);
+            h = 31 * h + Double.hashCode(correlation);
+            h = 31 * h + Double.hashCode(halfLifeBars);
+            h = 31 * h + Double.hashCode(lastZScore);
+            h = 31 * h + java.util.Arrays.hashCode(spread);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "PairsAnalysis[" + "hedgeRatio=" + hedgeRatio + ", " + "intercept=" + intercept + ", " + "correlation=" + correlation + ", " + "halfLifeBars=" + halfLifeBars + ", " + "lastZScore=" + lastZScore + ", " + "spread=" + java.util.Arrays.toString(spread) + "]";
+        }
     }
 
     private PairsHedger() {
