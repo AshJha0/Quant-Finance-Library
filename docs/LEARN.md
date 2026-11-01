@@ -6548,7 +6548,10 @@ confidently on a broken book.
 `fix/FixSession.java` detects inbound gaps, fires
 `Listener.onSequenceGap`, issues ResendRequest(2) and drops out-of-order
 messages until redelivery; `marketdata/L3BookBuilder.java` keeps
-`unknownRefCount`/`outOfBandCount` tripwires that catch a desynced book.
+`unknownRefCount`/`outOfBandCount` tripwires that catch a desynced book;
+and `feed/WebSocketFeed.java` and `sbe/BinaryMarketDataClient.java` raise a
+gap flag (`consumeGap()`) after a reconnect or a tick dropped on a full bus
+ring (`droppedTicks`), so the consumer knows to resynchronise.
 
 ### 195. "Why do exchanges broadcast every market data packet twice, and what do you do with the copies?"
 
@@ -7791,31 +7794,39 @@ because an unbounded sweep through a thin book is how flash-crash prints
 happen; the price-collar and LULD machinery exists for the same reason.
 
 *In this library:* `orderbook/HftOrderBook.java` (`submitMarket` -- returns
-filled quantity, never rests; the sweep test in
+filled quantity, never rests; `marketProtectionTicks(n)` limits a market
+order to n ticks through the opposite best at arrival and cancels the
+rest, the protected-band version real venues use; the sweep test in
 `src/test/java/com/quantfinlib/orderbook/HftOrderBookTest.java`
 `marketOrdersSweepAndNeverRest`), `orderbook/BookAnalytics.java` (`sweep`
 simulates the same walk non-destructively and reports VWAP and impact bps).
 
 ### 242. "Enumerate the lifecycle states of an order. Which transitions are legal?"
 
-The canonical lifecycle is small and worth knowing cold: NEW (accepted,
-working), PARTIALLY_FILLED (some quantity executed, remainder working),
+The canonical lifecycle is small and worth knowing cold: PENDING_NEW
+(sent, not yet acknowledged by the venue), NEW (accepted, working),
+PARTIALLY_FILLED (some quantity executed, remainder working),
 FILLED (terminal -- nothing left), CANCELED (terminal -- remainder pulled),
-REJECTED (terminal -- never worked at all). Legal transitions: NEW ->
-PARTIALLY_FILLED -> ... -> FILLED, NEW -> FILLED directly (one print),
+REJECTED (terminal -- never worked at all). Legal transitions:
+PENDING_NEW -> NEW or REJECTED (and, on some venues, straight to a
+fill), NEW -> PARTIALLY_FILLED -> ... -> FILLED, NEW -> FILLED directly
+(one print),
 NEW or PARTIALLY_FILLED -> CANCELED (you can cancel a remainder but not a
 completed fill), and nothing leaves FILLED, CANCELED or REJECTED. The
 trap: REJECTED is not CANCELED -- a rejected order never consumed queue
 priority, never printed, and needs no cancel; conflating them corrupts
 position accounting because a cancel-after-partial still leaves you with
-the filled part. Inside a matching engine the resting order itself needs
+the filled part. PENDING_NEW is the state people leave out, and it
+matters: an order in flight is exposure the risk gate must count and a
+quote the quoter must not replace yet. Inside a matching engine the resting order itself needs
 none of this ceremony: the book only stores the *remaining* quantity, and
 "filled" is simply the moment that remainder hits zero and the node is
 unlinked -- state machines live at the gateway, not in the ladder.
 
-*In this library:* `trading/OrderStatus.java` (exactly these five states),
-`trading/PaperTradingGateway.java` (the working-order state machine driving
-them), `orderbook/LimitOrder.java` (the book-side view: `quantity` IS the
+*In this library:* `trading/OrderStatus.java` (exactly these six states,
+following FIX OrdStatus(39)), `trading/OrderStateMachine.java` (the legal
+transitions, shared by `trading/HftOrderGateway.java` and
+`trading/PaperTradingGateway.java`), `orderbook/LimitOrder.java` (the book-side view: `quantity` IS the
 remaining amount, nothing else).
 
 ### 243. "A limit buy for 25 crosses a resting ask of 10. Describe every mutation."
@@ -7835,9 +7846,11 @@ the trade prints); acceptance and execution are different events. Desks
 care because fills reconcile against order ids -- an id that never comes
 back in a trade is a working order, not an error.
 
-*In this library:* `orderbook/HftOrderBook.java` (`submitLimit` -- "matches
-while it crosses, rests any remainder"; the javadoc makes the
-even-fully-filled-orders-get-ids point explicitly),
+*In this library:* `orderbook/HftOrderBook.java` (`submitLimit` matches
+while it crosses and rests any remainder; the javadoc makes the
+even-fully-filled-orders-get-ids point explicitly, and trades are
+delivered to the sink only after the book is consistent again, so a
+throwing sink cannot leave a half-updated book),
 `orderbook/OrderBook.java` (same semantics, readable).
 
 ### 244. "IOC, FOK, post-only -- give me the exact semantics, and what the venue answers when each cannot be honored."
@@ -7899,17 +7912,17 @@ self-match: cancel-newest (the incoming order is rejected -- protects the
 resting order's queue priority), cancel-oldest (the resting order is
 pulled and the incoming one proceeds -- useful when the new order carries
 fresher intent), cancel-both, and decrement-and-cancel (reduce the larger
-by the smaller). The design question to reason through: STP is a *venue*
-feature keyed on ids the venue knows, so in a matching core it is one
-extra comparison in the match loop before `fillLevel` -- this library's
-books do not carry participant ids, which is exactly why they don't
-implement it, and the surveillance side of the same coin (detecting
+by the smaller). STP is a venue feature keyed on ids the venue knows, so
+in a matching core it is one extra comparison in the match loop before a
+trade is printed. The surveillance side of the same coin (detecting
 self-matched prints after the fact) belongs to the regulatory layer.
 
-*In this library:* conceptual -- `orderbook/HftOrderBook.java` is where the
-check would live (the match loop already has maker and taker ids in hand);
-`docs/LEARN.md` flags STP as expected follow-on material to matching-engine
-design, and the `regulatory/` package covers the surveillance vocabulary.
+*In this library:* `orderbook/HftOrderBook.java` -- orders entered with a
+non-zero `ownerId` carry it, and `selfTradePrevention(policy)` picks
+`SelfTradePrevention.CANCEL_RESTING`, `CANCEL_INCOMING`, `CANCEL_BOTH`
+or `DECREMENT` (owner 0 is never checked; `selfTradePreventionCount()`
+counts the events); the `regulatory/` package covers the surveillance
+vocabulary.
 
 ### 247. "I want to change my resting order's price -- or just its size. What happens to my queue position, and why is the rule asymmetric?"
 
@@ -7919,18 +7932,22 @@ and join the back of another, full stop. A size *increase* also sends you
 to the back: the people queued behind you at that price agreed to wait
 behind your original size, not your new one. A size *decrease* usually
 keeps priority -- shrinking helps everyone behind you, so venues let you
-keep your spot. That asymmetry is why desks treat modify as
-cancel-and-replace in their models: this library's books implement modify
-exactly that way (cancel, then submit), which matches the venue
-economics -- your amended order re-queues. The practical consequence is
+keep your spot. That asymmetry is the rule this library's venue-side
+book implements: a size-down at the same price is reduced in place and
+keeps time priority, while a price change or size-up re-enters the order
+at the back of the new level, keeping its id and matching first if it
+now crosses. The practical consequence is
 large: at a busy level, queue position IS the asset (front of queue fills
 first and captures spread with less adverse selection), so a market maker
 re-pricing a quote pays for the new price with a trip to the back, and
 strategies weigh "better price, worse position" explicitly using
 fill-probability-vs-position models.
 
-*In this library:* `orderbook/OrderBook.java` / `orderbook/HftOrderBook.java`
-(`cancel` + resubmit is the modify path -- re-queueing is implicit), `marketdata/L3BookBuilder.java` (replace events end position
+*In this library:* `orderbook/HftOrderBook.java` (`modify(orderId,
+newQuantity, newPriceTick, timestampNanos)` -- size-down keeps priority,
+anything else re-queues), `orderbook/OrderBook.java` (the readable book,
+where cancel and resubmit is the modify path),
+`marketdata/L3BookBuilder.java` (replace events end position
 tracking -- same rule from the participant side),
 `microstructure/QueuePositionEstimator.java` +
 `microstructure/QueueModel.java` (what that position is worth).
@@ -8097,10 +8114,10 @@ machinery here (dense tick ladder, bitmaps, pooled nodes) -- the split is
 who drives the mutations, and it is why they are two classes, not one
 with a flag.
 
-*In this library:* `orderbook/HftOrderBook.java` (venue-side: "driven by
-matching"), `marketdata/L3BookBuilder.java` (participant-side: "driven by
-the feed instead of by matching -- this is the consumer of a venue's L3
-feed, not the venue"; queue-ahead tracking is its headline feature).
+*In this library:* `orderbook/HftOrderBook.java` (venue-side, driven by
+matching), `marketdata/L3BookBuilder.java` (participant-side, driven by
+the feed instead of by matching: the consumer of a venue's L3 feed, not
+the venue; queue-ahead tracking is its headline feature).
 
 ## Matching engine internals (Q255-Q268)
 
@@ -8213,19 +8230,20 @@ per-thread allocation counters straight from the JVM; snapshot before,
 run a session of mixed adds/cancels/aggressions (with the TEST itself
 pre-sizing its own structures so it does not allocate either -- the id
 ring for cancel targeting uses swap-remove on a preallocated array), and
-assert the delta is near zero. This library's book-churn test asserts
-under 100,000 bytes across a session with thousands of trades --
-tolerance for JIT and test harness noise, zero budget for per-operation
-allocation, which would show up as megabytes. Way two, remove the
+assert the delta is zero. This library's book-churn test warms up first
+and then demands exactly zero bytes across a session with thousands of
+trades; because JIT compilation or class loading can still allocate
+inside one window, it retries up to five times and passes only if some
+window shows zero. A tolerance ("under 100 KB") would hide a slow drip
+that only shows up over a trading day. Way two, remove the
 collector: run the full benchmark under Epsilon GC
 (`-XX:+UseEpsilonGC -Xms8g -Xmx8g`), the JVM's no-op collector that
 never frees anything -- an allocating hot path exhausts the heap and the
-process DIES, so completing a full session is proof by survival. The
-committed result: 5.6M orders, 5.3M trades, collector never ran. The two
-proofs fail differently -- the counter catches slow drips a big heap
+process dies, so completing a full session is proof by survival. The
+two proofs fail differently -- the counter catches slow drips a big heap
 would hide; Epsilon catches allocation on paths the counter's thread
-does not own -- which is why you want both, and why "proven, like every
-hot-path claim in this library" is written into the book's javadoc.
+does not own -- which is why you want both, and why the book's javadoc
+says the zero-allocation claim is proven by the allocation-counter test.
 
 *In this library:* `src/test/java/com/quantfinlib/orderbook/HftOrderBookTest.java`
 (the allocation-counter session, including the pre-sized-ring discipline),
