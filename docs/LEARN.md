@@ -2232,7 +2232,9 @@ and passed a cointegration test.
 
 *In this library:* `hedging/CointegrationTest.java` (`engleGranger` --
 the levels regression plus the ADF test on the residual that separates
-the legitimate case from the spurious one), `hedging/PairsHedger.java`
+the legitimate case from the spurious one; `engleGranger(a, b, lags)`
+adds ADF lags and compares against MacKinnon (2010) finite-sample
+critical values from `criticalValue(level, T)`), `hedging/PairsHedger.java`
 (what you are allowed to do once the test passes).
 
 ### 39. "What is a unit root, and how would you convince me this spread is mean-reverting?"
@@ -3310,9 +3312,12 @@ says the tail mean does not exist -- at which point the defensible
 answer to the board is that number's refusal, not a number.
 
 *In this library:* `risk/ExtremeValueTheory.java` -- `fitPot`
-(peaks-over-threshold GPD fit), `GpdFit.var(0.999)` (the extrapolation
-formula, documented in the javadoc), and the class throws rather than
-print infinite-mean expected shortfall -- the "refusal" above is
+(peaks-over-threshold GPD fit), `fitPotMle` (maximum likelihood with
+standard errors on the shape and scale, which is where the wide
+confidence interval comes from), `meanExcess` for choosing the
+threshold, `GpdFit.var(0.999)` (the extrapolation formula, documented
+in the javadoc), and `GpdFit.expectedShortfall` throws rather than
+print an infinite-mean expected shortfall -- the "refusal" above is
 implemented behavior.
 
 ### 76. "Design my stress-testing program. Historical, hypothetical, reverse -- what does each catch that the others miss?"
@@ -10735,8 +10740,9 @@ pre-window run-up in bps, the post-window reversion in bps, and the
 participation share -- and alerts on the joint pattern, not any single
 leg of it.
 
-*In this library:* `regulatory/FixAnalyzer.java` -- computes the fix from
-window mids per the WM/R-style median methodology and emits a
+*In this library:* `regulatory/FixAnalyzer.java` -- a WM/R-style fix:
+the median of window mids, or with `calculateFix(bids, offers)` the mid
+of separate bid and offer medians; it emits a
 `FixImpactReport` with `runUpBps`, `reversionBps` and
 `participationShare`: exactly the three-part signature.
 
@@ -11535,7 +11541,10 @@ was luck of offsetting client flow.
 *In this library:* `crb/CentralRiskBook.java` -- `nettingEfficiency()`
 (1 - net/gross) and `report(cov, confidence)` producing the `CrbReport`
 with netted VaR/ES via `risk/VarEngine.java` against summed standalone
-desk VaRs; per-desk attribution is maintained in the booking path.
+desk VaRs. The report is delta-gamma (Cornish-Fisher): dollar-gamma rows
+from options are moved onto their underlying factors rather than treated
+as linear exposures, and a book without options gives the delta-normal
+numbers; per-desk attribution is maintained in the booking path.
 
 ### 386. "A client sells you 5M EURUSD. Your book is long 8M. What do you do with the flow, and what does the client get?"
 
@@ -13099,7 +13108,10 @@ noise.
 *In this library:* `hedging/CointegrationTest.java` -- Engle-Granger
 two-step with ADF on the residual spread and the correct two-variable
 no-trend critical values (-3.90 / -3.34 / -3.04 at 1/5/10 percent)
-hard-coded and documented; run it before `PairsHedger` sizes anything.
+hard-coded and documented, plus `criticalValue(level, T)` for the
+MacKinnon (2010) finite-sample values (which matter on short samples) and
+`engleGranger(a, b, lags)` for an augmented test; run it before
+`PairsHedger` sizes anything.
 
 ### 443. "Your pair's hedge ratio isn't constant. How do you track a time-varying beta, and when is that better than rolling OLS?"
 
