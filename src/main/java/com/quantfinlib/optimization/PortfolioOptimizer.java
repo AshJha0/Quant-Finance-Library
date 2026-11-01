@@ -1,23 +1,30 @@
 package com.quantfinlib.optimization;
 
+import com.quantfinlib.risk.PsdMatrices;
 import com.quantfinlib.util.MathUtils;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.SplittableRandom;
-import java.util.function.ToDoubleFunction;
 
 /**
- * Portfolio Optimization Engine (long-only, fully invested).
+ * Long-only, fully invested mean-variance optimisation (Markowitz 1952),
+ * solved exactly as convex quadratic programs by {@link QuadraticProgram}:
  *
- * <p>Supports maximum-Sharpe and minimum-volatility portfolios plus efficient
- * frontier construction. The optimizer uses stochastic search over the simplex
- * (Dirichlet sampling) followed by deterministic pairwise-transfer refinement,
- * which is robust for non-smooth objectives and needs no external solver.
- * Results are deterministic for a given seed.</p>
+ * <ul>
+ *   <li><b>minimum variance</b>: {@code min w'Σw} s.t. {@code 1'w = 1, w ≥ 0};</li>
+ *   <li><b>frontier point</b>: the same with {@code μ'w = target} added;</li>
+ *   <li><b>maximum Sharpe</b>: by the homogenisation of the linear-fractional
+ *       problem (Cornuéjols and Tütüncü, Optimization Methods in Finance,
+ *       2007, §8.2): {@code min y'Σy} s.t. {@code (μ − r_f)'y = 1, y ≥ 0},
+ *       then {@code w = y / 1'y}. It needs at least one asset with
+ *       {@code μ_i > r_f}; otherwise no long-only portfolio has a positive
+ *       excess return and the method throws.</li>
+ * </ul>
  *
- * <p>Expected returns and covariance must share the same periodicity
- * (e.g. both annualized, or both daily).</p>
+ * <p>Results are optimal to rounding (the active-set method terminates on
+ * the KKT conditions). Expected returns and covariance must share the same
+ * periodicity. The covariance is copied and must be symmetric and positive
+ * semi-definite.</p>
  */
 public final class PortfolioOptimizer {
 
@@ -25,62 +32,119 @@ public final class PortfolioOptimizer {
     public record Allocation(double[] weights, double expectedReturn, double volatility, double sharpe) {
     }
 
-    private static final int SAMPLES = 20_000;
-    private static final int REFINE_SWEEPS = 60;
-
     private final double[] expectedReturns;
     private final double[][] covariance;
-    private final long seed;
 
     public PortfolioOptimizer(double[] expectedReturns, double[][] covariance) {
-        this(expectedReturns, covariance, 42L);
-    }
-
-    public PortfolioOptimizer(double[] expectedReturns, double[][] covariance, long seed) {
-        if (expectedReturns.length != covariance.length) {
+        int n = expectedReturns.length;
+        if (n < 1 || covariance.length != n) {
             throw new IllegalArgumentException("returns/covariance dimension mismatch");
         }
+        for (double m : expectedReturns) {
+            if (!Double.isFinite(m)) {
+                throw new IllegalArgumentException("expected returns must be finite");
+            }
+        }
+        PsdMatrices.choleskyPsd(covariance);       // square, symmetric, finite, PSD
         this.expectedReturns = expectedReturns.clone();
-        this.covariance = covariance;
-        this.seed = seed;
+        this.covariance = new double[n][];
+        for (int i = 0; i < n; i++) {
+            this.covariance[i] = covariance[i].clone();
+        }
+    }
+
+    /**
+     * Kept for source compatibility: the solver is deterministic and the
+     * seed is ignored.
+     */
+    public PortfolioOptimizer(double[] expectedReturns, double[][] covariance, long seed) {
+        this(expectedReturns, covariance);
     }
 
     /** Maximum Sharpe ratio portfolio. {@code riskFreeRate} in the same periodicity as the inputs. */
     public Allocation maxSharpe(double riskFreeRate) {
-        double[] w = optimize(x -> {
-            double vol = volatilityOf(x);
-            return vol == 0 ? Double.NEGATIVE_INFINITY
-                    : (MathUtils.dot(expectedReturns, x) - riskFreeRate) / vol;
-        });
-        return toAllocation(w, riskFreeRate);
+        int n = expectedReturns.length;
+        double[] excess = new double[n];
+        int best = -1;
+        for (int i = 0; i < n; i++) {
+            excess[i] = expectedReturns[i] - riskFreeRate;
+            if (excess[i] > 0 && (best < 0 || excess[i] > excess[best])) {
+                best = i;
+            }
+        }
+        if (best < 0) {
+            throw new IllegalArgumentException("no asset has an expected return above the "
+                    + "risk-free rate; the long-only tangency portfolio does not exist");
+        }
+        double[] y0 = new double[n];
+        y0[best] = 1 / excess[best];
+        QuadraticProgram.Solution s = QuadraticProgram.solve(scaled(2), new double[n],
+                new double[][]{excess}, new double[]{1}, negIdentity(n), new double[n], y0);
+        double sum = 0;
+        for (double v : s.x()) {
+            sum += v;
+        }
+        double[] w = new double[n];
+        for (int i = 0; i < n; i++) {
+            w[i] = Math.max(0, s.x()[i] / sum);
+        }
+        return toAllocation(normalise(w), riskFreeRate);
     }
 
     /** Minimum volatility portfolio. */
     public Allocation minVolatility() {
-        double[] w = optimize(x -> -volatilityOf(x));
-        return toAllocation(w, 0);
+        int n = expectedReturns.length;
+        double[] w0 = new double[n];
+        java.util.Arrays.fill(w0, 1.0 / n);
+        QuadraticProgram.Solution s = QuadraticProgram.solve(scaled(2), new double[n],
+                new double[][]{ones(n)}, new double[]{1}, negIdentity(n), new double[n], w0);
+        return toAllocation(normalise(s.x()), 0);
     }
 
     /**
-     * Efficient frontier: minimum-volatility portfolios across a grid of
-     * target returns between the min and max asset expected returns.
+     * Minimum-variance frontier: for each of {@code points} target returns
+     * evenly spaced from the lowest to the highest asset expected return,
+     * the long-only portfolio of least variance that earns exactly that
+     * return. Points below the minimum-variance portfolio's return are on
+     * the inefficient lower branch; filter by return if only the efficient
+     * part is wanted.
      */
     public List<Allocation> efficientFrontier(int points) {
-        double lo = Double.POSITIVE_INFINITY, hi = Double.NEGATIVE_INFINITY;
-        for (double r : expectedReturns) {
-            lo = Math.min(lo, r);
-            hi = Math.max(hi, r);
+        if (points < 1) {
+            throw new IllegalArgumentException("points must be >= 1");
         }
+        int n = expectedReturns.length;
+        int iLo = 0;
+        int iHi = 0;
+        for (int i = 1; i < n; i++) {
+            if (expectedReturns[i] < expectedReturns[iLo]) {
+                iLo = i;
+            }
+            if (expectedReturns[i] > expectedReturns[iHi]) {
+                iHi = i;
+            }
+        }
+        double lo = expectedReturns[iLo];
+        double hi = expectedReturns[iHi];
         List<Allocation> frontier = new ArrayList<>(points);
+        if (!(hi - lo > 1e-12 * Math.max(1, Math.abs(hi)))) {
+            Allocation mv = minVolatility();
+            for (int p = 0; p < points; p++) {
+                frontier.add(mv);
+            }
+            return frontier;
+        }
+        double[][] q = scaled(2);
+        double[][] a = {ones(n), expectedReturns.clone()};
         for (int p = 0; p < points; p++) {
-            double target = lo + (hi - lo) * p / Math.max(1, points - 1);
-            // Penalized objective: minimize vol subject to hitting the target return.
-            double[] w = optimize(x -> {
-                double shortfall = target - MathUtils.dot(expectedReturns, x);
-                double penalty = shortfall > 0 ? shortfall * 100 : 0;
-                return -(volatilityOf(x) + penalty);
-            });
-            frontier.add(toAllocation(w, 0));
+            double theta = points == 1 ? 0 : (double) p / (points - 1);
+            double target = lo + (hi - lo) * theta;
+            double[] w0 = new double[n];
+            w0[iLo] = 1 - theta;
+            w0[iHi] += theta;
+            QuadraticProgram.Solution s = QuadraticProgram.solve(q, new double[n], a,
+                    new double[]{1, target}, negIdentity(n), new double[n], w0);
+            frontier.add(toAllocation(normalise(s.x()), 0));
         }
         return frontier;
     }
@@ -96,64 +160,43 @@ public final class PortfolioOptimizer {
 
     // ------------------------------------------------------------------
 
-    private double[] optimize(ToDoubleFunction<double[]> objective) {
-        int n = expectedReturns.length;
-        SplittableRandom rnd = new SplittableRandom(seed);
-
-        // Phase 1: Dirichlet sampling over the simplex.
-        double[] best = new double[n];
-        java.util.Arrays.fill(best, 1.0 / n);
-        double bestScore = objective.applyAsDouble(best);
-        double[] cand = new double[n];
-        for (int s = 0; s < SAMPLES; s++) {
-            double sum = 0;
-            for (int i = 0; i < n; i++) {
-                cand[i] = -Math.log(rnd.nextDouble());
-                sum += cand[i];
-            }
-            for (int i = 0; i < n; i++) {
-                cand[i] /= sum;
-            }
-            double score = objective.applyAsDouble(cand);
-            if (score > bestScore) {
-                bestScore = score;
-                System.arraycopy(cand, 0, best, 0, n);
+    private double[][] scaled(double factor) {
+        int n = covariance.length;
+        double[][] q = new double[n][n];
+        for (int i = 0; i < n; i++) {
+            for (int j = 0; j < n; j++) {
+                q[i][j] = factor * covariance[i][j];
             }
         }
+        return q;
+    }
 
-        // Phase 2: deterministic pairwise-transfer hill climbing with shrinking step.
-        double step = 0.10;
-        double[] trial = new double[n];
-        for (int sweep = 0; sweep < REFINE_SWEEPS; sweep++) {
-            boolean improved = false;
-            for (int from = 0; from < n; from++) {
-                if (best[from] < 1e-12) {
-                    continue;
-                }
-                for (int to = 0; to < n; to++) {
-                    if (to == from) {
-                        continue;
-                    }
-                    double move = Math.min(step, best[from]);
-                    System.arraycopy(best, 0, trial, 0, n);
-                    trial[from] -= move;
-                    trial[to] += move;
-                    double score = objective.applyAsDouble(trial);
-                    if (score > bestScore) {
-                        bestScore = score;
-                        System.arraycopy(trial, 0, best, 0, n);
-                        improved = true;
-                    }
-                }
-            }
-            if (!improved) {
-                step /= 2;
-                if (step < 1e-6) {
-                    break;
-                }
-            }
+    static double[] ones(int n) {
+        double[] o = new double[n];
+        java.util.Arrays.fill(o, 1);
+        return o;
+    }
+
+    static double[][] negIdentity(int n) {
+        double[][] g = new double[n][n];
+        for (int i = 0; i < n; i++) {
+            g[i][i] = -1;
         }
-        return best;
+        return g;
+    }
+
+    /** Clears rounding-level negatives and renormalises to a sum of exactly one. */
+    static double[] normalise(double[] w) {
+        double[] out = new double[w.length];
+        double sum = 0;
+        for (int i = 0; i < w.length; i++) {
+            out[i] = Math.max(0, w[i]);
+            sum += out[i];
+        }
+        for (int i = 0; i < w.length; i++) {
+            out[i] /= sum;
+        }
+        return out;
     }
 
     private double volatilityOf(double[] w) {

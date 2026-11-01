@@ -122,9 +122,9 @@ class FormulaPinsTest {
                 new double[]{0.06, 0.10},
                 new double[][]{{0.01, 0}, {0, 0.04}}, 42);
         PortfolioOptimizer.Allocation tangency = opt.maxSharpe(0.02);
-        assertEquals(2.0 / 3, tangency.weights()[0], 0.03,
+        assertEquals(2.0 / 3, tangency.weights()[0], 1e-9,
                 "the analytic tangency, rf included");
-        assertEquals(1.0 / 3, tangency.weights()[1], 0.03);
+        assertEquals(1.0 / 3, tangency.weights()[1], 1e-9);
     }
 
     // ------------------------------------------------------------------
