@@ -13893,7 +13893,12 @@ is what makes them comparable and combinable.
 javadoc names the 12-1 form and the skip's purpose), `value()`,
 `quality()` (quality-minus-junk shape), `lowVolatility(lookback)`,
 plus `movingAverageCrossover`, `macd`, `rsi`, `bollinger`,
-`meanReversion`.
+`meanReversion`. `value()` and `quality()` read fundamentals through
+`AlphaContext.fundamentalsAsOf`: point-in-time with a `FundamentalsHistory`
+(publication dates and reporting lags), while a static snapshot can be
+scored only at the last bar and throws for every earlier one, which is
+the look-ahead guard. `Factors.prepared` (winsorise, z-score, sector
+demean, in that order) prepares raw scores for combination.
 
 ### 473. "Define IC and IR for a factor, and connect them through the Fundamental Law of Active Management."
 
@@ -14381,8 +14386,15 @@ yesterday. The fix is WARM evaluation: the backtest sees the
 preceding train bars for indicator warm-up but only TRADES from the
 test boundary -- an engine-level `tradeFrom` parameter, so equity and
 trades cover only the test window while state is fully formed at its
-first bar. The efficiency ratio -- out-of-sample performance over
-in-sample -- is the overfitting gauge (near 1: robust; near 0:
+first bar. A second continuity bug sits at the fold boundary: a
+position open at the end of one test window must carry into the next,
+as it would live; force-closing and re-entering at every boundary
+charges costs that never happen and drops overnight moves that do. The
+efficiency ratio -- out-of-sample performance over in-sample -- is the
+overfitting gauge, computed as the objective of the stitched
+out-of-sample curve over that of the stitched in-sample curve (a sum of
+per-fold Sharpes is not a Sharpe and is dominated by short noisy
+windows) (near 1: robust; near 0:
 curve-fit). But it is a RATIO, and when the in-sample objective
 itself is negative (the optimizer failed to find anything that even
 backtests well), a ratio of two losses can print "0.5" and read as
@@ -14393,8 +14405,8 @@ in-sample edge to survive.
 *In this library:* `backtest/Backtester.java` -- the `tradeFrom`
 overload (warm-up bars visible, trading and equity from the boundary
 only) and `backtest/validation/WalkForwardAnalyzer.java`, whose
-javadoc states both the warm-evaluation design and the
-NaN-efficiency rule verbatim.
+javadoc states the warm-evaluation design, the carried position across
+folds, the stitched-curve efficiency and the NaN-efficiency rule.
 
 ### 489. "You grid-searched 400 parameter combinations and the winner Sharpes 2.1. What number do you compute before believing it?"
 
@@ -14422,10 +14434,11 @@ default step, not a virtue.
 
 *In this library:*
 `backtest/validation/GridSearchOptimizer.java` -- the grid search
-with non-finite objectives ranked last, plus the deflation hook whose
-javadoc calls it "the MULTIPLE-TESTING HAIRCUT for the grid's
-winner," delegating to
-`backtest/validation/SharpeValidation.deflatedSharpe`.
+with non-finite objectives ranked last, plus `deflatedSharpeOfWinner`,
+the multiple-testing haircut for the grid's winner, which deflates
+against `effectiveTrials` (correlated neighbouring parameter sets are
+not independent trials, so the raw grid size overstates the haircut)
+and delegates to `backtest/validation/SharpeValidation`.
 
 ### 490. "Why does K-fold cross-validation leak on financial data, and what is the purge/embargo arithmetic that fixes it?"
 
@@ -14598,9 +14611,11 @@ certainly dies live; surviving it earns a live pilot, not a
 launch.
 
 *In this library:* `backtest/tick/TickBacktester.java` -- the fill
-model exactly as above (through-prints fill, at-price prints drain
-`defaultQueueAhead` first, half-spread on market orders), driving a
-`TickStrategy` on trade prints.
+model exactly as above (through-prints fill, but by at most the
+through print's size; at-price prints drain `defaultQueueAhead` first;
+half-spread on market orders plus an optional square-root size term,
+`Config.impactCoefficientBps`), driving a `TickStrategy` on trade
+prints.
 
 ### 496. "State the execution conventions of a bar-based single-instrument backtester -- and why must stops be checked INTRABAR?"
 
@@ -14669,7 +14684,10 @@ positions by risk, not by conviction adjectives.
 `backtest/portfolio/PositionSizing.java` -- `kellyFraction`
 (mu/sigma^2), `halfKelly` (the javadoc calls it the practitioner's
 standard, "trading growth for drawdown"), fixed-fractional,
-inverse-volatility, and volatility-targeting rules.
+inverse-volatility, and volatility-targeting rules;
+`backtest/TradeAnalytics.java` reports the empirical growth-optimal
+fraction on per-trade returns, which is the per-bet version for a
+strategy whose trades are not Gaussian.
 
 ### 498. "The backtest spans 2016-2024 and Sharpes 1.5. What regime question do you ask before allocating?"
 
