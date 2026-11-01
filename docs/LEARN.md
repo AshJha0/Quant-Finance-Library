@@ -21964,8 +21964,10 @@ hedgers showing negative), on a covariance from
 
 Assume it is wrong until each leak is ruled out. Survivorship: does
 the universe contain the names that died, or only today's survivors?
-Look-ahead: were signals computed strictly from past bars, and are the
-labels non-overlapping with the features? Selection: how many variants
+Look-ahead: were signals computed strictly from past bars, are the
+labels non-overlapping with the features, and does an order fill at the
+close of the very bar that generated it (a fill no live system can
+get)? Selection: how many variants
 were tried before this one, and does the Sharpe survive a
 multiple-testing haircut? Costs: is the model flat bps (which deletes
 the size constraint) or does it include size-dependent impact?
@@ -21977,8 +21979,11 @@ ratio against buying the index? A backtest that looks amazing is a
 prior for a leak, not a discovery; the honest engine's job is to make
 each of these a number, not a hope.
 
-*In this library:* `backtest/Backtester.java` is the honest core, and
-the checklist maps to concrete tools -- `validation/OverfitProbability`,
+*In this library:* `backtest/Backtester.java` is the core: fills
+default to `FillPolicy.NEXT_OPEN` (`NEXT_CLOSE` is available, and
+`CLOSE` only reproduces the old optimistic convention), and
+`BacktestConfig.defaults()` charges 1 bp commission and 3 bp slippage
+(`frictionless()` for a zero-cost run). The checklist maps to concrete tools -- `validation/OverfitProbability`,
 `validation/SharpeValidation`, `validation/BlockBootstrap`,
 `backtest/DrawdownAnalytics`, `backtest/BenchmarkComparison`, and the
 survivorship-aware `backtest/portfolio/PortfolioBacktester`.
@@ -22046,13 +22051,19 @@ search; below ~0.95 the "best" parameter set is statistically
 indistinguishable from the luckiest of 400 random ones. Feed it every
 trial's Sharpe as the null and the winner's own returns for the
 higher moments -- the winner's Sharpe alone is not enough, the SPREAD
-of the losers is what sets the haircut.
+of the losers is what sets the haircut. And count trials honestly in
+the other direction too: adjacent grid points trade almost the same
+book, so 400 correlated trials are fewer independent ones. The
+effective number is about `rho + (1 - rho) M` for M trials with mean
+pairwise return correlation rho (Bailey and Lopez de Prado 2014,
+section 3).
 
 *In this library:*
 `backtest/validation/GridSearchOptimizer.java` --
-`deflatedSharpeOfWinner` takes the full ranked search as the null and
-calls `validation/SharpeValidation.deflatedSharpe` (expected-max
-benchmark from the trial Sharpes, PSR with skew/kurtosis).
+`deflatedSharpeOfWinner` takes the full ranked search as the null,
+uses `effectiveTrials` for the number of trials, and calls
+`validation/SharpeValidation.deflatedSharpe` (expected-max benchmark
+from the trial Sharpes, PSR with skew/kurtosis).
 
 ### 830. "Your labels are 5-bar forward returns. Why does plain K-fold leak, and what fixes it?"
 
@@ -22138,9 +22149,15 @@ yesterday. The measured out-of-sample performance is then polluted by
 a warm-up artifact. The fix is WARM evaluation: the backtest sees the
 preceding train bars for indicator warm-up but only TRADES from the
 test boundary, so state is fully formed at the first traded bar while
-equity and trades cover only the test window. The efficiency ratio --
-out-of-sample objective over in-sample -- gauges overfitting (near 1
-robust, near 0 curve-fit). But it is a RATIO, and when the in-sample
+equity and trades cover only the test window. A second boundary bug is
+the forced exit: closing every position at the end of each fold and
+re-entering at the start of the next manufactures trades and costs no
+live system pays. The book should be carried across fold boundaries
+and managed by the next fold's strategy, with only the last fold
+liquidating. The efficiency ratio -- out-of-sample objective over
+in-sample, computed on the stitched OOS and IS curves rather than as a
+sum of per-fold objectives (a sum of fold Sharpes is not a Sharpe) --
+gauges overfitting (near 1 robust, near 0 curve-fit). But it is a RATIO, and when the in-sample
 objective is itself zero or negative (the optimizer found nothing that
 even backtests well), a ratio of two losses can print "0.5" and read
 as robust. The honest output there is NaN: "how much of the in-sample
@@ -22149,8 +22166,10 @@ edge survived" has no meaning when there was no edge to survive.
 *In this library:*
 `backtest/validation/WalkForwardAnalyzer.java` -- warm evaluation via
 `Backtester.run(..., tradeFrom)` (warm-up visible, trading from the
-boundary) and `efficiency` returns NaN when the in-sample objective
-sum is not positive.
+boundary), the open position carried across folds through
+`Backtester.runSegment`, trade indices into the full series, and
+`efficiency` on the stitched curves, NaN when the in-sample objective
+is not positive.
 
 ### 834. "Make a bar-close backtest execution-realistic. What layer do you add, and what accounting rule keeps it honest?"
 
@@ -22187,8 +22206,10 @@ your limit order at a price simply fills if the bar traded there --
 but resting passive orders only trade when the market trades THROUGH
 your price, or when enough volume prints AT your price to work off the
 queue ahead of you. A tick engine models exactly that: a market order
-crosses and pays half the spread; a limit order fills fully only on a
-trade-through, and at your own price it starts behind a simulated
+crosses and pays half the spread; a limit order fills on a
+trade-through, but only up to the size of the print that traded
+through it (a 100-share print through your level cannot fill 5,000),
+and at your own price it starts behind a simulated
 resting quantity and fills partially only as traded volume grinds that
 queue down. Passive fills must be EARNED, not assumed -- which is
 precisely why a bar backtest over-credits a passive strategy (it
@@ -22199,8 +22220,10 @@ the same way. Use bars for signal research, ticks before you trust a
 passive execution edge.
 
 *In this library:* `backtest/tick/TickBacktester.java` -- limit orders
-fill on trade-through and accrue queue via `defaultQueueAhead` before
-filling at their level; market orders pay half the configured spread.
+fill on trade-through (capped at the through print's size) and accrue
+queue via `defaultQueueAhead` before filling at their level; market
+orders pay half the configured spread, plus a square-root size term
+when `Config.impactCoefficientBps` is set.
 
 ### 836. "Where does capacity come from in a backtest, and why does a flat-bps cost model hide it?"
 
@@ -22223,8 +22246,10 @@ erased the strategy's binding constraint.
 
 *In this library:* `backtest/TradeCostModel.java` --
 `institutional(...)` adds square-root impact from per-symbol ADV/vol
-via `microstructure/MarketImpactModel.estimate`, the term that makes
-cost grow with book size and thus makes capacity measurable.
+via `microstructure/MarketImpactModel.estimate` (which uses only the
+bars before the trade bar and skips forward-filled bars, so the cost
+estimate does not peek at the day it is charged on), the term that
+makes cost grow with book size and thus makes capacity measurable.
 
 ### 837. "Two strategies both max-draw 18%. Why might you hold one and fire the other?"
 
