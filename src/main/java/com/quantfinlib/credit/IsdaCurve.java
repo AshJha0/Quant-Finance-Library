@@ -143,7 +143,7 @@ public final class IsdaCurve {
         return Math.exp(-rateTimesTime(t));
     }
 
-    /** Number of nodes. */
+    /** Number of nodes (a hazard curve carries one extra node 1000 years out). */
     public int timesLength() {
         return times.length;
     }
