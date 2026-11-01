@@ -70,23 +70,16 @@ public final class Black76 {
         return Math.exp(-rate * timeYears) * forward * MathUtils.normPdf(d1) * sqrtT;
     }
 
-    /** Black-76 implied vol from a price, via bisection (NaN if unattainable). */
+    /**
+     * Black-76 implied vol from a discounted price, via
+     * {@link ImpliedVolatility#black} (NaN if unattainable, 0 at intrinsic).
+     */
     public static double impliedVol(OptionType type, double marketPrice, double forward,
                                     double strike, double rate, double timeYears) {
-        double lo = 1e-6;
-        double hi = 5.0;
-        if (marketPrice <= price(type, forward, strike, rate, lo, timeYears)
-                || marketPrice >= price(type, forward, strike, rate, hi, timeYears)) {
+        if (!Double.isFinite(rate)) {
             return Double.NaN;
         }
-        for (int i = 0; i < 100; i++) {
-            double mid = 0.5 * (lo + hi);
-            if (price(type, forward, strike, rate, mid, timeYears) < marketPrice) {
-                lo = mid;
-            } else {
-                hi = mid;
-            }
-        }
-        return 0.5 * (lo + hi);
+        return ImpliedVolatility.black(type, marketPrice * Math.exp(rate * timeYears),
+                forward, strike, timeYears);
     }
 }
