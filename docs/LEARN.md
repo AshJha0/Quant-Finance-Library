@@ -4964,9 +4964,9 @@ slicing a parent order over hours gains nothing that matters. The
 engineering order: measure first (Q129); kernel-vs-bypass only
 matters after allocation, cache misses, and coordinated-omission-tails are already clean.
 
-*In this library:* `docs/ULTRA_LOW_LATENCY.md` -- Tier 4 ("Kernel
-bypass & hardware") places it explicitly *beyond* what the pure-JVM
-tiers buy you, with the prerequisite tiers measured first.
+*In this library:* `docs/ULTRA_LOW_LATENCY.md` section 9 ("Operating system and
+hardware") places it beyond what the JVM, GC and OS settings in
+sections 8 and 9 buy you, and names it out of scope.
 
 ### 129. "Your benchmark says p99 = 2 microseconds. Why might that number be a lie?"
 
@@ -7764,7 +7764,7 @@ on one clock when possible; and for real one-way latency numbers, use
 NIC hardware timestamps on PTP-disciplined clocks. Anything else is
 storytelling with error bars you have not earned.
 
-*In this library:* `docs/ULTRA_LOW_LATENCY.md` (Tier 4) covers hardware
+*In this library:* `docs/ULTRA_LOW_LATENCY.md` section 9 covers hardware
 timestamps and PTP as the prerequisite for wire-to-wire numbers; feed
 code keeps exchange event time and local time as separate notions
 (`feed/WebSocketFeed.java` publishes exchange event time), and QFLT
@@ -7876,8 +7876,8 @@ percentiles including max, pace to avoid coordinated omission, and run
 a hiccup monitor so you attribute tails to platform vs code before
 optimizing the wrong one.
 
-*In this library:* `docs/ULTRA_LOW_LATENCY.md` -- the Tier 4 section
-(kernel bypass and hardware, beyond the JVM entirely) lays out this
+*In this library:* `docs/ULTRA_LOW_LATENCY.md` section 9
+(operating system and hardware, beyond the JVM) lists this
 ladder; none of it is implemented in the library.
 
 ### 239. "When is a paper trading gateway enough, and when is it lying to you?"
@@ -23945,7 +23945,7 @@ Kernel bypass (userspace networking -- DPDK, Solarflare/Onload, an
 FFM-based NIC path) removes the socket syscall and the kernel network
 stack from the wire path, saving on the order of a microsecond-plus
 and, more importantly, cutting the jitter that syscalls and
-interrupts inject. It pays off only at Tier 4: once you have already
+interrupts inject. It pays off only as the last step, once you have already
 done everything above it: allocation-free hot paths, GC controlled or
 eliminated, threads pinned to isolated cores, the OS tuned. If your
 p99 tail is still dominated by GC pauses or lock contention,
@@ -23958,10 +23958,9 @@ dependencies and hardware assumptions. The library's job ends at the
 boundary the JVM can honor; bypass is a deployment-and-hardware
 decision layered on top.
 
-*In this library:* `docs/ULTRA_LOW_LATENCY.md` Tier 4 ("kernel bypass
-& hardware, beyond the JVM entirely") named as out of scope for the
-pure-JDK library, with Tiers 1-3 (allocation, GC, OS/CPU) as the
-prerequisites.
+*In this library:* `docs/ULTRA_LOW_LATENCY.md` section 9 names kernel bypass and
+hardware as out of scope for the pure-JDK library, with allocation,
+GC (section 8) and OS/CPU tuning (section 9) as the prerequisites.
 
 ### 888. "Sales wants you to promise 'sub-microsecond, guaranteed.' What can a pure-JDK library actually promise, and what belongs to the deployment?"
 
@@ -23974,7 +23973,7 @@ medians and percentiles on a described machine (the figures in
 bound, because the tail is owned by things outside the JVM's reach: OS
 scheduler preemption, CPU frequency scaling and SMT neighbors,
 safepoint and JIT deopt pauses, NUMA placement, and the network. Those
-are Tier 3-4 deployment concerns (core pinning, an isolated CPU set,
+are deployment concerns (core pinning, an isolated CPU set,
 GC choice, kernel tuning, bypass hardware) and only when the operator
 has done them does "guaranteed sub-microsecond tail" become
 meaningful. So the promise is layered: the library guarantees
