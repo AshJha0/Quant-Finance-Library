@@ -22943,9 +22943,10 @@ one thread MUTATES needs an atomic RMW; a plain store is only ever
 enough for a single writer.
 
 *In this library:* `trading/HftRiskGate.onFill`
-(`LONGS.getAndAdd(positions, symbolId, ...)`) and `bumpRejection`
-(same atomic-add discipline, "concurrent fill sources cannot lose
-updates").
+(`LONGS.getAndAdd(positions, symbolId, ...)`), `reserve`/`release` on
+the open-order arrays, and the private `reject` counter (the same
+atomic-add discipline, so concurrent fill sources and checking threads
+cannot lose updates).
 
 ### 865. "In review, someone marks every shared field volatile 'to be safe'. When is acquire/release the right tool instead, and does it cost more?"
 
@@ -22966,11 +22967,11 @@ across it. So the reviewer's guidance should be: reach for
 acquire/release when you are publishing a bundle behind a flag, and
 reserve volatile for a standalone flag read on its own.
 
-*In this library:* `marketdata/TickRingBuffer` (plain slot writes,
-single `tail.setRelease`, consumer `getAcquire`), and
-`trading/HftRiskGate`'s per-element VarHandle acquire/release ("on
-x86 an acquire load is a plain load ... the ~1 ns/check cost is
-unchanged").
+*In this library:* `marketdata/TickRingBuffer` (plain slot writes, a
+single `setRelease` of the tail sequence, consumer `getAcquire`), and
+`trading/HftRiskGate`'s per-element VarHandle acquire/release (the
+threading javadoc: plain loads and stores on x86; measured cost in
+`docs/BENCHMARKS.md`).
 
 ### 866. "After a refactor that co-located two counters for tidiness, throughput on the ring buffer dropped. No logic changed. What did the refactor reintroduce?"
 
@@ -22981,20 +22982,21 @@ with the hot mask/array fields), then every write by one core
 invalidates that line in the other core's cache, forcing a coherence
 round-trip on data the two threads never actually share
 logically -- pure hardware contention masquerading as a logic-free
-slowdown. The original layout pads these counters apart precisely so
-each lands on its own line: the head/tail sequences extend a padded
-class with seven long fields of slack, and the local caches are
-bracketed by dummy long fields too. The refactor "for tidiness"
-removed the slack, and the two cores went back to fighting over one
-line. The fix is to restore the padding, and the lesson is that in
-lock-free code memory LAYOUT is part of the contract -- tidiness that
-collapses padding is a performance regression, not a cleanup.
+slowdown. The fix is to give each counter its own line again, and the
+robust way to do that is not field padding. Padding with unused long
+fields relies on HotSpot keeping declaration order, which the JVM
+specification does not promise, and padding an `AtomicLong` subclass
+pads only after the value. The rings instead keep head, tail and the
+two cached copies in one `long[]` with a 128-byte stride per counter
+(a cache line plus the adjacent line Intel's spatial prefetcher fetches
+in pairs); array elements are contiguous, so the layout is guaranteed
+whatever the JVM does with fields, and a tidy-up cannot collapse it
+without changing the stride. The lesson is that in lock-free code
+memory LAYOUT is part of the contract.
 
-*In this library:* `marketdata/TickRingBuffer` and
-`trading/OrderRingBuffer` -- `PaddedSequence` (seven trailing longs)
-and the `hp1..hp7` / `tp1..tp7` / `ep1..ep7` slack around
-`cachedHead` / `cachedTail`, with the comment naming the exact false
-sharing this avoids.
+*In this library:* `marketdata/StridedSequences.java` (the layout and
+its rationale in the javadoc), used by `marketdata/TickRingBuffer`,
+`trading/OrderRingBuffer` and the generic `RingBuffer`.
 
 ### 867. "A dashboard shows a self-inconsistent account -- cash from one instant, positions from another. The trade path is fine. What is wrong with the READER?"
 
@@ -23124,8 +23126,8 @@ hand-off latency -- but it burns a full core doing nothing while the
 ring is empty, which on a shared box steals cycles from neighbors and
 runs the chip hotter. `parkNanos` yields the core between drains, so
 the process is a good citizen and idles cheaply, at the cost of a
-wake-up latency (a few hundred nanoseconds to microseconds) on the
-next tick -- fine when latency matters less than footprint. The
+wake-up latency on the next tick (scheduler-bound, and on Windows tied to the timer
+tick) -- fine when latency matters less than footprint. The
 library makes this a constructor choice rather than a hardcode: the
 bus takes a `busySpin` flag, spinning when set and parking ~200ns
 when not, so the same code serves a latency-critical pinned deployment
@@ -23141,9 +23143,12 @@ core to dedicate.
 
 It is valid for what it is -- a circuit breaker on a slightly-stale
 gross number -- and the design is explicit that this is acceptable, not
-a bug to be eliminated. The monitor sweeps every gate's positions and
-reference prices with acquire reads, sums gross notional, and if it
-exceeds the cap flips each gate's kill switch. The sweep is not a
+a bug to be eliminated. The monitor sweeps every gate's positions,
+open-order reservations and reference prices with acquire reads, sums
+worst-case gross notional (resting orders count as if they fill), and
+if it exceeds the cap -- or if an exposed symbol has no usable
+reference price, which makes the exposure unmeasurable -- flips each
+gate's kill switch, which makes each gateway send a cancel-all. The sweep is not a
 frozen global snapshot: positions the aggregator has not reached yet
 can change while it adds up the ones it has, so the total is an
 approximation of an instant that never precisely existed. That is
@@ -23158,8 +23163,9 @@ checks stay nanosecond-cheap and per-shard; the firm cap is
 deliberately a lagging global observer.
 
 *In this library:* `trading/GlobalRiskAggregator` -- `grossNotional()`
-sweep (acquire reads, "at most one interval stale"), trip-on-breach
-`kill(true)`, hysteretic resume below `resumeNotional`.
+sweep (acquire reads, worst case including working orders), fail-closed
+`unpricedSymbols()`, trip-on-breach `kill(true)`, hysteretic resume
+below `resumeNotional` only when nothing is unpriced.
 
 ### 874. "Ops flips a symbol halt from a dashboard thread. How soon is the checking thread guaranteed to see it, and what makes kill() and halt() cross-thread-correct?"
 
@@ -23176,7 +23182,7 @@ JIT could cache the old value in a register and the checking thread
 would run halted forever. Using a VarHandle keeps the storage a
 primitive `boolean[]` (no boxing, cache-friendly) while still getting
 the ordering, and because on x86 acquire/release are plain
-loads/stores the safety adds no measurable cost to the ~1ns check.
+loads/stores the safety adds essentially nothing to the check.
 kill() is the same mechanism on a one-element array so the aggregator
 can trip every shard with one released boolean each check acquires.
 
@@ -23215,9 +23221,11 @@ appears only on cold-path setup like the bus's `subscribe`/`start`.
 Turn the claim into a measurement the test suite runs. The JVM
 exposes per-thread allocation via `ThreadMXBean`
 (`getThreadAllocatedBytes`): read it before and after a tight loop of
-the operation ON THE SAME THREAD, and assert the delta is zero (or
-within a fixed slack for one-time JIT/JDK lazy init you warm up
-first). Because it is per-thread, it is not fooled by unrelated
+the operation ON THE SAME THREAD, and assert the delta is exactly zero
+bytes after a warm-up that absorbs one-time JIT and JDK lazy
+initialisation (the tests take the smallest of a few runs, with a
+bounded retry, rather than allowing a slack that would hide a small
+leak). Because it is per-thread, it is not fooled by unrelated
 allocation elsewhere in the process, and because it counts bytes it
 catches a single stray autobox that a GC-log eyeball would miss. The
 discipline in this library is that EVERY zero-alloc claim has such a
@@ -23244,8 +23252,8 @@ a genuinely zero-allocation steady state runs forever inside it, while
 a hidden per-operation allocation -- an autobox, a lambda capture, a
 defensive copy -- marches the heap up and eventually crashes the run.
 So running the benchmarks and a full session under Epsilon is a gate:
-completing 5.6M orders under Epsilon is positive proof the hot path is
-clean in a way a normal GC (which would quietly sweep the garbage and
+completing a full session under Epsilon with a flat heap is positive
+proof the hot path is clean in a way a normal GC (which would quietly sweep the garbage and
 just show up as jitter) cannot give you. In production Epsilon is a
 different, deliberate choice -- zero GC pauses by construction, sized to
 last the trading session and restart in the maintenance window -- but
@@ -23253,8 +23261,8 @@ its value in the test suite is as a trap: it converts a subtle
 allocation leak into a loud out-of-memory.
 
 *In this library:* `docs/ULTRA_LOW_LATENCY.md` -- the Epsilon GC flags,
-"GC pauses are zero by construction," and the full-session run (5.6M
-orders) used to verify the hot lane allocates nothing.
+"GC pauses are zero by construction," and the full-session run used
+to verify the hot lane allocates nothing.
 
 ### 878. "Profiling shows surprise allocation on a path with no `new`. It uses a HashMap<Integer,...> keyed by symbol. Where is the garbage, and what is the library's answer?"
 
