@@ -25376,16 +25376,18 @@ calls it and gets `UnsupportedOperationException`. The alternative is to
 simplify honestly -- ship the real, smaller thing and state its limit. This
 library does that repeatedly: `rates/NelsonSiegel.java` does not pretend to
 reprice every instrument exactly (it fits shape, and the javadoc SAYS so, in
-contrast to `rates/YieldCurve.java`'s exact bootstrap); the load tests budget
-dropped messages rather than claim zero on an unpinned desktop. The cost of the
-discipline is that you cannot advertise capability you have not built; the
-payoff is that a reader can re-derive any number and every code path in the
-COOKBOOK actually compiles. "Just add a stub" optimizes the demo and taxes the
+contrast to `rates/YieldCurve.java`'s exact bootstrap); the load tests are
+tagged and run nightly against floors far below measured numbers rather
+than claiming a throughput an unpinned CI runner cannot deliver; and where
+something is missing the docs say "Not implemented" instead of shipping a
+placeholder. The cost of the discipline is that you cannot advertise
+capability you have not built; the payoff is that a reader can re-derive
+any number. "Just add a stub" optimizes the demo and taxes the
 user -- exactly backwards for a library meant to be READ.
 
 *In this library:* `rates/NelsonSiegel.java` vs `rates/YieldCurve.java` (stated
-approximation vs exact), and the load tests that budget drops instead of
-promising zero.
+approximation vs exact), and the `load`-tagged tests whose floors are
+tripwires rather than promises.
 
 ### 979. "How do you state a model's bias honestly? Every estimator in here has one."
 
@@ -25417,8 +25419,10 @@ Sharpe rewards overfitting. The ungameable choices share a property: they
 neutralize the free parameters the strategy could exploit.
 `backtest/BenchmarkComparison.java` compares against a like-for-like passive
 alternative so leverage and beta do not count as skill.
-`backtest/validation/OverfitProbability.java` deflates the Sharpe by the number
-of trials, so searching harder cannot manufacture significance --
+`backtest/validation/SharpeValidation.java` deflates the Sharpe by the number
+of trials and `backtest/validation/OverfitProbability.java` measures how often
+the in-sample winner loses out of sample, so searching harder cannot
+manufacture significance --
 `backtest/validation/MonteCarloTradeShuffle.java` and `BlockBootstrap.java` build
 the null the real result must beat. For execution, the benchmark is the
 arrival price in `execution/BenchmarkExecutor.java`, which the trader cannot
@@ -25428,6 +25432,7 @@ strategy will find and turn; the defensible benchmarks are the ones with no
 knob left to turn.
 
 *In this library:* `backtest/BenchmarkComparison.java`,
+`backtest/validation/SharpeValidation.java` +
 `backtest/validation/OverfitProbability.java` +
 `backtest/validation/MonteCarloTradeShuffle.java`,
 `execution/BenchmarkExecutor.java` (arrival price -- fixed before you trade).
@@ -25436,28 +25441,31 @@ knob left to turn.
 
 It promises that every number is reproducible from the source with a JDK and
 nothing else -- no version-skew from a numerics dependency, no black-box you
-cannot read, no supply-chain surface. Clone, `mvn package`, and the tests that
-pin every formula run. That boundary is the whole honesty thesis: the code you
+cannot read, no supply-chain surface. Clone, `./mvnw verify` on JDK 25, and
+the tests that pin every formula run. That boundary is the whole honesty thesis: the code you
 read is the code that runs. What it refuses to promise is anything the platform
-cannot guarantee. It does not claim zero GC pauses on an unpinned desktop -- the
-load tests BUDGET dropped messages under OS preemption instead. It does not
-claim its ~2.3M ticks/s per shard (`trading/ShardedTradingEngine.java`)
-transfers to your hardware -- that is a measured desktop number, stated as such.
+cannot guarantee. It does not claim zero GC pauses on an unpinned desktop;
+throughput and timing tests are tagged, run nightly, and assert floors far
+below measured numbers. It does not claim that its measured per-shard
+throughput (`trading/ShardedTradingEngine.java`, figures in
+`docs/BENCHMARKS.md`) transfers to your hardware -- those are measured
+numbers on a stated machine.
 It does not claim venue-grade certification -- it is a readable reference
 implementation, not a co-located production stack. The boundary is: exact,
 reproducible, dependency-free correctness YES; hardware- and OS-dependent
 latency guarantees NO. Confusing the two is how libraries over-promise.
 
 *In this library:* the allocation-counter and load-floor tests draw the line --
-they assert what the JDK can guarantee and budget what the OS cannot;
+they assert exactly what the JDK can guarantee and set loose floors for what
+the OS controls;
 `trading/ShardedTradingEngine.java`'s throughput is documented as measured, not
 promised.
 
 ### 982. "How do you review a formula change safely? Someone edits BondPricer."
 
 You do not eyeball the algebra; you pin the number by an independent method and
-demand the edit preserve it. The review protocol here is finder -> fix ->
-verify-by-measurement. For `rates/BondPricer.java`, the test re-derives duration
+demand the edit preserve it. The review protocol here is find, fix, then
+verify by measurement. For `rates/BondPricer.java`, the test re-derives duration
 and convexity by FINITE DIFFERENCES -- bump the yield, reprice, difference -- so a
 change to the closed-form must still match the numerical derivative or the test
 fails. That is the safety: two independent computations of the same quantity,
@@ -25497,8 +25505,8 @@ about what it dropped.
 
 ### 984. "Design a limit framework: position, VaR, and greek limits together. What's the layering?"
 
-Layer by latency and scope, because a limit that must be checked in 3ns cannot
-be the same object as one that sums across the firm. Three tiers. **Hot,
+Layer by latency and scope, because a limit checked on every order in a few
+nanoseconds cannot be the same object as one that sums across the firm. Three tiers. **Hot,
 per-order**: `trading/HftRiskGate.java` -- position and notional caps as
 primitive comparisons, allocation-free, one per shard; this is the only limit on
 the critical path and it must be cheap. **Warm, per-book**:
@@ -25520,10 +25528,11 @@ breaches it in microseconds). Match the limit's clock to the risk's speed.
 ### 985. "How do you make documentation survive review? Docs rot faster than code."
 
 You make the documentation executable, so a stale doc fails the build like stale
-code fails a test. This library's rule is compile-and-run: the 300
-`docs/COOKBOOK.md` recipes are real code paths, the Part IV answers each point
-at a class you can open and a number you can re-derive, and the review
-methodology fact-checks by compiling and running, not by reading. A prose claim
+code fails a test. The aim is compile-and-run: every Part IV answer points at
+a class you can open and a number you can re-derive, and a review fact-checks
+by compiling and running, not by reading. This library only partly meets that
+aim. Not implemented: the build does not compile the `docs/COOKBOOK.md`
+recipes, so they are checked by review when signatures change. A prose claim
 with no runnable anchor is exactly the thing that rots -- so every claim has one:
 "delta-gamma reduces to delta-normal when gamma is zero" is not a sentence, it
 is an assertion in `risk/VarEngine.java`'s test; "a FOK either fills entirely or
@@ -25532,18 +25541,20 @@ that documentation cites code and code pins documentation, a two-way link, so a
 formula edit that invalidates a doc breaks a test. Docs survive review because
 the review runs them.
 
-*In this library:* `docs/COOKBOOK.md` (recipes that compile),
-`risk/MarketRiskTest.java` (formulas pinned by hand), and the Part II section 19
-test taxonomy that turns claims into assertions.
+*In this library:* `docs/COOKBOOK.md` (recipes, not yet compiled by the
+build), `risk/MarketRiskTest.java` (formulas pinned by hand), and the Part II
+section 19 test taxonomy that turns claims into assertions.
 
 ### 986. "When do you choose determinism over speed? They're usually opposed."
 
 You choose determinism whenever the cost of a non-reproducible result exceeds
 the value of the speed -- which for anything auditable, testable, or money-moving
 is almost always. Three concrete places this library pays for determinism. (1)
-**Prices as scaled longs**, never doubles, on the whole feed-to-order path: a
-long is a hair slower to carry than a double in some ops but reproduces exactly,
-and rounding errors in prices are how you fail audits. (2) **Deterministic
+**Prices as integers on the wire**: the SBE codecs carry an int64 mantissa
+with an exponent and the FIX encoder takes a price mantissa and decimal count,
+so what goes to the venue reproduces exactly, and rounding errors in prices
+are how you fail audits. (Inside the process the bus carries doubles, and the
+venue book converts to integer ticks on entry.) (2) **Deterministic
 session replay** -- `data/TickCapture.java` records every tick through the bus so
 `TickFileReader` replays the identical event sequence run after run, chosen over
 lossy sampling that would be cheaper to write. (3) **Model-based equivalence tests** demand the fast
@@ -25553,8 +25564,8 @@ changes the answer run-to-run is not speed, it is a bug you have not caught yet.
 Determinism is negotiable only where the output is disposable (a throughput
 probe), never where someone reconciles the number tomorrow.
 
-*In this library:* scaled longs across `fix/FixOrderEncoder.java` and the
-market-data path; the fast-vs-readable order book equivalence test (Part II
+*In this library:* integer price mantissas in `fix/FixOrderEncoder.java`
+(`encodeLimit(..., priceMantissa, priceDecimals, ...)`) and `sbe/Decimal64`; the fast-vs-readable order book equivalence test (Part II
 section 19).
 
 ### 987. "What is the cost of a false 'zero allocation' claim? Why test it rather than assert it?"
@@ -25641,21 +25652,21 @@ test, and yours to audit. A dependency buys convenience and sells away
 reproducibility, and for this domain that trade is backwards.
 
 *In this library:* the allocation-counter tests (provable only because nothing
-hidden allocates) and the compile-and-run COOKBOOK (reproducible only because
-nothing external drifts) are both consequences of the zero-dependency choice.
+hidden allocates) and the formula pins (reproducible only because nothing
+external drifts) are both consequences of the zero-dependency choice.
 
 ### 991. "Why Java for this -- and where does Java actually hurt?"
 
 Java earns its place and you should be honest about the ceiling. Where it wins:
 a managed runtime with a mature JIT gets you within a small multiple of C++ on
 the hot path IF you avoid allocation and megamorphic dispatch, and the library
-proves you can -- scaled-long arithmetic, flyweights over framed bytes, lock-free
+proves you can -- integer wire prices, flyweights over framed bytes, lock-free
 ring buffers, all allocation-free and tested to be. You get memory safety,
-world-class tooling, and readable code a reader can audit, which for a teaching
+mature tooling, and readable code a reader can audit, which for a teaching
 and reference library matters more than the last nanosecond. Where it hurts: the
 **garbage collector** is a latency tail you manage by not allocating rather than
-eliminate, which is why the load tests BUDGET drops under OS preemption instead
-of promising zero; the lack of value types (pre-Valhalla) forces the scaled-long
+eliminate, which is why throughput tests assert loose floors and run nightly
+rather than gate every build; the lack of value types (pre-Valhalla) forces the scaled-long
 and flyweight gymnastics that a struct would make free; and you cannot pin
 threads or control cache layout from pure Java as precisely as from C++, so
 `trading/ShardedTradingEngine.java`'s per-shard cache-line spacing is a
@@ -25665,8 +25676,8 @@ co-located last-nanosecond production stack, and the docs never pretend
 otherwise.
 
 *In this library:* the flyweights (`sbe/`, `fix/FixMarketDataView.java`) and
-scaled-long math that work AROUND Java's costs; the load tests that state the GC
-tail as a budgeted limit, not a solved problem.
+integer price mantissas that work AROUND Java's costs; the load tests that
+treat the platform tail as a measured limit, not a solved problem.
 
 ### 992. "State the honesty-as-a-feature thesis with three concrete examples from the code."
 
@@ -25676,42 +25687,48 @@ this library treats that as a feature to be tested, not a virtue to be claimed.
 Three concrete examples. (1) **Stated approximation**:
 `rates/NelsonSiegel.java` fits curve shape and its javadoc contrasts itself with
 the exact bootstrap in `rates/YieldCurve.java`, so you never mistake a smooth
-fit for exact repricing. (2) **Stated bias with the honest fix beside it**:
+fit for exact repricing. (2) **Stated bias with the fix beside it**:
 `optimization/PortfolioOptimizer.java`'s `maxSharpe` is documented as an
 error-maximizer you can watch misbehave, with `risk/CovarianceShrinkage.java`
 and `optimization/BlackLitterman.java` as the cures -- the problem and its fix
-ship together. (3) **Stated platform limit as a test**: the load tests budget
-dropped messages under OS preemption rather than promise zero on an unpinned
-desktop, and the checkpoint restore is honest about time -- learned state comes
-back, yesterday's intraday state deliberately does not
+ship together. (3) **Stated platform limit as a test**: throughput tests are
+tagged and run nightly against floors far below measured numbers rather than
+promising a rate an unpinned CI runner cannot deliver, while conservation is
+asserted exactly; and the checkpoint restore keeps time straight -- learned
+state comes back, yesterday's intraday state does not
 (`persist/Checkpoint.java`). In each case the honesty is enforced by a test or a
 reduces-exactly check, so it cannot quietly decay into a comfortable lie.
 
 *In this library:* `rates/NelsonSiegel.java`,
 `optimization/PortfolioOptimizer.java` + `risk/CovarianceShrinkage.java`,
-`persist/Checkpoint.java` and the drop-budgeting load tests.
+`persist/Checkpoint.java` and the `load`-tagged tests.
 
-### 993. "What is the single most load-bearing invariant in the codebase, and why that one?"
+### 993. "What is the single invariant the most code depends on, and why that one?"
 
-The most load-bearing invariant is that **prices never become doubles on the
-feed-to-order path -- they travel as scaled longs, exactly**. Everything else
-leans on it. Determinism leans on it: a long reproduces bit-for-bit, so a
-snapshot restores identically and a fast path matches a readable path exactly.
-Auditability leans on it: a scaled long has no rounding error, so a fill you
-book today reconciles with the clearer tomorrow -- and rounding errors in prices
-are precisely how you fail audits. Correctness of matching leans on it: two
-prices compare with integer equality, no epsilon, so the order book's ordering
-is total and unambiguous. It is more load-bearing than the zero-allocation
-invariant because a stray allocation costs you a pause you can measure and fix,
-but a double that silently rounds 1.08505 to something-close corrupts a number
-that flows into P&L, risk, and settlement, and you may not catch it until the
-reconciliation breaks. Pick this one because its violation is silent, its blast
-radius is the whole downstream, and every other guarantee assumes it holds.
+Prices are integers wherever two parties must agree on them: on the
+wire, in the matching engine, and at the venue boundary. The SBE codecs
+carry an int64 mantissa with an exponent (`Decimal64`), the FIX encoder
+takes a price mantissa and a decimal count, and `HftOrderBook` matches on
+integer ticks converted once at its edge. Inside the process the market
+data bus carries a primitive `double` per tick, which is fine for
+signals and risk arithmetic; the invariant is about the boundaries.
+Several things depend on it. Auditability: a price sent as 108505 with
+exponent -5 is exactly the price the counterparty books, so a fill
+reconciles with the clearer tomorrow, and rounding errors in prices are
+how you fail audits. Matching correctness: two resting orders compare
+with integer equality, no epsilon, so price-time priority is total and
+unambiguous, and the fast book can be checked state-for-state against
+the readable one. Determinism: replaying the same integer prices
+reproduces the same trades bit for bit. It ranks above the
+zero-allocation invariant because a stray allocation costs a pause you
+can measure and fix, while a price that silently rounds on the way out
+corrupts a number that flows into P&L, risk and settlement, and you may
+not catch it until the reconciliation breaks.
 
-*In this library:* scaled longs across `fix/FixOrderEncoder.java`, the
-market-data flyweights, and the order book -- "feed-to-order never touches a
-double" (Part II section 17).
-
+*In this library:* `sbe/Decimal64` and the flyweights,
+`fix/FixOrderEncoder.encodeLimit(..., priceMantissa, priceDecimals, ...)`,
+`fix/FixParse.priceMantissa` (rejects non-digits and overflow), and the
+int-tick API of `orderbook/HftOrderBook.java`.
 ### 994. "The one number you'd stake the system's reputation on -- which, and how is it defended?"
 
 The VaR exception rate under backtesting -- because it is the number that says
@@ -25733,12 +25750,11 @@ the trust the others only assert.
 *In this library:* `risk/VarBacktest.java` (the coverage/independence test),
 backed by `risk/VarEngine.java` and `risk/PnlAttribution.java`.
 
-### 995. "How do the 175-formula appendix and the pipeline tie the whole thing together?"
+### 995. "How do the formula appendix and the pipeline tie the whole thing together?"
 
 They are the two ends of one bridge: the appendix is the WHY, the pipeline is the
-HOW, and every appendix answer points at the class in the pipeline that runs it,
-so neither is orphaned. Part IV's exercises are not abstract -- each is answered
-the way a strong candidate answers it and then tied to a class you can open and a
+HOW, and every Part IV answer points at the class in the pipeline that runs it,
+so neither is orphaned. Each answer is tied to a class you can open and a
 number you can re-derive, so "why does mean-variance blow up" lands on
 `optimization/PortfolioOptimizer.java`, "how do you bootstrap a curve" lands on
 `rates/YieldCurve.java`, "what is implementation shortfall" lands on
@@ -25747,13 +25763,11 @@ in execution order -- discovery to fill -- so a reader can enter from either sid
 learn the concept and jump to the code, or trace the code and jump to the
 concept that justifies it. That two-way binding is what makes the library
 teachable rather than merely correct: the formula without the class is a claim,
-the class without the formula is a mechanism, and the tie between them is
-understanding. The COOKBOOK's 300 recipes are the third strand -- runnable proof
-that the tie holds end to end.
+and the class without the formula is a mechanism. The cookbook recipes are the
+third strand, worked end-to-end uses of the same classes.
 
 *In this library:* Part IV (the answers), Part II (the pipeline walk), and
-`docs/COOKBOOK.md` (the runnable recipes) -- three views of the same class set.
-
+`docs/COOKBOOK.md` (the recipes) -- three views of the same class set.
 ### 996. "What would you build next, and why that over everything else?"
 
 I would build a **live model-monitoring layer** that continuously scores every
@@ -25766,8 +25780,8 @@ monitor across all models -- the volume curve's fit error, the venue scorecard's
 predicted-vs-realized fill rate, the alpha weights' live IC -- and wire it to the
 same kill/reduce machinery as `trading/GlobalRiskAggregator.java`. I choose this
 over a new pricer or a new venue adapter because the library's marginal weakness
-is not a missing formula (it has 500) or missing throughput (2.3M ticks/s per
-shard) -- it is the operational question every desk faces at 10am: is what I
+is not a missing formula or missing throughput -- it is the operational
+question every desk faces at 10am: is what I
 learned yesterday still true today? The monitoring layer turns the honest
 answers the models already know how to compute into an alarm that fires in time
 to act. It is the smallest addition that closes the largest real-world gap.
@@ -25800,7 +25814,7 @@ section 19).
 
 ### 998. "Describe the review methodology in one sentence, then show it working."
 
-The methodology is finder -> fix -> verify-by-measurement: find the claim, make
+The methodology is find, fix, then verify by measurement: find the claim, make
 the change, and prove it with an independent measurement rather than an argument.
 It works like this across the codebase. A formula: `rates/BondPricer.java`'s
 duration and convexity are VERIFIED by finite differences -- bump the yield,
@@ -25810,8 +25824,8 @@ claim: replace `orderbook/HftOrderBook.java`'s bitmap scan with a linear loop an
 run `HftBookBenchmark` before and after -- the bitmap's value is MEASURED, not
 assumed. A correctness claim: the NBBO fast path is differential-tested against
 brute-force recomputation over 20,000 random updates. A capacity claim: the load
-floors are tripwires set ~20x below measured numbers, so a regression fails CI
-without flaking. In every case the verification is a number the reviewer reads
+floors are tripwires set far below measured numbers and run nightly, so an
+order-of-magnitude regression fails without the suite flaking. In every case the verification is a number the reviewer reads
 off a run, and the discipline is that a fix is not done until the measurement
 agrees.
 
@@ -25827,8 +25841,9 @@ computation. Almost every failure in the domain is a version of that. People run
 the optimizer raw and it loads up on noise (`optimization/PortfolioOptimizer.java`
 documents it as an error-maximizer and ships the shrinkage and Black-Litterman
 cures beside it). People trust an in-sample Sharpe and it evaporates
-(`backtest/validation/OverfitProbability.java` deflates it by the trial count;
-`PurgedKFold.java` closes the label leak). People backtest at mid with instant
+(`backtest/validation/SharpeValidation.java` deflates it by the trial count,
+`backtest/validation/OverfitProbability.java` measures how often the winner
+fails out of sample, and `PurgedKFold.java` closes the label leak). People backtest at mid with instant
 fills and are shocked live (`backtest/ExecutionAwareBacktester.java` and
 `backtest/TradeCostModel.java` make them pay the spread). People compute VaR and
 never check it (`risk/VarBacktest.java` makes the market grade it). The
@@ -25838,8 +25853,8 @@ the honest fix in the same file. The domain punishes false confidence, and the
 library is engineered as a standing argument against it.
 
 *In this library:* `optimization/PortfolioOptimizer.java` +
-`risk/CovarianceShrinkage.java`, `backtest/validation/OverfitProbability.java` +
-`PurgedKFold.java`, `backtest/ExecutionAwareBacktester.java`,
+`risk/CovarianceShrinkage.java`, `backtest/validation/SharpeValidation.java` +
+`backtest/validation/OverfitProbability.java` + `PurgedKFold.java`, `backtest/ExecutionAwareBacktester.java`,
 `risk/VarBacktest.java` -- each converts a too-trusted estimate into a tested one.
 
 ### 1000. "Synthesize the whole library in one answer -- what is it, really?"
@@ -25848,20 +25863,19 @@ It is a single, readable, dependency-free path from a market idea to a live fill
 and back to an audited number, built so every step is one class you can open, one
 formula you can re-derive, and one test that proves it. Structurally it is two
 lanes: a warm research lane that thinks in objects -- discover a factor
-(`alpha/`), validate it honestly (`backtest/validation/`), size it
+(`alpha/`), validate it (`backtest/validation/`), size it
 (`optimization/`), price the instruments (`rates/`, `credit/`,
-`hedging/`), and measure the risk (`risk/`) -- and a hot trading lane that reads
-longs -- gate (`trading/HftRiskGate.java`), encode
+`hedging/`), and measure the risk (`risk/`) -- and a hot trading lane that works
+on primitives -- gate (`trading/HftRiskGate.java`), encode
 (`fix/FixOrderEncoder.java`), hand off (`trading/OrderRingBuffer.java`) -- joined
 at two seams: the learned state the warm lane distills for the hot lane to read,
-and `persist/Checkpoint.java` carrying that learning across days. Philosophically
-it is a sustained argument that honesty is the load-bearing feature: every model
-states its bias, every simplification is stated not hidden, every guarantee is
-tested or budgeted, and every number is reproducible from source with nothing but
-a JDK. It is not the fastest possible stack and never claims to be -- it is the
-one you can READ, audit, and trust, which for learning the domain and defending a
-number is worth more than a nanosecond. That is the whole thing: the pipeline is
-the skeleton, honesty is the spine.
+and `persist/Checkpoint.java` carrying that learning across days. Every model
+states its bias, every simplification is stated rather than hidden, every
+correctness claim is tested and every platform-dependent number is measured and
+labelled as such, and every number is reproducible from source with nothing but
+a JDK. It is not the fastest possible stack and does not claim to be; it is one
+you can read, audit and check, which for learning the domain and defending a
+number matters more than a nanosecond.
 
 *In this library:* the entire tree from `alpha/` through `trading/`, bound by
 `persist/Checkpoint.java` across days and by the test taxonomy of Part II section
