@@ -14,14 +14,14 @@ import java.util.function.ToDoubleFunction;
  * is just "whichever metric has the biggest units wins". Min-max
  * normalization maps each criterion to [0,1] across the candidate set
  * first; the weights then express genuine relative importance. Two
- * consequences to design around: scores are relative to this run's
+ * consequences to design around. Scores are relative to this run's
  * universe (the same stock scores differently in a different candidate
- * list — fine for "pick the best 20 today", wrong for tracking one name
- * through time), and min-max is outlier-sensitive (one absurd P/E
+ * list: fine for "pick the best 20 today", wrong for tracking one name
+ * through time). Min-max is outlier-sensitive (one absurd P/E
  * compresses everyone else's spread; screen out garbage with
  * {@link FundamentalFilters} before ranking, which is the intended
- * pipeline order). Negative weights invert a criterion — lower P/E
- * ranks higher — without a separate "ascending" flag.</p>
+ * pipeline order). Negative weights invert a criterion (lower P/E
+ * ranks higher) without a separate "ascending" flag.</p>
  */
 public final class RankingEngine {
 
