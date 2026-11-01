@@ -133,7 +133,7 @@ public final class FactorRiskModel {
                             double[][] factorReturns, double[][] residuals, double[][][] zStyles,
                             double[][] factorCov, double[] specificVar, double regimeMultiplier,
                             boolean repaired) {
-        this.factorNames = factorNames;
+        this.factorNames = List.copyOf(factorNames);
         this.sectorCount = sectorCount;
         this.styleCount = styleCount;
         this.sectors = sectors;

@@ -53,8 +53,8 @@ public final class BacktestAttribution {
     private BacktestAttribution(List<String> factorNames, List<String> sectorNames, double[][] factor,
                            double[] specific, double[] trading, double[] cost, double[] financing,
                            double[] longLeg, double[] shortLeg, double[][] sector, double[] net) {
-        this.factorNames = factorNames;
-        this.sectorNames = sectorNames;
+        this.factorNames = List.copyOf(factorNames);
+        this.sectorNames = List.copyOf(sectorNames);
         this.factor = factor;
         this.specific = specific;
         this.trading = trading;
