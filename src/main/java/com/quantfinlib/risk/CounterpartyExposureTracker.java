@@ -10,9 +10,16 @@ import java.util.Map;
  * <ul>
  *   <li><b>Current exposure</b> — max(0, net mark-to-market) per netting set.</li>
  *   <li><b>Potential future exposure</b> — notional add-ons by tenor bucket
- *       (BIS current-exposure-method style FX factors: &lt;1y 1%, 1–5y 5%,
- *       &gt;5y 7.5%).</li>
+ *       using the FX/gold factors of the Basel Current Exposure Method
+ *       (1988 Accord Annex 3 as amended in 1995: &lt;1y 1%, 1–5y 5%,
+ *       &gt;5y 7.5%), applied to every trade whatever its {@code product}.</li>
  * </ul>
+ *
+ * <p>CEM was replaced for regulatory capital by SA-CCR (BCBS 279, 2014;
+ * in force from 2017 to 2021 by jurisdiction), which uses supervisory
+ * deltas, hedging sets, maturity factors and a multiplier on collateral.
+ * This class is a CEM-vintage netting estimate for monitoring, not a
+ * regulatory EAD.</p>
  */
 public final class CounterpartyExposureTracker {
 

@@ -39,7 +39,7 @@ import java.util.TreeMap;
  * notional is tracked per pair in {@link #pendingFixing(String)} and
  * released via {@link #settleFixing} once fixings occur. This is a
  * RISK ledger, not a cash ledger: premium and settlement cash legs are
- * deliberately untracked (the same delta-only stance for cash equities
+ * not tracked (the same delta-only stance for cash equities
  * — no settlement cash — and options — no premium), and lifecycle
  * events (expiry, exercise, settlement) re-book as offsetting flows.
  * Deterministic, single-threaded, research/warm lane — pair it with

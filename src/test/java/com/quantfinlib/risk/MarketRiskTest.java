@@ -352,7 +352,7 @@ class MarketRiskTest {
                 new int[]{10, 20, 60});
         assertEquals(Math.sqrt(264), es, 1e-12);
 
-        // MAR33.5: ES = ES_R,S * max(1, ES_F,C / ES_R,C). The stressed
+        // MAR33: ES = ES_R,S * max(1, ES_F,C / ES_R,C). The stressed
         // reduced-set ES is the base. (The previous version scaled the
         // current full ES by a stressed/current ratio floored at 1, which
         // is not the rule; those pins were 150 and 100.)

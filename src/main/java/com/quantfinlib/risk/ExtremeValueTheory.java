@@ -2,7 +2,7 @@ package com.quantfinlib.risk;
 
 /**
  * Extreme value theory via peaks-over-threshold — the statistically
- * honest way to ask about quantiles BEYOND the sample. Historical VaR
+ * principled way to ask about quantiles beyond the sample. Historical VaR
  * at 99.9% from 500 observations is reading the worst half-observation;
  * EVT instead fits the Generalized Pareto Distribution to the
  * exceedances over a high threshold (the Pickands-Balkema-de Haan
