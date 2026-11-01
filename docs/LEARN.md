@@ -12289,9 +12289,10 @@ flat-vol price understates it; feed downside-strike vol at minimum.
 
 *In this library:* `pricing/Autocallable.java` -- Monte Carlo pricer
 with memory coupons, coupon/autocall/knock-in barriers, and a "model
-honesty" javadoc naming flat-vol GBM a first pricer (feed downside vol
+limits" javadoc section naming flat-vol GBM a first pricer (feed downside vol
 from `VolSurface` as the first-order smile correction), antithetic
-variates, seeded reproducibility.
+variates, seeded reproducibility (`SplittableRandom`, so seeded results differ
+from v1).
 
 ### 415. "Why is a variance swap model-free, how do you mark a seasoned one, and why is a vol swap different?"
 
