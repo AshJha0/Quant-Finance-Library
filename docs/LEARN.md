@@ -3817,20 +3817,30 @@ exposure with zero FX exposure. The FX risk does not vanish -- it moves
 to the dealer, and hedging it changes the drift. The dealer hedging a
 quanto holds the foreign stock, whose *domestic* value is S * FX; when
 the stock and the exchange rate are correlated, the hedge P&L picks up
-a systematic cross-term, and no-arbitrage forces the quanto forward to
-grow at r_foreign - rho * sigma_S * sigma_FX rather than the plain
-forward rate. Intuition check worth pushing on: if the
-Nikkei tends to rally when the yen weakens (rho < 0 against USD/JPY
-value of the payout currency), the dealer's stock hedge is worth fewer
-dollars exactly when it needs to be worth more, and the quanto drift
-adjustment compensates -- get the sign wrong and you misprice every
-quanto on the book by a term that compounds with maturity. Quantos are
+a systematic cross-term. Under the domestic risk-neutral measure the
+foreign asset drifts at r_f - q - rho * sigma_S * sigma_X, where rho is
+the correlation of the asset with X, the price of one unit of foreign
+currency in domestic currency. So the quanto forward is
+F = S exp((r_f - q - rho sigma_S sigma_X) T), and the option is Black-76
+on that forward discounted at the domestic rate r_d (Hull, the chapter
+on convexity, timing and quanto adjustments; Wystup 2006, section 2.6).
+Both rates matter: r_f sets the drift, r_d the discounting, and with
+rho = 0 the forward is the foreign forward S exp((r_f - q) T), not
+S exp((r_d - q) T). Worked case: S = 100, r_f = 0, q = 0, sigma_S = 20%,
+sigma_X = 10%, rho = -0.3, T = 1 gives F = 100 exp(0.006) = 100.60. The
+sign: a positive rho lowers the forward, because the hedger's short
+foreign-currency position loses exactly when the foreign currency is
+strong, which is when the asset is also high; a negative rho, as when
+the Nikkei rallies while the yen weakens, raises it. Get the
+sign wrong and you misprice every quanto on the book by a term that
+compounds with maturity. Quantos are
 everywhere retail structured products reference foreign indices, which
 is most of them, so this is bread-and-butter for any exotics desk.
 
-*In this library:* `pricing/QuantoOption.java` (the drift adjustment
--rho * sigma_S * sigma_FX implemented and documented -- the javadoc
-works the Nikkei-in-USD example).
+*In this library:* `pricing/QuantoOption.java` -- `quantoForward(spot,
+foreignRate, assetYield, assetVol, fxVol, rho, timeYears)` and
+`price(type, spot, strike, domesticRate, foreignRate, assetYield, ...)`,
+with the drift adjustment and the two rates documented in the javadoc.
 
 ### 94. "Walk me through the lifecycle of a structured product from the dealer's side."
 
@@ -6064,8 +6074,10 @@ on for autocallable-style monotone structures.
 
 *In this library:* `pricing/Autocallable.java` -- Monte Carlo with
 antithetic variates ("2 per draw", a `sign` flip on the path draws);
-`simulation/MonteCarloSimulator.java` is the plain-paths engine to
-compare standard errors against.
+`simulation/MonteCarloSimulator.java` has the same switch in
+`simulatePaths` and `price` (paths in pairs with the Gaussian draws
+negated, standard error per pair), so you can compare standard errors
+with and without it.
 
 ### 178. "Why does a simulated 99% VaR need 10,000+ paths when the mean converges fine at 1,000?"
 
@@ -6087,10 +6099,11 @@ a VaR quoted as 4.2% when its own sampling noise is +/-0.4% deserves
 the error bar, and running the simulator at three seeds is the cheap
 way to expose it.
 
-*In this library:* `simulation/MonteCarloSimulator.java` (the javadoc
-recommends 10,000+ scenarios) and `simulation/SimulationResult.java` --
-`valueAtRisk` and `conditionalValueAtRisk` read sorted-path quantiles,
-so seed-to-seed wobble is directly observable by re-running.
+*In this library:* `simulation/MonteCarloSimulator.java` and
+`simulation/SimulationResult.java` -- `valueAtRisk` is the empirical
+loss quantile and `conditionalValueAtRisk` the Acerbi-Tasche tail mean
+over the same tail (so it is never below VaR); re-run with a different
+seed and the wobble is directly observable.
 
 ### 179. "Your simulator assumes GBM. List the assumptions, and rank the violations by how much they hurt."
 
@@ -6114,9 +6127,10 @@ the stop. The usage: GBM for long-horizon planning fans and as
 a variance-reduction baseline; historical or filtered bootstrap when
 the tail is the deliverable.
 
-*In this library:* `simulation/MonteCarloSimulator.java` -- daily-step
-GBM with the parameters (annual drift, annual vol) explicit, so each
-assumption is a visible input; the fat-tail and clustering correctives
+*In this library:* `simulation/MonteCarloSimulator.java` -- GBM with
+the parameters (annual drift, annual vol) explicit, so each assumption
+is a visible input; `simulate` draws the exact lognormal terminal value,
+so there is no time-step error to confuse with model error. The fat-tail and clustering correctives
 live in `volatility/Garch11.java` and the risk questions of
 `docs/LEARN.md` (Q73-Q85).
 
@@ -12104,14 +12118,17 @@ a double win; the quanto strips that, so the quanto forward sits
 quanto protects you from the usual FX drag on good asset days, which is
 worth paying for -- the drift correction is positive. Classic example:
 Nikkei quantoed into USD, where equity-yen correlation makes the
-correction economically visible in the forward. Implementation honesty:
-a quanto pricer is a change of drift feeding a standard pricer -- if
-your code does anything to sigma, it is wrong.
+correction economically visible in the forward. On the implementation:
+a quanto pricer is a change of drift feeding a standard pricer, and the
+drift starts from the foreign rate r_f while the discounting uses the
+domestic rate r_d. Code that touches sigma, or that drifts the asset at
+r_d, is wrong.
 
 *In this library:* `pricing/QuantoOption.java` -- the javadoc derives
-the `- rho sigma_S sigma_FX` correction, walks the sign intuition
-explicitly, and the implementation is "about being
-a change of drift": adjust the carry, delegate the pricing.
+the `- rho sigma_S sigma_X` correction from the foreign drift, states
+the sign intuition, and prices through Black-Scholes with rate r_d and
+carry `q + (r_d - r_f) + rho sigma_S sigma_X`, which reproduces the
+quanto forward; `foreignRate` is a required argument.
 
 ### 419. "How do you price American options on a tree, and what low-vol edge case must the implementation catch?"
 
