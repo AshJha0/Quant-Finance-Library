@@ -1,115 +1,122 @@
-# Architecture Reference
+# Architecture
 
-One page per question: where does a capability live, what are its key classes, and where
-are its tests. Every package also carries a `package-info.java` with the same summary in
-javadoc form (rendered on the docs site under `api/`). For rendered visual versions of
-the flows below — the two-lane architecture, the measured hot path, the alpha pipeline,
-per-bar survivorship ordering, matching-engine internals, and the FX instrument map —
-see **[DIAGRAMS.md](DIAGRAMS.md)** (Mermaid, renders on GitHub).
+Where each capability lives, how data moves through the library, and the rules the
+code follows. Every package also has a `package-info.java` with the same summary in
+javadoc form, published under `api/` on the documentation site. Tests mirror the main
+source tree: the tests for `com.quantfinlib.risk` are in
+`src/test/java/com/quantfinlib/risk`. Rendered diagrams of the flows below are in
+[DIAGRAMS.md](DIAGRAMS.md). Which packages are stable APIs and which are reference
+implementations is set out in [STABILITY.md](STABILITY.md).
 
-## Data flow at a glance
+## Two lanes
+
+The library has a research lane and a trading lane.
+
+The research lane works on whole series held in memory: load bars, compute
+indicators and factors, price instruments, measure risk, optimise, backtest and
+report. It favours clear code over speed, and allocation is acceptable.
+
+The trading lane handles one event at a time: a tick arrives, a strategy decides, a
+risk gate checks the order, and an order gateway hands it to a venue adapter. Its
+steady-state paths do not allocate, and its threads communicate through
+single-producer, single-consumer ring buffers.
 
 ```
-                 CSV / HTTP / WebSocket / QFLT tick files / binary SBE
-                                      │
-                                   [data, feed, sbe]
-                                      ▼
-   research path                HftMarketDataBus ── TickCapture ──► session.qflt
-   ┌──────────────┐                   │ (204ns p50)                     │ replay
-   BarSeries ◄────┘                   ▼                                 ▼
-   │ indicators / ml /          StreamingIndicators             TickBacktester
-   │ screener / risk /                │                        (queue-aware fills)
-   │ optimization                     ▼
-   ▼                            strategy decision
-   Backtester / walk-forward          │
-   / portfolio backtests              ▼
-   │                            HftRiskGate (~3ns) ─► HftOrderGateway ─► OrderListener
-   ▼                                                    (504ns tick→order)     │
-   reports (HTML/PDF/XLSX/CSV,                    ┌─────────────┬──────────────┤
-   SVG charts), CLI, dashboard              FixSession    PaperTrading   sbe.BinaryOrder
-                                            (broker)       Gateway        Publisher
+              CSV / HTTP / WebSocket / QFLT tick files / SBE / ITCH
+                                    |
+                          [data, feed, sbe, marketdata]
+                                    |
+   research lane                    v                 trading lane
+   -------------              HftMarketDataBus ---- TickCapture --> QFLT file
+   BarSeries                        |                                  | replay
+     | indicators, alpha,           v                                  v
+     | pricing, risk,         strategy / HftQuoter               TickBacktester
+     | optimization                 |
+     v                              v
+   Backtester, walk-forward    HftRiskGate --> HftOrderGateway --> OrderListener
+   portfolio and alpha                          (order state,          |
+   backtests                                    cancel/replace)        |
+     |                                               +-----------+-----+--------+
+     v                                               |           |              |
+   reports (HTML/PDF/XLSX/CSV),                 FixSession  PaperTrading   BinaryOrder
+   CLI, dashboard                                (FIX 4.4)   Gateway        Publisher (SBE)
 ```
 
-The research lane above is one pipeline read left to right: **alpha
-discovery → signal generation → nested validation → out-of-sample scoring →
-selection → risk-managed sizing → portfolio constraints → optimal
-execution** — the stage-by-stage class map is [LEARN.md §8c](LEARN.md) and
-[DIAGRAMS.md diagram 19](DIAGRAMS.md). The same pipeline spans five asset
-classes -- equities, FX, rates, credit and commodities -- with the instrument
-layer living in `rates`, `credit`, `commodities`, `fx` and `markets`
-([DIAGRAMS.md diagram 52](DIAGRAMS.md)).
+Execution reports come back the other way: the venue adapter calls the gateway's
+`onAck`, `onFill`, `onCanceled`, `onReplaced`, `onReject` and `onCancelReject`, which
+drive the order state machine and release the risk gate's reservations.
 
 ## Package map
 
-| Package | Purpose | Key classes | Tests |
-|---|---|---|---|
-| `core` | Primitive-array OHLCV time series | `Bar`, `BarSeries` | (covered via all consumers) |
-| `util` | Numerics + measurement | `MathUtils`, `LatencyRecorder`, `HiccupMonitor` | `LatencyRecorderTest`, `HiccupMonitorTest` |
-| `data` | Data in/out and preparation | `CsvBarLoader`, `HttpBarFetcher`, `TickFileWriter/Reader`, `TickCapture` + `AsyncTickCapture` (off-thread QFLT capture), `SeriesAligner`, `CorporateActions`, `PointInTimeUniverse` + `UniverseCsvLoader` (membership + delisting/merger events, CSV interchange format) | `CsvBarLoaderTest`, `HttpBarFetcherTest`, `TickFileTest`, `AsyncTickCaptureTest`, `SeriesAlignerTest`, `CorporateActionsTest`, `PointInTimeUniverseTest`, `UniverseCsvLoaderTest` |
-| `feed` | Live WebSocket market data | `WebSocketFeed`, `BinanceTradeParser` | `WebSocketFeedTest` (loopback RFC6455 server) |
-| `sbe` | Binary flyweight codecs + channel adapters | `TradeFlyweight`, `OrderFlyweight`, `QuoteFlyweight`, `BinaryMarketDataClient`, `BinaryOrderPublisher/Receiver` | `SbeCodecTest`, `QuoteFlyweightTest` (incl. zero-alloc proofs) |
-| `fx` | FX conventions, curves, instruments, e-FX market structure | `CurrencyPair`, `SwapPointsCurve`, `FxSwap`, `Ndf`, `FxVolSurface`, `FixingRisk`, `AggregatedBook`, `CrossRateEngine`, `FxTierBook` (per-LP tier ladders: sweep + full-amount), `LpScorecard` (last-look analytics), `LpRouter` (expected-all-in routing), `SyntheticCross` (direct vs legs) | `CurrencyPairTest`, `SwapPointsCurveTest`, `FxVolSurfaceTest`, `FxSwapNdfTest`, `FixingRiskCrossRateTest`, `AggregatedBookTest`, `FxTierBookTest`, `LpScorecardAndRouterTest`, `SyntheticCrossTest` (all incl. zero-alloc proofs) |
-| `marketdata` | Market data transport + equities L3 | HFT lane: `HftMarketDataBus`, `TickRingBuffer`, `SymbolRegistry`; equities: `ItchCodec` (ITCH 5.0-style flyweight), `L3BookBuilder` (full depth + own-order queue position), `Nbbo` (consolidated inside); convenience: `MarketDataProcessor`, `RingBuffer`, `HistoricalDataStore` | `HftPathTest`, `MarketDataTest`, `RingBufferStressTest`, `ItchCodecTest`, `L3BookBuilderTest`, `NbboTest` (incl. zero-alloc + differential proofs) |
-| `indicators` | Technical analysis | `Indicators` (21 batch), `StreamingIndicators` (O(1) live) | `IndicatorsTest`, `StreamingIndicatorsTest` (batch/stream parity) |
-| `orderbook` | Matching engines (research + venue-grade) + book analytics | `OrderBook` (readable reference), `HftOrderBook` (tick ladder, pooled nodes, zero-alloc, limit/market/IOC/FOK/post-only), `BookPrimitives` (shared bitmap scans + open-addressing map), `BookAnalytics`, `Side` | `OrderBookTest`, `OrderBookInvariantTest` (model-based fuzz), `HftOrderBookTest` (equivalence vs reference + zero-alloc proof), `HftOrderBookTifTest` (incl. FOK-atomicity property test) |
-| `alpha` | Factor research pipeline (signal → IC → validation → cost-aware backtest → construction → report) | `AlphaContext`, `AlphaFactor`, `Factors`, `SignalEvaluator` (IC/IR/turnover + quantile-return profile with top-minus-bottom spread), `AlphaValidation`, `AlphaBacktester`, `PortfolioConstruction`, `AlphaReport`, `FamaMacBeth` (cross-sectional premia with time-series t-stats — a priced factor vs a dud, tested with planted premia), `CalendarAnomalies` (day-of-week/turn-of-month profiles with the t-stats that keep them honest) | `FactorsTest`, `SignalEvaluatorTest`, `AlphaValidationTest`, `PortfolioConstructionTest`, `AlphaBacktesterReportTest`, `AlphaResearchRoundTest` |
-| `microstructure` | Impact, queues, TCA, optimal execution, exchange mechanics, streaming signals + quant models | `MarketImpactModel`, `QueueModel`, `TransactionCostAnalyzer`, `AlmgrenChriss`, `TickSizeSchedule`, `Auction`, `SignalEngine` (unified multi-symbol: imbalance/vol/liquidity/momentum/composite), `FlowSignals` (OFI + imbalances), `CircuitBreakers` (LULD + market-wide); execution-feeding models: `VolumeCurve` (dynamic intraday volume), `VolatilityCurve` (vol seasonality + regime), `QueuePositionEstimator` (L2 queue position), `HiddenLiquidityDetector` (iceberg inference), `SpreadForecaster` (spread prediction), `TradeClassifier` (Lee-Ready), `FillProbabilityModel` (touch × queue); adaptive layer: `OnlineAlphaLearner` (ridge-SGD alpha weights, prequential out-of-sample IC gate), `LeadLagEstimator` (streaming cross-asset lead-lag), `DayTypeProfiles` (per-day-type seasonality curves), `EwmaCovariance` (streaming basket risk matrix: marginal contribution + min-variance hedge ratios), `KylesLambda` (learned impact — the live `MarketState.impactBps` producer), `JumpRobustVolatility` (bipower jump/diffusion separation), `ClosingAuctionModel` (documented-contract auction reserve), `HawkesIntensity` (self-exciting event bursts, stability-enforced), `AlphaEnsemble` (IC-weighted, confidence-sized signal blend), `Vpin` (volume-bucketed flow toxicity), `OrnsteinUhlenbeck` (mean-reversion fit: κ/θ/σ, half-life, stationary z-score — refuses non-reverting series), `LiquidityMeasures` (Roll bounce-implied spread, Corwin-Schultz high-low spread, Amihud illiquidity — liquidity from bars alone), `VarianceRatio` (Lo-MacKinlay trending/reverting/random-walk test + z-stat), `KalmanBeta` (time-varying hedge ratio: tracks the drifting β a static OLS averages away — tested head-to-head) | `MicrostructureTest`, `AlmgrenChrissTest`, `TickSizeAuctionTest`, `SignalEngineTest`, `FlowSignalsTest`, `CircuitBreakersTest`, `QuantModelsTest`, `QuantModels2Test`, `QuantModels3Test`, `QuantModels4Test`, `QuantModels5Test`, `QuantModels6Test`, `QuantSignalsTest`, `AdaptiveQuantAlgosTest`; the full learning loop end-to-end: `integration.OvernightLearningLoopTest` |
-| `pricing` | Fair value & derivatives pricing | `BlackScholes`, `VolSurface`, `SabrModel`, `BinomialTree`, `FairValueEngine`, `TriangularArbitrage`, `ForwardCurve`, `VannaVolga`, `DigitalOption`, `TouchOption`, `BarrierOption`, `DividendSchedule`, `IncrementalGreeks`, `Autocallable` (memory coupons, knock-in; MC + antithetic, zero-vol cases exact), `Black76` (futures/forward options + implied vol), `Heston` (semi-analytic stochastic vol, stable little-trap form, MC cross-checked), `HigherOrderGreeks` (vanna/volga/exchange cross-gamma, pinned as finite differences), `VarianceSwap` (model-free strike = squared VIX-style replication; vega/variance notional bridge; additive-in-time MTM; Brockhaus-Long vol-swap strike), `ExchangeOption` (Margrabe + Kirk spread approximation, each pinned by its exact limits), `QuantoOption` (drift adjustment as a carry shift on the tested vanilla pricer), `AsianOption` (exact discrete-geometric Kemna-Vorst + Turnbull-Wakeman arithmetic moment matching; one fixing IS vanilla BS, pinned exact), `StructuredNotes` (reverse convertible, capital-protected note with the participation solver, discount certificate -- each pinned as EQUAL to its bond+vanilla replication; deltas by decomposition) | `BlackScholesTest`, `VolSurfaceTest`, `AmericanAndSabrTest`, `PricingTest`, `ExoticOptionsTest` (MC cross-checked), `VannaVolgaTest`, `DividendScheduleTest`, `IncrementalGreeksTest`, `AutocallableRfqTest`, `MarketRiskPricingTest`, `VarianceSwapTest`, `StructuredClosedFormsTest`, `AsianOptionTest`, `StructuredNotesTest` |
+| Package | Purpose | Main classes |
+|---|---|---|
+| `core` | OHLCV series on primitive arrays | `Bar`, `BarSeries` |
+| `util` | Numerics and measurement | `MathUtils` (normal CDF by Cody's erfc algorithm), `LatencyRecorder`, `HiccupMonitor` |
+| `data` | Data in and out | `CsvBarLoader`, `HttpBarFetcher`, `SeriesAligner`, `CorporateActions`, `PointInTimeUniverse`, `UniverseCsvLoader`, `TickFileWriter`/`TickFileReader` (QFLT v2), `TickCapture`, `AsyncTickCapture` |
+| `feed` | Live and multicast feeds | `WebSocketFeed`, `BinanceTradeParser`, `MoldUdp64Receiver` |
+| `sbe` | SBE-style binary codecs (schema 2) | `MessageHeader`, `Decimal64`, `TradeFlyweight`, `OrderFlyweight`, `QuoteFlyweight`, `BinaryMarketDataClient`, `BinaryOrderPublisher`, `BinaryOrderReceiver` |
+| `fix` | FIX 4.4 session and garbage-free codecs | `FixSession`, `FileSessionStore` (CRC-32C journal), `FixMessage`, `FixOrderEncoder`, `FixExecReportView`, `FixExecReportView.ExecIdDeduplicator`, `FixMarketDataView` |
+| `marketdata` | Trading-lane transport and equities L3 | `HftMarketDataBus`, `TickRingBuffer`, `SymbolRegistry`, `ItchCodec`, `L3BookBuilder`, `Nbbo`; simpler `MarketDataProcessor`, `RingBuffer` |
+| `orderbook` | Matching engines and book analytics | `OrderBook` (readable reference), `HftOrderBook` (price ladder, pooled nodes, self-trade prevention), `BookAnalytics` |
+| `trading` | Order entry and pre-trade risk | `HftRiskGate`, `HftOrderGateway`, `OrderStateMachine`, `OrderRingBuffer`, `OrderListener`, `HftQuoter`, `AutoHedger`, `OrderThrottle`, `LastLookGate`, `LoopbackVenue`, `PaperTradingGateway`, `TradingDashboard`, `ShardedTradingEngine`, `GlobalRiskAggregator` |
+| `indicators` | Technical indicators | `Indicators` (batch), `StreamingIndicators` (one update per tick) |
+| `pricing` | Option pricing and volatility surfaces | `BlackScholes`, `Black76`, `Bachelier`, `ImpliedVolatility`, `BinomialTree`, `Heston`, `SabrModel`, `VolSurface`, `BarrierOption`, `DigitalOption`, `TouchOption`, `AsianOption`, `QuantoOption`, `ExchangeOption`, `VarianceSwap`, `VannaVolga`, `Autocallable`, `StructuredNotes`, `IncrementalGreeks`, `HigherOrderGreeks` |
+| `rates` | Fixed income | `YieldCurve` (single curve), `BondPricer`, `DayCount`, `BusinessCalendar`, `SwapPricer`, `RatesOptions`, `NelsonSiegel`, `Svensson`, `ShortRateModels`, `KeyRateDurations` |
+| `credit` | Credit curves and spreads | `CreditCurve`, `CdsPricer`, `CreditSpreads`, `CvaApproximator` |
+| `fx` | FX conventions, instruments and e-FX structure | `CurrencyPair`, `SwapPointsCurve`, `FxSwap`, `Ndf`, `FxVolSurface`, `FixingRisk`, `AggregatedBook`, `CrossRateEngine`, `FxTierBook`, `LpScorecard`, `LpRouter`, `SyntheticCross` |
+| `commodities`, `markets` | Futures curves; index and private-market analytics | `CommodityCurve`, `IndexConstruction`, `PrivateMarketAnalytics` |
+| `volatility` | Volatility models | `EwmaVolatility`, `Garch11`, `GjrGarch11`, `Egarch11` (maximum likelihood), `HarRv`, `RangeVolatility`, `VolatilityIndex`, `VolatilityDecomposition`, `InformationCriteria` |
+| `risk` | Market, credit and limit risk | `TailRisk`, `VarEngine`, `RiskMetrics`, `FrtbEs`, `PnlAttribution`, `VarBacktest`, `ExtremeValueTheory`, `StressTester`, `ComponentVar`, `CovarianceShrinkage`, `PsdMatrices`, `GaussianCopula`, `Dependence`, `Pca`, `PreTradeLimitChecker`, `CounterpartyExposureTracker` |
+| `crb` | Central risk book | `CentralRiskBook`, `InternalizationEngine`, `SkewedQuoter`, `HedgeOptimizer`, `CrbHedgeUniverse`, `CrbAutoHedger`, `CrbRouter`, `CrbPnlLedger` |
+| `hedging` | Hedging | `DeltaHedger`, `HedgingSimulator`, `GreekHedger`, `OptionsBook`, `MinimumVarianceHedge`, `FxHedger`, `PairsHedger`, `CointegrationTest`, `WhalleyWilmott` |
+| `optimization` | Portfolio construction | `QuadraticProgram` (active-set), `PortfolioOptimizer`, `ConstrainedPortfolioOptimizer`, `RiskParityOptimizer`, `BlackLitterman`, `NelderMead` |
+| `alpha` | Factor research | `AlphaContext`, `Factors`, `SignalEvaluator`, `AlphaValidation`, `FamaMacBeth`, `NeweyWest`, `Ols`, `FundamentalsHistory`, `PortfolioConstruction`, `TurnoverAwareOptimizer`, `AlphaBacktester`, `AlphaReport` |
+| `microstructure` | Impact, queues, signals, execution models | `AlmgrenChriss`, `MarketImpactModel`, `QueueModel`, `TransactionCostAnalyzer`, `SignalEngine`, `FlowSignals`, `VolumeCurve`, `VolatilityCurve`, `KylesLambda`, `HawkesIntensity`, `Vpin`, `OnlineAlphaLearner`, `AlphaEnsemble`, `EwmaCovariance`, `CircuitBreakers` |
+| `execution` | Execution algorithms and routing | `BenchmarkExecutor`, `PovTracker`, `TwapScheduler`, `VwapScheduler`, `ImplementationShortfallScheduler`, `PortfolioExecutor`, `LiquiditySeekingAlgo`, `SmartOrderRouter`, `HftSor`, `AdaptiveSor`, `VenueScorecard` |
+| `backtest` | Backtesting | `Backtester`, `BacktestConfig`, `FillPolicy`, `TradeCostModel`, `ExecutionAwareBacktester`, `ExecutionAlgoBacktester`, `TradeAnalytics`; `portfolio.PortfolioBacktester`; `tick.TickBacktester`; `validation.WalkForwardAnalyzer`, `GridSearchOptimizer`, `SharpeValidation`, `PurgedKFold`, `BlockBootstrap`, `OverfitProbability` |
+| `ml` | Statistical learning | `GradientBoostedRegressor`, `RegimeDetector`, `VolatilityForecaster`, `MarketImpactPredictor`, `IntradayLiquidityForecaster`, `AnomalyDetector` |
+| `simulation` | Monte Carlo | `MonteCarloSimulator`, `SimulationResult` |
+| `screener`, `dsl` | Screening and rule-based strategies | `StockScreener`, `RankingEngine`, `StrategyBuilder`, `Rules` |
+| `regulatory`, `rfq` | Best execution, fixings, RFQ | `BestExecutionAnalyzer`, `FixAnalyzer`, `MarketQualityMetrics`, `RfqAuction`, `RfqDealerScorecard` |
+| `persist` | State across sessions | `Checkpoint` |
+| `report`, `cli` | Output | `ReportGenerator`, HTML/PDF/XLSX/CSV exporters, `SvgCharts`, `cli.Main` |
+| `examples` | Demos and benchmarks (separate jar) | `QuickStartDemo`, `LiveTradingDemo`, `HftLatencyBenchmark`, `HftOrderBenchmark`, `HftQuoterBenchmark`, `HftBookBenchmark`, `ScaleBenchmark`, `ShardScaleBenchmark` |
 
-| `rates` | Fixed income | `YieldCurve`, `BondPricer` (YTM bracket-checked — impossible prices throw, never return a bound), `DayCount`, `BusinessCalendar`, `ShortRateModels` (Vasicek/CIR/curve-fitted Hull-White: closed-form bonds + simulation steps), `KeyRateDurations` (per-node DV01 slices that sum to the parallel move), `NelsonSiegel` (level/slope/curvature fit: OLS-per-lambda grid, planted-parameter recovery pinned), `RatesOptions` (Black-76 swaptions on the annuity numeraire + cap/floor strips; payer−receiver and cap−floor parities pinned to 1e-12), `SwapPricer` (single-curve vanilla swaps: annuity, par rate `(1 - DF(T)) / sum DF`, payer/receiver PV, bump-and-reprice DV01 -- a swap struck at par PVs to zero, pinned at 1e-12), `Svensson` (double-hump Nelson-Siegel-Svensson: 2-D lambda grid + 4-regressor OLS, nests NS and beats it on two-hump curves, tested head-to-head) | `RatesTest`, `ConventionsTest`, `NelsonSiegelTest`, `SvenssonTest`, `RatesOptionsTest`, `MarketRiskPricingTest` (in `pricing`), `markets.AssetClassRoundTest` |
-| `credit` | Credit curves, CDS pricing, bond credit spreads | `CreditCurve` (piecewise-constant hazard rates bootstrapped from CDS par spreads by per-pillar bisection -- every input reprices exactly; survival/default probabilities; the credit triangle `spread ~ h * (1 - R)` pinned by test), `CdsPricer` (risky annuity / risky DV01, premium and protection legs, par spread, upfront on the standard fixed coupon), `CreditSpreads` (bond Z-spread by bracket-checked bisection -- impossible prices throw; the CDS-bond basis is `zSpread - parSpread`), `CvaApproximator` (unilateral CVA: `LGD * sum EE_i * [Q(t_{i-1}) - Q(t_i)] * DF(t_i)`, flat-hazard case pinned by hand sum) | `CreditTest`, `CvaTest` |
-| `commodities` | Futures-curve analytics for the roll-dominated asset class | `CommodityCurve` (linear-interpolated futures curve, no extrapolation; strict `isContango`/`isBackwardation`; annualized roll yield `ln(F_near/F_far) / (T_far - T_near)`; implied storage-minus-convenience carry from `F = S * exp((r + u - y) t)`) -- the roll itself executes via `execution.FuturesRollAlgo` | `markets.AssetClassRoundTest` |
-| `markets` | Index construction + private-market (LP) analytics | `IndexConstruction` (cap/price/equal weighting, divisor continuity through membership changes -- a member swap leaves the level unchanged, pinned; one-way turnover `0.5 * sum abs(w1 - w2)`), `PrivateMarketAnalytics` (bracket-checked IRR, TVPI/DPI/RVPI multiples, Kaplan-Schoar PME -- a fund that IS the index scores exactly 1, Geltner AR(1) desmoothing -- smoothing then desmoothing round-trips to machine precision) | `AssetClassRoundTest` |
-| `volatility` | Vol models | `EwmaVolatility`, `Garch11`, `GjrGarch11` (leverage-effect asymmetry, MLE; likelihood-beats the symmetric fit on asymmetric data — tested), `Egarch11` (Nelson log-variance: leverage as a sign, no positivity constraints; multi-step forecasts deliberately refused — median ≠ mean), `HarRv` (Corsi daily/weekly/monthly OLS — the realized-vol forecasting benchmark), `VolatilityIndex` (VIX-style model-free fear gauge from an option chain — a flat-vol chain hands its vol back, tested), `VolatilityDecomposition` (systematic vs idiosyncratic: the exact OLS split, cross-checked against `RiskMetrics.beta`), `RangeVolatility` (Parkinson/Garman-Klass/Rogers-Satchell/Yang-Zhang OHLC estimators — closed forms pinned exactly, GBM sanity + efficiency vs close-to-close tested), `InformationCriteria` (AIC/BIC model referee) | `VolatilityModelsTest`, `EgarchTest`, `VolatilityIndexAndDecompositionTest`, `RangeVolatilityTest`, `InformationCriteriaTest`, `MarketRiskTest` (in `risk`), `QuantSignalsTest` (in `microstructure`) |
-| `risk` | Portfolio/credit/limit/validation risk + the market-risk workflow ([MARKET_RISK.md](MARKET_RISK.md)) | `RiskMetrics`, `PortfolioRiskAnalyzer`, `VarBacktest`, `PreTradeLimitChecker`, `CounterpartyExposureTracker`, `SettlementRiskAnalyzer`, `ConcentrationRisk`; market risk: `Dependence` (Spearman/Kendall/τ→ρ bridge), `Pca` (Jacobi), `GaussianCopula` (+ Student-t tail dependence), `VarEngine` (delta-normal/MC/delta-gamma/historical/full-revaluation, each with ES), `ExtremeValueTheory` (POT/GPD, refuses infinite-mean ES), `StressTester` (scenarios/ladders/closed-form reverse stress), `FrtbEs` (97.5% ES liquidity-horizon cascade + Basel traffic light — styled after MAR33, not certified), `PnlAttribution` (FRTB PLAT), `ComponentVar` (Euler allocation: components sum EXACTLY to portfolio VaR; marginal vs incremental; hedges carry negative components), `CovarianceShrinkage` (Ledoit-Wolf to the scaled identity: data-driven intensity, average variance preserved as an identity) | `RiskMetricsTest`, `VarBacktestTest`, `CreditAndLimitsTest`, `MarketRiskTest`, `RiskAllocationTest` |
-| `hedging` | Hedging algorithms | `DeltaHedger`, `HedgingSimulator`, `GreekHedger`, `OptionsBook`, `MinimumVarianceHedge`, `FxHedger`, `PairsHedger`, `CointegrationTest`, `WhalleyWilmott` (OPTIMAL no-trade band width — cube-root laws pinned exactly; hedge to the nearest edge, never the center) | `HedgingTest`, `HedgingSimulatorTest`, `OptionsBookTest`, `CointegrationTestTest`, `AdaptiveQuantAlgosTest` (in `microstructure`) |
-| `crb` | Central risk book ([CENTRAL_RISK_BOOK.md](CENTRAL_RISK_BOOK.md)) | `CentralRiskBook` (equities cash/options + FX spot/swap/NDF/options → one factor space; currency-level FX netting; diversification-benefit report; checkpointable), `FactorRegistry`, `SkewedQuoter` (inventory-shaded quotes), `InternalizationEngine` (improvement for risk-reducing flow, warehouse limit for risk-adding; checkpointable counters), `CrbHedgeUniverse` (loadings-matrix builder — FX forwards, index futures, outrights), `HedgeOptimizer` (min-variance + L1 cost, soft-threshold coordinate descent), `CrbAutoHedger` (band breach → hedge the excess; hard limit outranks cost), `CrbRouter` (internal cross → adverse-selection-priced dark → lit), `CrbPnlLedger` (spread captured vs hedge/router costs — the desk's realized economics) | `CrbBookTest`, `CrbExecutionTest`, `CrbPersistenceAndUniverseTest`, `CrbRealWorldScenarioTest` |
-| `optimization` | Portfolio construction | `PortfolioOptimizer`, `RiskParityOptimizer` (validates alignment; refuses zero-variance assets), `BlackLitterman`, `ConstrainedPortfolioOptimizer` | `PortfolioOptimizerTest`, `PortfolioConstructionTest`, `ReviewFixesRoundTest` |
-| `ml` | Statistical learning | `GradientBoostedRegressor`, `VolatilityForecaster`, `RegimeDetector`, `MarketImpactPredictor`, `IntradayLiquidityForecaster`, `AnomalyDetector` | `MlForecastingTest`, `MarketMlTest`, `RegimeDetectorTest` |
-| `backtest` | Bar backtesting + execution/cost models | `Backtester` (warm-up overload for cold-start-free walk-forward), `ExecutionAwareBacktester` (model-declared worst-case cost sizing; force-close pays it too), `Instant/Sor/Iceberg/LastLookExecution` (last-look holds on the signal bar — no intrabar time travel), `TradeCostModel` (flat + institutional w/ sqrt impact, shared across engines), `ExecutionAlgoBacktester` (grade each benchmark algo TCA-style over a session's bars), `BenchmarkComparison` (Jensen alpha, beta, tracking error, information ratio, up/down capture), `DrawdownAnalytics` (episode depth AND duration, time under water — agrees exactly with `RiskMetrics.maxDrawdown`), `TradeAnalytics` (expectancy, payoff ratio, win/loss streaks, Kelly, hold times — the trade signature a Sharpe hides) | `BacktesterTest`, `ExecutionAwareBacktesterTest`, `LastLookExecutionTest`, `TradeCostModelTest`, `ExecutionAlgoBacktesterTest`, `BacktestQualityRoundTest`, `ValidationRobustnessTest`, `BacktestAnalyticsRoundTest` |
-| `backtest.strategies` | Built-in strategies | SMA/EMA cross, RSI, MACD, Bollinger | (covered by backtest/CLI tests) |
-| `backtest.validation` | Overfitting defense | `WalkForwardAnalyzer` (warm OOS folds — no cold-start bias; efficiency NaN when in-sample is already losing), `GridSearchOptimizer` (+ `deflatedSharpeOfWinner`: the multiple-testing haircut wired to the search itself), `SharpeValidation` (probabilistic + deflated Sharpe + minimum track record length, round-tripped), `ParameterGrid`, `StrategyFactory`, `BlockBootstrap` (stationary bootstrap — the Sharpe's sampling distribution; blocked vs iid width tested head-to-head on autocorrelated returns), `PurgedKFold` (purge + embargo splits — the label-leak fix, index arithmetic hand-pinned), `OverfitProbability` (CSCV probability of backtest overfitting: skill scores 0, regime-flipping noise scores 1 — both tested), `MonteCarloTradeShuffle` (reshuffles the trade P&L multiset to size path/sequencing risk — the per-trade complement to BlockBootstrap; front-loaded losses rank in the tail, pinned) | `ValidationTest`, `ValidationRobustnessTest`, `BacktestQualityRoundTest`, `BacktestAnalyticsRoundTest`, `AlphaResearchRoundTest` (in `alpha`) |
-| `backtest.portfolio` | Multi-asset backtesting | `PortfolioBacktester` (survivorship-aware overload: delistings, mergers, index drops, ex-date cash dividends), `CrossSectionalMomentum` (point-in-time 12-1 long/short), `PositionSizing` | `PortfolioBacktestTest`, `SurvivorshipBacktestTest`, `CrossSectionalMomentumTest` |
-| `backtest.tick` | Tick-level backtesting | `TickBacktester` (queue-aware fills, flat or banded tick grid) | `TickBacktesterTest` |
-| `dsl` | Strategy builder | `StrategyBuilder`, `Rules`, `Rule` | `StrategyBuilderTest` |
-| `screener` | Stock screening | `StockScreener`, `TechnicalFilters`, `FundamentalFilters`, `RankingEngine` | `ScreenerTest` |
-| `simulation` | Monte Carlo | `MonteCarloSimulator`, `SimulationResult` | `MonteCarloTest` |
-| `persist` | Multi-day persistence of learned state | `Checkpoint` (atomic named-section binary file; `writeState`/`readState` on `VolumeCurve`, `VolatilityCurve`, `SpreadForecaster`, `OnlineAlphaLearner`, `LeadLagEstimator`, `EwmaCovariance`, `KylesLambda`, `ClosingAuctionModel`, `AlphaEnsemble`, `VenueScorecard` (v2, reads v1), `LpScorecard` (v2, reads v1), `rfq.RfqDealerScorecard`, `crb.CentralRiskBook` (fresh-instance restore only), `crb.InternalizationEngine` (config mismatch throws), `crb.CrbPnlLedger` — learned state survives the overnight, intraday state resets) | `CheckpointTest`, `integration.OvernightLearningLoopTest` (five days through the write/restore seam), `crb.CrbPersistenceAndUniverseTest` |
-| `execution` | Execution algos & venues, smart order routing | `SmartOrderRouter` (readable, fee-adjusted) + `HftSor` (zero-alloc tick path) + `AdaptiveSor` (full checklist: displayed + hidden liquidity, fees/rebates, latency, fill probability, reliability veto, dark probes) with `VenueScorecard` (streaming fill-rate/latency/hidden-liquidity), `BenchmarkExecutor` (dynamic VWAP/TWAP/Arrival/IS/Close/Open/POV over live market state), static schedulers `Twap/VwapScheduler`, `PovTracker`, `ImplementationShortfallScheduler` (Almgren-Chriss), `WmrFixingScheduler`, `IcebergOrder`, `DarkPoolSimulator`, `MidPegTracker`, `VenueBenchmark`, `PortfolioExecutor` (multi-symbol basket scheduling: leg-balance band + interval budget, risk-weighted by vol regime or — via `useRiskModel(EwmaCovariance)` — by marginal basket risk); `LiquiditySeekingAlgo` (opportunistic bursts on forecast-relative cheapness + completion floor); `VenueScorecard` also learns post-fill markout (adverse selection), priced into `AdaptiveSor`'s expected cost; `SpreadExecutionAlgo` (pairs/basis with a hard legging cap), `OrderPlacementPolicy` (post-or-cross expected-cost arithmetic + closed-form breakeven), `AntiGamingJitter` (seeded, total-preserving schedule randomization), `FuturesRollAlgo` (migration-curve roll, executed as calendar spreads) | `ExecutionTest`, `HftSorTest`, `AdaptiveSorTest`, `BenchmarkExecutorTest`, `PovAndIsSchedulerTest`, `WmrFixingSchedulerTest`, `PortfolioExecutorTest`, `LiquiditySeekingAlgoTest`, `AdvancedExecutionAlgosTest` |
-| `rfq` | RFQ market structure for equity derivatives | `RfqAuction` (best/cover by client direction, spread to model fair value), `RfqDealerScorecard` (streaming panel quality: quote rate, response, spread-to-fair, win rate — persistable) | `AutocallableRfqTest` (in `pricing`) |
-| `regulatory` | Surveillance & best-ex | `FixAnalyzer`, `BestExecutionAnalyzer`, `MarketQualityMetrics` | `RegulatoryTest` |
-| `trading` | Order entry (paper + HFT lane) + scale-out | `OrderGateway`, `PaperTradingGateway`, `TradingDashboard`; fast lane: `HftRiskGate`, `OrderRingBuffer`, `HftOrderGateway`, `HftQuoter` + `AvellanedaStoikov` (closed-form reservation price / optimal spread; tested in `microstructure.QuantModels4Test`), `AutoHedger`, `OrderThrottle` (message-rate token bucket), `LastLookGate` (symmetric maker-side check); scale-out: `ShardedTradingEngine`, `GlobalRiskAggregator` | `PaperTradingTest`, `TradingDashboardTest`, `HftOrderPathTest`, `HftQuoterAutoHedgerTest`, `OrderThrottleTest`, `LastLookGateTest`, `ShardedTradingTest`, `LoadAndSoakTest` |
-| `fix` | FIX 4.4 engine + garbage-free hot path | `FixSession` (+persistence: `FileSessionStore`; ResetSeqNumFlag(141) reset-on-logon for clean-slate reconnects), `FixMessage`, typed app messages; hot path: `FixOrderEncoder` (orders out), `FixExecReportView` (fills in), `FixMarketDataView` (35=W/X quotes in), shared `FixParse` | `FixMessageTest`, `FixSessionTest`, `FixPersistenceTest`, `FixProtocolExtrasTest`, `FixResetSeqNumTest`, `FixOrderEncoderTest`, `FixExecReportViewTest`, `FixMarketDataViewTest` |
-| `report` | Reporting | `ReportGenerator`, HTML/CSV/PDF/XLSX exporters, `SvgCharts` | `ReportTest`, `SvgChartsTest` |
-| `cli` | Command line | `Main` (backtest / walkforward / report) | `CliTest` |
-| `examples` | Runnable demos & benchmarks (coverage-excluded) | `QuickStartDemo`, `LiveTradingDemo` (Binance → paper venue → dashboard), `HftLatencyBenchmark`, `HftOrderBenchmark`, `HftQuoterBenchmark`, `HftBookBenchmark`, `ScaleBenchmark`, `ShardScaleBenchmark` | run manually / bench workflow |
+## Design rules
 
-## Design invariants worth knowing
-
-1. **Zero runtime dependencies** — main sources use only the JDK. JUnit/JMH are test scope.
-2. **Hot paths are single-producer/single-consumer** — one bus per feed, one gateway per
-   trading thread; correctness comes from acquire/release ordering, not locks.
-3. **Batch and streaming indicators are bit-identical** — verified by parity tests, so
-   backtested behavior transfers to live execution exactly.
-4. **Performance claims are tests** — zero-allocation is asserted with the JVM's
-   per-thread allocation counter; FIFO under stress is asserted across threads;
-   latency numbers come from committed, re-runnable benchmarks.
-5. **Recovery over reset** — FIX gaps are resent, tick sessions are replayable,
-   walk-forward carries capital across folds: state is continuous, not restarted.
-   The `persist` package is this invariant across the overnight: learned model
-   state (curves, alpha weights + their IC evidence, venue/LP scorecards) survives
-   via `Checkpoint`'s atomic named-section files, while intraday state deliberately
-   resets on restore. New cross-session continuity belongs in that
-   `writeState`/`readState` contract, not ad-hoc serialization.
+1. **No runtime dependencies.** Main sources use only the JDK. JUnit and JMH are
+   test-scope.
+2. **Single writer per hot structure.** Each market-data bus has one producer and one
+   consumer thread, and each order gateway has one submitting thread and one venue
+   thread. The ring buffers and the risk gate's per-symbol state publish with
+   acquire/release (`VarHandle`) ordering, so the per-event paths take no locks.
+   Locks are used elsewhere: lifecycle and registration methods (`start`, `stop`,
+   `subscribe`, `SymbolRegistry.register`, `addOrderListener`) are `synchronized`;
+   `FixSession` serialises the journal write and the socket write under one lock;
+   `PaperTradingGateway` and `GlobalRiskAggregator.sweep` are synchronized.
+3. **Batch and streaming indicators agree.** `Indicators` and `StreamingIndicators`
+   are tested for equal outputs on the same input, so a rule backtested on bars
+   behaves the same when fed ticks.
+4. **Allocation claims are tested.** Zero-allocation tests read the JVM's per-thread
+   allocation counter and require exactly zero bytes after warm-up. Latency results
+   come from the benchmarks described in [BENCHMARKS.md](BENCHMARKS.md).
+5. **No look-ahead by default.** Backtests fill at the next bar's open, EWMA
+   volatility is seeded causally, fundamentals are point-in-time, and the regime
+   detector exposes a filtered probability for live use.
+6. **Fail closed in the trading lane.** The risk gate rejects non-finite prices, counts
+   working orders against position limits, and its kill switch cancels working orders.
+   A listener that throws kills the gate rather than failing silently.
+7. **Recover state instead of resetting it.** The FIX journal replays real messages
+   after a crash, tick sessions can be replayed, walk-forward analysis carries the
+   position across folds, and `persist.Checkpoint` writes learned model state
+   atomically (forced to disk before the rename) so it survives a restart.
 
 ## Further reading
 
-- [LEARN.md](LEARN.md) — the from-zero tutorial: every concept above explained for
-  beginners, with a guided reading path through these packages.
-- [COOKBOOK.md](COOKBOOK.md) — three hundred runnable recipes across the capabilities.
-- [LEARN.md Part IV — The exercise room](LEARN.md#part-iv--the-exercise-room) — 1000 practice questions (quant, execution, risk, low-latency, plus 500 day-to-day professional scenarios) answered with these classes.
-- [MARKET_RISK.md](MARKET_RISK.md) — the 14-step market-risk workflow mapped to classes.
-- [CENTRAL_RISK_BOOK.md](CENTRAL_RISK_BOOK.md) — the central risk book: cross-product netting, internalization, cost-aware hedging, internal-first routing.
-- `docs/ULTRA_LOW_LATENCY.md` — the latency stack: in-library techniques, JVM flags,
-  kernel/CPU tuning (`scripts/linux-tune.sh`), and the kernel-bypass/hardware frontier.
-- `CHANGELOG.md` — release history; `README.md` — capability tour with examples.
+- [GETTING_STARTED.md](GETTING_STARTED.md): build and first runs.
+- [LEARN.md](LEARN.md): tutorial from first principles.
+- [COOKBOOK.md](COOKBOOK.md): runnable recipes.
+- [MARKET_RISK.md](MARKET_RISK.md): the market-risk workflow mapped to classes.
+- [CENTRAL_RISK_BOOK.md](CENTRAL_RISK_BOOK.md): netting, internalisation and hedging.
+- [ULTRA_LOW_LATENCY.md](ULTRA_LOW_LATENCY.md): the trading lane in detail.
+- [CHANGELOG.md](../CHANGELOG.md): release history.

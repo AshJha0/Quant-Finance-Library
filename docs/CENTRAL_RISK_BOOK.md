@@ -1,128 +1,139 @@
-# Central Risk Book
+# Central risk book
 
-One netted view of the firm's market risk across desks and products,
-and the machinery that monetizes it. A CRB exists because two desks
-paying the street to shed opposite risks is money burned twice: net
-first, warehouse what nets against future flow, hedge only the excess
-— and hedge it through yourself before anyone else.
+A central risk book (CRB) holds one netted view of a firm's market risk across desks
+and products. When two desks would each pay the market to shed opposite risks, the
+CRB nets them first, keeps the risk that is likely to offset against future flow, and
+hedges only what is left, crossing internally before going to external venues.
 
-Everything lives in `com.quantfinlib.crb` (research/warm lane,
-deterministic, tested in `CrbBookTest`, `CrbExecutionTest`,
-`CrbPersistenceAndUniverseTest` and `CrbRealWorldScenarioTest`).
+Everything described here is in `com.quantfinlib.crb`. It runs in the research or
+warm lane: single-threaded, deterministic, re-deciding on an interval rather than per
+tick. Tests are in `src/test/java/com/quantfinlib/crb` (`CrbBookTest`,
+`CrbExecutionTest`, `CrbPersistenceAndUniverseTest`, `CrbRealWorldScenarioTest`).
 
-## 1. One factor space for every product
+## 1. One factor space
 
-`CentralRiskBook` decomposes each instrument into common risk factors
-at booking time — the decomposition IS the netting:
+`CentralRiskBook` decomposes each instrument into named risk factors when it is
+booked. Netting is then a sum per factor.
 
-| Product | Booked via | Factors it lands on |
+| Product | Booked via | Factors |
 |---|---|---|
-| Cash equity | `bookCashEquity` | `EQ:<sym>` (currency notional delta) |
-| Listed equity option | `bookEquityOption` | `EQ:<sym>` (Δ·S·units), `EQGAMMA:<sym>` ($ per 1%), `EQVEGA:<sym>` (per vol pt) via `pricing.BlackScholes` |
-| FX spot | `bookFxSpot` | `CCY:<base>` and `CCY:<quote>` — CURRENCY legs, so EURUSD and USDJPY net their shared USD |
-| FX swap | `bookFxSwap` | `FXPOINTS:<pair>` (−N for a buy-sell: P&L per +1.0 far−near move — points widening hurts the buy-sell) + the quote-ccy cash-flow imbalance; the base legs cancel exactly |
-| NDF | `bookNdf` | full currency delta until the fixing + `pendingFixing(pair)` gross notional, released via `settleFixing` once fixings occur |
-| FX option | `bookFxOption` | Garman-Kohlhagen delta split onto the currency legs, `FXGAMMA:`/`FXVEGA:<pair>` |
+| Cash equity | `bookCashEquity` | `EQ:<sym>` (delta in currency notional) |
+| Listed equity option | `bookEquityOption` | `EQ:<sym>` (delta times spot times units), `EQGAMMA:<sym>` (dollar gamma per 1 %), `EQVEGA:<sym>` (per vol point), from `pricing.BlackScholes` |
+| FX spot | `bookFxSpot` | `CCY:<base>` and `CCY:<quote>`. Currency legs, so EURUSD and USDJPY net their USD. |
+| FX swap | `bookFxSwap` | `FXPOINTS:<pair>` (-N for a buy-sell: P&L per +1.0 move in far minus near points) and the quote-currency cash-flow imbalance. The base legs cancel. |
+| NDF | `bookNdf` | Full currency delta until fixing, plus gross notional pending fixing (`pendingFixing(pair)`), released by `settleFixing`. |
+| FX option | `bookFxOption` | Garman-Kohlhagen delta on the currency legs, `FXGAMMA:<pair>`, `FXVEGA:<pair>` |
 
-An equity-option delta nets against cash shares; an FX-option delta
-nets against spot; a second desk's opposite flow nets against the
-first. `nettingEfficiency()` reports how much gross flow annihilated,
-and `report(cov, confidence)` prices the arrangement: netted book
-VaR/ES (via `risk.VarEngine`) against the sum of standalone desk VaRs
-— the difference is the **diversification benefit**, the number that
-justifies the desk.
+`nettingEfficiency()` is `1 - net / gross` summed over factors.
 
-## 2. Quoting and internalization (Quant)
+**Risk report.** `report(covariance, confidence)` returns a `CrbReport` with gross and
+net exposure, netting efficiency, VaR and ES of the netted book, the sum of standalone
+desk VaRs, and the diversification benefit (standalone sum minus book VaR). The
+covariance is over factors in registry order (`factors().name(i)`), in the units of
+each factor's exposure.
 
-- `SkewedQuoter` — inventory-shaded two-way prices: a long book shades
-  both quotes down (the ask becomes the attractive side), linear in
-  inventory/limit, capped so the quote never crosses itself.
-- `InternalizationEngine` — the internalize-or-route decision:
-  risk-REDUCING flow is crossed against inventory and earns the client
-  price improvement (a share of the saved spread — the book was going
-  to pay to shed that risk anyway); risk-ADDING flow is warehoused
-  only inside the warehouse limit. `internalizationRate()` is the
-  desk's headline stat.
+VaR and ES are second order: `risk.VarEngine.deltaGammaVar` and `deltaGammaEs`, with
+the Cornish-Fisher expansion. Dollar-gamma rows are not exposures to a return of their
+own, so they are moved into the gamma matrix on their underlying factors, with factor
+returns read as relative moves:
 
-## 3. Hedging the residual (Algo)
+- `EQGAMMA:s` with dollar gamma G per 1 % (G = Gamma S^2 / 100) contributes
+  `0.5 * 100 * G * r_s^2`, that is `Gamma[EQ:s][EQ:s] += 100 G`.
+- `FXGAMMA:BBBQQQ` contributes `0.5 * 100 * G * (r_BBB - r_QQQ)^2` on the two `CCY:`
+  factors.
 
-- `CrbHedgeUniverse` — builds the `loadings[factor][instrument]`
-  matrix the optimizer needs, aligned to the book's factor registry
-  (hand-assembling it is the most error-prone step in the workflow):
-  `addFxForward` loads the two currency legs exactly like a booked
-  trade; `addSingleFactor` covers index futures (`EQ:<index>` — the
-  covariance carries the correlation to single names, so the
-  regression hedge falls out of the optimizer, not a beta table),
-  vega hedges and outrights; hedge-only factors register with zero
-  book exposure.
-- `HedgeOptimizer` — minimum variance with an L1 cost term:
-  `min (e+Lh)'Σ(e+Lh) + λ·Σc|h|`, solved by coordinate descent with
-  the exact soft-threshold update. Instruments whose marginal risk
-  reduction isn't worth their cost get EXACTLY zero; `λ = 0` recovers
-  the closed-form minimum-variance hedge (pinned in the tests against
-  the regression-beta formula). Feed `c` from a `KylesLambda` impact
-  estimate plus the spread.
-- `CrbAutoHedger` — per-factor bands with a cooldown: inside the band
-  the book warehouses (inventory is the edge, not the problem); on a
-  breach it hedges only the EXCESS beyond `resetFraction·limit`, and
-  if the cost-aware hedge refuses to fix a hard-limit breach it reruns
-  cost-blind — the limit outranks thrift.
+Vega rows stay linear; their factor return is the change in implied volatility in
+points. For a book without options the report equals delta-normal VaR.
 
-## 4. Routing, dark pools included (SOR)
+## 2. Quoting and internalisation
 
-`CrbRouter` allocates in honest cost order:
+- `SkewedQuoter` shades two-way prices by inventory. A long book moves both quotes
+  down, so its offer becomes the more attractive side. The shift is linear in
+  inventory over the limit and capped so the quote never crosses itself.
+- `InternalizationEngine` decides whether to internalise or route. Flow that reduces
+  the book's risk is crossed against inventory and the client receives part of the
+  saved spread as price improvement. Flow that adds risk is kept only inside the
+  warehouse limit. `internalizationRate()` reports the share internalised.
 
-1. **Internal** — crossing the book's own offsetting inventory costs
-   zero and leaks nothing; the CRB is the firm's first dark pool.
-2. **Dark venues** — midpoint fills pay no spread, but each venue
-   carries an adverse-selection charge in bps (post-fill markout — a
-   `VenueScorecard` estimate slots in directly) and its liquidity is
-   discounted by fill probability. A venue whose charge exceeds the
-   lit cost gets nothing, whatever its size.
-3. **Lit** — half spread plus impact, but it fills; whatever the dark
-   legs are not *expected* to fill routes lit too.
+## 3. Hedging the residual
 
-## 5. The economics (the desk head's question)
+- `CrbHedgeUniverse` builds the `loadings[factor][instrument]` matrix the optimiser
+  needs, aligned to the book's factor registry. `addFxForward` loads both currency
+  legs as a booked trade would; `addSingleFactor` covers index futures (`EQ:<index>`,
+  whose correlation to single names comes from the covariance), vega hedges and
+  outrights. Factors used only by hedges are registered with zero book exposure.
+- `HedgeOptimizer` minimises variance plus an L1 cost:
 
-`CrbPnlLedger` keeps the realized flow economics honest: internalized
-flow captures the street half spread minus the improvement given back;
-routed flow captures nothing; hedges and router allocations cost their
-bps. `netEconomics()` answers the only question that matters at the
-close — did the spread we captured pay for the hedging we did?
-Inventory mark-to-market is deliberately NOT mixed in (that is the
-risk report's job — blending realized spread with unrealized marks is
-how desks fool themselves). Persistable like everything else.
+  ```
+  min over h:  (e + L h)' Sigma (e + L h)  +  lambda * sum_i c_i |h_i|
+  ```
 
-`CrbRealWorldScenarioTest` runs the desk's actual week at realistic
-sizes, vols and costs: a quiet two-way day (internalization rate above
-50%, economics = captured spread), a one-way 18M institutional day
-(warehouse absorbs, band breaches, the cost-aware hedge escalates to
-the direct instrument because a proxy cannot satisfy a per-factor
-band, and the day still nets positive), a COVID-template stress replay
-priced to the dollar with the reverse-stress sigmas showing what the
-netting bought, and an NDF fixing day rolling through the overnight
-checkpoint. Recipe 14 in the cookbook is the runnable version.
+  where `e` is the factor exposure, `L` the loadings, `Sigma` the factor covariance,
+  `c_i` the all-in cost per unit notional of instrument i (spread plus expected impact,
+  for example from `microstructure.KylesLambda`), and `lambda` the risk/cost trade-off.
+  It is solved by cyclic coordinate descent with the soft-threshold update. Every 50
+  sweeps the solver solves the optimality conditions on the current support and sign
+  pattern and accepts the result if the subgradient condition holds off the support.
+  A ridge of `1e-12 tr(G) / m` on the instrument Gram matrix keeps the solution unique
+  when instruments are collinear. Instruments whose risk reduction is worth less than
+  their cost get exactly zero. With `lambda = 0` the result is the minimum-variance
+  hedge from the normal equations.
+- `CrbAutoHedger` sets a band per factor with a cooldown. Inside the band the book keeps
+  the risk. On a breach it hedges only the excess beyond `resetFraction * limit`. If the
+  cost-aware hedge would leave a hard-limit breach, it reruns without costs, because
+  the limit takes priority over cost.
+
+## 4. Routing
+
+`CrbRouter` allocates an order in order of expected cost:
+
+1. **Internal.** Crossing against the book's own offsetting inventory costs nothing
+   and leaks no information.
+2. **Dark venues.** Midpoint fills pay no spread, but each venue carries an
+   adverse-selection charge in basis points (post-fill markout, for example from
+   `execution.VenueScorecard`), and its size is discounted by fill probability. A venue
+   whose charge exceeds the lit cost gets nothing.
+3. **Lit.** Half spread plus impact. Whatever the dark venues are not expected to fill
+   goes lit.
+
+## 5. Economics
+
+`CrbPnlLedger` records realised flow economics: internalised flow earns the street half
+spread minus the improvement given to the client; routed flow earns nothing; hedges and
+router allocations cost their basis points. `netEconomics()` says whether the captured
+spread paid for the hedging. Inventory mark-to-market is kept out of the ledger; it
+belongs to the risk report, and mixing realised spread with unrealised marks makes
+both harder to read.
+
+`CrbRealWorldScenarioTest` runs a week at realistic sizes, volatilities and costs: a
+two-way day, a one-way institutional day that breaches bands and escalates the hedge to
+the direct instrument, a stress replay using the March 2020 template, and an NDF fixing
+day carried through an overnight checkpoint. The cookbook has a runnable version.
 
 ## 6. Overnight persistence
 
-`CentralRiskBook.writeState/readState` and the
-`InternalizationEngine` counters plug into `persist.Checkpoint`
-sections — factor names, net/gross, per-desk attribution, pending
-fixings and the internalization history all survive the night into
-fresh instances. Restoring into a book that already holds positions
-throws, and an internalization history earned under one warehouse
-limit refuses to restore under another (configuration mismatches
-fail loudly, the house rule).
+`CentralRiskBook.writeState`/`readState` and the `InternalizationEngine` counters use
+`persist.Checkpoint` sections. Factor names, net and gross exposure, per-desk
+attribution, pending fixings and the internalisation history survive a restart into
+fresh instances. Restoring into a book that already holds positions throws, and an
+internalisation history recorded under one warehouse limit refuses to restore under
+another.
 
-## Deliberate boundaries
+## Limits of the model
 
-- Exposures are kept in native units per factor (`CCY:JPY` in yen);
-  the covariance supplied to `report`/`HedgeOptimizer` must match —
-  no FX conversion service is smuggled in.
-- The NDF fixing flag is gross notional pending, not a dated fixing
-  ladder — `fx.FixingRisk` owns dated fixing analysis.
-- Booking is position-decomposition, not lifecycle: expiries,
-  exercises and settlements re-book as offsetting flows.
-- Single-threaded by design: a CRB re-decides on interval cadence
-  (the warm lane), not per tick — the ULL lanes stay in `trading`
-  and `marketdata`.
+- Exposures are kept in native units per factor (`CCY:JPY` in yen). The covariance
+  passed to `report` and `HedgeOptimizer` must use the same units; there is no FX
+  conversion step.
+- `FXGAMMA` is in quote-currency units, so the report is in one currency only when the
+  quote currency is the reporting currency or the caller has converted.
+- The NDF fixing figure is gross notional pending, not a dated fixing ladder;
+  `fx.FixingRisk` handles dated fixings.
+- Booking decomposes positions; it does not model a lifecycle. Expiries, exercises and
+  settlements are booked as offsetting flows.
+- Single-threaded.
+
+## Not implemented
+
+- Rates, credit and commodity products in the factor space.
+- Full revaluation in the book report; VaR is delta-gamma only.
+- Multi-threaded or per-tick operation.
