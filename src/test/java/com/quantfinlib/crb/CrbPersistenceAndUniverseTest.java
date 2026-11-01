@@ -65,7 +65,7 @@ class CrbPersistenceAndUniverseTest {
         assertEquals(day1.exposure("CCY:EUR") - 4_000_000, day2.exposure("CCY:EUR"), 1e-6);
 
         // Config mismatch: an internalization rate earned under one
-        // warehouse limit says NOTHING about another — refuse, loudly.
+        // warehouse limit says nothing about another — refuse, loudly.
         InternalizationEngine wrongConfig = new InternalizationEngine(10_000_000, 0.5);
         Checkpoint.Reader r2 = Checkpoint.reader(file);
         assertThrows(IllegalStateException.class,
@@ -92,7 +92,7 @@ class CrbPersistenceAndUniverseTest {
         assertEquals(1, ledger.hedges());
         assertEquals(300 - 100 - 60, ledger.netEconomics(), 1e-9);
 
-        // A fully-routed decision earns NOTHING and counts as nothing —
+        // A fully-routed decision earns nothing and counts as nothing —
         // the internalization stat must not inflate on flow we passed on.
         ledger.onDecision(new InternalizationEngine.Decision(0, 5_000_000, 0), 4);
         assertEquals(1, ledger.internalizations(), "routed flow is not internalization");
@@ -103,7 +103,7 @@ class CrbPersistenceAndUniverseTest {
         assertThrows(IllegalArgumentException.class,
                 () -> ledger.onInternalized(1_000_000, 4, 5));
 
-        // EVERY field survives the round-trip — not just netEconomics,
+        // every field survives the round-trip — not just netEconomics,
         // which a swapped hedgeCost/routerCost would leave unchanged.
         Path file = dir.resolve("ledger.qfl");
         try (Checkpoint.Writer w = Checkpoint.writer(file)) {
