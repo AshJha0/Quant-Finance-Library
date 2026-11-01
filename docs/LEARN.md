@@ -1477,7 +1477,8 @@ portfolio and blends views in with explicit confidences, so an absent view
 means "hold the market," not "bet on noise."
 
 *In this library:* `optimization/PortfolioOptimizer.java` (`maxSharpe` — the
-naive optimizer, so you can watch it misbehave),
+unregularised optimizer, solved exactly by an active-set QP, so what
+misbehaves is the inputs, not the solver),
 `risk/CovarianceShrinkage.java` (the Ledoit-Wolf fix),
 `optimization/BlackLitterman.java` (the posterior formula, one screen).
 
@@ -1562,8 +1563,10 @@ financing and rate risk), and it's still only as good as the covariance
 estimate — though notably it needs *no return forecasts at all*, which is
 exactly what makes it robust where max-Sharpe is fragile.
 
-*In this library:* `optimization/RiskParityOptimizer.java` — the fixed-point
-iteration, with a test asserting the contributions actually come out equal;
+*In this library:* `optimization/RiskParityOptimizer.java` — Spinu's
+convex formulation solved by damped Newton steps (a multiplicative
+fixed-point update can oscillate), with `riskBudget` for unequal
+budgets and a test asserting the contributions actually come out equal;
 compare against `PortfolioOptimizer.maxSharpe` on the same inputs.
 
 ### 7. "Your factor has an IC of 0.03. Is that good?"
@@ -5825,15 +5828,23 @@ empirical basis for "risk off." The transition diagonal gives regime
 persistence: p_stay = 0.98 means an expected duration of
 1/(1-0.98) = 50 bars, which is why the filtered high-vol probability is
 a usable de-leveraging signal rather than a strobe light. Desk use
-case: vol targeting that halves gross when the smoothed high-vol
-probability crosses 0.5 cuts drawdowns materially in backtests -- the
-model formalizes what discretionary traders call "the tape has
-changed."
+case: vol targeting that halves gross when the filtered high-vol
+probability crosses 0.5. The word "filtered" carries the weight. The
+filtered probability at t uses returns up to t only; the smoothed
+probability uses the whole sample, including returns after t, so
+de-levering on it in a backtest is look-ahead and the drawdown it
+"avoids" is one it saw coming. Smoothed probabilities are for labelling
+regimes after the fact. And the parameters themselves are fitted on the
+whole sample, so even the filtered path is out-of-sample only when the
+model was fitted on an earlier window. The model formalizes what
+discretionary traders call "the tape has changed."
 
 *In this library:* `ml/RegimeDetector.java` -- Baum-Welch EM with
 forward-backward scaling, the `RegimeModel` record (per-state
-means/stdDevs, transition matrix, `smoothedHighVolProbability`,
-`expectedDuration`), state 1 pinned to high-vol by construction.
+means/stdDevs, transition matrix, `filteredHighVolProbability` for
+trading, `smoothedHighVolProbability` for ex-post labelling,
+`expectedDuration`), `viterbi` for the most likely state path, state 1
+pinned to high-vol by construction.
 
 ### 167. "EM converged. Why don't you trust it yet?"
 
@@ -5857,9 +5868,13 @@ and alarms on regime CHANGE learns about label switching the first time
 the alarm fires because the labels swapped, not the market.
 
 *In this library:* `ml/RegimeDetector.java` -- forward-backward WITH
-scaling, `logLikelihood` exposed for restart comparison, and the
-documented convention that state 1 is always the high-volatility regime
-(the label-switching fix baked into the contract).
+scaling and emission densities in log space (an extreme return cannot
+underflow both densities to zero), five starts by default (the
+median-split start plus four seeded random ones, best likelihood kept;
+`fit(returns, iterations, starts, seed)` to choose), `logLikelihood`
+exposed, and the documented convention that state 1 is always the
+high-volatility regime (the label-switching fix baked into the
+contract).
 
 ### 168. "Your ops team wants alerts on manipulative or broken market activity. What do you detect, and how do you avoid alert fatigue?"
 
@@ -6038,8 +6053,13 @@ tweaking features is K-fold overfitting with extra steps.
 
 *In this library:* `backtest/validation/WalkForwardAnalyzer.java` --
 rolling train/test folds with per-fold parameter selection and the
-stitched `outOfSampleEquity`, alongside `PurgedKFold.java` for the
-label-overlap repairs of Q170.
+stitched `outOfSampleEquity`. Two details matter for a fair curve: the
+book is carried across fold boundaries (an open position stays open
+into the next fold, as it would live, instead of being force-closed and
+re-entered), and efficiency is the objective of the stitched
+out-of-sample curve over that of the stitched in-sample curve, not a
+sum of per-fold Sharpes. `PurgedKFold.java` handles the label-overlap
+repairs of Q170.
 
 ### 175. "Your model's out-of-sample correlation with forward returns is 0.04 and significant. Are you rich?"
 
@@ -11587,7 +11607,7 @@ after the build silently has no row.
 `crb/HedgeOptimizer.java` directly. The javadoc calls hand-assembly "the
 most error-prone step in the whole hedging workflow".
 
-### 389. "Minimum-variance hedging says trade twelve instruments in dust sizes. How do you make the optimizer respect transaction costs -- and when should it refuse to answer?"
+### 389. "Minimum-variance hedging says trade twelve instruments in dust sizes. How do you make the optimizer respect transaction costs -- and what happens with near-duplicate instruments?"
 
 Add an L1 cost term and solve by coordinate descent. The objective is
 `(e + L*h)' Sigma (e + L*h) + lambda * sum(c_i * |h_i|)`: residual
@@ -11600,17 +11620,24 @@ soft-threshold update, not a dusty small position -- so the answer is
 "hedge with the future and one forward", not twelve trades. At lambda=0
 it recovers the closed-form minimum-variance hedge, pinned in tests
 against the normal equations -- the discipline of an exact special case.
-The refusal matters as much: near-collinear instruments (two
-0.999-correlated futures) make Gauss-Seidel contract slowly, and a
-silent max-iteration exit would return a plausible-LOOKING, grossly
-unconverged hedge for a live breach; the implementation instead throws,
-telling you to drop the redundant twin. A wrong answer that looks like
-an answer is worse than an exception.
+Near-collinear instruments (two 0.999-correlated futures) are the hard
+case: coordinate descent contracts slowly there, and a silent
+max-iteration exit would return a plausible-looking, grossly
+unconverged hedge for a live breach. Two fixes work together. Once the
+iteration has found which instruments are in the hedge and with which
+signs, solve the optimality conditions on that support exactly and
+accept the result if the subgradient condition holds off the support;
+and add a tiny ridge to the instrument Gram matrix so the solution is
+unique even when two instruments are interchangeable. If neither the
+iteration nor the exact finish converges, throw rather than return a
+number: a wrong answer that looks like an answer is worse than an
+exception.
 
 *In this library:* `crb/HedgeOptimizer.java` -- the exact soft-threshold
 coordinate descent, RELATIVE convergence tolerance (notionals run in
-millions), the lambda=0 closed-form recovery pinned in tests, and the
-documented `IllegalStateException` on non-convergence.
+millions), an exact support solve every 50 sweeps, a ridge of
+1e-12 tr(G)/m, the lambda=0 closed-form recovery pinned in tests, and an
+`IllegalStateException` only when neither route converges.
 
 ### 390. "Design the auto-hedging policy for a CRB. When does it trade, how much, and what overrides what?"
 
