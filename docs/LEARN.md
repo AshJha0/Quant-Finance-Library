@@ -10169,7 +10169,9 @@ lives. The best lag is the `k > 0` with the largest absolute correlation
 follower's -- but it must be compared against the contemporaneous (lag-0)
 correlation: if lag 0 dominates every positive lag, the pair simply
 co-moves and neither side is tradeably ahead; you have a hedge
-relationship, not a signal. Turn the best lag into a prediction via the
+relationship, not a signal. And with maxLag candidate lags tested at
+once, the largest of them clears a naive significance threshold by luck
+alone, so the band must be corrected for multiple testing. Turn the best lag into a prediction via the
 regression beta at that lag (expected follower return given the leader's
 move k intervals ago). And apply the streaming-estimate hygiene rule: a
 lead that appears and disappears within the decay window is noise; only
@@ -10177,8 +10179,10 @@ a persistent best lag with stable sign is structure. The classic pairs --
 index futures lead the cash basket, the liquid large-cap leads its sector
 peers -- are exactly this computation.
 
-*In this library:* `microstructure/LeadLagEstimator.java` (`bestLag`,
-`correlationAtLag(0)` comparison, `expectedFollowerReturn`).
+*In this library:* `microstructure/LeadLagEstimator.java` (`bestLag`, which
+reports 0 unless the best positive lag clears a multiple-testing corrected
+band and beats the contemporaneous correlation; `correlationAtLag(0)`;
+`expectedFollowerReturn`).
 
 ### 330. "'The market is volatile right now.' Why is that statement meaningless without a clock, and what breaks on expiry days?"
 
@@ -12568,7 +12572,9 @@ on daily equity data is alpha + beta ~ 0.98, so shocks take months to
 fade -- volatility clustering, quantified in one number.
 
 *In this library:* `volatility/EwmaVolatility.java` (the RiskMetrics
-recursion, lambda validated in (0,1)), `volatility/Garch11.java` (MLE
+recursion, lambda validated in (0,1); `variances` seeds causally with
+bias-corrected weights rather than with the full-sample variance, which
+would leak the future into the first values), `volatility/Garch11.java` (MLE
 fit plus the geometric multi-step forecast) -- run both on the same
 series after a vol spike and compare the 10-day paths.
 
@@ -13967,14 +13973,23 @@ and the neutralization silently neutralizes nonsense. The safe API
 takes the map and aligns it to the panel's symbol order internally;
 symbols missing from the map get a singleton sentinel sector (they
 demean against themselves to zero -- conservative: an unlabeled name
-cannot leak sector risk in). Second trap: neutralization changes gross
-exposure, so re-normalize weights AFTER, not before, or position
-sizes drift with each step in the pipeline.
+cannot leak sector risk in). Second trap: neutralizing in sequence does
+not neutralize jointly. Project out sectors, then beta, and the beta
+projection reintroduces sector exposure; you need one projection onto
+the null space of all constraint rows at once. Third trap: the betas
+themselves. Estimating each name's beta against an equal-weight market
+that includes the name pulls every beta toward 1 on small panels (the
+self-weight is 1/N), so use a leave-one-out market or an external index.
+Last, neutralization changes gross exposure, so re-normalize weights
+AFTER, not before, or position sizes drift with each step in the
+pipeline.
 
 *In this library:* `alpha/PortfolioConstruction.java` --
 `sectorNeutralize` (map-keyed overload aligns by symbol; missing
-symbols get singleton sectors), `betaNeutralize`, demeaning for
-dollar neutrality, and the documented re-normalize-after rule.
+symbols get singleton sectors), `betaNeutralize`, `neutralize(weights,
+constraints)` for the joint projection (with `sectorRows` building the
+sector dummies), `trailingBetas` against a leave-one-out market (or an
+external market series), and the documented re-normalize-after rule.
 
 ### 476. "Estimate the premium on your factor with a standard error. Why is pooled OLS wrong, and what data reality must the estimator survive?"
 
@@ -14100,9 +14115,15 @@ the cost model itself.
 
 *In this library:* `alpha/AlphaBacktester.java` -- cost-aware panel
 backtests using `microstructure/MarketImpactModel.estimate` for the
-square-root impact term (the comment marks the large-size case as
-"this IS the capacity answer"), sharing the estimator and cost
-decomposition with the execution engines.
+square-root impact term (ADV and volatility from the bars before the
+fill bar), sharing the estimator and cost decomposition with the
+execution engines. Its `Config` adds the other capacity levers: fills
+at the next open by default, weights that drift with prices between
+rebalances (turnover is measured against the drifted book, not a free
+daily rebalance back to target), financing (borrow fee, cash and margin
+rates), and a per-bar participation cap with carry-over of unexecuted
+trades, whose `meanTrackingGap` reports how far the book lags its
+target once size bites.
 
 ### 480. "You have five signals. How do you combine them -- and why must the combined weights NOT sum to one?"
 
@@ -14113,7 +14134,13 @@ that have decayed fade automatically -- no committee meeting required.
 This beats equal weighting (which funds dead signals forever) and
 beats in-sample regression stacking (which overfits the combination
 itself). The subtle design decision is normalization: the combined
-weight vector must NOT be renormalized to sum to 1. The weights ARE
+weight vector must NOT be renormalized to sum to 1, and the gate must
+be significance, not sign. With a short EWMA memory a trailing IC is
+noisy (an effective sample of about 200 observations gives a standard
+error near 0.07), so a component with no skill shows IC > 0 half the
+time. Shrink each IC toward zero by two standard errors,
+max(0, IC - 2 SE), and a dead signal gets weight only about 2% of the
+time. The weights ARE
 the sizing. If four signals have gone quiet (IC ~ 0) and one limps
 along at IC 0.01, renormalizing would let that lone near-dead
 component emit at full portfolio size -- the ensemble would take its
@@ -14128,9 +14155,10 @@ claim that scale is meaningless; in signal combination, scale IS the
 conviction.
 
 *In this library:* `microstructure/AlphaEnsemble.java` -- IC-weighted
-combination with the no-renormalize rule (the javadoc
-explains the IC-0.01 full-size failure it prevents) and zero weight
-until the track record exists.
+combination with each IC shrunk by `z` standard errors (z = 2 by
+default, via `IcSignificance`), the no-renormalize rule (the javadoc
+explains the marginal-IC full-size failure it prevents), and zero
+weight until the track record spans one IC memory.
 
 ### 481. "You want to fit alpha weights online, on live data. What keeps it out of sample, and what off-by-one destroys it?"
 
@@ -14140,8 +14168,10 @@ information available before t; only after the realized return arrives
 does it update its weights. The running out-of-sample IC that this
 produces -- correlation of predictions with outcomes, where every
 prediction was genuinely made in advance -- is the gate: the learner's
-output should carry zero weight until its prequential IC clears a
-threshold, so a model that has not yet proven itself live cannot trade.
+output should carry zero weight until its prequential IC is
+significant, that is, until it exceeds about two of its own standard
+errors, so a model that has not yet proven itself live cannot trade.
+A gate at IC > 0 passes a skill-free model half the time.
 This is walk-forward validation collapsed into the learning loop
 itself. The off-by-one that destroys it: feature snapshotting. The
 regression pairs features with the NEXT interval's return, so when the
@@ -14155,8 +14185,9 @@ fraudulent. The bug is invisible in the aggregate numbers (they just
 look better than reality); only the snapshot discipline prevents it.
 
 *In this library:* `microstructure/OnlineAlphaLearner.java` --
-prequential predict-then-train with time-decayed IC statistics as the
-gate, and the stored previous-interval snapshot (the field comment
+prequential predict-then-train with time-decayed IC statistics, a gate
+that returns 0 until the out-of-sample IC clears two standard errors,
+and the stored previous-interval snapshot (the field comment
 explains it must be "as of the PREVIOUS" interval).
 
 ### 482. "The PM asks for a one-page alpha report. What goes on it?"
