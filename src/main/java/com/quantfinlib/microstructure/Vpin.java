@@ -1,13 +1,13 @@
 package com.quantfinlib.microstructure;
 
 /**
- * VPIN — Volume-synchronized Probability of INformed trading (Easley,
+ * VPIN (Volume-synchronized Probability of INformed trading; Easley,
  * López de Prado &amp; O'Hara): the flow-toxicity gauge a market maker
  * watches to decide when quoting is no longer a business. Trades fill
- * fixed-volume buckets (volume time, not clock time — informed trading
- * compresses clock time but not volume time); each full bucket scores
- * its absolute buy/sell imbalance; VPIN is the average over the last
- * {@code window} buckets:
+ * fixed-volume buckets (volume time, not clock time, because informed
+ * trading compresses clock time but not volume time); each full bucket
+ * scores its absolute buy/sell imbalance; VPIN is the average over the
+ * last {@code window} buckets:
  *
  * <pre>  VPIN = (1/n) Σ |buyVol − sellVol| / bucketVolume</pre>
  *

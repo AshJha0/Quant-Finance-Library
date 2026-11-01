@@ -33,12 +33,12 @@ import java.io.IOException;
  * {@code BenchmarkExecutor.MarketState.alpha}.</p>
  *
  * <p>Same caveat as every learned signal here: the live IC is a
- * tripwire, not a validation — run any blend you intend to trade through
+ * tripwire, not a validation. Run any blend you intend to trade through
  * the {@code alpha} package's walk-forward machinery. Components must be
  * dimensionless (~[-1, 1]); non-finite inputs are handled per component
  * (see {@link #onObservation}). Zero allocation per event (caller-owned
  * arrays), single writer, one instance per symbol. The IC evidence persists via
- * {@code persist.Checkpoint} — restored trust is earned trust.</p>
+ * {@code persist.Checkpoint}: restored trust is earned trust.</p>
  */
 public final class AlphaEnsemble {
 

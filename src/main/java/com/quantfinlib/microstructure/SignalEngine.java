@@ -16,16 +16,16 @@ import com.quantfinlib.util.MathUtils;
  *       imbalance, via a per-symbol {@link FlowSignals};</li>
  *   <li><b>Fair value</b> — the size-weighted microprice
  *       ({@link FairValueEngine#microprice});</li>
- *   <li><b>Volatility</b> — a streaming EWMA realized-variance rate over
- *       irregular tick arrivals: per valid mid change,
+ *   <li><b>Volatility</b>: a streaming EWMA realized-variance rate over
+ *       irregular tick arrivals. Per valid mid change,
  *       {@code r² / dt} enters a time-decayed average, and
- *       {@link #volPerSqrtSecond} is its square root — multiply by
+ *       {@link #volPerSqrtSecond} is its square root; multiply by
  *       {@code √(seconds per year)} to annualize externally;</li>
  *   <li><b>Liquidity</b> — time-decayed EWMAs of the absolute spread (and
  *       {@link #spreadBps} of mid), displayed top-of-book depth, and quote
  *       arrival intensity (from the decayed inter-quote gap);</li>
- *   <li><b>Momentum</b> — two <em>time-aware</em> EMAs of the mid (decay by
- *       elapsed time, not by update count — constant-step EMAs like
+ *   <li><b>Momentum</b>: two <em>time-aware</em> EMAs of the mid (decay by
+ *       elapsed time, not by update count; constant-step EMAs like
  *       {@code indicators.StreamingIndicators} mis-weight irregular tick
  *       arrivals), read as the normalized fast/slow gap
  *       {@code (fast − slow)/mid}.</li>
@@ -315,8 +315,8 @@ public final class SignalEngine {
     }
 
     /**
-     * Momentum scaled by the volatility accrued over the fast horizon —
-     * a t-statistic-like "drift vs noise" ratio — clamped to [-1, 1].
+     * Momentum scaled by the volatility accrued over the fast horizon (a
+     * t-statistic-like "drift vs noise" ratio), clamped to [-1, 1].
      */
     public double momentumZ(int symbolId) {
         double vol = volPerSqrtSecond(symbolId);

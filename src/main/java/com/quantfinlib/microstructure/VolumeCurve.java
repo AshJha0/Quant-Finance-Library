@@ -107,7 +107,7 @@ public final class VolumeCurve {
     /**
      * Closes the session: folds today into the learned profile and resets
      * the intraday state. Call once per trading day. Unlike the vol/spread
-     * curves, a zero bucket IS a real observation here (no prints = no
+     * curves, a zero bucket is a real observation here (no prints = no
      * volume), so partial-coverage sessions (feed started mid-day) bias
      * the profile — exclude them from rollDay or seed the shape via
      * {@link #seedProfile} instead.

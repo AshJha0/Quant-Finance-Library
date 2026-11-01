@@ -20,10 +20,10 @@ import java.util.List;
  * </ol>
  *
  * <p>Market orders are always eligible on their side. The indicative price /
- * volume / imbalance triple — what venues disseminate during the call phase
- * — is exposed via {@link #indicative}, and {@link #uncross} additionally
- * reports the surplus side. Not thread-safe; an auction is single-threaded
- * by nature (one uncross event).</p>
+ * volume / imbalance triple (what venues disseminate during the call
+ * phase) is exposed via {@link #indicative}, and {@link #uncross}
+ * additionally reports the surplus side. Not thread-safe; an auction is
+ * single-threaded by nature (one uncross event).</p>
  */
 public final class Auction {
 

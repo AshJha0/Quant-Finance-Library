@@ -74,7 +74,7 @@ class QuantModels6Test {
         double[] values = new double[2];
         double planted = 0;
         for (int i = 0; i < 3_000; i++) {
-            // The return realized NOW was leaned by component 0's PREVIOUS value.
+            // The return realized now was leaned by component 0's previous value.
             double ret = 1e-4 * (0.6 * planted + rnd.nextGaussian());
             planted = rnd.nextDouble() * 2 - 1;
             values[0] = planted;                           // predictive
@@ -101,7 +101,7 @@ class QuantModels6Test {
 
     @Test
     void aBarelyTrustedBlendIsABarelySizedSignal() {
-        // The weights are NOT renormalized: with only weak trust, the output
+        // The weights are not renormalized: with only weak trust, the output
         // must be small — never a lone IC-0.02 component at full strength.
         AlphaEnsemble ens = new AlphaEnsemble(1, 0.01);
         Random rnd = new Random(9);
@@ -183,7 +183,7 @@ class QuantModels6Test {
         assertTrue(ens.componentIC(0) != 0 && Double.isFinite(ens.componentIC(0)),
                 "the skipped component keeps its evidence: " + ens.componentIC(0));
 
-        // An observation where NOTHING scores must not inflate the record.
+        // An observation where nothing scores must not inflate the record.
         ens.onObservation(new double[]{Double.NaN, Double.NaN}, 1e-4);
         long all = ens.samples();
         ens.onObservation(new double[]{0.2, 0.2}, 1e-4);   // all-NaN snapshot: no scoring

@@ -7,22 +7,22 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 /**
- * Kyle's lambda — market impact learned from the tape instead of assumed
+ * Kyle's lambda: market impact learned from the tape instead of assumed
  * from a formula. Kyle (1985): price change is linear in signed order
  * flow, {@code Δp = λ·q + noise}, and λ (price per unit of signed volume)
  * is the market's depth read off its own behavior. Where
  * {@link MarketImpactModel} parameterizes impact (square-root law with
  * calibrated constants), this class runs the streaming through-origin
- * regression {@code λ = E[q·Δp] / E[q²]} on time-decayed moments — the
+ * regression {@code λ = E[q·Δp] / E[q²]} on time-decayed moments. The
  * regression-through-origin form is standard here because both the signed
  * flow and the mid change are zero-mean at these horizons.
  *
  * <p>Feed one {@link #onSample} per aggregation window (a trade, a bar, a
  * decision interval): the mid change over the window and the signed volume
- * that traded in it (buy-aggressor positive — {@link TradeClassifier}
+ * that traded in it (buy-aggressor positive; {@link TradeClassifier}
  * supplies the sign when the feed doesn't). {@link #impactBps} then prices
  * a contemplated child order in the units
- * {@code execution.BenchmarkExecutor.MarketState.impactBps} expects —
+ * {@code execution.BenchmarkExecutor.MarketState.impactBps} expects,
  * closing the last MarketState input that lacked a live producer. A noisy
  * negative λ estimate is clamped to zero impact there: "the market pays
  * you to trade" is an estimation artifact, and feeding it to the executor

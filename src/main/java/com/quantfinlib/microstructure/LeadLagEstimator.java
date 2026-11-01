@@ -10,8 +10,8 @@ import java.util.Arrays;
 /**
  * Streaming cross-asset lead-lag estimation: does instrument A's return
  * <em>now</em> predict instrument B's return a few intervals from now?
- * The classic pairs — EURUSD leads EURJPY, index futures lead the cash
- * basket, the liquid large-cap leads its sector peers — are exactly this
+ * The classic pairs (EURUSD leads EURJPY, index futures lead the cash
+ * basket, the liquid large-cap leads its sector peers) are exactly this
  * structure, and it is the basis of cross hedging and cross pricing.
  *
  * <p>Feed one {@link #onSample} per fixed sampling interval with the two
