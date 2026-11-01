@@ -113,7 +113,7 @@ class MarketRiskPricingTest {
     void hestonSemiAnalyticAgreesWithItsOwnMonteCarlo() {
         // Realistic equity-skew parameters (Feller violated, as markets do).
         Heston.Params p = new Heston.Params(2.0, 0.04, 0.5, -0.7, 0.04);
-        assertTrue(p.feller() < 1, "deliberately in the violated regime");
+        assertTrue(p.feller() < 1, "parameters chosen to violate the Feller condition");
         double analytic = Heston.call(100, 100, 0.02, 0.0, 1.0, p);
         double mc = Heston.callMonteCarlo(100, 100, 0.02, 0.0, 1.0, p, 200, 40_000, 42);
         assertEquals(analytic, mc, 0.35,
