@@ -7,11 +7,11 @@ package com.quantfinlib.risk;
  * (factor exposures δ, optional gammas Γ):
  *
  * <ul>
- *   <li><b>Named scenarios</b> — a vector of factor shocks (fractions:
+ *   <li><b>Named scenarios</b>: a vector of factor shocks (fractions:
  *       −0.20 = down 20%) applied through the delta-gamma P&amp;L
  *       {@code δ'Δx + ½Δx'ΓΔx}. Ship-your-own scenarios, plus
  *       {@link #blackMonday1987}, {@link #lehman2008} and
- *       {@link #covidMarch2020} as starting templates — stylized
+ *       {@link #covidMarch2020} as starting templates. These are stylized
  *       single-day shock magnitudes from the public record for a
  *       [equity, rates(bp/1e4), FX-USD, commodity, vol-points/1e2]
  *       factor ordering, documented as approximations to edit, not
@@ -19,12 +19,12 @@ package com.quantfinlib.risk;
  *   <li><b>Sensitivity ladders</b> — one factor swept over a shock
  *       range, everything else flat: the "what does ±X% do" table every
  *       risk report carries;</li>
- *   <li><b>Reverse stress</b> — the question regulators now ask first:
- *       "what move BREAKS us?" For a linear book under covariance Σ,
+ *   <li><b>Reverse stress</b>: the question regulators now ask first,
+ *       "what move breaks us?" For a linear book under covariance Σ,
  *       the most-probable shock producing a target loss L has the
  *       closed form {@code Δx* = −(L/(δ'Σδ))·Σδ}: the worst direction
  *       is along Σδ, and its Mahalanobis distance {@code L/√(δ'Σδ)}
- *       says how implausible the breaking move is (in "sigmas") — a
+ *       says how implausible the breaking move is (in "sigmas"). A
  *       book broken by a 2σ move has a problem today.</li>
  * </ul>
  *
@@ -68,9 +68,9 @@ public final class StressTester {
 
     /**
      * One factor swept over {@code [−range, +range]} in {@code steps}
-     * increments, everything else flat — the sensitivity ladder.
+     * increments, everything else flat: the sensitivity ladder.
      * Returns P&amp;L per rung, ascending shock. Delta-only: curvature is
-     * ignored — a book carrying gamma needs the delta-gamma overload,
+     * ignored. A book carrying gamma needs the delta-gamma overload,
      * or the down rungs will look symmetric when they are not.
      */
     public static double[] sensitivityLadder(double[] exposures, int factor,

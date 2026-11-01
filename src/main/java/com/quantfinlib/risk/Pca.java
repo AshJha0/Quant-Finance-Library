@@ -1,9 +1,9 @@
 package com.quantfinlib.risk;
 
 /**
- * Principal component analysis of a covariance matrix — the risk-factor
+ * Principal component analysis of a covariance matrix: the risk-factor
  * compressor. A yield curve has a dozen tenors but three real risk
- * factors (level, slope, curvature — the classic result this class
+ * factors (level, slope, curvature; the classic result this class
  * reproduces on curve data); an equity book has hundreds of names but a
  * handful of factors carrying most of the variance. PCA finds them:
  * the eigenvectors of the covariance matrix, ordered by how much

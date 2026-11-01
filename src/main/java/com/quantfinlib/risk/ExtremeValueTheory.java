@@ -12,7 +12,7 @@ package com.quantfinlib.risk;
  * <pre>  VaR_p = u + (β/ξ)·[((n/Nᵤ)(1−p))^{−ξ} − 1]</pre>
  *
  * <p>The shape ξ is the number to stare at: ξ ≈ 0 is an exponential
- * tail (Gaussian-ish), ξ &gt; 0 is a power-law tail (fat — equity
+ * tail (Gaussian-ish), ξ &gt; 0 is a power-law tail (fat; equity
  * returns typically fit ξ ≈ 0.2-0.4), and ξ ≥ 1 means the tail mean
  * does not even exist ({@code expectedShortfall} refuses rather than
  * returning a finite lie). {@link #fitPot} uses probability-weighted

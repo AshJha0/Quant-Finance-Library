@@ -30,7 +30,7 @@ class RiskAllocationTest {
         assertEquals(z * sigma, a.portfolioVar(), 1e-9);
         assertEquals(100 * z * 6 / sigma, a.components()[0], 1e-9);
         assertEquals(200 * z * 19 / sigma, a.components()[1], 1e-9);
-        // The Euler identity: components sum EXACTLY to the total.
+        // The Euler identity: components sum exactly to the total.
         assertEquals(a.portfolioVar(), a.components()[0] + a.components()[1], 1e-9);
         assertEquals(z * 6 / sigma, a.marginals()[0], 1e-12);
     }

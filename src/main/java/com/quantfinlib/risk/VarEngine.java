@@ -19,10 +19,10 @@ import java.util.SplittableRandom;
  *       through the linear map; converges to delta-normal for a linear
  *       book (the tests pin that agreement), and exists so the same
  *       harness can price non-linear books by full revaluation;</li>
- *   <li><b>Delta-gamma (Cornish-Fisher)</b> — second-order P&amp;L
+ *   <li><b>Delta-gamma (Cornish-Fisher)</b>: second-order P&amp;L
  *       {@code δ'Δx + ½Δx'ΓΔx} whose skew tilts the quantile via the
- *       Cornish-Fisher expansion: a short-gamma book's VaR is worse
- *       than delta-normal says, a long-gamma book's better — the
+ *       Cornish-Fisher expansion. A short-gamma book's VaR is worse
+ *       than delta-normal says and a long-gamma book's better, the
  *       asymmetry delta-normal cannot see;</li>
  *   <li><b>Historical</b> — replay actual factor-return rows through
  *       the exposures; no distributional assumption, no correlation
@@ -310,10 +310,10 @@ public final class VarEngine {
 
     /**
      * Full-revaluation VaR: every scenario repriced through the
-     * caller's pricer — the method that sees what every sensitivity
+     * caller's pricer. This is the method that sees what every sensitivity
      * shortcut misses (a knocked-out barrier, a pinned short gamma, an
      * autocall triggered by the scenario itself). Scenarios are rows of
-     * factor moves — historical rows for historical full-reval,
+     * factor moves: historical rows for historical full-reval,
      * Cholesky-generated rows for Monte Carlo full-reval. A pricer
      * returning NaN/Infinity throws: a scenario your pricer cannot
      * price is a modelling problem, not a quantile.

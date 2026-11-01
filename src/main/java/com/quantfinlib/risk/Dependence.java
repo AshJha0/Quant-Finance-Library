@@ -11,8 +11,8 @@ package com.quantfinlib.risk;
  *       same order?", robust to outliers and any monotone transform.
  *       Also the correlation FRTB's P&amp;L attribution test is defined
  *       on ({@code PnlAttribution});</li>
- *   <li><b>Kendall's τ</b> — the probability a random pair is concordant
- *       minus discordant. Slower to compute (O(n²) here — fine at risk
+ *   <li><b>Kendall's τ</b>: the probability a random pair is concordant
+ *       minus discordant. Slower to compute (O(n²) here, fine at risk
  *       sample sizes) but with the property copula work leans on:
  *       for elliptical copulas, {@code ρ_pearson = sin(πτ/2)} inverts τ
  *       into the copula correlation without distributional damage.</li>
