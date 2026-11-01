@@ -352,18 +352,36 @@ class MarketRiskTest {
                 new int[]{10, 20, 60});
         assertEquals(Math.sqrt(264), es, 1e-12);
 
-        // The stressed ratio scales capital up, never down.
-        assertEquals(150, FrtbEs.stressCalibratedEs(100, 30, 20), 1e-12, "ratio 1.5");
-        assertEquals(100, FrtbEs.stressCalibratedEs(100, 10, 20), 1e-12,
-                "a calm stressed period floors at 1, never discounts");
+        // MAR33.5: ES = ES_R,S * max(1, ES_F,C / ES_R,C). The stressed
+        // reduced-set ES is the base. (The previous version scaled the
+        // current full ES by a stressed/current ratio floored at 1, which
+        // is not the rule; those pins were 150 and 100.)
+        assertEquals(187.5, FrtbEs.stressCalibratedEs(100, 150, 80), 1e-12, "150 * 100/80");
+        assertEquals(30, FrtbEs.stressCalibratedEs(80, 30, 80), 1e-12,
+                "full = reduced: ratio 1, ES is the stressed reduced ES");
+        assertEquals(30, FrtbEs.stressCalibratedEs(70, 30, 80), 1e-12,
+                "full/reduced below 1 floors at 1");
+        assertThrows(IllegalArgumentException.class,
+                () -> FrtbEs.stressCalibratedEs(100, 30, 74.9),
+                "reduced set must explain >= 75% of full current ES");
+        assertEquals(40.0 / 3, FrtbEs.stressCalibratedEs(100, 10, 75), 1e-12,
+                "exactly 75% coverage is allowed");
 
-        // ES 97.5 of a known tail: losses 1..1000; VaR = 975th value, ES =
-        // mean of 975..1000 (26 values) = 987.5 exactly.
+        // ES 97.5 of losses 1..1000: (1-c)n = 25 tail observations,
+        // 976..1000, mean 988.0 (Acerbi-Tasche). The old estimator also
+        // averaged the VaR point 975 and pinned 987.5.
         double[] losses = new double[1000];
         for (int i = 0; i < 1000; i++) {
             losses[i] = i + 1;
         }
-        assertEquals(987.5, FrtbEs.es975(losses), 1e-9, "mean of 975..1000");
+        assertEquals(988.0, FrtbEs.es975(losses), 1e-9, "mean of 976..1000");
+        // 250-day window: w = 6.25, ES = (250+...+245 + 0.25*244)/6.25.
+        double[] year = new double[250];
+        for (int i = 0; i < 250; i++) {
+            year[i] = 250 - i;          // unsorted on purpose
+        }
+        double expected = (250 + 249 + 248 + 247 + 246 + 245 + 0.25 * 244) / 6.25;
+        assertEquals(expected, FrtbEs.es975(year), 1e-12, "fractional boundary weight");
 
         assertEquals(FrtbEs.TrafficLight.GREEN, FrtbEs.TrafficLight.of(4));
         assertEquals(FrtbEs.TrafficLight.AMBER, FrtbEs.TrafficLight.of(5));

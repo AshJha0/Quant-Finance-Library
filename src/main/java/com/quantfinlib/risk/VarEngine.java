@@ -2,7 +2,7 @@ package com.quantfinlib.risk;
 
 import com.quantfinlib.util.MathUtils;
 
-import java.util.Random;
+import java.util.SplittableRandom;
 
 /**
  * Portfolio Value-at-Risk, all four classic flavors over one input
@@ -31,7 +31,11 @@ import java.util.Random;
  *
  * <p>Conventions: VaR and ES are returned as POSITIVE losses in
  * currency units; confidence is the one-sided level (0.99 = 99%);
- * factor returns and Σ are per-horizon (scale √t outside). Expected
+ * factor returns and Σ are per-horizon (scale √t outside). Sample-based
+ * methods share the tail definitions of {@link TailRisk}. Monte Carlo
+ * factors the covariance with {@link PsdMatrices#choleskyPsd}, so a
+ * rank-deficient factor covariance is accepted and an indefinite one is
+ * rejected. Expected
  * shortfall accompanies each method — post-FRTB, ES is the primary
  * number and VaR the diagnostic. Research lane, deterministic (MC per
  * seed).</p>
@@ -85,8 +89,8 @@ public final class VarEngine {
         if (scenarios < 100) {
             throw new IllegalArgumentException("need >= 100 scenarios");
         }
-        double[][] chol = GaussianCopula.cholesky(covariance);
-        Random rnd = new Random(seed);
+        double[][] chol = PsdMatrices.choleskyPsd(covariance);
+        SplittableRandom rnd = new SplittableRandom(seed);
         double[] z = new double[n];
         double[] losses = new double[scenarios];
         for (int s = 0; s < scenarios; s++) {
@@ -270,23 +274,19 @@ public final class VarEngine {
     // Shared tail arithmetic
     // ------------------------------------------------------------------
 
-    /** VaR (quantile) and ES (tail mean) of a loss sample, positive = loss. */
+    /**
+     * VaR and ES of a loss sample, positive = loss, using the shared
+     * definitions of {@link TailRisk}: VaR is the lower empirical quantile
+     * {@code L(ceil(c·n))}, ES the Acerbi-Tasche tail mean over the worst
+     * {@code (1−c)·n} observations with a fractional boundary weight. Both
+     * are floored at zero (a tail made of gains reports no loss).
+     */
     static VarResult tail(double[] losses, double confidence) {
         if (!(confidence > 0.5 && confidence < 1)) {
             throw new IllegalArgumentException("confidence must be in (0.5, 1)");
         }
-        double[] sorted = losses.clone();
-        java.util.Arrays.sort(sorted);
-        int n = sorted.length;
-        int index = Math.min(n - 1, (int) Math.ceil(confidence * n) - 1);
-        double var = Math.max(0, sorted[index]);
-        double sum = 0;
-        int count = 0;
-        for (int i = index; i < n; i++) {
-            sum += sorted[i];
-            count++;
-        }
-        return new VarResult(var, Math.max(0, sum / count));
+        TailRisk.Tail t = TailRisk.of(losses, confidence);
+        return new VarResult(Math.max(0, t.var()), Math.max(0, t.expectedShortfall()));
     }
 
     private static double zOf(double confidence) {
