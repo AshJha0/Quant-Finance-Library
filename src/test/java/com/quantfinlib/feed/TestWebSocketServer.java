@@ -29,6 +29,7 @@ final class TestWebSocketServer implements AutoCloseable {
     private final Thread acceptThread;
     final List<String> receivedTexts = new CopyOnWriteArrayList<>();
     private final AtomicInteger connections = new AtomicInteger();
+    private final AtomicInteger closeFrames = new AtomicInteger();
     private volatile Socket client;
     private volatile OutputStream out;
     private volatile boolean running = true;
@@ -46,6 +47,11 @@ final class TestWebSocketServer implements AutoCloseable {
 
     int connectionCount() {
         return connections.get();
+    }
+
+    /** Close frames received from clients. */
+    int closeFrameCount() {
+        return closeFrames.get();
     }
 
     /** Sends one text frame to the current client. */
@@ -191,6 +197,12 @@ final class TestWebSocketServer implements AutoCloseable {
                 if (opcode == 1) {
                     receivedTexts.add(new String(payload, StandardCharsets.UTF_8));
                 } else if (opcode == 8) {
+                    closeFrames.incrementAndGet();
+                    synchronized (this) {
+                        // RFC 6455 5.5.1: answer with a close frame, then close.
+                        socket.getOutputStream().write(new byte[]{(byte) 0x88, 0});
+                        socket.getOutputStream().flush();
+                    }
                     socket.close();
                     return;
                 }

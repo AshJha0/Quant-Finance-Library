@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.function.BooleanSupplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -155,6 +156,93 @@ class WebSocketFeedTest {
                 awaitTrue(() -> bus.processedCount() == 2, "bus did not dispatch");
                 assertEquals(3000.25, bus.latestPrice("ETHUSDT"), 0.0);
             }
+        }
+    }
+
+    @Test
+    void closeAndErrorFromOneEpochScheduleExactlyOneReconnect() throws Exception {
+        try (TestWebSocketServer server = new TestWebSocketServer();
+             HftMarketDataBus bus = new HftMarketDataBus(1 << 10, 4, false)) {
+            bus.start();
+            try (WebSocketFeed feed = new WebSocketFeed(
+                    URI.create("ws://127.0.0.1:" + server.port() + "/"),
+                    new BinanceTradeParser(), bus).withReconnect(10, 50)) {
+                feed.start();
+                server.awaitConnections(1, 5_000);
+                long epoch = feed.currentEpoch();
+                // The JDK can report both onError and onClose for one failure,
+                // from different threads.
+                java.util.concurrent.CountDownLatch go = new java.util.concurrent.CountDownLatch(1);
+                Thread t1 = new Thread(() -> {
+                    awaitQuietly(go);
+                    feed.onDisconnect(epoch, "error: test");
+                });
+                Thread t2 = new Thread(() -> {
+                    awaitQuietly(go);
+                    feed.onDisconnect(epoch, "closed: test");
+                });
+                t1.start();
+                t2.start();
+                go.countDown();
+                t1.join();
+                t2.join();
+
+                server.awaitConnections(2, 10_000);
+                awaitTrue(feed::isConnected, "did not reconnect");
+                server.sendText(BTC_TRADE);
+                awaitTrue(() -> feed.tradesPublished() == 1, "trade after reconnect lost");
+                assertEquals(1, feed.reconnectCount(), "two producers would mean two reconnects");
+                assertEquals(2, server.connectionCount());
+                assertEquals(epoch + 1, feed.currentEpoch());
+                assertTrue(feed.consumeGap(), "a reconnect raises the gap flag");
+                // A late callback from the superseded socket changes nothing.
+                feed.onDisconnect(epoch, "closed: stale");
+                assertTrue(feed.isConnected());
+            }
+        }
+    }
+
+    @Test
+    void unregisteredSymbolsAreDroppedNotThrownInsideTheCallback() throws Exception {
+        try (TestWebSocketServer server = new TestWebSocketServer();
+             HftMarketDataBus bus = new HftMarketDataBus(1 << 10, 4, false)) {
+            bus.start();
+            try (WebSocketFeed feed = new WebSocketFeed(
+                    URI.create("ws://127.0.0.1:" + server.port() + "/"),
+                    new BinanceTradeParser(), bus).withSymbols("BTCUSDT")) {
+                feed.start();
+                server.awaitConnections(1, 5_000);
+                server.sendText(ETH_TRADE_COMBINED);
+                server.sendText(BTC_TRADE);
+                awaitTrue(() -> feed.tradesPublished() == 1, "registered symbol lost");
+                assertEquals(1, feed.unknownSymbolDrops());
+                assertEquals(0, feed.reconnectCount(), "an unknown symbol must not cycle the socket");
+                assertTrue(feed.isConnected());
+            }
+        }
+    }
+
+    @Test
+    void closePerformsTheCloseHandshake() throws Exception {
+        try (TestWebSocketServer server = new TestWebSocketServer();
+             HftMarketDataBus bus = new HftMarketDataBus(1 << 10, 4, false)) {
+            bus.start();
+            WebSocketFeed feed = new WebSocketFeed(
+                    URI.create("ws://127.0.0.1:" + server.port() + "/"),
+                    new BinanceTradeParser(), bus);
+            feed.start();
+            server.awaitConnections(1, 5_000);
+            feed.close();
+            awaitTrue(() -> server.closeFrameCount() == 1, "close frame never reached the server");
+            assertFalse(feed.isConnected());
+        }
+    }
+
+    private static void awaitQuietly(java.util.concurrent.CountDownLatch latch) {
+        try {
+            latch.await();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
     }
 

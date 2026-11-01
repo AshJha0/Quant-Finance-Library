@@ -294,13 +294,17 @@ class L3BookBuilderTest {
         var mx = (com.sun.management.ThreadMXBean)
                 java.lang.management.ManagementFactory.getThreadMXBean();
         long tid = Thread.currentThread().threadId();
-        long before = mx.getThreadAllocatedBytes(tid);
-        for (int i = 0; i < 500_000; i++) {
-            churn(b, rnd, ring, state);
+        // Smallest of five runs: one noisy run cannot fail the claim, but a
+        // per-event allocation shows in every run.
+        long allocated = Long.MAX_VALUE;
+        for (int run = 0; run < 5; run++) {
+            long before = mx.getThreadAllocatedBytes(tid);
+            for (int i = 0; i < 100_000; i++) {
+                churn(b, rnd, ring, state);
+            }
+            allocated = Math.min(allocated, mx.getThreadAllocatedBytes(tid) - before);
         }
-        long allocated = mx.getThreadAllocatedBytes(tid) - before;
-        assertTrue(allocated < 100_000,
-                "book building allocated " + allocated + " bytes");
+        assertEquals(0, allocated, "book building allocated in steady state");
         assertTrue(b.executeCount() > 0 && b.deleteCount() > 0,
                 "the loop must exercise executes and deletes");
     }
@@ -319,13 +323,16 @@ class L3BookBuilderTest {
         var mx = (com.sun.management.ThreadMXBean)
                 java.lang.management.ManagementFactory.getThreadMXBean();
         long tid = Thread.currentThread().threadId();
-        long before = mx.getThreadAllocatedBytes(tid);
-        for (int i = 100_000; i < 400_000; i++) {
-            wireCycle(b, add, exec, del, stock, i);
+        long allocated = Long.MAX_VALUE;
+        int i = 100_000;
+        for (int run = 0; run < 5; run++) {
+            long before = mx.getThreadAllocatedBytes(tid);
+            for (int k = 0; k < 60_000; k++, i++) {
+                wireCycle(b, add, exec, del, stock, i);
+            }
+            allocated = Math.min(allocated, mx.getThreadAllocatedBytes(tid) - before);
         }
-        long allocated = mx.getThreadAllocatedBytes(tid) - before;
-        assertTrue(allocated < 100_000,
-                "wire decode allocated " + allocated + " bytes");
+        assertEquals(0, allocated, "wire decode allocated in steady state");
         assertEquals(0, b.restingOrders());
     }
 

@@ -1,19 +1,24 @@
 /**
  * Zero-dependency FIX 4.4 engine.
- * {@link com.quantfinlib.fix.FixMessage} (validated codec: BodyLength +
- * CheckSum framing) and {@link com.quantfinlib.fix.FixSession} (initiator
- * and acceptor roles): Logon with optional Username/Password, heartbeats
- * with TestRequest probing, sequence tracking with full ResendRequest
- * recovery (PossDup replays, SequenceReset-GapFill, duplicate suppression),
- * session Reject handling, Logout handshake, and optional durable
- * {@link com.quantfinlib.fix.FileSessionStore} for seqnum continuation
- * across restarts. Application flow: NewOrderSingle, cancel/replace (35=F/G)
- * and typed {@link com.quantfinlib.fix.ExecutionReport}s.
+ * {@link com.quantfinlib.fix.FixMessage} (validated codec: BodyLength and
+ * CheckSum framing, length-prefixed data fields, repeated tags kept in order)
+ * and {@link com.quantfinlib.fix.FixSession} (initiator and acceptor): Logon
+ * first with an acceptor-side {@code onLogonRequest} check, CompID and
+ * SendingTime validation, negotiated HeartBtInt, TestRequest probing with
+ * TestReqID matching, ResendRequest recovery (PossDup replays with
+ * OrigSendingTime, SequenceReset-GapFill, duplicate suppression), session
+ * Reject for malformed messages, Logout. Timing runs on an injectable
+ * {@link com.quantfinlib.fix.FixClock}.
  *
- * <p>Garbage-free hot path (flyweights over framed bytes, scaled-long
- * prices): {@link com.quantfinlib.fix.FixOrderEncoder} (orders out),
- * {@link com.quantfinlib.fix.FixExecReportView} (fills in) and
- * {@link com.quantfinlib.fix.FixMarketDataView} (35=W/X tiered quotes in)
- * — feed to order without touching a String or a double.</p>
+ * <p>{@link com.quantfinlib.fix.FileSessionStore} is a CRC-checked journal
+ * forced to disk before each message is sent, recovered past a torn tail,
+ * and bounded by compaction, so a resend after a crash replays the real
+ * orders.</p>
+ *
+ * <p>Garbage-free path (flyweights over framed bytes, scaled-long prices):
+ * {@link com.quantfinlib.fix.FixOrderEncoder} (new, cancel and replace out),
+ * {@link com.quantfinlib.fix.FixExecReportView} (fills in, with ExecID
+ * de-duplication) and {@link com.quantfinlib.fix.FixMarketDataView} (35=W/X
+ * quotes in).</p>
  */
 package com.quantfinlib.fix;
