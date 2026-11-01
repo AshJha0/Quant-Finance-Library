@@ -374,9 +374,10 @@ public final class ExposureSimulator {
             double[][] discPos = new double[paths][m];
             double[][] discNeg = new double[paths][m];
             double[][] expo = new double[paths][m];
-            double[] driverRates = new double[paths];
-            double[] driverFx = new double[paths];
-            double tLast = times[m - 1];
+            double[][] driverRates = new double[paths][m];
+            double[][] driverFx = new double[paths][m];
+            double[] wrOnGrid = new double[ng];
+            double[] wfxOnGrid = new double[ng];
 
             double v0 = value(0, 0, hasFx ? mk.fxSpot() : 0, initialResets());
             SplittableRandom rng = new SplittableRandom(seed);
@@ -406,11 +407,13 @@ public final class ExposureSimulator {
                     integ += x * bStep[g] + e2;
                     x = x * decay[g] + e1;
                     wr += ew;
+                    wrOnGrid[g] = wr;
                     double t = grid[g];
                     double dt = t - grid[g - 1];
                     if (hasFx) {
                         wfx += rho * ew + rhoPerp * Math.sqrt(dt) * rng.nextGaussian();
                     }
+                    wfxOnGrid[g] = wfx;
                     double disc = p0(t) * Math.exp(-0.5 * vFn(t) - integ);
                     dOnGrid[g] = disc;
                     fillResets(resets, resetAt, g, x);
@@ -438,10 +441,17 @@ public final class ExposureSimulator {
                     expo[p][i] = Math.max(net, 0);
                     discPos[p][i] = d * Math.max(net, 0);
                     discNeg[p][i] = d * Math.max(-net, 0);
+                    // Wrong-way driver for bucket i: the standardised Brownian move that
+                    // drives E(t_i). Uncollateralised, the level W(t_i) / sqrt(t_i); under
+                    // a CSA, the increment over the margin period of risk ending at t_i
+                    // (a zero MPR falls back to the level).
+                    int u = userIndex[i];
+                    int l = csa == null || lagIndex[i] == u ? 0 : lagIndex[i];
+                    double span = times[i] - grid[l];
+                    double norm = 1 / Math.sqrt(span);
+                    driverRates[p][i] = (wrOnGrid[u] - wrOnGrid[l]) * norm;
+                    driverFx[p][i] = hasFx ? (wfxOnGrid[u] - wfxOnGrid[l]) * norm : 0;
                 }
-                // Standardised Brownian values at the last exposure date (the grid end).
-                driverRates[p] = wr / Math.sqrt(tLast);
-                driverFx[p] = hasFx ? wfx / Math.sqrt(tLast) : 0;
             }
             double[] p0s = new double[m];
             for (int i = 0; i < m; i++) {
