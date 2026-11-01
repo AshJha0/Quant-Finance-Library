@@ -33,6 +33,14 @@ public final class Indicators {
     /** direction: +1 = uptrend (value is support), -1 = downtrend (value is resistance). */
     public record SuperTrend(double[] value, int[] direction) {}
 
+    /**
+     * Ichimoku lines. {@code chikou} is for display only: {@code chikou[i]}
+     * holds {@code close(i + kijun)}, a price from the future relative to
+     * bar {@code i}. Any rule or signal reading it at bar {@code i} looks
+     * ahead. The causal form of the lagging-span signal is
+     * {@code close(i)} compared with {@code close(i − kijun)}, which
+     * strategy rules should read from the close array directly.
+     */
     public record Ichimoku(double[] tenkan, double[] kijun, double[] senkouA,
                            double[] senkouB, double[] chikou) {}
 
@@ -46,7 +54,12 @@ public final class Indicators {
     // Moving averages
     // ------------------------------------------------------------------
 
-    /** Simple moving average. */
+    /**
+     * Simple moving average. Rolling sum, re-summed exactly from the window
+     * every {@code period} bars so rounding error from the add/subtract
+     * updates cannot accumulate over long series (the same schedule as
+     * {@link StreamingIndicators.Sma}, so the two stay bit-identical).
+     */
     public static double[] sma(double[] v, int period) {
         checkPeriod(period);
         double[] out = MathUtils.nanArray(v.length);
@@ -58,6 +71,12 @@ public final class Indicators {
             sum += v[i];
             if (i >= period) {
                 sum -= v[i - period];
+            }
+            if ((i + 1) % period == 0) {
+                sum = 0;
+                for (int j = i - period + 1; j <= i; j++) {
+                    sum += v[j];
+                }
             }
             if (i >= period - 1) {
                 out[i] = sum / period;
@@ -467,7 +486,8 @@ public final class Indicators {
     /**
      * Ichimoku Cloud with standard forward/backward displacement:
      * senkou spans are plotted {@code kijunPeriod} bars ahead, chikou
-     * {@code kijunPeriod} bars behind.
+     * {@code kijunPeriod} bars behind. The chikou array is display-only and
+     * contains future prices relative to its index; see {@link Ichimoku}.
      */
     public static Ichimoku ichimoku(BarSeries s, int tenkanPeriod, int kijunPeriod, int senkouBPeriod) {
         int n = s.size();
