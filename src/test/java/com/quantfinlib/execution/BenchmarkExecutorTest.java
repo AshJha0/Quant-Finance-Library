@@ -66,8 +66,12 @@ class BenchmarkExecutorTest {
         assertEquals(10_000, e.dueQuantity(0.5, thin));
         // Ramp: at f = 0.95 the cap fraction is 0.25 + 0.75 * 0.5 = 0.625 -> 25k.
         assertEquals(25_000, e.dueQuantity(0.95, thin));
-        // Horizon: the whole remainder, whatever the depth.
-        assertEquals(100_000, e.dueQuantity(1.0, thin));
+        // Horizon: the remainder, limited only by all of the displayed depth.
+        assertEquals(40_000, e.dueQuantity(1.0, thin));
+        BenchmarkExecutor deep = new BenchmarkExecutor(Side.BUY, 100_000, Benchmark.TWAP,
+                0.1, 0, 0.25);
+        deep.onFill(30_000);
+        assertEquals(70_000, deep.dueQuantity(1.0, neutral(1.0)));
     }
 
     @Test

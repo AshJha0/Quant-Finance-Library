@@ -250,9 +250,8 @@ public final class HftOrderGateway implements AutoCloseable {
     /**
      * Requests a cancel/replace to a new total quantity and price. The new
      * terms pass the risk gate ({@link HftRiskGate#checkReplace}); any
-     * extra working quantity is reserved now. Returns 0 on success,
-     * {@code -reason} on a risk or throttle rejection, and
-     * {@code -REJECT_TOO_MANY_OPEN} is never returned here. Returns
+     * extra working quantity is reserved now. Returns 0 on success and
+     * {@code -reason} on a risk or throttle rejection. Returns
      * {@link #REPLACE_NOT_LIVE} if the order is unknown, terminal or has a
      * cancel or replace already pending, and {@link #REPLACE_RING_FULL} on
      * backpressure.

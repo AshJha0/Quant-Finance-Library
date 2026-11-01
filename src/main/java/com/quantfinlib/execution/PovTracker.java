@@ -89,7 +89,8 @@ public final class PovTracker {
 
     /** Target executed quantity for the volume seen so far: {@code p / (1 - p) * V}. */
     public long targetQuantity() {
-        return (long) Math.floor(participation / (1 - participation) * marketVolume);
+        // The 1e-6 absorbs binary rounding (0.1 / 0.9 * 900000 must give 100000).
+        return (long) Math.floor(participation / (1 - participation) * marketVolume + 1e-6);
     }
 
     /**
