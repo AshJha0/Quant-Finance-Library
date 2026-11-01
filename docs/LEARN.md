@@ -2106,9 +2106,13 @@ never averages — latency distributions are multi-modal, and the mean is a
 number nobody experiences.
 
 *In this library:* `util/LatencyRecorder.java` (zero-allocation
-HdrHistogram-style log-linear buckets — safe to keep on the hot path),
-`util/HiccupMonitor.java` (the jHiccup pattern);
-`docs/ULTRA_LOW_LATENCY.md` treats coordinated omission explicitly.
+HdrHistogram-style log-linear buckets, safe to keep on the hot path;
+percentiles are bucket upper bounds, and `clockResolutionNanos()`
+reports the clock step), `util/HiccupMonitor.java` (the jHiccup
+pattern). The library's latency benchmarks run open-loop fixed-rate
+passes timed from intended start next to the closed-loop ones, because
+a closed-loop harness that waits for each response is itself
+coordinated omission.
 
 ### 35. "Your FIX session drops mid-day. Walk me through the reconnect — what do the sequence numbers do?"
 
@@ -4851,14 +4855,18 @@ percentile spectrum to max), warm up before recording, and correlate
 spikes with the hiccup log -- if the benchmark's p99.9 spikes and the
 hiccup monitor shows a matching stall, the platform, not the
 algorithm, is your problem. This question separates people
-who have *published* latency numbers from people who have been burned
-by them.
+who have published latency numbers from people who have been burned
+by them. A fourth trap is the clock itself: on Windows `nanoTime()`
+advances in 100 ns steps, so a reported 100 ns is one clock tick, not
+100 ns of work, and a percentile below the clock step is meaningless.
 
 *In this library:* `util/LatencyRecorder.java` (full percentile
-spectrum p50-p99.9-max, no averages), `util/HiccupMonitor.java`
-(jHiccup-style stall detection -- the javadoc describes exactly the
-diagnosis workflow), `docs/ULTRA_LOW_LATENCY.md` (the coordinated
-omission warning next to the paced benchmarks).
+spectrum p50-p99.9-max, no averages; each percentile is an upper bound
+on the true sample quantile, never a bucket midpoint),
+`util/HiccupMonitor.java` (jHiccup-style stall detection -- the javadoc
+describes the diagnosis workflow), and the latency benchmarks in the
+examples jar, which print the clock step and run open-loop passes with
+intended-start timestamps beside the closed-loop ones.
 
 ### 130. "Describe the LMAX-style sequencer architecture. Why does determinism fall out of it -- and how do you debug with replay?"
 
@@ -6231,20 +6239,26 @@ naive recorder poisons the experiment: storing every sample allocates
 (GC pauses caused by your profiler), locking a shared histogram
 serializes your hot path, and floating-point bucket math costs more
 than the operation being timed. The right shape is HdrHistogram-style
-log-linear bucketing: an array of counts indexed by the sample's
-power-of-two range plus a few sub-bucket bits -- recording is a couple
-of array writes, allocation-free, with bounded relative error (~6% at
-16 sub-buckets per octave) which is plenty for a percentile whose
-neighboring values span microseconds. Single-writer by design: one
+log-linear bucketing (Tene 2012): an array of counts indexed by the
+sample's power-of-two range plus a few sub-bucket bits -- recording is a
+couple of array writes, allocation-free, with bounded relative error
+(1/128, under 0.8%, at 128 sub-buckets per power of two). Two reporting
+details matter. A percentile read from a bucket is an interval, so
+report its upper edge (a bound you can defend) rather than the bucket
+midpoint (a guess dressed up as a measurement). And no histogram is
+more precise than the clock that fed it: print the clock step beside
+the numbers. Single-writer by design: one
 recorder per thread, merge at read time, rather than a contended
 shared structure. And publish the error bar with the number -- a p99.9
 from 10,000 samples rests on ten observations, the same tail-starvation
 arithmetic as Q178.
 
 *In this library:* `util/LatencyRecorder.java` -- zero-allocation
-log-linear histogram (16 sub-buckets per power of two, ~6% worst-case
-quantile error, `record` is "a couple of array writes"), explicitly
-single-writer; wired into the live loop's dashboards.
+log-linear histogram (exact below 128 ns, then 128 sub-buckets per
+power of two; `percentile` is the bucket's upper bound clamped to the
+observed range, `percentileLowerBound` the other edge,
+`clockResolutionNanos()` and `summary()` report the clock step),
+explicitly single-writer; wired into the live loop's dashboards.
 
 ### 184. "Your p99.9 spiked overnight. How do you know whether to blame your code or the platform?"
 
@@ -6268,7 +6282,11 @@ between a focused fix and a week of profiling the wrong layer.
 
 *In this library:* `util/HiccupMonitor.java` -- a jHiccup-style daemon
 thread recording park-excess into a `LatencyRecorder`; the javadoc
-prescribes exactly this run-alongside triage, and
+prescribes this run-alongside triage. On Windows the default park mode
+wakes on the system timer tick (1 to 15.6 ms), so most of what it
+records there is timer quantisation; `HiccupMonitor.spinning(resolution)`
+busy-reads `nanoTime()` instead and records only time the thread was
+not running, at the cost of one core. And
 `docs/ULTRA_LOW_LATENCY.md` covers the JVM/kernel tuning that shrinks
 what it observes.
 
