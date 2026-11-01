@@ -19244,7 +19244,9 @@ and pull quantity forward. Feed it whichever event type you care about:
 trades, quotes, or your own fills.
 
 *In this library:* `microstructure/HawkesIntensity.java` (`burstScore`,
-the branching-ratio rejection, backwards-timestamp tolerance) and
+the branching-ratio rejection, backwards-timestamp tolerance, and
+`HawkesIntensity.fit` for maximum-likelihood calibration of mu, alpha
+and beta from event timestamps) and
 `microstructure/QueueModel.java` (the horizons that shorten).
 
 ### 683. "Your feed prints trades with no aggressor flag. How do you get the buy/sell signs your flow signals need?"
@@ -19285,16 +19287,22 @@ correlation, then compare it against the *contemporaneous* correlation
 at lag zero. If lag zero dominates every lagged correlation, the pair
 co-moves but neither side is tradeably ahead -- what looked like the
 future "leading" was simultaneous reaction seen through your feed's
-timestamps. If a positive lag genuinely dominates, the regression beta
+timestamps. The second check is multiple testing: an argmax over ten
+noise correlations always finds some lag, and with a per-lag
+two-standard-error band a pure-noise pair would still report a lead
+about 40% of the time. So the best lag must also clear a Šidák-corrected
+band at a 5% family-wise level (about 2.8 standard errors for ten lags,
+using the EWMA's effective sample size). If a positive lag passes both
+checks, the regression beta
 at that lag turns the leader's move into an expected follower return.
 For the execution desk the humbler use is the valuable one: your buy
 children in the cash name are about to face a repriced book -- urgency
 for the next interval just went up, and passive orders resting at
 pre-jump prices are stale.
 
-*In this library:* `microstructure/LeadLagEstimator.java` (`bestLag` vs
-`correlationAtLag(0)`, `expectedFollowerReturn` -- the compare-against-
-lag-zero discipline is in the javadoc).
+*In this library:* `microstructure/LeadLagEstimator.java` (`bestLag`
+returns 0 unless the lead clears the corrected band and beats
+`correlationAtLag(0)`; `expectedFollowerReturn`).
 
 ### 685. "Your working name is drifting toward its LULD band. What happens mechanically, and what should the algo do before it happens?"
 
@@ -19466,7 +19474,9 @@ materially below, and the desk is systematically paying.
 
 *In this library:* `regulatory/BestExecutionAnalyzer.java`
 (`OrderOutcome` with `filled=false` supported, `BestExecutionReport`
-with `avgSlippageBpsByVenue`, median latency).
+with `avgSlippageBpsByVenue`, a quantity-weighted slippage alongside
+the simple average, median latency; `implementationShortfall` for the
+Perold delay, execution and opportunity-cost split).
 
 ### 692. "Quarterly venue review: rank the venues you actually used. What goes into the ranking beyond price?"
 
@@ -19637,7 +19647,8 @@ totals, a pending spread spike, half-matured markouts -- because it
 belonged to yesterday, and restoring it would have the morning's first
 decisions consuming stale context as if it were live. Two properties
 make the save trustworthy rather than a toy. Atomicity: write to a
-temp file, then rename over the old one -- a crash mid-save corrupts
+temp file, force it to the device, rename it over the old one, then
+force the directory -- a crash or power loss mid-save corrupts
 nothing, yesterday's checkpoint survives. And named sections: each
 model writes and reads its own section, so adding a model doesn't
 invalidate old files and a missing section is detectable rather than a
@@ -19726,29 +19737,34 @@ risk run.
 *In this library:* `pricing/BlackScholes.java` -- the explicit
 zero-vol / T guard returns the discounted forward intrinsic (comment
 notes the ATM-forward 0/0 in d1 that motivates it), with `intrinsic`
-for the T = 0 case.
+for the T = 0 case; delta, gamma, vega, theta and rho also return
+their deterministic limits at zero vol instead of NaN or infinity.
 
 ### 702. "Your surface builder just rejected a quote: the implied-vol solver returned NaN. The trader swears the price is fine. Who is right?"
 
 Check the band before you check the trader. A call's price lives
 between its discounted forward intrinsic (the sigma -> 0 floor) and its
-sigma -> infinity ceiling (approaching `S e^{-qT}`). The bisection
-solver brackets vol in `[1e-4, 5.0]`, evaluates the model price at both
-ends, and confirms the target lies between them; a NaN means the quoted
-price sat **outside** that band -- which is not a low or high volatility,
-it is a stale print, a crossed mid, or a penny-option rounding artifact.
-So the solver is right and it is right *loudly*: returning NaN forces the
-caller to decide -- drop the quote, widen the bracket knowingly, or go
-find why the mid is stale -- instead of a clamped 0.0001 or 5.0 silently
-poisoning the smile interpolation and feeding garbage Greeks to the
-hedger. Nine times in ten the "fine" price is a mid built from a
-one-sided market or a late feed. The fix is upstream (refresh the quote),
-never a wider clamp.
+sigma -> infinity ceiling (approaching `S e^{-qT}`). Every implied vol
+between those bounds exists and is found: the solver is a safeguarded
+Newton iteration on the normalised Black function (the normalisation of
+Jäckel 2015), which first converts an in-the-money quote into the
+out-of-the-money option by parity and keeps every step inside a
+shrinking bracket, so it recovers sigma to near machine precision in
+deep wings and at very short or very long expiries. A NaN therefore
+means the quoted price sat strictly **outside** that band (below
+intrinsic, or at or above the zero-strike bound); a price exactly at
+intrinsic returns 0, not NaN. Outside the band is not a low or high
+volatility, it is a stale print, a crossed mid, or a penny-option
+rounding artifact. So the solver is right and it is right *loudly*:
+returning NaN forces the caller to decide -- drop the quote or go find
+why the mid is stale -- instead of a clamped value silently poisoning
+the smile interpolation and feeding garbage Greeks to the hedger. Nine
+times in ten the "fine" price is a mid built from a one-sided market or
+a late feed. The fix is upstream (refresh the quote).
 
-*In this library:* `pricing/BlackScholes.java` -- `impliedVol` bisects
-the documented `[1e-4, 5.0]` bracket and returns NaN for prices below
-intrinsic or above the maximum attainable price, javadoc naming
-stale/rounded quotes as the expected cause.
+*In this library:* `pricing/BlackScholes.java` -- `impliedVol` delegates
+to `pricing/ImpliedVolatility.java` (`black`: NaN outside the attainable
+range, 0 at intrinsic); `Black76.impliedVol` uses the same solver.
 
 ### 703. "You came in flat delta last night; this morning you're long 400 deltas with no trade booked. Explain the P&L, then decide whether to re-hedge."
 
@@ -20024,32 +20040,39 @@ concentrate a book-sized cliff at one price. Discontinuous payoffs are
 priced with models but *managed* with structure.
 
 *In this library:* `pricing/BarrierOption.java` -- `downAndOutCall` and
-the knock-in/knock-out family via in/out parity; the javadoc's
-regular/reverse discussion is this exact failure mode, and
+the general `price` for the knock-in/knock-out family; the regular and
+reverse cases share one formula, and
 `hedging/HedgingSimulator.java` shows the discrete cost/error blowup on
 plain options.
 
-### 715. "A structurer wants a price on an up-and-out call struck below the barrier. Your closed-form pricer throws instead of quoting. Is the library broken?"
+### 715. "A structurer wants a price on an up-and-out call struck below the barrier. What does the closed-form pricer give you, and how far do you trust it?"
 
-No -- it is refusing to lie. That is a **reverse** barrier: the knock-out
-sits where the payoff is largest (H > K for a call), so value is a tent
-that collapses to zero right at the barrier, delta flips sign, and gamma
-explodes near H. The flat-vol Reiner-Rubinstein closed form still
-produces *a* number there, but it is the wrong number in exactly the
-region that matters -- reverse barriers are acutely smile-sensitive and
-belong on local/stochastic vol with an explicit barrier shift. A
-regular barrier (down-and-out call, H < K) knocks out where the option
-is nearly worthless anyway, Greeks stay tame, and the closed form is
-trustworthy; the code supports those. So the throw is the honest
-engineering choice: reject the reverse configuration with a clear
-exception rather than return a plausible-looking price that mis-hedges
-a desk into a loss. The library is telling you to price this one on a
-richer model, which is the correct desk answer, not a bug.
+It gives you a number, and the number is the correct flat-vol price.
+That is a **reverse** barrier: the knock-out sits where the payoff is
+largest (H > K for a call), so value is a tent that collapses to zero
+right at the barrier, delta flips sign, and gamma explodes near H.
+`BarrierOption.price` covers all eight single-barrier types with cash
+rebates using the Reiner-Rubinstein building blocks (Reiner and
+Rubinstein 1991, combined as in Haug 2007, table 4-13); for an
+up-and-out call with K < H the combination is A - B + C - D + F. (An
+earlier version threw on reverse barriers rather than price them; the
+regular-barrier convenience methods such as `downAndOutCall` now
+delegate to the same formula.) The trust question is the model, not
+the algebra. A flat-vol price is right under Black-Scholes and wrong
+in exactly the region that matters: reverse barriers are acutely
+smile-sensitive, because the value depends on the vols near H where
+the payoff is cut off. So use the closed form as the reference and the
+sanity check, and price and hedge the trade on local or stochastic vol
+with a barrier shift. Two practical details: the formula assumes
+continuous monitoring (apply the Broadie-Glasserman-Kou shift
+H e^{+0.5826 sigma sqrt(dt)} for an up barrier observed daily), and a
+barrier already breached at spot gives the vanilla for a knock-in and
+the rebate for a knock-out.
 
-*In this library:* `pricing/BarrierOption.java` -- knock-ins/knock-outs
-built through in/out parity (`KO = vanilla - KI` in the code) with
-explicit `IllegalArgumentException`s naming reverse barriers (H > K
-calls, H < K puts) as unsupported in closed form, and the reason.
+*In this library:* `pricing/BarrierOption.java` -- `price(type,
+direction, knock, spot, strike, barrier, rebate, rate, carry, vol, T)`
+for all eight types, the building-block table in the javadoc, and the
+monitoring note.
 
 ### 716. "An autocall you're short is drifting toward its coupon barrier, a client RFQ for more of the same just came in, and your vol book feels heavy. Connect the three."
 
@@ -20224,9 +20247,15 @@ foreign asset's return in your currency at a fixed FX rate, and hedging
 it forces the dealer to hold the foreign asset and rebalance an FX hedge
 whose size tracks the asset -- when asset and FX are correlated, that
 rebalancing has systematic expected cost, which appears as a **drift
-correction** `minus rho x sigma_S x sigma_FX`. Crucially only the drift
-moves; the vol pricing the payoff stays the asset's own sigma_S, so any
-code that touches sigma is already wrong. The sign: let rho be the
+correction** `minus rho x sigma_S x sigma_FX`. Only the drift moves;
+the vol pricing the payoff stays the asset's own sigma_S, so any code
+that touches sigma is already wrong. The drift being corrected is the
+asset's own carry in its own currency: under the domestic measure the
+asset drifts at `r_f - q - rho sigma_S sigma_X`, where r_f is the
+foreign rate, and the payoff is discounted at the domestic rate r_d.
+Using r_d in the drift is a second, common bug: with rho = 0 the
+quanto forward must equal the foreign forward `S e^{(r_f - q)T}`, not
+`S e^{(r_d - q)T}`. The sign: let rho be the
 correlation between the asset and the foreign currency's value in
 domestic terms. If rho > 0 (asset rallies when the foreign currency
 strengthens), the unhedged investor would have double-won, the quanto
@@ -20236,10 +20265,13 @@ a positively correlated asset has the sign flipped: that is the bug.
 Nikkei-into-USD is the classic case where the correction is
 economically visible.
 
-*In this library:* `pricing/QuantoOption.java` -- `quantoForward`
-applies the `minus rho sigma_S sigma_FX` drift correction and `price`
-delegates to a standard pricer, the implementation deliberately "honest
-about being a change of drift" (the javadoc walks the sign intuition).
+*In this library:* `pricing/QuantoOption.java` --
+`quantoForward(spot, foreignRate, assetYield, assetVol, fxVol, rho, T)`
+gives `S exp((r_f - q - rho sigma_S sigma_X) T)`, and
+`price(type, spot, strike, domesticRate, foreignRate, assetYield,
+assetVol, fxVol, rho, T)` discounts at r_d by delegating to
+`BlackScholes` with carry `q + (r_d - r_f) + rho sigma_S sigma_X`
+(Hull, quanto section; Wystup 2006, section 2.6).
 
 ### 724. "A crash just repriced the skew. You recalibrate SABR and rho and nu both jump. Which market move maps to which parameter?"
 
@@ -20262,8 +20294,9 @@ calibrate stably to level, slope and curvature per expiry.
 
 *In this library:* `pricing/SabrModel.java` -- `impliedVol` (Hagan's
 approximation with the slope and curvature terms visible) and
-`calibrate` with beta fixed by the caller, `Params` carrying
-(alpha, beta, rho, nu, rmse).
+`calibrate` (Levenberg-Marquardt, beta fixed by the caller, optional
+weights; `calibrateToAtm` solves alpha from the ATM vol), `Params`
+carrying (alpha, beta, rho, nu, rmse) with rmse in decimal vol.
 
 ### 725. "Your semi-analytic Heston price disagrees with your Monte Carlo at the long-dated, high-vol-of-vol corner. Which is wrong, and how do you tell?"
 
@@ -20336,7 +20369,8 @@ kills expiry-day manipulation and cuts variance toward `vol^2 T / 3` in
 the continuous limit.
 
 *In this library:* `pricing/AsianOption.java` -- `arithmeticPrice`
-(Turnbull-Wakeman, the contract's convention, O(n^2) in fixings) and
+(Turnbull-Wakeman, the contract's convention, second moment computed
+in O(n) in fixings) and
 `geometricPrice` (exact Kemna-Vorst, the control variate), with the
 AM-GM `A >= G` ordering tested.
 
@@ -20387,10 +20421,14 @@ estimation window or a robustness check, and lean on the term-structure
 shape rather than a single point. Typical daily equity fits sit near
 0.98; 0.999 is a warning, not a result.
 
-*In this library:* `volatility/Garch11.java` -- `fit` (MLE), the
-`Params` record exposing `persistence()` and `unconditionalVariance()`,
-and `forecastVariance` whose geometric decay stalls as persistence
-approaches 1.
+*In this library:* `volatility/Garch11.java` -- `fit` (maximum
+likelihood by Nelder-Mead on transformed parameters from several
+starts, omega estimated rather than variance-targeted), `estimate`
+with Gaussian or Student-t innovations and Bollerslev-Wooldridge
+robust standard errors (the honest way to show how badly determined
+omega is at 0.999), the `Params` record exposing `persistence()` and
+`unconditionalVariance()`, and `forecastVariance` whose geometric decay
+stalls as persistence approaches 1.
 
 ### 730. "You fit GJR-GARCH to an FX pair and the leverage term gamma is essentially zero. A quant calls it a failed fit. Is it?"
 
@@ -20456,12 +20494,18 @@ on different timescales), mimicking the long memory of realized vol that
 one GARCH decay cannot; and realized variance from intraday returns is a
 far less noisy measurement of a day's variance than one squared daily
 return. So: judge it by out-of-sample forecast error, not coefficient
-stability, and if you must interpret the betas, regularize or lengthen
-the sample. Feed it genuine daily realized variance with enough history
+stability, and if you must interpret the betas, look at their
+Newey-West standard errors first (`fitWithErrors`; overlapping weekly
+and monthly windows make the residuals autocorrelated, so iid errors
+understate the wobble), then regularize or lengthen the sample. The
+fit itself is a Householder QR on scaled regressors, so the
+collinearity costs interpretability, not numerical accuracy. A log-HAR
+(`fitLog`) is the usual next step when the residuals are skewed. Feed it genuine daily realized variance with enough history
 for the 22-day window plus margin.
 
 *In this library:* `volatility/HarRv.java` -- `fit` returning `Params`
-(intercept, betaDaily, betaWeekly, betaMonthly) and `forecast`; combine
+(intercept, betaDaily, betaWeekly, betaMonthly), `fitWithErrors`,
+`fitLog`/`forecastLog`, and `forecast`; combine
 with intraday RV from `microstructure/JumpRobustVolatility.java`.
 
 ### 733. "You only have daily OHLC bars, no tick data, and need a realized-vol estimate. Which range estimator, and what's the catch on a trending name?"
@@ -20609,7 +20653,10 @@ lower for reactivity by preference, and don't over-engineer a fit for a
 horizon that doesn't reward it.
 
 *In this library:* `volatility/EwmaVolatility.java` -- the RiskMetrics
-recursion with lambda validated in (0,1); contrast the flat multi-step
+recursion with lambda validated in (0,1), seeded causally (bias-corrected
+weights rather than the full-sample variance, which would leak the
+future into the first estimates; an explicit-seed overload exists);
+contrast the flat multi-step
 line against `volatility/Garch11.java`'s mean-reverting forecast to see
 why the horizon decides.
 
