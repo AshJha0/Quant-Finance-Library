@@ -1579,7 +1579,8 @@ report the mean IC over time divided by its own volatility (the ICIR), and
 why IC decay across horizons tells you how fast to trade the signal.
 
 *In this library:* `alpha/SignalEvaluator.java` — per-date Spearman IC,
-ICIR, decay profile, and turnover; `alpha/AlphaBacktester.java` shows the
+IR, a Newey-West t-stat of the mean IC, and turnover; `alpha/AlphaReport.java`
+for the decay profile; `alpha/AlphaBacktester.java` shows the
 IC surviving (or not) out of sample.
 
 ---
@@ -2174,9 +2175,9 @@ into high-vol and low-vol halves; if the coefficient only exists in one
 half, the pooled t-stat was an average of two different regimes, not
 evidence.
 
-*In this library:* `alpha/FamaMacBeth.java` (the two-pass estimator; its
-javadoc states explicitly that the plain time-series t-stats carry no
-Newey-West correction -- the limitation is documented, not hidden),
+*In this library:* `alpha/FamaMacBeth.java` (the two-pass estimator,
+with Newey-West standard errors on the per-period premia and the iid
+t-stats kept as `naiveTStats` for comparison),
 `volatility/Garch11.java` (the model of exactly the heteroskedasticity
 that breaks the naive formula).
 
@@ -7099,10 +7100,10 @@ jitter; 60s is quiet but leaves you blind for two minutes while orders
 may be resting. Desks pick per-counterparty values and monitor staleness
 continuously, not just at the timer edges.
 
-*In this library:* `fix/FixSession.java` -- the heartbeat thread sends
-keep-alives on send-side quiet, probes with TestRequest on receive-side
-staleness (`testRequestPending`), and disconnects on continued silence:
-"Heartbeats with TestRequest probing and staleness disconnect."
+*In this library:* `fix/FixSession.java` sends a Heartbeat after one
+interval of outbound silence, a TestRequest with a fresh TestReqID (112)
+after 1.5 intervals of inbound silence, and disconnects after 2.5. Only a
+Heartbeat that echoes the outstanding TestReqID clears the probe.
 
 ### 220. "Your FIX engine restarts at 14:03 mid-session. What must have been persisted for trading to resume safely?"
 
@@ -8455,9 +8456,9 @@ Choosing the memory-ordering strength per field, by writer cardinality,
 instead of sprinkling `synchronized`, is exactly the skill this class
 demonstrates.
 
-*In this library:* `trading/HftRiskGate.java` (`onFill` -- "atomic add:
-concurrent fill sources cannot lose updates"; compare `bumpRejection`,
-the single-writer release counter).
+*In this library:* `trading/HftRiskGate.java`: `onFill` applies fills
+with atomic adds, so concurrent fill sources cannot lose updates, and the
+rejection counters are updated the same way.
 
 ### 273. "One strategy on one shard goes insane. How does the FIRM stop trading -- and why is there a hysteresis band on the way back?"
 
@@ -11443,7 +11444,7 @@ the desk is paying clients to trade. Persistable, so the week's
 economics survive the nightly restart.
 
 *In this library:* `crb/CrbPnlLedger.java` -- `onInternalized`,
-`onRouted`, `onHedge`, `netEconomics()`; the MTM exclusion and the
+`onRoute`, `onHedge`, `netEconomics()`; the MTM exclusion and the
 "paying clients to trade" guard are both explicit in javadoc and code;
 `writeState`/`readState` for persistence.
 
@@ -13600,12 +13601,17 @@ applied to 2,000 stocks monthly can fund a business while a 0.15-IC
 signal on one asset traded quarterly cannot -- and why breadth claims
 must be audited: 500 names in one sector at one rebalance is nowhere
 near 500 independent bets. Alongside IC/IR, report the t-stat of mean
-IC (is it distinguishable from zero given the number of dates) and hit
-rate (fraction of dates with positive IC).
+IC (is it distinguishable from zero given the number of dates; the
+per-date ICs overlap when the horizon exceeds the sampling step, so the
+standard error must be Newey-West, not std/sqrt(n)) and hit rate (the
+fraction of name-dates where the demeaned score and the demeaned forward
+return agree in sign; without demeaning, a one-signed score such as low
+volatility just reports how often the market went up).
 
 *In this library:* `alpha/SignalEvaluator.java` -- per-date Spearman
-rank IC against forward returns, IR, t-stat, hit rate, plus turnover
-and factor-exposure checks, in one evaluation record.
+rank IC against forward returns, IR, HAC t-stat (with `naiveTStat`
+beside it), IC autocorrelation, demeaned hit rate, turnover and
+factor-exposure checks, in one evaluation record.
 
 ### 474. "Two signals, same mean IC. One has a 2-day decay half-life, the other 3 months. Which do you want, and what decides it?"
 
@@ -13629,8 +13635,11 @@ in normalized weights between consecutive rebalances -- report it next
 to IC always, because IC-per-unit-turnover is the number that
 predicts net performance.
 
-*In this library:* `alpha/AlphaReport.java` -- the `Decay` record
-(mean IC per forward horizon, fitted half-life in bars);
+*In this library:* `alpha/AlphaReport.java` -- `lagIcProfile` (IC of
+today's scores against the one-bar return h bars ahead, fitted to
+`IC(h) = IC0 exp(-(h-1)/tau)`, half-life `tau ln 2`, plus signal
+autocorrelation), and `decayProfile`, the holding-period IC against
+cumulative forward returns with the horizon where it halves;
 `alpha/SignalEvaluator.java` -- turnover as half the L1 weight change,
 reported beside IC/IR in the same summary line.
 
@@ -13671,8 +13680,11 @@ it in two passes: each period, run one CROSS-SECTIONAL regression of
 returns on factor exposures, yielding that period's factor premium;
 then treat the time series of premia as the sample -- the mean is the
 premium estimate, and its t-stat uses the time-series standard error,
-which correctly absorbs cross-sectional correlation because each
-period contributed exactly one observation. A factor with mean premium
+which absorbs cross-sectional correlation because each period
+contributed exactly one observation. With multi-bar forward returns
+sampled every bar the premia overlap and are autocorrelated, so the
+time-series standard error must itself be Newey-West (Fama and MacBeth
+1973; Newey and West 1987). A factor with mean premium
 t > 3 across 300 months is evidence; the same coefficient from pooled
 OLS with t = 12 is the same information with a miscounted sample. The
 data realities a production estimator must survive: NaN scores
@@ -13685,7 +13697,8 @@ underdetermined); and a period whose design matrix is singular
 so the reported number of contributing periods is accurate.
 
 *In this library:* `alpha/FamaMacBeth.java` -- per-period
-cross-sectional regressions with the NaN-skip / infinity-throw
+cross-sectional regressions by Householder QR, Newey-West errors on the
+premia (lag at least horizon - 1), the NaN-skip / infinity-throw
 distinction, the thin-period rule, and the singular-period catch, all
 counted and reported.
 
@@ -13714,10 +13727,11 @@ turn-of-month flows (pension contributions, index rebalances) retain
 a structural cause worth monitoring even so.
 
 *In this library:* `alpha/CalendarAnomalies.java` -- day-of-week and
-turn-of-month profiles with per-bucket mean, t-stat and count; the
+turn-of-month profiles with per-bucket mean, Newey-West t-stat (and
+the iid `naiveTStat`) and count; the
 javadoc states the post-publication decay lesson as the class's point.
 
-### 478. "You have one alpha candidate and one history. Design the validation gauntlet -- and explain the test that correctly humiliates a static signal."
+### 478. "You have one alpha signal and one history. Design the validation gauntlet, and say which permutation null actually tests predictive power."
 
 Three independent attacks. Walk-forward: repeatedly pick the best
 factor variant on a training window, measure it on the following test
@@ -13726,24 +13740,34 @@ measurement, and a variant that wins training folds but loses test
 folds is curve-fit. Blocked K-fold: recompute IC on k contiguous
 (never shuffled -- shuffling time series leaks adjacent-day
 information) blocks; the dispersion across folds tells you whether the
-"signal" is one lucky regime. Permutation test: re-pair score dates
-with return dates at random many times, build the null distribution of
-mean IC, and report where the observed value falls -- a p-value with no
-normality assumption. The permutation test has a conservative property worth understanding: a signal whose
-cross-section barely changes over time (a static ranking) is
-INVARIANT under date permutation, so it earns p ~= 1 regardless of
-its in-sample IC -- correctly so, because a time-invariant
-cross-section against persistent return drifts is ONE effective
-observation, however many dates you sample it on. Only signals whose
-time variation aligns with return variation can earn a small p. Add a
-parameter sensitivity sweep (a real effect degrades gracefully as
-parameters move; an artifact falls off a cliff) and the gauntlet is
-complete.
+"signal" is one lucky regime. Permutation test: build a null
+distribution of mean IC by breaking the score/return link many times,
+and report where the observed value falls -- a p-value with no
+normality assumption. Which link you break decides what you test. The
+test of predictive power permutes symbol labels of the forward returns
+within each date: it destroys the cross-sectional link and keeps both
+marginals and all time-series dependence. Re-pairing score dates with
+return dates at random tests something else. A slow factor (value,
+quality, low volatility, 12-1 momentum) has a cross-section that barely
+changes over time, so it is nearly invariant under date permutation
+and gets p near 1 whatever its skill. That makes the date permutation
+a diagnostic for whether the ranking varies over time, not a test of
+whether it predicts; using it as the main test throws away every
+persistent factor. A circular shift of returns against scores (every
+shift, exactly enumerated) keeps the persistence of both sides and asks
+whether the timing of the signal adds information beyond a fixed
+ranking. Add a parameter sensitivity sweep (a real effect degrades
+gracefully as parameters move; an artifact falls off a cliff) and the
+gauntlet is complete.
 
 *In this library:* `alpha/AlphaValidation.java` -- `walkForward` over
-factor candidates, blocked K-fold IC, the permutation robustness test
-(javadoc explains the static-signal p ~= 1 property), and the
-parameter sensitivity sweep.
+factor candidates (folds weighted by observation count, a Newey-West
+t-stat on the stitched out-of-sample IC), blocked K-fold IC,
+`monteCarloRobustness` with `NullModel.CROSS_SECTIONAL` as the default
+and `CIRCULAR_SHIFT` and `DATE_PERMUTATION` as alternatives (two-sided,
+add-one smoothed p-value), and `parameterSensitivity`, whose
+`worstNeighborDrop` is the fall from the best parameter to its worse
+neighbour.
 
 ### 479. "Your alpha has IC 0.04 and looks great gross. What does a cost-aware backtest add, and what is the capacity question?"
 
@@ -13834,8 +13858,8 @@ explains it must be "as of the PREVIOUS" interval).
 Four blocks, each answering a question the PM will actually ask.
 (1) Headline evaluation: mean rank IC, t-stat, IR, hit rate, turnover
 -- is there a signal, how consistent, at what trading cost profile
-(Q473, Q474). (2) Alpha decay: mean IC as a function of forward
-horizon with the fitted half-life -- tells the PM the rebalance
+(Q473, Q474). (2) Alpha decay: IC against returns further and further
+ahead, with the fitted half-life -- tells the PM the rebalance
 frequency the signal demands and whether it fits the book's rhythm; a
 half-life of 3 bars on a weekly-rebalanced book is a mismatch visible
 in one chart. (3) Factor attribution: OLS of the strategy's portfolio
@@ -13849,13 +13873,14 @@ discipline is that every number is out-of-sample or attributed;
 gross in-sample Sharpe appears nowhere, because it is the one number
 guaranteed to flatter. A report in this shape also fails gracefully:
 a signal that is really the momentum factor shows up in block (3), a
-static ranking shows up in block (4), a cost-doomed fast signal shows
+signal with no cross-sectional skill shows up in block (4), a cost-doomed fast signal shows
 up in blocks (1)+(2) -- each failure mode has a designated place to
 become visible.
 
 *In this library:* `alpha/AlphaReport.java` -- the decay block
-(horizons, mean ICs, half-life) and factor attribution via OLS of
-portfolio returns on factor returns, designed to sit alongside
+(`lagIcProfile`, `decayProfile`) and factor attribution via OLS of
+portfolio returns on factor returns (`attribute`, with standard
+errors and a Newey-West t on alpha), designed to sit alongside
 `alpha/SignalEvaluator.java`'s headline record and
 `alpha/AlphaValidation.java`'s verdicts.
 
@@ -14243,30 +14268,40 @@ model exactly as above (through-prints fill, at-price prints drain
 ### 496. "State the execution conventions of a bar-based single-instrument backtester -- and why must stops be checked INTRABAR?"
 
 Every bar engine embeds an execution model whether its author knows
-it or not, so state it explicitly. The defensible convention set:
-signals generated from bar t's data fill at bar t's CLOSE (adjusted
-for slippage) -- filling at the same bar's open is lookahead
-(the signal used data from a bar that had not opened yet), and
-filling at next open is defensible but must be stated, because
-strategy ranks reshuffle under the change. Stop-loss and
+it or not, so state it explicitly. A signal computed from bar t's
+data includes close(t), so the earliest price it can trade at is
+open(t+1). Filling at close(t) assumes the order went in before the
+closing print using a price that did not exist yet; filling at
+open(t) is plain look-ahead. The defensible default is therefore
+next-bar open (or next-bar close for a market-on-close style daily
+study), adjusted for slippage. The gap between a close(t) run and a
+next-open run measures how much of the edge lives inside one bar of
+latency, and fast mean-reversion signals often lose most of it. Stop-loss and
 take-profit levels are different in kind: they are RESTING orders,
 live continuously, so they must be evaluated INTRABAR against the
 bar's high and low -- a stop 2% below entry, on a bar that plunges
 5% intrabar and recovers by the close, fired in reality at the
 stop price; a close-only check misses the exit entirely and books
 the recovery you never got. The residual ambiguity to acknowledge:
-when one bar's range crosses BOTH stop and target, bar data cannot
-tell you which hit first -- the conservative engine assumes the
-stop. Costs per side, position sizing rule, and whether equity is
-marked on close complete the contract. The meta-point: none of
-these choices is "correct," but all of them must be documented and
+when one bar's range crosses both stop and target, bar data cannot
+tell you which hit first, so the conservative engine assumes the
+stop. A stop is a market order once triggered, so it pays slippage,
+and a gap through the level fills at the open, not at the level.
+Costs per side, position sizing rule, and whether equity is
+marked on close complete the contract. Some of these choices are
+matters of convention, and all of them must be documented and
 constant across every strategy you compare, or the comparison
 measures conventions, not strategies.
 
-*In this library:* `backtest/Backtester.java` -- the javadoc states
-the contract: fills at bar close adjusted for slippage, stop-loss /
-take-profit evaluated intrabar against the bar's high/low, with
-per-strategy overrides falling back to `BacktestConfig` defaults.
+*In this library:* `backtest/Backtester.java` -- the class javadoc
+states the contract. Fills follow `BacktestConfig.fillPolicy()`
+(`FillPolicy.NEXT_OPEN` by default; `NEXT_CLOSE`, and `CLOSE` as the
+optimistic zero-latency bound), adjusted for slippage. Stop-loss and
+take-profit are checked intrabar against the bar's low and high from
+the first bar whose whole range lies after the entry, gaps fill at the
+open, stop fills pay slippage, and the stop wins when both levels lie
+inside one bar. `BacktestConfig.defaults()` charges 1 bp commission and
+3 bp slippage; `BacktestConfig.frictionless()` charges nothing.
 
 ### 497. "How much should you bet? Derive the Kelly answer, then explain why nobody runs it at full size."
 
