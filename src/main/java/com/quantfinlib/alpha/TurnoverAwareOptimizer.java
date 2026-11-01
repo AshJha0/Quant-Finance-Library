@@ -43,6 +43,8 @@ import com.quantfinlib.util.MathUtils;
 public final class TurnoverAwareOptimizer {
 
     /**
+     * Optimiser settings.
+     *
      * @param riskAversion     λ &gt; 0
      * @param turnoverPenalty  κ &ge; 0, per unit of |Δw|
      * @param rho              ADMM penalty parameter &gt; 0 (1 is a reasonable start
@@ -169,6 +171,8 @@ public final class TurnoverAwareOptimizer {
     }
 
     /**
+     * Solves the turnover-penalised mean-variance problem.
+     *
      * @param alpha       expected returns per name (no NaN; exclude names with cap 0)
      * @param covariance  per-period covariance, symmetric positive semidefinite
      * @param previous    current book {@code w₀} (zeros for a fresh start)

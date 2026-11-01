@@ -33,6 +33,8 @@ public final class OrderPlacementPolicy {
     }
 
     /**
+     * Decides how to place the next child order.
+     *
      * @param halfSpread          half the touch spread, &gt; 0
      * @param fillProbability     P(passive order fills within the
      *                            horizon), in [0, 1]

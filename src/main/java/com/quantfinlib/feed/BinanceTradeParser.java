@@ -81,7 +81,7 @@ public final class BinanceTradeParser implements FeedParser {
         }
         start += marker.length();
         int end = start;
-        while (end < json.length() && (Character.isDigit(json.charAt(end)))) {
+        while (end < json.length() && Character.isDigit(json.charAt(end))) {
             end++;
         }
         if (end == start) {

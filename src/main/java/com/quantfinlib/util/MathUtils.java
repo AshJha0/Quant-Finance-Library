@@ -296,6 +296,7 @@ public final class MathUtils {
     }
 
     /** Natural log of the standard normal density, finite for any finite x. */
+    @SuppressWarnings("FloatingPointLiteralPrecision") // ln sqrt(2 pi) to 20 digits
     public static double logNormPdf(double x) {
         return -0.5 * x * x - 0.91893853320467274178; // ln sqrt(2 pi)
     }
@@ -318,6 +319,7 @@ public final class MathUtils {
      * relative accuracy (about 1e-15) down to x = -37.5. Further out the value
      * is subnormal and then 0. NaN in gives NaN out.</p>
      */
+    @SuppressWarnings("FloatingPointLiteralPrecision") // sqrt(32) to 30 digits, as in ANORM
     public static double normCdf(double x) {
         if (Double.isNaN(x)) {
             return Double.NaN;
@@ -359,21 +361,30 @@ public final class MathUtils {
         return x > 0 ? 1 - lower : lower;
     }
 
+    // Cody's coefficients keep the digits SPECFUN ANORM publishes, so they can be
+    // checked against the source; each literal rounds to the nearest double.
+    @SuppressWarnings("FloatingPointLiteralPrecision")
     private static final double INV_SQRT_2PI = 0.398942280401432677939946059934;
+    @SuppressWarnings("FloatingPointLiteralPrecision")
     private static final double[] CODY_A = {2.2352520354606839287, 161.02823106855587881,
             1067.6894854603709582, 18154.981253343561249, 0.065682337918207449113};
+    @SuppressWarnings("FloatingPointLiteralPrecision")
     private static final double[] CODY_B = {47.20258190468824187, 976.09855173777669322,
             10260.932208618978205, 45507.789335026729956};
+    @SuppressWarnings("FloatingPointLiteralPrecision")
     private static final double[] CODY_C = {0.39894151208813466764, 8.8831497943883759412,
             93.506656132177855979, 597.27027639480026226, 2494.5375852903726711,
             6848.1904505362823326, 11602.651437647350124, 9842.7148383839780218,
             1.0765576773720192317e-8};
+    @SuppressWarnings("FloatingPointLiteralPrecision")
     private static final double[] CODY_D = {22.266688044328115691, 235.38790178262499861,
             1519.377599407554805, 6485.558298266760755, 18615.571640885098091,
             34900.952721145977266, 38912.003286093271411, 19685.429676859990727};
+    @SuppressWarnings("FloatingPointLiteralPrecision")
     private static final double[] CODY_P = {0.21589853405795699, 0.1274011611602473639,
             0.022235277870649807, 0.001421619193227893466, 2.9112874951168792e-5,
             0.02307344176494017303};
+    @SuppressWarnings("FloatingPointLiteralPrecision")
     private static final double[] CODY_Q = {1.28426009614491121, 0.468238212480865118,
             0.0659881378689285515, 0.00378239633202758244, 7.29751555083966205e-5};
 
@@ -483,6 +494,7 @@ public final class MathUtils {
     }
 
     /** Natural log of the gamma function (Lanczos, |relative error| &lt; 2e-10). */
+    @SuppressWarnings("FloatingPointLiteralPrecision") // Numerical Recipes gammln coefficients as printed
     public static double logGamma(double x) {
         if (!(x > 0)) {
             throw new IllegalArgumentException("x must be > 0: " + x);

@@ -46,6 +46,8 @@ import java.util.Map;
 public final class CrossSectionalMomentum implements PortfolioStrategy {
 
     /**
+     * Momentum strategy settings.
+     *
      * @param lookbackBars momentum window (252 ≈ 12 months of dailies)
      * @param skipBars     most-recent bars excluded (21 ≈ 1 month)
      * @param perSide      names held long and short (shrinks when the member

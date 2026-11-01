@@ -35,15 +35,17 @@ public final class InternalizationEngine {
     private double internalizedNotional;
     private double routedNotional;
 
+    private double lastRouted;
+    private double lastImprovementBps;
+
     /**
+     * Creates an engine with an empty warehouse.
+     *
      * @param warehouseLimit   max |inventory| the book will hold on a
      *                         factor after absorbing risk-adding flow, &gt; 0
      * @param improvementShare fraction of the half spread returned to a
      *                         risk-reducing client, in [0, 1]
      */
-    private double lastRouted;
-    private double lastImprovementBps;
-
     public InternalizationEngine(double warehouseLimit, double improvementShare) {
         if (!(warehouseLimit > 0) || warehouseLimit == Double.POSITIVE_INFINITY) {
             throw new IllegalArgumentException("warehouseLimit must be positive and finite");

@@ -31,6 +31,8 @@ import java.util.Map;
 public final class AlphaRiskModels {
 
     /**
+     * Risk model specification.
+     *
      * @param window           estimation periods (&ge; 2)
      * @param momentumLookback momentum lookback in bars
      * @param volLookback      low-volatility lookback in bars

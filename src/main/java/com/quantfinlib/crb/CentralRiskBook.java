@@ -666,6 +666,8 @@ public final class CentralRiskBook {
     }
 
     /**
+     * Snapshot of the book's exposures.
+     *
      * @param grossExposure    Σ over factors of gross booked notional
      * @param netExposure      Σ over factors of |netted| notional
      * @param nettingEfficiency 1 − net/gross

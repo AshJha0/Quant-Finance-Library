@@ -217,6 +217,8 @@ public final class RegimeDetector {
     }
 
     /**
+     * Fits the regime model by EM from several starts.
+     *
      * @param maxIterations EM iterations per start (0 evaluates the start)
      * @param starts        number of starting points, &ge; 1; the first is
      *                      always the median split, the rest are random

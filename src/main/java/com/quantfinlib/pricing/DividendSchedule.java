@@ -52,6 +52,8 @@ public final class DividendSchedule {
     }
 
     /**
+     * Builds a schedule of discrete cash dividends.
+     *
      * @param exTimesYears ex-dividend times in years from valuation, ascending
      * @param amounts      cash amounts per share, aligned with the times
      */

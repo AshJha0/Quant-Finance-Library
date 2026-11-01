@@ -208,6 +208,8 @@ public final class CircuitBreakers {
         private boolean level3Used;
 
         /**
+         * The market-wide halt an index decline triggers, if any.
+         *
          * @param declineFromPriorClose e.g. 0.08 = the index is down 8%
          * @param minutesSinceMidnight  local exchange time in minutes,
          *                              e.g. 14:30 = 870 (validated to 0..1440

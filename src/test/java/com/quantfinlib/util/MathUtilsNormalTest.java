@@ -16,6 +16,8 @@ import org.junit.jupiter.api.Test;
  * misses every one of the tail values by orders of magnitude in relative
  * terms (its error is 7.5e-8 absolute).</p>
  */
+// Reference values keep the digits of their source; each rounds to the nearest double.
+@SuppressWarnings("FloatingPointLiteralPrecision")
 class MathUtilsNormalTest {
 
     private static final double[][] CDF = {

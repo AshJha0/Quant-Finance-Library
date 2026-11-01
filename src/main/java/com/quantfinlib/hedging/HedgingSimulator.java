@@ -37,6 +37,8 @@ public final class HedgingSimulator {
     }
 
     /**
+     * Simulates the hedging error distribution over Monte Carlo paths.
+     *
      * @param hedgeVol     volatility used to price and delta-hedge (implied vol)
      * @param realizedVol  volatility of the simulated underlying paths
      * @param stepsPerPath hedging opportunities per path (e.g. 126 for daily over 6 months)

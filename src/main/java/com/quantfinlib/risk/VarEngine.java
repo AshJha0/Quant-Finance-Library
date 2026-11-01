@@ -304,7 +304,7 @@ public final class VarEngine {
     /** Revalues the book under one scenario's factor moves. */
     @FunctionalInterface
     public interface ScenarioReval {
-        /** @return the book's P&amp;L under these factor moves (finite) */
+        /** Returns the book's P&amp;L under these factor moves (finite). */
         double pnl(double[] factorMoves);
     }
 

@@ -32,6 +32,8 @@ public final class BestExecutionAnalyzer {
     }
 
     /**
+     * Best-execution summary.
+     *
      * @param avgSlippageBps          simple mean over filled orders (NaN when none filled)
      * @param quantityWeightedSlippageBps notional-weighted mean over filled orders
      *                                    (NaN when none filled)
@@ -115,6 +117,8 @@ public final class BestExecutionAnalyzer {
     }
 
     /**
+     * Decomposes implementation shortfall into its components.
+     *
      * @param fillQty    executed quantities (positive)
      * @param fillPrice  matching execution prices
      * @param unfilledQty quantity of the order never executed, &ge; 0
