@@ -33,7 +33,7 @@ import java.util.concurrent.TimeUnit;
  * instead of hiding in one run. {@code riskGateCheck} uses one symbol and
  * a constant price (branch predictor and cache in the best case);
  * {@code riskGateCheckRandomSymbols} draws the symbol, side and price from a
- * pre-generated random table over 1,024 symbols, which is the more honest
+ * pre-generated random table over 1,024 symbols, which is the more realistic
  * figure for a book of many instruments.</p>
  */
 @BenchmarkMode(Mode.AverageTime)
