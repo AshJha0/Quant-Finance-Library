@@ -7500,8 +7500,12 @@ and the storm recurs on each flap.
 
 *In this library:* `feed/WebSocketFeed.java` implements bounded
 exponential backoff (`withReconnect(maxAttempts, initialBackoffMillis)`,
-defaults 10 attempts from 500ms) with reconnect epochs that never
-overlap; `WebSocketFeedTest.java` drives drop-and-reconnect against a
+defaults 10 attempts from 500ms). Close and error callbacks of one
+connection schedule at most one reconnect, the previous socket is
+aborted first, and callbacks from a superseded socket are ignored, so
+two sockets can never publish into the single-producer bus; a reconnect
+raises a gap flag (`consumeGap`) so the consumer knows its state may be
+stale. `WebSocketFeedTest.java` drives drop-and-reconnect against a
 local RFC 6455 server.
 
 ### 232. "You sent an order, the connection dropped before any reply. Do you send it again?"
@@ -7554,8 +7558,11 @@ transport where the key's meaning is invisible.
 *In this library:* `fix/ExecutionReport.java` carries `execId` as the
 dedupe key alongside cumQty/leavesQty (whose running algebra is itself a
 second dedupe check -- a replayed fill that double-counts breaks the
-CumQty+LeavesQty invariant); `fix/FixSession.java` implements the
-at-least-once redelivery side with PossDup marking.
+CumQty+LeavesQty invariant) and a `possDup` component;
+`fix/FixExecReportView.java` reads ExecID, PossDupFlag and PossResend
+without allocating, and its `ExecIdDeduplicator` drops fills replayed
+after a resend; `fix/FixSession.java` implements the at-least-once
+redelivery side with PossDup marking.
 
 ### 234. "Two servers both timestamp the same fill. The timestamps disagree by 800 microseconds. Which one is lying?"
 
@@ -7578,12 +7585,12 @@ on ONE clock when possible; and for real one-way latency numbers, use
 NIC hardware timestamps on PTP-disciplined clocks -- anything else is
 storytelling with error bars you have not earned.
 
-*In this library:* `docs/ULTRA_LOW_LATENCY.md` Tier 4 names this
-explicitly -- "Hardware timestamps & PTP ... measurement at wire
-precision instead of System.nanoTime at syscall precision. Prerequisite
-for wire-to-wire numbers"; feed code keeps exchange event time
-and local time as separate, never-conflated notions
-(`feed/WebSocketFeed.java` publishes exchange event time).
+*In this library:* `docs/ULTRA_LOW_LATENCY.md` (Tier 4) covers hardware
+timestamps and PTP as the prerequisite for wire-to-wire numbers; feed
+code keeps exchange event time and local time as separate notions
+(`feed/WebSocketFeed.java` publishes exchange event time), and QFLT
+capture files record which clock their timestamps came from
+(`TickFileWriter.ClockDomain`).
 
 ### 235. "What is a sequencer-bus architecture, and why do deterministic trading systems use it?"
 
@@ -7636,9 +7643,11 @@ on it converts silent loss into an operations event.
 *In this library:* `data/AsyncTickCapture.java` -- the javadoc argues
 this policy verbatim ("ticks are dropped from the capture -- counted in
 droppedTicks, never blocking the consumer. A recording gap you can see
-beats latency you can't explain"); `marketdata/TickRingBuffer.publish`
-returns false on full so "the caller chooses the backpressure policy
-(spin, drop, or count)."
+beats latency you can't explain"). A writer failure such as a full disk
+is kept and surfaced (`isHealthy()`, `failure()`, rethrown by
+`close()`) instead of killing the writer thread silently.
+`marketdata/TickRingBuffer.publish` returns false on full, so the caller
+chooses the backpressure policy (spin, drop, or count).
 
 ### 237. "Size the ring buffer between the bus and the tick recorder. Show the arithmetic."
 
@@ -7660,8 +7669,8 @@ that your drop-or-block choice (Q236) takes over -- sizing and policy
 are one decision, not two.
 
 *In this library:* `marketdata/TickRingBuffer.java` rounds capacity up
-to a power of two and documents the Disruptor-style padding and
-acquire/release publication; `data/AsyncTickCapture.java` does this
+to a power of two and documents the strided sequences (head and tail on
+separate cache lines) and acquire/release publication; `data/AsyncTickCapture.java` does this
 exact arithmetic in its javadoc: "capacity 1M ~ 28 MB ~ several seconds
 of a busy feed."
 
@@ -7688,10 +7697,9 @@ percentiles including max, pace to avoid coordinated omission, and run
 a hiccup monitor so you attribute tails to platform vs code before
 optimizing the wrong one.
 
-*In this library:* `docs/ULTRA_LOW_LATENCY.md` -- "Tier 4 -- Kernel
-bypass & hardware (beyond the JVM entirely)" lays out exactly this
-ladder with the numbers above, then the measurement-discipline section
-that applies at every tier.
+*In this library:* `docs/ULTRA_LOW_LATENCY.md` -- the Tier 4 section
+(kernel bypass and hardware, beyond the JVM entirely) lays out this
+ladder; none of it is implemented in the library.
 
 ### 239. "When is a paper trading gateway enough, and when is it lying to you?"
 
@@ -7716,9 +7724,9 @@ microstructure effects with small REAL orders, because those effects
 are properties of the market, not of your code.
 
 *In this library:* `trading/PaperTradingGateway.java` -- quote-driven
-fills at the touch, the optional `risk/PreTradeLimitChecker.java` gate
-("rejected orders never reach the market, exactly like production"),
-full account snapshots, and a capped rejection log; the queue-position
+fills at the touch limited by displayed size, the optional
+`risk/PreTradeLimitChecker.java` gate (rejected orders never reach the
+simulated market), full account snapshots, and a capped rejection log; the queue-position
 truth it cannot simulate is what `marketdata/L3BookBuilder.java`
 measures on real feeds.
 
