@@ -5169,7 +5169,10 @@ drops.
 
 *In this library:* `data/CorporateActions.java` -- the `Type` enum covers
 splits and dividends, and the javadoc states it "back-adjusts a raw price
-series for splits and dividends."
+series for splits and dividends." For a backtest that needs both views,
+`backtest/portfolio/PortfolioBacktester.java` has a price-pair overload:
+signals run on adjusted prices while cash, fills and dividends use the
+unadjusted ones.
 
 ### 139. "CSV is the lingua franca of market data. Give me the ways a CSV bar file will hurt you."
 
@@ -5234,7 +5237,10 @@ reports nothing is where multi-asset backtests go to rot.
 
 *In this library:* `data/SeriesAligner.java` -- `intersect` and
 `unionForwardFill` are the two policies, side by side, so the choice is
-explicit in the calling code.
+explicit in the calling code. `unionForwardFill` also marks every
+filled bar as synthetic on the `BarSeries`, and the volatility and
+impact estimators skip synthetic bars, so a stale mark cannot pass for
+a zero return in an estimate.
 
 ### 142. "Your ten-year backtest picks stocks from today's S&P 500 list. What is wrong, and how do you fix it structurally?"
 
@@ -5469,7 +5475,10 @@ Neither is "better"; they answer different questions about the past.
 
 *In this library:* `indicators/Indicators.java` -- `sma`, `ema`, and
 `wma` side by side; `indicators/StreamingIndicators.java` shows why the
-EMA's one-value state makes it the natural streaming primitive.
+EMA's one-value state makes it the natural streaming primitive. A
+running-sum SMA has its own trap: adding the new value and subtracting
+the old one accumulates rounding error over a long run, so both the
+streaming and the batch SMA re-sum the window every `period` updates.
 
 ### 152. "Build RSI from scratch. Then tell me why two vendors' RSI(14) numbers disagree."
 
@@ -5491,7 +5500,8 @@ backtest threshold is exactly 30, that difference flips trades, which is
 an argument against backtesting knife-edge thresholds.
 
 *In this library:* `indicators/Indicators.java` -- `rsi` (documented
-Wilder smoothing, with the avgLoss == 0 conventions in `toRsi`), and
+Wilder smoothing, with the avgLoss == 0 conventions in `toRsi`, and
+tests pinned to the published StockCharts RSI example), and
 `alpha/Factors.java` -- the factor version explicitly documented as
 Cutler's RSI (arithmetic mean), with the reproducibility rationale.
 
