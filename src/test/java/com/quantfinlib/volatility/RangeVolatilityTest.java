@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Range estimators pinned two ways: constant-range synthetic bars match
- * each estimator's closed form EXACTLY, and a discretely sampled GBM path
+ * each estimator's closed form exactly, and a discretely sampled GBM path
  * puts every estimator near the true sigma with Parkinson demonstrably
  * tighter than close-to-close (the efficiency claim, tested not asserted).
  */

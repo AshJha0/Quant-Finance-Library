@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * The primitive dual-array sort backing rank/selection code: agreement with
- * the JDK sort on random data (keys AND permutation), tie stability of the
+ * the JDK sort on random data (keys and permutation), tie stability of the
  * key order, adversarial inputs (sorted, reversed, constant), and small
  * arrays through the insertion-sort path.
  */

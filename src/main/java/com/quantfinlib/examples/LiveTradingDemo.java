@@ -13,8 +13,8 @@ import java.io.IOException;
 import java.time.Duration;
 
 /**
- * The five-minute live demo: real market data → streaming strategy → paper
- * execution → live dashboard, in one command.
+ * The five-minute live demo: real market data feeding a streaming strategy,
+ * paper execution and a live dashboard, in one command.
  *
  * <pre>
  *   java -cp target/classes com.quantfinlib.examples.LiveTradingDemo
@@ -23,11 +23,11 @@ import java.time.Duration;
  *
  * <p>What it wires (public crypto data — no keys, no cost, no license):</p>
  * <ol>
- *   <li>Binance trade stream (BTC + ETH) → {@link WebSocketFeed} →
- *       {@link HftMarketDataBus};</li>
+ *   <li>Binance trade stream (BTC + ETH) into {@link WebSocketFeed}, then
+ *       onto {@link HftMarketDataBus};</li>
  *   <li>a streaming EMA(20/60) crossover per symbol on the bus consumer
  *       thread, with tick-to-decision latency recorded;</li>
- *   <li>signals → {@link PaperTradingGateway} market orders ($100k paper
+ *   <li>signals sent as {@link PaperTradingGateway} market orders ($100k paper
  *       account, real commission accounting);</li>
  *   <li>positions/P&amp;L/fills/latency live at
  *       <a href="http://localhost:8080">localhost:8080</a> via

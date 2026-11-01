@@ -28,7 +28,7 @@ class CrbExecutionTest {
         assertEquals(flat.ask() - 100, 100 - flat.bid(), 1e-12, "flat book, symmetric");
 
         // Beyond-limit inventory clamps: the skew never exceeds
-        // skewFraction of the half spread, and the quote NEVER crosses.
+        // skewFraction of the half spread, and the quote never crosses.
         SkewedQuoter.Quote capped = SkewedQuoter.quote(100, 10, 500, 100, 0.9);
         assertEquals(-9, capped.skewBps(), 1e-12);
         assertTrue(capped.bid() < capped.ask(), "never self-crossing");
@@ -40,7 +40,7 @@ class CrbExecutionTest {
                 () -> SkewedQuoter.quote(100, 10, 0, 100, 1.0), "fraction 1 could cross");
         assertThrows(IllegalArgumentException.class,
                 () -> SkewedQuoter.quote(100, 10, Double.NaN, 100, 0.5));
-        // 100%+ half spreads would quote a zero or NEGATIVE bid.
+        // 100%+ half spreads would quote a zero or negative bid.
         assertThrows(IllegalArgumentException.class,
                 () -> SkewedQuoter.quote(100, 12_000, 0, 100, 0),
                 "a negative bid must never be emitted as a live quote");
@@ -126,7 +126,7 @@ class CrbExecutionTest {
         double[] e = {1_000_000};
         double[][] loadings = {{1}};
         // The marginal risk saving at h=0 is |2*L'Se| = 2*4e-4*1e6 = 800;
-        // price the instrument above that and the optimizer holds ZERO.
+        // price the instrument above that and the optimizer holds zero.
         double[] none = HedgeOptimizer.hedge(e, cov, loadings, new double[]{1}, 1_000);
         assertEquals(0, none[0], "an uneconomic hedge is exactly zero, not dust");
         // Moderate cost: hedge less than fully.
@@ -224,7 +224,7 @@ class CrbExecutionTest {
 
     @Test
     void routerCrossesInternallyFirstThenPricesDarkAgainstLit() {
-        // Deliberately pass the venues in the WRONG order to prove the
+        // Pass the venues in the wrong order on purpose to prove the
         // router ranks by adverse selection, not array position.
         CrbRouter.DarkVenue toxic = new CrbRouter.DarkVenue("TOXIC", 10_000_000, 1.0, 20);
         CrbRouter.DarkVenue clean = new CrbRouter.DarkVenue("CLEAN", 4_000_000, 0.5, 2);

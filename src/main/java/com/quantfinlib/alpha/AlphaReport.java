@@ -375,10 +375,10 @@ public final class AlphaReport {
      * NaN until the window fills. The steadiness plot: a flat positive line
      * is a strategy, a single spike is an anecdote.
      *
-     * <p>Uses the sample standard deviation (n−1) — the same definition as
-     * {@code risk.RiskMetrics.sharpeRatio} behind {@link #summarize} — so a
-     * full-sample rolling window reproduces the headline Sharpe exactly
-     * rather than differing by {@code √(n/(n−1))}.</p>
+     * <p>Uses the sample standard deviation (n−1), the same definition as
+     * {@code risk.RiskMetrics.sharpeRatio} behind {@link #summarize}. A
+     * full-sample rolling window therefore reproduces the headline Sharpe
+     * exactly rather than differing by {@code √(n/(n−1))}.</p>
      */
     public static double[] rollingSharpe(double[] returns, int window, int periodsPerYear) {
         if (window < 2 || window > returns.length) {
@@ -395,8 +395,8 @@ public final class AlphaReport {
     }
 
     /**
-     * The full ratio set on an equity curve — Sharpe, Sortino, Calmar,
-     * CAGR, max drawdown — computed by the same engine the backtesters
+     * The full ratio set on an equity curve (Sharpe, Sortino, Calmar,
+     * CAGR, max drawdown), computed by the same engine the backtesters
      * use, so definitions never fork between research and backtest reports.
      */
     public static PerformanceMetrics summarize(double[] equity, int periodsPerYear) {

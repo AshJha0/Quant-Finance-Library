@@ -72,7 +72,7 @@ class QuantSignalsTest {
         assertEquals(0.0, vpin.vpin(), 1e-12,
                 "the oldest (toxic) bucket was the one evicted");
 
-        // A block trade of ANY size is O(window), never O(size/bucket):
+        // A block trade of any size is O(window), never O(size/bucket):
         // this returns instantly and reads maximum toxicity.
         Vpin block = new Vpin(1_000, 4);
         block.onTrade(Long.MAX_VALUE - 1, true);
@@ -111,7 +111,7 @@ class QuantSignalsTest {
         assertEquals(1, p.zScore(p.theta() + p.stationaryStdev()), 1e-12);
         assertTrue(Double.isFinite(OrnsteinUhlenbeck.lastZScore(x, dt)));
 
-        // A trending series has NO mean reversion: refuse, don't report
+        // A trending series has no mean reversion: refuse, don't report
         // an infinite half-life as if it were a holding period.
         double[] trend = new double[100];
         for (int t = 0; t < trend.length; t++) {
@@ -156,7 +156,7 @@ class QuantSignalsTest {
         // negative variance.
         assertEquals(0, HarRv.forecast(rv, new HarRv.Params(-10, 0, 0, 0)), 0.0);
 
-        // Window alignment pinned EXACTLY where the horizons disagree:
+        // Window alignment pinned exactly where the horizons disagree:
         // 21 flat days then a spiked last day. d = 0.5, w = (4·0.1+0.5)/5
         // = 0.18, m = (21·0.1+0.5)/22; a d/w swap or off-by-one window
         // moves this a lot.

@@ -10,8 +10,8 @@ import com.quantfinlib.util.MathUtils;
  *
  * <pre>  VR(q) = Var(q-period returns) / (q · Var(1-period returns))</pre>
  *
- * is 1. Positive return autocorrelation (momentum) compounds —
- * VR &gt; 1; negative autocorrelation (mean reversion) cancels —
+ * is 1. Positive return autocorrelation (momentum) compounds, so
+ * VR &gt; 1; negative autocorrelation (mean reversion) cancels, so
  * VR &lt; 1. The z-statistic says whether the deviation is signal or
  * sampling noise.
  *
@@ -20,11 +20,11 @@ import com.quantfinlib.util.MathUtils;
  * tells you what the series is instead (VR ≈ 1: don't trade the
  * spread, index it; VR &gt; 1: you're holding a momentum name, trade it
  * that way). Overlapping q-period sums with the simplified denominator
- * — Lo-MacKinlay's small-sample unbiased correction is omitted (bias
- * ~(q−1)/n, negligible for n ≫ q; the length gate enforces n ≥ 10q) —
- * and the homoskedastic z-statistic; the heteroskedasticity-robust
- * variant is likewise omitted. Stated, not hidden. VR(1) is
- * identically 1. Static, deterministic, research lane.</p>
+ * and the homoskedastic z-statistic. Lo-MacKinlay's small-sample unbiased
+ * correction is omitted (bias ~(q−1)/n, negligible for n ≫ q; the length
+ * gate enforces n ≥ 10q), and the heteroskedasticity-robust variant is
+ * likewise omitted. VR(1) is identically 1. Static, deterministic,
+ * research lane.</p>
  */
 public final class VarianceRatio {
 

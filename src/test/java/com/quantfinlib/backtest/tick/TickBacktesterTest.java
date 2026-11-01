@@ -114,7 +114,7 @@ class TickBacktesterTest {
 
     @Test
     void ordersCannotFillAgainstTheTriggeringPrint(@TempDir Path dir) throws Exception {
-        // Order placed on the only tick that trades through its price: must NOT fill.
+        // Order placed on the only tick that trades through its price: must not fill.
         Path file = writeTicks(dir, new double[]{99.0, 100.0}, fill(2, 1_000));
         var result = TickBacktester.run(onTick((ctx, i, sym, px) -> {
             if (i == 0) {

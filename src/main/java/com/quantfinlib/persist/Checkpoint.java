@@ -20,9 +20,9 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Multi-day persistence of learned state: everything the models learn
- * across sessions — volume/vol/spread baselines, alpha weights and their
- * out-of-sample IC evidence, venue and LP scorecards — is exactly what a
+ * Multi-day persistence of learned state. Everything the models learn
+ * across sessions (volume/vol/spread baselines, alpha weights and their
+ * out-of-sample IC evidence, venue and LP scorecards) is exactly what a
  * desk does not want to relearn from zero every morning. A checkpoint is
  * one binary file of named sections, written at end of day and restored at
  * the next session start:
@@ -54,12 +54,12 @@ import java.util.Set;
  * to open a directory and journals the rename through NTFS metadata, so
  * the step is skipped there). A crash or power loss mid-save leaves
  * yesterday's file intact, never a torn or empty one. (On the rare filesystem
- * without atomic rename — some network mounts — the commit degrades to a
+ * without atomic rename, such as some network mounts, the commit degrades to a
  * plain replace, and a crash in that narrow window can lose the old file;
  * keep checkpoints on a local disk if that guarantee matters.) If any
  * section writer threw, nothing is committed. The reader loads the whole file up front (these
  * files are kilobytes), skips unknown sections (forward compatibility),
- * and rejects a section the model did not fully consume — the loudest
+ * and rejects a section the model did not fully consume, the loudest
  * possible signal of a writer/reader format drift.</p>
  *
  * <p>Everything here is cold-path (end of day / session start); the hot

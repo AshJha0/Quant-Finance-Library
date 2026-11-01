@@ -13,10 +13,10 @@ import java.util.List;
  * <ul>
  *   <li>{@link #builder()} — explicit bands loaded from the venue's
  *       published table (the production path: exchanges publish these);</li>
- *   <li>{@link #esmaStyle(int)} — a generated 1-2-5 progression per price
+ *   <li>{@link #esmaStyle(int)}: a generated 1-2-5 progression per price
  *       decade in the shape of the ESMA table, parameterized by liquidity
  *       band (0 = most liquid ⇒ finest ticks). Faithful in structure and
- *       magnitude, but not a certified copy of RTS 11 Annex — load the real
+ *       magnitude, but not a certified copy of RTS 11 Annex; load the real
  *       table for compliance work.</li>
  * </ul>
  *

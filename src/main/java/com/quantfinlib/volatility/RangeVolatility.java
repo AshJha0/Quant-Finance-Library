@@ -21,7 +21,7 @@ import com.quantfinlib.core.BarSeries;
  *   <li><b>Rogers-Satchell (1991)</b> — drift-independent:
  *       {@code sigma^2 = mean( ln(H/C) ln(H/O) + ln(L/C) ln(L/O) )}.
  *       The one to reach for on trending series.</li>
- *   <li><b>Yang-Zhang (2000)</b> — adds the overnight gap the others
+ *   <li><b>Yang-Zhang (2000)</b>: adds the overnight gap the others
  *       ignore: {@code sigma^2 = sigma_o^2 + k sigma_c^2 + (1-k) sigma_rs^2}
  *       with {@code sigma_o^2} the sample variance of open-over-prior-close
  *       log returns, {@code sigma_c^2} the sample variance of close-over-open

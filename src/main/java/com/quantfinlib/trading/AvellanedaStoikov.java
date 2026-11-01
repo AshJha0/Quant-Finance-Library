@@ -30,18 +30,18 @@ package com.quantfinlib.trading;
  *       {@code Math.pow(mid * sig.volPerSqrtSecond(sym), 2)}. NaN or
  *       negative reads as 0 (the inventory term disables; the liquidity
  *       floor keeps quoting sane);</li>
- *   <li>{@code horizonSeconds} — time to the moment inventory must be
+ *   <li>{@code horizonSeconds}: time to the moment inventory must be
  *       flat (the close, the fixing). Continuous 24/5 FX has no terminal
- *       time: use a fixed risk horizon (how long you are willing to sit
- *       on a position) — the standard practitioner reading of τ;</li>
- *   <li>{@code inventory} — signed position in units OF the instrument
+ *       time, so use a fixed risk horizon (how long you are willing to sit
+ *       on a position), the standard practitioner reading of τ;</li>
+ *   <li>{@code inventory}: signed position in units of the instrument
  *       the mid prices (shares of the stock, base-currency units of the
  *       pair). This is dimensional, not stylistic: the shade
  *       {@code q·γ·σ²·τ} is in price units only when q counts the same
- *       thing σ² is quoted per — pass round lots instead of shares and
+ *       thing σ² is quoted per. Pass round lots instead of shares and
  *       the shade silently shrinks 100× while the spread term (which
  *       never sees q) is unchanged, gutting the skew that is the model's
- *       point. Calibrate γ with the inventory unit fixed first.</li>
+ *       purpose. Calibrate γ with the inventory unit fixed first.</li>
  * </ul>
  *
  * <p>Wiring into the fast lane: compute {@code reservationPrice − mid} as

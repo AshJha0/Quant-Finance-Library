@@ -15,7 +15,7 @@ package com.quantfinlib.microstructure;
  *       stdev {@code σ/√(2κ)} — entry/exit in units the strategy can
  *       threshold;</li>
  *   <li><b>the refusal</b>: a fitted {@code b ≥ 1} means the series
- *       shows NO mean reversion in-sample — the fit throws rather than
+ *       shows no mean reversion in-sample — the fit throws rather than
  *       reporting an infinite half-life as a tradable number, because
  *       fitting OU to a random walk is how pairs desks die.</li>
  * </ul>

@@ -19,7 +19,7 @@ import java.util.concurrent.locks.LockSupport;
  *   <li>fail closed: a symbol with non-zero position or open orders and no
  *       finite positive reference price makes the exposure unmeasurable,
  *       and that alone trips the breaker ({@link #unpricedSymbols()});</li>
- *   <li>breach → {@link HftRiskGate#kill} on every gate, which makes each
+ *   <li>a breach calls {@link HftRiskGate#kill} on every gate, which makes each
  *       {@link HftOrderGateway} on those gates send a cancel-all.
  *       Recovery is hysteretic: trading resumes only once gross notional is
  *       below {@code cap * resumeFraction} and nothing is unpriced.</li>

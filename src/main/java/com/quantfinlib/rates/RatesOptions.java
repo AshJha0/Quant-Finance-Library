@@ -11,21 +11,21 @@ import com.quantfinlib.pricing.BlackScholes.OptionType;
  * shifted lognormal) and {@code pricing.Bachelier} (normal).
  *
  * <ul>
- *   <li><b>Swaption</b> — an option on a forward-starting swap. The
+ *   <li><b>Swaption</b>: an option on a forward-starting swap. The
  *       underlying is the forward swap rate
  *       {@code F = (DF(start) − DF(end)) / annuity}, the natural numeraire
  *       is the annuity (the PV of the fixed leg's 1%-per-year), and the
- *       price is simply {@code annuity × Black76(F, K, vol, expiry)} —
- *       discounting lives entirely in the annuity, which is why the
+ *       price is simply {@code annuity × Black76(F, K, vol, expiry)}.
+ *       Discounting lives entirely in the annuity, which is why the
  *       Black-76 leg is called with rate 0. A payer swaption (right to pay
  *       fixed) is a call on the swap rate: it pays when rates rise.</li>
- *   <li><b>Cap / floor</b> — a strip of independent options (caplets), one
+ *   <li><b>Cap / floor</b>: a strip of independent options (caplets), one
  *       per accrual period, each a Black-76 call (put) on that period's
  *       simple forward rate {@code f_i = (DF(t_{i-1})/DF(t_i) − 1)/τ},
  *       fixing at the period start and paying at its end. The first
  *       period's rate is already fixed today, so its caplet is pure
- *       intrinsic — included, as the market convention includes it unless
- *       the trade says otherwise.</li>
+ *       intrinsic. It is included, as the market convention includes it
+ *       unless the trade says otherwise.</li>
  * </ul>
  *
  * <p>Two identities hold for every vol model (both pinned by tests): payer −

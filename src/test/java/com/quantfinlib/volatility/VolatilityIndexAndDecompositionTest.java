@@ -42,7 +42,7 @@ class VolatilityIndexAndDecompositionTest {
         // F STRICTLY BETWEEN strikes: with F on a strike (above) the
         // (F/K0-1)^2 correction term is exactly zero and untestable —
         // dropping it would pass. At F = 100.9 the omission error is
-        // ~+2.9e-3, so THIS assertion is what makes the term load-bearing
+        // ~+2.9e-3, so this assertion is what makes the term necessary
         // (chain re-priced at the shifted forward via spot = 100.9, r=0).
         double[] putsF = new double[n];
         double[] callsF = new double[n];
@@ -106,7 +106,7 @@ class VolatilityIndexAndDecompositionTest {
         assertEquals(Math.sqrt(d.systematicVariance() * 252),
                 d.systematicVol(252), 1e-15);
 
-        // A clone of the market IS the market: beta 1, idio 0, R² 1.
+        // A clone of the market is the market: beta 1, idio 0, R² 1.
         var clone = VolatilityDecomposition.decompose(market.clone(), market);
         assertEquals(1.0, clone.beta(), 1e-12);
         assertEquals(0.0, clone.idiosyncraticVariance(), 1e-15,

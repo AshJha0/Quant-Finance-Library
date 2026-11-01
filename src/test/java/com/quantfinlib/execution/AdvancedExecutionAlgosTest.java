@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AdvancedExecutionAlgosTest {
 
     // ------------------------------------------------------------------
-    // Spread execution — legging risk is THE risk
+    // Spread execution — legging risk is the risk
     // ------------------------------------------------------------------
 
     @Test

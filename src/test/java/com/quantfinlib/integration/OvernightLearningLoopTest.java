@@ -97,8 +97,8 @@ class OvernightLearningLoopTest {
 
                 for (int q = 0; q < QUOTES_PER_BUCKET; q++) {
                     ts += DT;
-                    // Planted alpha with honest causality: the PREVIOUS quote's
-                    // imbalance leans THIS interval's return — exactly the
+                    // Planted alpha with causal timing: the previous quote's
+                    // imbalance leans this interval's return — exactly the
                     // alignment trainFrom's snapshot mechanism assumes.
                     double flow = Math.round(rnd.nextGaussian() * 800);
                     double ret = 0.4 * plantedQi * sigma + sigma * rnd.nextGaussian();
@@ -157,7 +157,7 @@ class OvernightLearningLoopTest {
                     "day " + day + " parent mostly worked: " + exec.executed());
             if (day == DAYS - 1) {
                 // Routing genuinely abandons the toxic venue: by the final
-                // day its restored adverse markout loses EVERY tie.
+                // day its restored adverse markout loses every tie.
                 assertEquals(0, toxicQty, "no flow to the fading venue on day 5");
                 assertTrue(cleanQty > 0, "the clean venue carries the day");
             }
@@ -205,7 +205,7 @@ class OvernightLearningLoopTest {
         }
 
         // The negative control: a learner fed pure noise through the same
-        // five days must NOT have earned trust.
+        // five days must not have earned trust.
         OnlineAlphaLearner noise = new OnlineAlphaLearner(0.05, 1e-4, 0.01);
         Random nr = new Random(9);
         for (int i = 0; i < DAYS * BUCKETS * QUOTES_PER_BUCKET; i++) {

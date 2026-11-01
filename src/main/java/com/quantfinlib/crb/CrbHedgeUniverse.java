@@ -13,15 +13,15 @@ import java.util.List;
  * factor space, in the same conventions {@link CentralRiskBook} books
  * with:
  * <ul>
- *   <li>{@link #addSingleFactor} — an instrument that is 1-for-1 one
- *       factor: an index future onto {@code EQ:<index>} (the covariance
- *       carries its correlation to the single names — the regression
- *       hedge falls out of the optimizer, not out of a beta table), a
- *       variance swap onto {@code EQVEGA:<sym>}, an FX vol trade onto
- *       {@code FXVEGA:<pair>};</li>
- *   <li>{@link #addFxForward} — one unit of base notional loads
+ *   <li>{@link #addSingleFactor}: an instrument that is 1-for-1 one
+ *       factor. An index future maps onto {@code EQ:<index>} (the
+ *       covariance carries its correlation to the single names, so the
+ *       regression hedge falls out of the optimizer, not out of a beta
+ *       table), a variance swap onto {@code EQVEGA:<sym>}, an FX vol trade
+ *       onto {@code FXVEGA:<pair>};</li>
+ *   <li>{@link #addFxForward}: one unit of base notional loads
  *       {@code CCY:<base>} +1 and {@code CCY:<quote>} −rate, exactly
- *       like a booked spot/forward — the natural hedge for the
+ *       like a booked spot/forward. It is the natural hedge for the
  *       currency legs that spot, swaps, NDFs and option deltas net
  *       into;</li>
  *   <li>{@link #add} — anything else, factor names and per-unit

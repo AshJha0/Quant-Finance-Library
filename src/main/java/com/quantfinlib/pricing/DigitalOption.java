@@ -9,8 +9,8 @@ import com.quantfinlib.util.MathUtils;
  *
  * <p>Parameter conventions match {@link BlackScholes}: {@code rate} is the
  * domestic (quote-currency) rate, {@code carry} the continuous yield on the
- * underlying — the foreign rate for FX (Garman-Kohlhagen), the dividend
- * yield for equities — so the forward is {@code S·e^{(r−q)t}}.</p>
+ * underlying (the foreign rate for FX under Garman-Kohlhagen, the dividend
+ * yield for equities), so the forward is {@code S·e^{(r−q)t}}.</p>
  *
  * <ul>
  *   <li><b>Cash-or-nothing</b>: pays a fixed amount if the option finishes

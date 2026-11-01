@@ -12,15 +12,16 @@ import java.util.Set;
  * conventions, settlement-lag arithmetic, and coupon schedule generation.
  *
  * <p>Why this is a finance class and not a util: cash cannot move on a day
- * the payment system is closed, so every real-world date in a trade — the
- * settlement date (spot = trade + 2 business days in most FX pairs, T+1 US
- * equities), each coupon date, an option expiry — must land on a business
- * day, and which way a weekend date rolls changes the accrual period and
- * therefore the payment ({@link DayCount} then converts the rolled dates
- * to a year fraction). {@code MODIFIED_FOLLOWING} — roll forward unless
- * that crosses month-end, then backward — is the near-universal swap
- * convention precisely because plain following would occasionally push a
- * month's payment into the next month and break month-bucketed accounting.
+ * the payment system is closed, so every real-world date in a trade (the
+ * settlement date, spot = trade + 2 business days in most FX pairs and T+1
+ * for US equities; each coupon date; an option expiry) must land on a
+ * business day, and which way a weekend date rolls changes the accrual
+ * period and therefore the payment ({@link DayCount} then converts the
+ * rolled dates to a year fraction). {@code MODIFIED_FOLLOWING} (roll
+ * forward unless that crosses month-end, then backward) is the
+ * near-universal swap convention precisely because plain following would
+ * occasionally push a month's payment into the next month and break
+ * month-bucketed accounting.
  * A holiday missing from the set silently shifts settlement by a day: the
  * classic source of small unexplained cash breaks between two systems that
  * disagree about, say, Whit Monday.</p>

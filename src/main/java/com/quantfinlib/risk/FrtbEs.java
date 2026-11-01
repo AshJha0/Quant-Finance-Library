@@ -11,13 +11,13 @@ package com.quantfinlib.risk;
  * <pre>  ES = √( Σⱼ [ ESⱼ · √((LHⱼ − LHⱼ₋₁)/10) ]² )      (the LH cascade)
  *  ES   = ES_R,S · max(1, ES_F,C / ES_R,C)                    (MAR33, stressed calibration)</pre>
  *
- * <p><b>Styled after BCBS MAR33, not certified</b> — the same
+ * <p><b>Styled after BCBS MAR33, not certified</b>: the same
  * stance as the LULD and ESMA-tick implementations elsewhere in this
- * library: the formulas are the regulation's, the tests pin their
+ * library. The formulas are the regulation's and the tests pin their
  * arithmetic, but regulatory capital additionally requires desk-level
  * approvals, the full P&amp;L attribution program
  * ({@link PnlAttribution}), non-modellable risk factor (NMRF) capital,
- * and the standardized-approach floor — all named in
+ * and the standardized-approach floor, all named in
  * {@code docs/MARKET_RISK.md} as out of scope. Standard
  * liquidity horizons are provided as {@link #LH_10} … {@link #LH_120}.
  * Research lane, static, deterministic.</p>

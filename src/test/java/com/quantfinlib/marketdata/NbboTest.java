@@ -48,7 +48,7 @@ class NbboTest {
         // Venue 1 quoting outside the inside: no NBBO change, no callback.
         assertFalse(n.onVenueQuote(1, 99, 5, 103, 5, 2));
         assertEquals(1, fired[0]);
-        // Size change AT the inside is a change.
+        // Size change at the inside is a change.
         assertTrue(n.onVenueQuote(0, 100, 15, 102, 10, 3));
         assertEquals(2, fired[0]);
         assertEquals(3, n.updateCount());

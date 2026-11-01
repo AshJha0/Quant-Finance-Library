@@ -15,8 +15,8 @@ import java.util.List;
  *       distribution.</li>
  * </ul>
  *
- * <p>Scores are robust z-scores — (x − median) / (1.4826 · MAD) — not
- * mean/stdev: an anomaly detector whose baseline includes the anomalies
+ * <p>Scores are robust z-scores, (x − median) / (1.4826 · MAD), not
+ * mean/stdev. An anomaly detector whose baseline includes the anomalies
  * inflates its own scale and misses exactly the events it hunts (a storm
  * of stuffing intervals raises the stdev until nothing clears the
  * threshold). Median/MAD ignores up to half the sample being

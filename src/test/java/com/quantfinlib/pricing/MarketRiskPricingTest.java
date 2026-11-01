@@ -48,7 +48,7 @@ class MarketRiskPricingTest {
 
     @Test
     void vannaAndVolgaMatchFiniteDifferencesOfDeltaAndVega() {
-        // Deliberately r != 2*carry etc. — parameters chosen so no
+        // r != 2*carry etc. on purpose: parameters chosen so no
         // convention coincidence can fake agreement.
         double s = 100;
         double k = 110;
@@ -86,9 +86,9 @@ class MarketRiskPricingTest {
     void hestonCollapsesToBlackScholesWhenVolOfVolVanishes() {
         // Small (not degenerate) vol-of-vol with v0 = theta: variance is
         // pinned near v0, so the price sits within O(sigmaV^2) of
-        // BS(sqrt(v0)) — sigmaV = 0.01 keeps the integrand well-conditioned.
-        // This tolerance is deliberately tight: it caught a genuine bug —
-        // the naive complex sqrt lost the imaginary part near u = 0 and
+        // BS(sqrt(v0)); sigmaV = 0.01 keeps the integrand well-conditioned.
+        // This tolerance is tight on purpose. It caught a real bug: the
+        // naive complex sqrt lost the imaginary part near u = 0 and
         // biased every price ~0.5%; the stable form agrees to 4+ decimals.
         Heston.Params p = new Heston.Params(5, 0.04, 0.01, 0.0, 0.04);
         double heston = Heston.call(100, 100, 0.02, 0.0, 1.0, p);
@@ -122,7 +122,7 @@ class MarketRiskPricingTest {
         double put = Heston.put(100, 100, 0.02, 0.0, 1.0, p);
         double forward = 100 * Math.exp(0.02);
         assertEquals(analytic - Math.exp(-0.02) * (forward - 100), put, 1e-9);
-        // The skew: with rho < 0, low strikes carry MORE implied vol than high.
+        // The skew: with rho < 0, low strikes carry more implied vol than high.
         double lowK = Heston.call(100, 80, 0.02, 0.0, 1.0, p);
         double highK = Heston.call(100, 120, 0.02, 0.0, 1.0, p);
         double ivLow = BlackScholes.impliedVol(OptionType.CALL, lowK, 100, 80, 0.02, 0.0, 1.0);
@@ -150,7 +150,7 @@ class MarketRiskPricingTest {
         assertEquals(Math.exp(-0.03 * 5),
                 ShortRateModels.vasicekBond(0.03, 0.5, 0.03, 0, 5), 1e-12,
                 "the deterministic limit is exact");
-        // Convexity: with vol, the Gaussian rate makes the bond WORTH MORE
+        // Convexity: with vol, the Gaussian rate makes the bond worth more
         // (Jensen on e^{-∫r}).
         assertTrue(ShortRateModels.vasicekBond(0.03, 0.5, 0.03, 0.02, 5)
                 > Math.exp(-0.03 * 5));

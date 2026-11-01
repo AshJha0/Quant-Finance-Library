@@ -1,17 +1,17 @@
 package com.quantfinlib.rates;
 
 /**
- * Key-rate durations — where on the curve a bond's rate risk lives.
+ * Key-rate durations: where on the curve a bond's rate risk lives.
  * {@code BondPricer.dv01} answers "what does one parallel basis point
  * cost?"; a curve rarely moves in parallel, so risk desks slice that
  * DV01 across the curve's tenors: bump one node, hold the rest, reprice.
  * The vector of per-node sensitivities is the hedging recipe (each KRD
  * is offset with the instrument that drives that node), and its sum
- * recovers the parallel duration — a consistency check the tests pin.
+ * recovers the parallel duration, a consistency check the tests pin.
  *
  * <p>Mechanics: for each curve tenor, the zero rate at that node is
  * bumped ±1bp (all other nodes fixed — the curve's own interpolation
- * spreads the bump between neighbors, which IS the standard convention),
+ * spreads the bump between neighbors, which is the standard convention),
  * the bond is repriced off each bumped curve, and the central difference
  * gives the sensitivity. Prices per 100 face follow the
  * {@code BondPricer} convention. Research lane; deterministic.</p>

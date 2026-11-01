@@ -89,7 +89,7 @@ public final class SpreadExecutionAlgo {
             // imbalance — cross it and get flat.
             leadQty = 0;
         } else {
-            // Even a full lead fill with NO hedge fill stays inside the cap.
+            // Even a full lead fill with no hedge fill stays inside the cap.
             long headroomLeadUnits = (long) Math.floor((leggingLimit - imbalance) / ratio);
             leadQty = Math.min(Math.min(leadRemaining, leadChildMax), headroomLeadUnits);
         }

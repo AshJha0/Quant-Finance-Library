@@ -57,7 +57,7 @@ class AsyncTickCaptureTest {
         Path file = dir.resolve("tiny.qflt");
         try (HftMarketDataBus bus = new HftMarketDataBus(1 << 14, 4, false)) {
             int id = bus.registerSymbol("X");
-            // A 16-slot capture ring with a writer that CANNOT keep up with a
+            // A 16-slot capture ring with a writer that cannot keep up with a
             // burst published faster than file I/O: drops must be counted and
             // the publisher must never block on the capture.
             try (AsyncTickCapture capture = AsyncTickCapture.attach(bus, file, 16)) {

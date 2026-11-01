@@ -168,7 +168,7 @@ class SurvivorshipBacktestTest {
 
     @Test
     void sameBarMergerIntoDyingAcquirerIsDeterministic() {
-        // TGT merges into ACQ and ACQ delists with the SAME effective bar:
+        // TGT merges into ACQ and ACQ delists with the same effective bar:
         // mergers process before delistings, so the converted shares settle
         // at the acquirer's terms — independent of map iteration order.
         Map<String, BarSeries> data = Map.of(

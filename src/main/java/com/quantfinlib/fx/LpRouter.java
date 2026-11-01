@@ -3,9 +3,9 @@ package com.quantfinlib.fx;
 /**
  * Last-look-aware LP router: chooses where to send an FX clip by
  * <em>expected all-in</em> price, not displayed price. The FX-specific
- * insight it encodes: a tight quote from an LP that rejects 20% of the time
- * — and whose rejects are followed by adverse markout — is more expensive
- * than a wider firm quote. Expected cost per LP:
+ * insight it encodes: a tight quote from an LP that rejects 20% of the
+ * time, and whose rejects are followed by adverse markout, is more
+ * expensive than a wider firm quote. Expected cost per LP:
  *
  * <pre>  quoted price  ±  rejectRate × max(postRejectMarkout, 0)</pre>
  *

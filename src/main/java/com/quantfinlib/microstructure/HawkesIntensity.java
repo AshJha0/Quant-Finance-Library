@@ -12,8 +12,8 @@ import com.quantfinlib.util.MathUtils;
  * <pre>  λ(t) = μ + S(t),   S(t) = Σ over past events of α·e^(−β(t−tᵢ))</pre>
  *
  * where μ is the baseline arrival rate, α the excitation each event adds,
- * and β the decay. {@code S} updates in O(1) per event — decay what is
- * there, add α — which is what makes Hawkes streaming-friendly while
+ * and β the decay. {@code S} updates in O(1) per event (decay what is
+ * there, add α), which is what makes Hawkes streaming-friendly while
  * richer clustering models are not.
  *
  * <p><b>Stability is enforced, not assumed:</b> the branching ratio
@@ -25,12 +25,12 @@ import com.quantfinlib.util.MathUtils;
  * it decays back with the configured half-life when the burst ends.</p>
  *
  * <p>Uses: pre-positioning for activity bursts (a burst means queues
- * consume faster — {@code QueueModel} horizons shorten), conflation
+ * consume faster, so {@code QueueModel} horizons shorten), conflation
  * pressure forecasting, and as a dimensionless ensemble input. Feed every
  * arrival of the event type you care about (trades, quotes, or your own
  * fills) via {@link #onEvent}; timestamps must be non-decreasing (a
- * backwards timestamp is ignored — feed-merge jitter must not inject
- * negative decay). Zero allocation per event, single writer, one
+ * backwards timestamp is ignored, because feed-merge jitter must not
+ * inject negative decay). Zero allocation per event, single writer, one
  * instance per symbol per event type.</p>
  *
  * <p><b>Calibration.</b> {@link #fit} estimates μ, α and β from event

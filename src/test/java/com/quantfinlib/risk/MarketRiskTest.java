@@ -189,7 +189,7 @@ class MarketRiskTest {
                 "long gamma cushions the same tail");
 
         // Delta-gamma ES (closed-form Cornish-Fisher tail mean): with
-        // gamma = 0 it IS delta-normal ES, exactly; with short gamma it
+        // gamma = 0 it is delta-normal ES, exactly; with short gamma it
         // exceeds both its own VaR and the Gaussian ES.
         assertEquals(VarEngine.deltaNormalEs(exposures, cov, 0.99),
                 VarEngine.deltaGammaEs(exposures, new double[2][2], cov, 0.99), 1e-9,
@@ -280,7 +280,7 @@ class MarketRiskTest {
 
     @Test
     void evtIgnoresTiesAtTheThreshold() {
-        // Discretized losses: ten observations sit EXACTLY at the threshold
+        // Discretized losses: ten observations sit exactly at the threshold
         // value (P&L snapped to ticks does this) — counted as y = 0
         // exceedances they would deflate both PWMs and bias the shape.
         double[] losses = new double[100];
@@ -322,13 +322,13 @@ class MarketRiskTest {
         assertEquals(200_000, ladder[4], 1e-6);
 
         // The delta-gamma ladder shows the curvature the linear one hides:
-        // short gamma costs 0.5 * 1e7 * 0.01 = 50k at BOTH +/-10% rungs.
+        // short gamma costs 0.5 * 1e7 * 0.01 = 50k at both +/-10% rungs.
         double[] dgLadder = StressTester.sensitivityLadder(exposures, gamma, 0, 0.10, 4);
         assertEquals(-250_000, dgLadder[0], 1e-6, "the down rung is WORSE short gamma");
         assertEquals(0, dgLadder[2], 1e-6);
         assertEquals(150_000, dgLadder[4], 1e-6);
 
-        // Reverse stress: the returned shock loses EXACTLY the target.
+        // Reverse stress: the returned shock loses exactly the target.
         double[][] cov = {{4e-4, 1e-4}, {1e-4, 2.25e-4}};
         double[] expo2 = {1_000_000, -500_000};
         var reverse = StressTester.reverseStress(expo2, cov, 50_000);
@@ -446,7 +446,7 @@ class MarketRiskTest {
         assertTrue(fit.logLikelihood() > Garch11.fit(r).logLikelihood(),
                 "the model that generated the data likelihood-beats the symmetric one");
 
-        // Symmetric GARCH data: the honest answer is gamma ~ 0.
+        // Symmetric GARCH data: the correct answer is gamma ~ 0.
         double[] sym = new double[n];
         double hs = 2e-6 / (1 - 0.08 - 0.9);
         for (int t = 0; t < n; t++) {

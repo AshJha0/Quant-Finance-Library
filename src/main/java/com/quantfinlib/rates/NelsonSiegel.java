@@ -12,8 +12,8 @@ import com.quantfinlib.util.MathUtils;
  *
  * <ul>
  *   <li><b>b0</b> — the level: z(∞), where the long end settles;</li>
- *   <li><b>b1</b> — the slope: z(0) = b0 + b1, so b1 &lt; 0 is an upward
- *       curve and b1 &gt; 0 is inversion — the recession-signal number;</li>
+ *   <li><b>b1</b>: the slope. z(0) = b0 + b1, so b1 &lt; 0 is an upward
+ *       curve and b1 &gt; 0 is inversion, the recession-signal number;</li>
  *   <li><b>b2</b> — the curvature: the mid-curve hump, peaking near
  *       t ≈ λ;</li>
  *   <li><b>λ</b> — where the hump sits (years).</li>

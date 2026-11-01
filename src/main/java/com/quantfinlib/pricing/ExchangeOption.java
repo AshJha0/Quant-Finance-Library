@@ -7,23 +7,23 @@ import com.quantfinlib.util.MathUtils;
  * approximation — the workhorse formulas for relative-value option books
  * (crack spreads, calendar spreads, stock-vs-index switches).
  *
- * <p><b>Margrabe (1978)</b> — the right to exchange asset 2 for asset 1
- * (payoff {@code max(0, S1 − S2)}) is a Black-Scholes call in disguise:
- * price asset 1 in units of asset 2 and the strike becomes 1, the rate
+ * <p><b>Margrabe (1978)</b>: the right to exchange asset 2 for asset 1
+ * (payoff {@code max(0, S1 − S2)}) is a Black-Scholes call in disguise.
+ * Price asset 1 in units of asset 2 and the strike becomes 1, the rate
  * drops out entirely (a ratio has no financing cost) and the vol is the
  * vol of the ratio, {@code σ² = σ1² + σ2² − 2ρσ1σ2}. The observation
  * worth knowing: with ρ = 1 and σ1 = σ2 the ratio has zero
- * vol and the option is pure forward intrinsic — two perfectly correlated
+ * vol and the option is pure forward intrinsic. Two perfectly correlated
  * equal-vol assets can never finish crossed.</p>
  *
- * <p><b>Kirk (1995)</b> — a spread call {@code max(0, F1 − F2 − K)} has no
+ * <p><b>Kirk (1995)</b>: a spread call {@code max(0, F1 − F2 − K)} has no
  * exact lognormal closed form (a difference of lognormals is not
  * lognormal); Kirk approximates {@code F2 + K} as one lognormal asset with
  * vol scaled by its F2 share, {@code σ_K = sqrt(σ1² − 2ρσ1σ2·f + σ2²·f²)}
- * with {@code f = F2/(F2+K)}. Exact in both limits — K = 0 collapses to
- * Margrabe, F2 = 0 collapses to Black-76 (both pinned) — and accurate to
+ * with {@code f = F2/(F2+K)}. Exact in both limits (K = 0 collapses to
+ * Margrabe, F2 = 0 collapses to Black-76, both pinned) and accurate to
  * a few bps of premium for moderate K; known to degrade for very large K
- * with high σ2 (stated: it is an approximation, not a theorem).</p>
+ * with high σ2 (it is an approximation, not a theorem).</p>
  *
  * <p>Research lane, deterministic, no smile (single flat vol per leg).</p>
  */

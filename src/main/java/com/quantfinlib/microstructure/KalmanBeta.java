@@ -11,18 +11,18 @@ package com.quantfinlib.microstructure;
  * <pre>  state:       [α, β]_t = [α, β]_{t-1} + noise(q)
  *  observation:  y_t = α_t + β_t·x_t + noise(r)</pre>
  *
- * The knobs mean something: {@code processNoise} (q) is how fast you
- * believe the relationship drifts — 0 collapses to recursive least
- * squares (β converges and freezes), large q chases every tick;
+ * The knobs mean something. {@code processNoise} (q) is how fast you
+ * believe the relationship drifts: 0 collapses to recursive least
+ * squares (β converges and freezes), large q chases every tick.
  * {@code observationNoise} (r) is how noisy each print is. Their ratio
  * is what matters. {@link #betaVariance()} is the filter's own
- * uncertainty — a hedge sized off a β the filter itself distrusts is a
+ * uncertainty; a hedge sized off a β the filter itself distrusts is a
  * position, not a hedge.
  *
  * <p>Pairs workflow: {@code hedging.CointegrationTest} (is there a
- * relationship?) → this class (what is the ratio now?) →
+ * relationship?), then this class (what is the ratio now?), then
  * {@link OrnsteinUhlenbeck} on the resulting spread (how fast does it
- * revert?) → {@code execution.SpreadExecutionAlgo} (execute with the
+ * revert?), then {@code execution.SpreadExecutionAlgo} (execute with the
  * legging cap). O(1) per observation, allocation-free after
  * construction, deterministic; research/warm lane.</p>
  */

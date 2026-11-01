@@ -23,9 +23,9 @@ import java.util.TreeMap;
  *   <li>{@code EQGAMMA:<sym>} / {@code EQVEGA:<sym>} — dollar gamma per
  *       1% move (Γ·S²/100 per contract-adjusted unit) and vega per vol
  *       point;</li>
- *   <li>{@code CCY:<ccy>} — currency exposure in native units of that
+ *   <li>{@code CCY:<ccy>}: currency exposure in native units of that
  *       currency (an EURUSD buy of 10M books CCY:EUR +10M euros and
- *       CCY:USD −10M·rate dollars) — this is what lets spot, swaps,
+ *       CCY:USD −10M·rate dollars). This is what lets spot, swaps,
  *       NDFs and option deltas net at the currency level;</li>
  *   <li>{@code FXPOINTS:<pair>} — forward-points risk of swaps: P&amp;L
  *       in quote units per 1.0 move in the far−near differential;</li>
@@ -39,8 +39,8 @@ import java.util.TreeMap;
  * notional is tracked per pair in {@link #pendingFixing(String)} and
  * released via {@link #settleFixing} once fixings occur. This is a
  * risk ledger, not a cash ledger: premium and settlement cash legs are
- * not tracked (the same delta-only stance for cash equities
- * — no settlement cash — and options — no premium), and lifecycle
+ * not tracked (the same delta-only stance applies to cash equities, with
+ * no settlement cash, and to options, with no premium), and lifecycle
  * events (expiry, exercise, settlement) re-book as offsetting flows.
  * Deterministic, single-threaded, research/warm lane — pair it with
  * {@link InternalizationEngine} for flow decisions and
@@ -159,8 +159,8 @@ public final class CentralRiskBook {
 
     /**
      * NDF: buy {@code baseNotional} of base forward at {@code fwdRate}.
-     * Economically a forward until the fixing — full currency delta on
-     * both legs — with the non-deliverable notional tracked per pair
+     * Economically a forward until the fixing (full currency delta on
+     * both legs), with the non-deliverable notional tracked per pair
      * (settlement is cash in the deliverable currency; what fixes at the
      * fixing is the rate, and until then the book is exposed).
      * Both legs are booked at face (undiscounted, date-blind); see
@@ -279,11 +279,11 @@ public final class CentralRiskBook {
 
     /**
      * Releases {@code notional} (positive, gross) of pending fixing after
-     * the fixing occurs — without this the pending number only ever
+     * the fixing occurs. Without this the pending number only ever
      * grows and goes stale the day after the first fixing. The fixed
      * NDF's currency delta must be re-booked separately as the
      * offsetting flow when it cash-settles (position decomposition, not
-     * lifecycle — see class doc). Over-settling throws: releasing more
+     * lifecycle; see class doc). Over-settling throws: releasing more
      * than is pending means the caller's fixing ledger disagrees with
      * the book's, which is a reconciliation problem, not a rounding one.
      */
@@ -436,8 +436,8 @@ public final class CentralRiskBook {
     // ------------------------------------------------------------------
 
     /**
-     * Serializes the whole netted book — factor names, net/gross, per-desk
-     * attribution, pending fixings, flow count — for a
+     * Serializes the whole netted book (factor names, net/gross, per-desk
+     * attribution, pending fixings, flow count) for a
      * {@code persist.Checkpoint} section. Restore into a fresh instance
      * via {@link #readState}: a book that relearns its positions every
      * morning is not a book.

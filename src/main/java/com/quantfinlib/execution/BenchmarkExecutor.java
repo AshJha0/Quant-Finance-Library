@@ -5,22 +5,22 @@ import com.quantfinlib.util.MathUtils;
 
 /**
  * The dynamic benchmark execution algorithm: one stateful executor that
- * works a parent order toward any of the standard benchmarks — <b>VWAP,
+ * works a parent order toward any of the standard benchmarks (<b>VWAP,
  * TWAP, Arrival Price, Implementation Shortfall, Closing Price, Opening
- * Price, and Participation (POV)</b> — and, unlike a precomputed slice list
+ * Price, and Participation (POV)</b>). Unlike a precomputed slice list
  * ({@link TwapScheduler}, {@link VwapScheduler},
- * {@link ImplementationShortfallScheduler}), <em>re-decides every interval
- * from live market state</em>. Cross-asset: prices/sizes are doubles, so it
- * serves equities and FX identically.
+ * {@link ImplementationShortfallScheduler}), it <em>re-decides every
+ * interval from live market state</em>. Cross-asset: prices/sizes are
+ * doubles, so it serves equities and FX identically.
  *
  * <h2>Two layers</h2>
  * <ol>
- *   <li><b>The benchmark curve</b> — each {@link Benchmark} defines the
+ *   <li><b>The benchmark curve</b>: each {@link Benchmark} defines the
  *       fraction of the parent that <em>should</em> be complete by now.
  *       Time-driven benchmarks (TWAP linear, Arrival/IS front-loaded, Close
  *       back-loaded, Open aggressively front-loaded) use elapsed schedule
  *       fraction; volume-driven benchmarks (VWAP, POV) use the realized
- *       volume curve — VWAP against the expected cumulative profile, POV
+ *       volume curve, VWAP against the expected cumulative profile and POV
  *       against a fixed share of actual volume.</li>
  *   <li><b>The dynamic adjustment</b> — the raw "behind schedule" quantity
  *       is then shaped by the real-time inputs a production algo watches:
@@ -207,9 +207,9 @@ public final class BenchmarkExecutor {
 
     /**
      * Sensible defaults: alpha urgency 1 (a full-scale normalized alpha of
-     * ±1 doubles/halves the pace — smooth, never rail-pinned), child capped
-     * at 25% of displayed depth. Participation must state its rate — use
-     * {@link #pov}.
+     * ±1 doubles/halves the pace, smoothly and never rail-pinned), child
+     * capped at 25% of displayed depth. Participation must state its rate;
+     * use {@link #pov}.
      */
     public static BenchmarkExecutor of(Side side, long parentQty, Benchmark benchmark) {
         if (benchmark == Benchmark.PARTICIPATION) {

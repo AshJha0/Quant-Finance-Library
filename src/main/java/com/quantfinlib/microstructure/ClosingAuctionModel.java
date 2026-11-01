@@ -20,10 +20,10 @@ import java.io.IOException;
  *       share of daily volume becomes a day-over-day EWMA (first session
  *       seeds — the same convention as the seasonality curves);</li>
  *   <li><b>Which way is today's auction leaning?</b> From the venue's
- *       imbalance dissemination (see the input contract below): an
+ *       imbalance dissemination (see the input contract below). An
  *       imbalance on the opposite side of your parent means the auction
- *       is looking for exactly your shares — reserve more; an imbalance
- *       on your side means you would join a crowd competing to trade —
+ *       is looking for exactly your shares, so reserve more. An imbalance
+ *       on your side means you would join a crowd competing to trade, so
  *       reserve less and work the continuous market instead.</li>
  * </ol>
  *
@@ -35,8 +35,8 @@ import java.io.IOException;
  * <b>indicative/reference prices</b>. This library ships no venue
  * imbalance feed, so this model is a <b>documented-contract structure</b>:
  * the learning and the reserve logic are tested against synthetic inputs,
- * but the mapping from your venue's message format — and the
- * {@code imbalanceSensitivity} calibration — must be validated against
+ * but the mapping from your venue's message format (and the
+ * {@code imbalanceSensitivity} calibration) must be validated against
  * real dissemination data before the output steers size. The model is
  * shipped without that data, so this caveat applies.
  *
@@ -58,7 +58,7 @@ public final class ClosingAuctionModel {
     private double auctionShareEwma;
     private int daysLearned;
 
-    // Today's dissemination state. Zero IS the no-dissemination state —
+    // Today's dissemination state. Zero is the no-dissemination state —
     // a flag would be a second representation of the same fact.
     private double imbalanceRatio;         // signed: + = buy-side imbalance
     private double indicativePressure;     // (indicative − reference)/reference

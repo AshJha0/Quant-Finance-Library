@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.function.ToDoubleFunction;
 
 /**
- * Probability OF backtest overfitting via combinatorially symmetric
+ * Probability of backtest overfitting via combinatorially symmetric
  * cross-validation — CSCV (Bailey, Borwein, Lopez de Prado &amp; Zhu 2015,
  * "The probability of backtest overfitting").
  *
@@ -37,9 +37,10 @@ import java.util.function.ToDoubleFunction;
  *
  * <p><b>PBO = the fraction of combinations with {@code lambda <= 0}</b>:
  * the probability that the config you would have picked is an
- * out-of-sample loser. Rules of thumb: PBO &lt; 0.1 — selection is finding
- * something real; PBO &ge; 0.5 — the selection is pure noise-mining and
- * the "best" backtest is meaningless regardless of how good it looks.</p>
+ * out-of-sample loser. Rules of thumb: PBO &lt; 0.1 means selection is
+ * finding something real; PBO &ge; 0.5 means the selection is pure
+ * noise-mining and the "best" backtest is meaningless regardless of how
+ * good it looks.</p>
  *
  * <p>Trailing periods that don't fill a whole block are dropped (stated:
  * with T = 1007 and S = 8, each block is 125 periods and the last 7 are

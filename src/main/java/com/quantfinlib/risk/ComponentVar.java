@@ -22,11 +22,11 @@ import com.quantfinlib.util.MathUtils;
  *       owns (the risk-budget number);</li>
  *   <li><b>marginal VaR</b> — how fast VaR moves per unit added (the
  *       "should the next dollar go here?" number);</li>
- *   <li><b>incremental VaR</b> — how much VaR disappears if the position
- *       is closed entirely (a full re-computation without it — not
- *       component VaR, and the difference is the whole point: a large
- *       position that hedges the book has positive size, negative
- *       component, and closing it raises VaR).</li>
+ *   <li><b>incremental VaR</b>: how much VaR disappears if the position
+ *       is closed entirely (a full re-computation without it). This is not
+ *       component VaR, and the difference matters: a large position that
+ *       hedges the book has positive size, negative component, and
+ *       closing it raises VaR.</li>
  * </ul>
  *
  * <p>Delta-normal only, stated: allocations inherit the model's

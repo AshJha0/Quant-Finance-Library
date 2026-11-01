@@ -7,27 +7,27 @@ import java.util.List;
 import java.util.SplittableRandom;
 
 /**
- * Monte Carlo trade reshuffling — the answer to "was my equity curve's
+ * Monte Carlo trade reshuffling: the answer to "was my equity curve's
  * shape luck?". A backtest reports one path: this strategy's trades in
  * the order they happened, producing one max drawdown and one terminal
  * equity. But the order is itself a sample. Reshuffle the same trade
  * P&amp;Ls into thousands of random sequences and you get the distribution
- * of drawdowns and terminal wealth the strategy's own trades imply — and
- * the question stops being "the backtest drew down 18%" and
+ * of drawdowns and terminal wealth the strategy's own trades imply. The
+ * question then stops being "the backtest drew down 18%" and
  * becomes "the 95th-percentile drawdown of my trade set is 31%, so plan
  * for 31, not 18".
  *
  * <p>What reshuffling holds fixed and what it breaks: it preserves the
  * multiset of trade outcomes (win rate, average win/loss, profit factor
- * are invariant) and destroys their order — so it isolates
- * "path/sequencing risk" from "edge". Its blind spot, stated plainly:
- * it assumes trades are exchangeable, so it understates risk for a
- * strategy whose losses cluster (serial correlation, regime dependence)
- * — a martingale that wins small and loses catastrophically looks
- * tamer reshuffled than it is. For serially-correlated paths use
- * {@link BlockBootstrap} on the return series; this class is the
- * per-trade complement, and the two disagreeing is itself the signal
- * that your trades are not independent.</p>
+ * are invariant) and destroys their order, so it isolates
+ * "path/sequencing risk" from "edge". Its blind spot: it assumes trades
+ * are exchangeable, so it understates risk for a strategy whose losses
+ * cluster (serial correlation, regime dependence). A martingale that
+ * wins small and loses catastrophically looks tamer reshuffled than it
+ * is. For serially-correlated paths use {@link BlockBootstrap} on the
+ * return series; this class is the per-trade complement, and the two
+ * disagreeing is itself the signal that your trades are not
+ * independent.</p>
  *
  * <p>The path compounds each trade's {@link Trade#returnPct()} (return on
  * the capital committed at entry): wealth {@code W_k = Π_{j≤k}(1 + r_j)}

@@ -12,7 +12,7 @@ import com.quantfinlib.rates.YieldCurve;
  *   CVA = LGD * sum_i EE(t_i) * [ Q(t_{i-1}) - Q(t_i) ] * DF(t_i)
  * </pre>
  *
- * expected exposure at each bucket, times the probability of defaulting IN
+ * expected exposure at each bucket, times the probability of defaulting in
  * that bucket (read off the {@link CreditCurve}'s survival function), times
  * the discount factor, times loss-given-default. The three ingredients are
  * separate objects: exposure comes from your pricing/
@@ -21,15 +21,16 @@ import com.quantfinlib.rates.YieldCurve;
  * hump, or Monte Carlo EE averages), credit comes from the CDS-bootstrapped
  * curve, discount from the {@link YieldCurve}.
  *
- * <p>Approximations, stated: exposure is evaluated at the bucket end and
- * assumed constant across the bucket (O(dt) bias, shrink the grid to
- * shrink it); default and exposure are independent — no wrong-way risk,
- * which understates CVA when exposure grows exactly when the counterparty
- * weakens (the FX-forward-with-an-EM-sovereign classic); unilateral — your
- * own default (DVA) is not netted; LGD is a constant you pass, usually
- * {@code 1 - recovery} on the same convention as the curve's bootstrap,
- * but kept separate because the curve's recovery is a quoting convention
- * while CVA's LGD is a modeling choice. Research lane, deterministic.</p>
+ * <p>Approximations: exposure is evaluated at the bucket end and
+ * assumed constant across the bucket (O(dt) bias; shrink the grid to
+ * shrink it). Default and exposure are independent, so there is no
+ * wrong-way risk, which understates CVA when exposure grows exactly when
+ * the counterparty weakens (the FX-forward-with-an-EM-sovereign classic).
+ * Unilateral: your own default (DVA) is not netted. LGD is a constant you
+ * pass, usually {@code 1 - recovery} on the same convention as the curve's
+ * bootstrap, but kept separate because the curve's recovery is a quoting
+ * convention while CVA's LGD is a modeling choice. Research lane,
+ * deterministic.</p>
  */
 public final class CvaApproximator {
 

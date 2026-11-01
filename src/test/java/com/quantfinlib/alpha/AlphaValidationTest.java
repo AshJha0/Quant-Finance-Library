@@ -89,10 +89,10 @@ class AlphaValidationTest {
     }
 
     /**
-     * Drifts flip sign halfway: the momentum ranking genuinely changes over
+     * Drifts flip sign halfway: the momentum ranking changes over
      * time (and keeps predicting), so the date-permutation has something to
-     * destroy. On a time-INVARIANT panel the test is deliberately
-     * conservative — one effective observation — which the luck case below
+     * destroy. On a time-invariant panel the test is conservative by
+     * design (one effective observation), which the luck case below
      * exercises.
      */
     private static AlphaContext regimePanel() {
