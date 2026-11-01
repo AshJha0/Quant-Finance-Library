@@ -3,10 +3,10 @@ package com.quantfinlib.execution;
 /**
  * POV (percentage-of-volume) execution tracker: the streaming counterpart of
  * the precomputed {@link TwapScheduler}/{@link VwapScheduler} schedules.
- * POV cannot be prescheduled — it chases realized market volume — so this
- * class maintains the participation ledger live: feed it market prints and
- * own fills, and it answers "how many shares am I allowed to send right
- * now" ({@link #dueQuantity}).
+ * POV cannot be prescheduled because it chases realized market volume, so
+ * this class maintains the participation ledger live: feed it market
+ * prints and own fills, and it answers "how many shares am I allowed to
+ * send right now" ({@link #dueQuantity}).
  *
  * <p>The participation rate {@code p} is a share of total traded volume,
  * ours included (the industry definition). With {@code V} the volume

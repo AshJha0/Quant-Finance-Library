@@ -188,7 +188,7 @@ class BenchmarkExecutorTest {
 
     @Test
     void sellSideFlipsTheAlphaSign() {
-        // For a seller, a FALLING price (negative alpha) is adverse -> hurry.
+        // For a seller, a falling price (negative alpha) is adverse -> hurry.
         BenchmarkExecutor buy = new BenchmarkExecutor(Side.BUY, 100_000, Benchmark.TWAP,
                 0.1, 10, 1.0);
         BenchmarkExecutor sell = new BenchmarkExecutor(Side.SELL, 100_000, Benchmark.TWAP,
