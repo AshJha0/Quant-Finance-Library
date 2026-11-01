@@ -9,16 +9,16 @@ package com.quantfinlib.risk;
  * anchored to a STRESSED period:
  *
  * <pre>  ES = √( Σⱼ [ ESⱼ · √((LHⱼ − LHⱼ₋₁)/10) ]² )      (the LH cascade)
- *  ES   = ES_R,S · max(1, ES_F,C / ES_R,C)                    (MAR33.5)</pre>
+ *  ES   = ES_R,S · max(1, ES_F,C / ES_R,C)                    (MAR33, stressed calibration)</pre>
  *
- * <p><b>Styled after BCBS MAR33, not certified</b> — the same honesty
+ * <p><b>Styled after BCBS MAR33, not certified</b> — the same
  * stance as the LULD and ESMA-tick implementations elsewhere in this
  * library: the FORMULAS are the regulation's, the tests pin their
  * arithmetic, but regulatory capital additionally requires desk-level
  * approvals, the full P&amp;L attribution program
  * ({@link PnlAttribution}), non-modellable risk factor (NMRF) capital,
  * and the standardized-approach floor — all named in
- * {@code docs/MARKET_RISK.md} as deliberately out of scope. Standard
+ * {@code docs/MARKET_RISK.md} as out of scope. Standard
  * liquidity horizons are provided as {@link #LH_10} … {@link #LH_120}.
  * Research lane, static, deterministic.</p>
  */
@@ -76,11 +76,11 @@ public final class FrtbEs {
         return Math.sqrt(sumSq);
     }
 
-    /** Minimum share of full-set current ES the reduced set must explain (MAR33.5(2)). */
+    /** Minimum share of full-set current ES the reduced set must explain (BCBS MAR33). */
     public static final double MIN_REDUCED_SET_COVERAGE = 0.75;
 
     /**
-     * Stressed calibration of the IMA expected shortfall (BCBS MAR33.5):
+     * Stressed calibration of the IMA expected shortfall (BCBS MAR33):
      *
      * <pre>  ES = ES_R,S · max(1, ES_F,C / ES_R,C)</pre>
      *
@@ -112,7 +112,7 @@ public final class FrtbEs {
         }
         if (esCurrentReduced < MIN_REDUCED_SET_COVERAGE * esCurrentFull) {
             throw new IllegalArgumentException("reduced factor set explains "
-                    + esCurrentReduced / esCurrentFull + " of full-set current ES; MAR33.5 needs >= 0.75");
+                    + esCurrentReduced / esCurrentFull + " of full-set current ES; MAR33 needs >= 0.75");
         }
         return esStressedReduced * Math.max(1, esCurrentFull / esCurrentReduced);
     }

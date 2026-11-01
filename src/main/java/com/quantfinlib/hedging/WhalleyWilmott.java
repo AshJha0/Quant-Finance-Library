@@ -29,7 +29,7 @@ package com.quantfinlib.hedging;
  * outside the band, trade back to the NEAREST EDGE, not to the center
  * — hedging to delta itself throws away the band's whole point (you
  * would pay the spread again on the next tick's drift). Zero gamma
- * degenerates honestly: zero band, always hedge exactly to delta.
+ * degenerates cleanly: zero band, always hedge exactly to delta.
  *
  * <p>Pairs with the band executors: {@code trading.AutoHedger} and
  * {@code crb.CrbAutoHedger} take a band as configuration — this class
