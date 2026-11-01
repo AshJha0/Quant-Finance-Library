@@ -4,6 +4,7 @@ import com.quantfinlib.marketdata.HftMarketDataBus;
 import com.quantfinlib.orderbook.Side;
 import com.quantfinlib.trading.HftOrderGateway;
 import com.quantfinlib.trading.HftRiskGate;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.lang.management.ManagementFactory;
@@ -125,6 +126,7 @@ class SbeCodecTest {
     }
 
     @Test
+    @Tag("timing")
     void orderChannelReassemblesSplitFramesAndDetectsCorruption() throws Exception {
         // The market-data side has both of these tests; the ORDER channel
         // — where a compact() bug means duplicated or dropped orders at

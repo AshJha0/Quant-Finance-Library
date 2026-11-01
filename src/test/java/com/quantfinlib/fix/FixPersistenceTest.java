@@ -2,6 +2,7 @@ package com.quantfinlib.fix;
 
 import com.quantfinlib.orderbook.Side;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -20,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@Tag("socket")
 class FixPersistenceTest {
 
     private final ExecutorService executor = Executors.newCachedThreadPool();
@@ -73,6 +75,7 @@ class FixPersistenceTest {
     }
 
     @Test
+    @Tag("timing")
     void sessionsContinueSequenceNumbersAcrossReconnect(@TempDir Path dir) throws Exception {
         Path clientDir = dir.resolve("client");
         Path venueDir = dir.resolve("venue");
