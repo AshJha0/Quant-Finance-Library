@@ -1,17 +1,33 @@
 # Learn: A Beginner's Guide to This Library
 
 This guide assumes **no background in finance and no background in
-low-latency engineering**. It explains, in plain language, every major idea
-this library implements — first the finance, then the technology — and ties
-each one to the actual classes so you can read real code right after
-learning the concept. If you're a student or a junior engineer, read it top
-to bottom; each section is a few minutes.
+low-latency engineering**. It explains in plain language the main ideas
+this library implements, first the finance and then the technology, and
+ties each one to the classes that implement it so you can read the code
+right after learning the concept. If you are a student or a junior
+engineer, read Parts I to III top to bottom; each section takes a few
+minutes.
+
+The guide has four parts and an appendix:
+
+- **Part I, The Finance**: markets, execution, signals, portfolios, risk,
+  derivatives, rates, credit and backtesting.
+- **Part II, The Technology**: latency, garbage collection, data
+  structures, the memory model, measurement, protocols and scaling.
+- **Part III, Your learning path**: what to run, what to read in which
+  order, and exercises.
+- **Part IV, the knowledge check**: questions organised by topic, each
+  with a worked answer that names the class implementing it. Use it to
+  test yourself once Parts I to III feel familiar.
+- **Appendix, the formula reference**: the formulas the code implements,
+  in the code's conventions, with the class and a published source for
+  each.
 
 A useful mindset before you start: nothing in trading is magic. Markets are
 queues, prices are auctions, "high-frequency" is mostly careful engineering,
 and most of the math is high-school algebra applied very carefully. The hard
-part is honesty — measuring what your system actually does instead of what
-you hope it does. That theme runs through this whole codebase.
+part is measurement: knowing what your system actually does rather than
+what you hope it does. That theme runs through this whole codebase.
 
 ---
 
@@ -33,8 +49,8 @@ ask) is a convenient "fair-ish" reference price, but nobody actually trades
 at the mid.
 
 *In this library:* every book class exposes the bid and ask (most also a
-mid) — `fx/AggregatedBook.java` is a good first read: ~190 lines, plain
-arrays, and its javadoc explains each decision.
+mid). `fx/AggregatedBook.java` is a good first read: it is short, uses
+plain arrays, and its javadoc explains each decision.
 
 ### 2. The order book: the market is a queue
 
@@ -60,10 +76,10 @@ Some useful order-type vocabulary you'll meet in the code:
 - **Iceberg**: show only a small part of your true size, reload as it fills.
 
 *In this library:* `orderbook/OrderBook.java` is the readable matching
-engine — start there; every rule is spelled out. `orderbook/HftOrderBook.java`
+engine; start there, since every rule is spelled out. `orderbook/HftOrderBook.java`
 is the same logic rebuilt for speed (Part II explains how), with
 `submitIoc`/`submitFok`/`submitPostOnly`. A test drives both with identical
-random orders and demands identical books — the readable one is the
+random orders and demands identical books, so the readable one is the
 executable specification of the fast one.
 
 ### 3. Market data: L1, L2, L3
@@ -86,8 +102,8 @@ stream and maintaining a correct book is called **book building**.
 Why would you care where your order sits in a queue? Because at a busy
 price level, hundreds of orders wait ahead of you, and only the front of
 the queue gets filled when trades happen. Your **queue position** largely
-determines your probability of getting filled — a first-class input to any
-market-making decision.
+determines your probability of getting filled, which makes it a primary
+input to any market-making decision.
 
 *In this library:* `marketdata/ItchCodec.java` decodes ITCH-style messages;
 `marketdata/L3BookBuilder.java` rebuilds the full book *and* tracks your own
@@ -97,7 +113,7 @@ turns queue position into a fill probability.
 ### 4. Market structure, or: equities and FX are different planets
 
 **US equities** are exchange-traded: a share of AAPL trades on ~16 exchanges
-plus **dark venues** (trading places that don't display their orders —
+plus **dark venues** (trading places that don't display their orders;
 institutions use them to trade size without showing their hand), but the lit
 exchanges all publish quotes, and regulation stitches them into a national
 view — the consolidated **tape** (the public record of every quote and
@@ -124,15 +140,15 @@ you *their* prices privately. Three consequences that shape everything:
   the WM/Refinitiv 4pm London benchmark, computed over a 5-minute window.
   Executing evenly across that window replicates the benchmark.
 
-*In this library:* equities side — `marketdata/Nbbo.java`,
-`microstructure/CircuitBreakers.java`. FX side — `fx/FxTierBook.java`
+*In this library:* on the equities side, `marketdata/Nbbo.java` and
+`microstructure/CircuitBreakers.java`. On the FX side, `fx/FxTierBook.java`
 (tiers), `fx/LpScorecard.java` + `fx/LpRouter.java` (measuring and routing
 around last look), `trading/LastLookGate.java` (the maker's side, done
 symmetrically), `execution/WmrFixingScheduler.java` (the fix).
 
 ### 5. Market making: selling immediacy for a living
 
-A **market maker** quotes both sides at once — bid 1.0850, ask 1.0852 —
+A **market maker** quotes both sides at once (bid 1.0850, ask 1.0852),
 hoping to buy at the bid, sell at the ask, and pocket the spread over and
 over. Two things ruin this simple plan:
 
@@ -160,9 +176,12 @@ algorithms slice the parent order into small children over time:
   predictable — sometimes *too* predictable, hence randomized jitter.
 - **VWAP** (volume-weighted): slice in proportion to the typical volume
   curve (markets trade heavily at the open and close, quietly at lunch).
-- **POV** (percentage of volume): react to *actual* volume — "be 10% of
-  whatever trades." One subtlety: measure your participation against
-  *other people's* volume, or the algo chases its own fills.
+- **POV** (percentage of volume): react to *actual* volume: "be 10% of
+  whatever trades." One subtlety: a 10% share of *total* volume, your own
+  fills included, means trading `p / (1 - p)` times *other people's*
+  volume (11.1% of it at p = 10%). Targeting `p` times total volume
+  including your own fills chases its own tail and settles at
+  `p / (1 + p)`, about 9.1%.
 - **Implementation Shortfall / Arrival Price**: the thinking person's algo.
   Trading fast costs **market impact** (you push the price); trading slow
   costs **risk** (the price drifts away from where it was when you
@@ -178,12 +197,14 @@ slippage vs arrival, vs VWAP, fill rates, venue quality, markouts.
 `VwapScheduler.java`, `PovTracker.java`,
 `ImplementationShortfallScheduler.java` (with
 `microstructure/AlmgrenChriss.java` for the math) emit a fixed slice list;
-`execution/BenchmarkExecutor.java` is the **dynamic** version — one executor
+`execution/BenchmarkExecutor.java` is the **dynamic** version. It is one executor
 covering all of VWAP/TWAP/Arrival/IS/Close/Open/POV that re-decides each
 interval from live spread, depth, volatility, the volume curve, estimated
-impact and an alpha signal. TCA is
+impact and an alpha signal. Its implementation-shortfall benchmark follows
+the Almgren-Chriss trajectory `1 - sinh(kT(1 - f)) / sinh(kT)` for elapsed
+fraction f (urgency kT set by `withShortfallUrgency`, default 2). TCA is
 `microstructure/TransactionCostAnalyzer.java`. Smart order
-routing — which venue gets each child — is `execution/SmartOrderRouter.java`
+routing (which venue gets each child) is `execution/SmartOrderRouter.java`
 (readable), `execution/HftSor.java` (fast), and
 `execution/AdaptiveSor.java` (full-checklist: lit + dark, learned fill rate,
 latency, hidden liquidity, and adverse selection — a venue whose fills are
@@ -197,7 +218,7 @@ as the numbers you feed it, and each one is a small model:
   the open, quiet at lunch, heavy at the close. `VolumeCurve` learns that
   shape day after day and rescales it live ("today is running 2× normal").
 - *"Is the market volatile right now?"* is the wrong question — the open is
-  ALWAYS wild. The right question is "volatile *for this time of day*?",
+  always wild. The right question is "volatile *for this time of day*?",
   and `VolatilityCurve.regime()` answers exactly that (0 = normal for this
   hour, 1 = genuinely extreme).
 - *"What will the spread cost me in a minute?"* `SpreadForecaster` knows
@@ -212,11 +233,11 @@ as the numbers you feed it, and each one is a small model:
   the bid = seller, in between = look at the tick direction (~85% right,
   which is why everything downstream uses decayed averages).
 - *"Is there more size than I can see?"* `HiddenLiquidityDetector` flags
-  icebergs the honest way: a single print bigger than what was displayed
+  icebergs from direct evidence: a single print bigger than what was displayed
   means hidden size was there.
 - *"How much will MY order move the price?"* Instead of assuming a formula,
   `KylesLambda` learns it from the tape: regress price changes on signed
-  flow and the slope IS the market's depth (Kyle, 1985). One caveat done
+  flow and the slope is the market's depth (Kyle, 1985). One caveat done
   right: a noisy negative estimate is clamped to zero cost — the model
   must never tell the algo it gets *paid* to trade.
 - *"Was that a jump or a regime?"* A single headline print enters a squared-
@@ -228,21 +249,21 @@ as the numbers you feed it, and each one is a small model:
 - *"How much should I leave for the closing auction?"* For liquid names
   the close is the deepest liquidity event of the day.
   `ClosingAuctionModel` learns the auction's typical share and tilts it by
-  today's imbalance feed — with an honest caveat in its javadoc: the
-  library ships the structure and the tests, but the imbalance-feed
-  mapping must be validated against your venue's data.
+  today's imbalance feed. Its javadoc carries a caveat: the library
+  ships the structure and the tests, but the imbalance-feed mapping must
+  be validated against your venue's data.
 
-**Executing a whole basket.** A pension fund rarely trades one stock — it
+**Executing a whole basket.** A pension fund rarely trades one stock; it
 transitions a *portfolio* (sell the old holdings, buy the new ones). Run N
 independent algos and a new risk appears that none of them can see: if the
 buys fill fast and the sells lag, the fund is carrying a large unintended
 market bet mid-flight. `execution/PortfolioExecutor.java` coordinates
 per-symbol executors with the two rules that only exist at basket level: a
 **leg-balance band** (the ahead leg slows down until the lagging leg
-catches up — never the reverse, since pushing a child past its own
+catches up, never the reverse, since pushing a child past its own
 schedule would break its benchmark) and a **per-interval budget** that
 goes to the riskiest names first when it binds. Both rules only ever
-*reduce* what a child sends, so each symbol's own schedule stays honest.
+*reduce* what a child sends, so each symbol's own schedule stays intact.
 
 ### 7. Signals: reading the tape
 
@@ -272,31 +293,35 @@ momentum in one place, for equities and FX alike.
 blends its ingredients with fixed weights you configure.
 `microstructure/OnlineAlphaLearner.java` learns them instead — a small
 online regression from the signals to the next interval's return. The
-interesting part is not the regression; it is the **honesty mechanism**.
-Any self-updating signal faces the same trap: it grades its own homework.
+interesting part is not the regression; it is the **evaluation
+discipline**. Any self-updating signal faces the same trap: it grades its
+own homework.
 Two safeguards close that trap here:
 
 1. Every prediction is recorded *before* the outcome updates the weights,
    and the rolling **out-of-sample IC** is computed on those predictions —
    so the learner is always scored on what it genuinely didn't know.
-2. Timing: at 10:00:01 the signals already *contain* the 10:00:00→10:00:01
-   move (momentum IS the move). Fitting current signals to the return that
+2. Timing: at 10:00:01 the signals already *contain* the move from
+   10:00:00 to 10:00:01 (momentum is the move). Fitting current signals to the return that
    just happened is a "nowcast" that looks brilliantly predictive and
    predicts nothing. The learner therefore trains each return against the
    signals **snapshotted one interval earlier**.
 
-Even then, the learned alpha stays silent (emits 0) until its live IC is
-positive over a meaningful window — and "meaningful" is enforced, not
-hoped: a lucky first hour doesn't count. This is the same discipline as §8's
+Even then, the learned alpha stays silent (emits 0) until its
+out-of-sample IC is significant: the IC minus two EWMA standard errors
+(`microstructure/IcSignificance.java`) must be above zero, so a lucky
+first hour does not count. This is the same discipline as §8's
 walk-forward validation, shrunk to streaming scale.
 
 **Two more signal ideas worth knowing.** Related instruments don't move
-simultaneously: EURUSD leads EURJPY, index futures lead the cash basket —
+simultaneously: EURUSD leads EURJPY, index futures lead the cash basket:
 the liquid instrument moves first and the follower echoes it a moment
 later. `LeadLagEstimator` measures that lead live (which lag, how strong)
-for cross-hedging and pricing. And not all days share a shape: option-expiry
+for cross-hedging and pricing, and reports no lead unless the best lag
+clears a band corrected for the number of lags tried and beats the
+contemporaneous correlation. And not all days share a shape: option-expiry
 days trade 2-3× normal volume with a violent close, half days compress the
-U-curve, FX fixing days spike at the fix — `DayTypeProfiles` gives each
+U-curve, FX fixing days spike at the fix. `DayTypeProfiles` gives each
 day type its own independently learned curves instead of one wrong average.
 
 ### 8. Alpha research: signals over days, not milliseconds
@@ -319,16 +344,24 @@ winning, mildly), value, low volatility, quality. The research loop:
      companies that exist *today*, you've quietly deleted every bankruptcy
      from history and your backtest is fiction. You need **point-in-time**
      universes: who was actually in the index on that date, including the
-     ones that later died. (This library ships a test where a naive
-     backtest overstates final equity 2× against a delisting — bias you
-     can measure.)
-   - **Costs**: spreads, fees, and **market impact** (empirically ~√size —
-     trading 4× the size costs ~2× the impact per share).
+     ones that later died. (This library ships a test in which a naive
+     backtest overstates final equity against a delisting, so the bias
+     is measured rather than asserted.)
+   - **Look-ahead in fills**: a signal computed from today's close cannot
+     trade at today's close. The bar backtesters fill at the next bar's
+     open by default (`backtest/FillPolicy.java`, `NEXT_OPEN`).
+   - **Overlapping samples**: an IC computed every day on 20-day forward
+     returns shares 19 days with its neighbour, so the plain `s/√n`
+     standard error is far too small. IC, Fama-MacBeth and calendar
+     t-stats use Newey-West (1987) HAC standard errors
+     (`alpha/NeweyWest.java`).
+   - **Costs**: spreads, fees, and **market impact** (empirically about
+     √size: trading 4× the size costs about 2× the impact per share).
 
 *In this library:* the `alpha` package — `Factors`, `SignalEvaluator` (IC),
 `AlphaValidation` (walk-forward, permutation), `AlphaBacktester`
 (cost-aware), `PortfolioConstruction` (neutralization); `data/PointInTimeUniverse.java`
-and `backtest/portfolio/` for survivorship honesty.
+and `backtest/portfolio/` for survivorship control.
 
 ### 8b. Portfolio construction: turning forecasts into weights
 
@@ -336,10 +369,11 @@ A validated signal (§8) still leaves the hardest practical question
 unanswered: *how much* of each thing do you hold? The classical answer
 is Markowitz **mean-variance optimization**: feed in expected returns
 and a covariance matrix, get back the weights with the best return per
-unit of risk. `optimization/PortfolioOptimizer.java` implements it —
+unit of risk. `optimization/PortfolioOptimizer.java` implements it:
 `maxSharpe` for the best risk-adjusted portfolio, `minVolatility` for
 the safest fully-invested one, `efficientFrontier` for the whole
-risk/return menu.
+risk/return menu. Each is a convex quadratic program, solved exactly by
+an active-set method (`optimization/QuadraticProgram.java`).
 
 Then the dirty secret every practitioner learns in week one:
 **max-Sharpe portfolios are error-maximizers.** Expected returns are
@@ -353,15 +387,16 @@ increasing order of ambition:
 
 - **Stop forecasting returns.** **Risk parity** uses only the
   covariance matrix (the estimable input) and asks for the portfolio
-  where every asset contributes *equally* to total risk —
-  `RiskParityOptimizer.equalRiskContribution` solves it by fixed-point
-  iteration, and `riskContributions` audits any existing book ("that
-  60/40 portfolio is actually ~90% equity risk" is this one function
-  call).
+  where every asset contributes *equally* to total risk.
+  `RiskParityOptimizer.equalRiskContribution` solves it through Spinu's
+  (2013) convex formulation with damped Newton steps, `riskBudget`
+  handles unequal budgets, and `riskContributions` audits any existing
+  book ("that 60/40 portfolio is actually about 90% equity risk" is this
+  one function call).
 - **Anchor the forecasts.** **Black-Litterman** starts from the
-  returns *implied* by market weights — if the market holds this
+  returns *implied* by market weights (if the market holds this
   portfolio, what expectations justify it?
-  (`BlackLitterman.impliedEquilibriumReturns`) — then blends in your
+  `BlackLitterman.impliedEquilibriumReturns`), then blends in your
   views with explicit confidences (`posteriorReturns`). No views =
   hold the market; a view tilts you away from it in proportion to how
   confident you claimed to be. Garbage-in becomes
@@ -376,40 +411,42 @@ How does `alpha/PortfolioConstruction.java` (§8) relate? It's the
 *cross-sectional* cousin. When your "assets" are 500 stocks ranked by
 a factor, you don't estimate a 500x500 covariance and optimize — you
 size by z-score, neutralize sector and beta, and budget by inverse
-volatility (`zScoreWeights` → `sectorNeutralize` → `betaNeutralize` →
-`inverseVolBudget`). The `optimization` package is for the *other*
+volatility (`zScoreWeights`, then `sectorNeutralize`, `betaNeutralize`
+and `inverseVolBudget`). The `optimization` package is for the *other*
 shape of problem: a handful of assets or strategies whose covariance
 you can actually know.
 
 *Real-life case:* a fund allocates across its 5 strategies. Naive
 `maxSharpe` on their track records puts 80% into the strategy with the
-best — i.e. luckiest — backtest. Risk parity spreads the book so no
+best (that is, luckiest) backtest. Risk parity spreads the book so no
 single strategy dominates the risk. Black-Litterman starts from the
 current capital allocation as the equilibrium and lets the PM express
 one view ("stat arb beats trend by 2%, modest confidence") as a tilt
 rather than an upheaval. The constrained pass caps any strategy at
-35% and charges turnover — and the resulting rebalance is small enough
+35% and charges turnover, and the resulting rebalance is small enough
 to actually execute.
 
-### 8c. The full trading pipeline in one line
+### 8c. The full trading pipeline
 
-Everything a systematic desk does fits on one line:
+A systematic desk's work can be written as one chain of eight stages:
 
-**Alpha discovery → signal generation → nested validation → out-of-sample
-scoring → selection → risk-managed sizing → portfolio constraints →
-optimal execution.**
+```
+alpha discovery -> signal generation -> nested validation -> out-of-sample
+scoring -> selection -> risk-managed sizing -> portfolio constraints ->
+optimal execution
+```
 
-Each arrow is a place where money is made or quietly lost, and each stage
-has a precise statement and a home in this library:
+Each step in the chain is a place where money is made or quietly lost,
+and each stage has a precise statement and a home in this library:
 
 1. **Alpha discovery** — research produces a candidate set
    `A = {a_1, a_2, ..., a_K}` of alpha rules. Nothing is trusted yet: K
-   is exactly the "number of trials" that every later honesty statistic
-   must know about. *In this library:* `alpha.Factors` and
+   is exactly the "number of trials" that every later multiple-testing
+   statistic must know about. *In this library:* `alpha.Factors` and
    `alpha.AlphaFactor` (the candidate rules), `alpha.AlphaContext` (the
    frozen data panel they compute on).
 2. **Signal generation** — `s_t(k) = a_k(X_{t-1})`: the signal at time t
-   may use only information known BEFORE trade time. The subscript
+   may use only information known before trade time. The subscript
    `t-1` is the entire defense against look-ahead bias, and it is a
    structural property, not a hope: the context panel is frozen and the
    rule reads yesterday's row. *In this library:* `alpha.AlphaContext`
@@ -423,14 +460,14 @@ has a precise statement and a home in this library:
    `backtest.validation.WalkForwardAnalyzer` (warm folds),
    `alpha.AlphaValidation`.
 4. **Out-of-sample score** — `Q_k = Score(PnL_OOS, DD, Turnover,
-   Stability)`: a candidate is a VECTOR of qualities, not one Sharpe.
-   Drawdown (depth AND duration), turnover (costs eat gross alpha) and
+   Stability)`: a candidate is a vector of qualities, not one Sharpe.
+   Drawdown (depth and duration), turnover (costs eat gross alpha) and
    stability across folds all enter before anyone looks at the mean.
    *In this library:* `alpha.SignalEvaluator` (IC/IR/turnover),
    `alpha.AlphaBacktester` (cost-aware PnL),
    `backtest.DrawdownAnalytics`, `backtest.BenchmarkComparison`.
 5. **Selection** — accept iff `Q_k > tau_Q`. Because K rules were tried,
-   the threshold must be a MULTIPLE-TESTING threshold: the expected
+   the threshold must be a multiple-testing threshold: the expected
    best of K zero-skill candidates, not zero. *In this library:*
    `backtest.validation.SharpeValidation` (deflated Sharpe),
    `GridSearchOptimizer.deflatedSharpeOfWinner`,
@@ -462,14 +499,13 @@ has a precise statement and a home in this library:
    `microstructure.TransactionCostAnalyzer` (did we actually pay what
    the objective predicted?).
 
-The one-line pipeline is also the debugging map: when live PnL
-disappoints, walk the arrows backwards — execution paid more than the
+The pipeline is also the debugging map: when live PnL disappoints, walk
+the stages backwards. Did execution pay more than the
 objective said (stage 8)? the constraints bound (7)? sizing divided by a
 stale sigma (6)? the threshold was too soft for K trials (5)? the score
 ignored turnover (4)? the folds leaked (3)? the signal peeked (2)? or the
-candidate was never real (1). Every post-mortem lands on exactly one
-arrow. Diagram 19 in [DIAGRAMS.md](DIAGRAMS.md) draws this pipeline
-end-to-end.
+candidate was never real (1). A post-mortem usually lands on one stage.
+Diagram 19 in [DIAGRAMS.md](DIAGRAMS.md) draws this pipeline end to end.
 
 **The same line, every asset class.** The pipeline above used equity
 nouns, but the arrows are asset-blind. The middle of the line
@@ -485,7 +521,7 @@ means. One table, five markets:
 | Signals | `alpha.AlphaFactor` on `alpha.AlphaContext` | points vs realized drift (carry signal) | rolldown/carry via `rates.YieldCurve.forwardRate` | CDS-bond basis via `credit.CreditSpreads.zSpread` minus `CdsPricer.parSpread` | roll yield via `CommodityCurve.annualizedRollYield` |
 | Validation | `backtest.validation.PurgedKFold` + `WalkForwardAnalyzer` | same folds; embargo spans the weekend gap | same folds, on curve-factor series | same folds, on spread series | same folds; purge across roll dates |
 | Scoring | `alpha.SignalEvaluator`, `alpha.AlphaBacktester` | same, with spread + last-look reject costs | same, PnL stated in DV01 terms | same, PnL stated in spread-DV01 terms | same, PnL includes the roll term |
-| Selection | `backtest.validation.SharpeValidation`, `OverfitProbability` | same -- and K counts trials ACROSS columns | same | same | same |
+| Selection | `backtest.validation.SharpeValidation`, `OverfitProbability` | same -- and K counts trials across columns | same | same | same |
 | Sizing | inverse-vol, `alpha.PortfolioConstruction` | vol-target, `backtest.portfolio.PositionSizing` + `volatility.EwmaVolatility` | DV01-matched, `rates.SwapPricer.dv01` | spread-DV01 (risky annuity), `credit.CdsPricer.riskyAnnuity` | inverse-vol on futures returns, `PositionSizing` |
 | Constraints | beta/sector caps, `optimization.ConstrainedPortfolioOptimizer` | settlement + counterparty limits, `risk.SettlementRiskAnalyzer`, `risk.CounterpartyExposureTracker` | key-rate bucket limits, `rates.KeyRateDurations` | issuer concentration caps, `risk.ConcentrationRisk` | scenario limits, `risk.StressTester` |
 | Execution | `execution.BenchmarkExecutor`, `execution.AdaptiveSor` | `fx.LpRouter` over `fx.FxTierBook`; fixings via `execution.WmrFixingScheduler` | par-swap DV01 hedging, `rates.SwapPricer` | upfront on the standard coupon, `credit.CdsPricer.upfront` | calendar-spread rolls, `execution.FuturesRollAlgo` |
@@ -512,26 +548,41 @@ across all trading engines, and portfolio measures like **VaR**
 backtests of VaR itself, because a risk model that's never checked against
 reality is decoration.
 
-*In this library:* `trading/HftRiskGate.java` (~3ns per check),
-`trading/GlobalRiskAggregator.java` (firm-wide breaker + kill),
+A position limit has to count orders already working at the venue, not
+only fills: otherwise ten resting orders can each pass a check that their
+sum breaks. `HftRiskGate` reserves each order's quantity when it accepts
+it and releases the reservation on fill, cancel or reject. It also
+rejects non-finite, zero and negative prices, and carries daily order,
+notional and loss limits.
+
+*In this library:* `trading/HftRiskGate.java` (per-order gate; measured
+cost per check is in [BENCHMARKS.md](BENCHMARKS.md)),
+`trading/GlobalRiskAggregator.java` (firm-wide breaker and kill switch;
+it fails closed, so an exposed symbol without a reference price trips
+it),
 `risk/RiskMetrics.java`, `risk/VarBacktest.java` (Kupiec/Christoffersen
 tests).
 
 **The full market-risk workflow** goes far beyond a daily VaR number,
 and the library maps the whole thing in
 [MARKET_RISK.md](MARKET_RISK.md): four flavors of portfolio VaR that
-disagree exactly when they should (`VarEngine` — a short-gamma book's
+disagree exactly when they should (`VarEngine`: a short-gamma book's
 tail is worse than the Gaussian formula admits, and the delta-gamma
 method knows it), Expected Shortfall beside every VaR (what the average
-BAD day costs, not just the threshold), extreme value theory for
-quantiles beyond the sample (`ExtremeValueTheory` — which refuses to
+bad day costs, not just the threshold; every class uses the
+Acerbi-Tasche 2002 estimator from `risk/TailRisk.java`), extreme value
+theory for
+quantiles beyond the sample (`ExtremeValueTheory`, which refuses to
 report a finite tail mean when the fitted tail has none), stress tests
 including the regulator's favorite inverted question "what move breaks
 us?" (`StressTester.reverseStress`, answered in closed form with an
 implausibility score in sigmas), and the Basel/FRTB layer
-(`FrtbEs`, `PnlAttribution`) — styled after the regulation, tested on
-its arithmetic, and honest that certification is a program, not a
-library.
+(`FrtbEs`, `PnlAttribution`), styled after the regulation and tested on
+its arithmetic. `FrtbEs.stressCalibratedEs` follows BCBS MAR33: stressed
+reduced-set ES scaled by `max(1, ES_full,current / ES_reduced,current)`,
+and it refuses a reduced set that explains less than 75% of current
+full-set ES. Regulatory model approval is a programme of work at a bank;
+a library can only supply the arithmetic.
 
 ### 9b. Regulation and surveillance: proving you behaved
 
@@ -541,7 +592,7 @@ obligations follow every desk around, and both are measurement
 problems this library implements:
 
 **Best execution.** If you execute client orders, you must get terms
-as good as reasonably available — and *demonstrate* it, per order,
+as good as reasonably available, and *demonstrate* it, per order and
 per venue. `regulatory/BestExecutionAnalyzer.java` (MiFID II
 RTS 27/28 spirit) accumulates order outcomes and its `report()`
 answers the questions an auditor asks: fill rate, average slippage in
@@ -550,24 +601,25 @@ executed at-or-better than arrival, and slippage broken down by venue
 (the venue whose fills are consistently worst has some explaining to
 do). The shared vocabulary for venue quality lives in
 `regulatory/MarketQualityMetrics.java`: **quoted spread** (what was
-posted), **effective spread** (what the taker actually paid — twice
+posted), **effective spread** (what the taker actually paid: twice
 the signed distance from the mid), **realized spread** (the same
-measured against the mid a horizon *later* — the part the maker kept
-after adverse selection), and **price impact** (effective is roughly
-realized plus impact — the decomposition that says whether a wide
+measured against the mid a horizon *later*, which is the part the maker
+kept after adverse selection), and **price impact** (effective is
+roughly realized plus impact; the decomposition says whether a wide
 spread was compensation for risk or extraction from customers). Plus the
-**order-to-trade ratio** — messages per executed trade, the metric
+**order-to-trade ratio**: messages per executed trade, the metric
 venues fine you on when your algo sprays cancels.
 
-**Banging the close.** A genuinely fun surveillance example. Benchmark
+**Banging the close.** A good surveillance example. Benchmark
 fixes are computed from prices inside a window
-(`regulatory/FixAnalyzer.calculateFix` — the median of mid samples,
-WM/R style), so a participant with a large position *marked* at the
+(`regulatory/FixAnalyzer.calculateFix` takes the median of mid samples,
+WM/R style, and `calculateFix(bids, offers)` the mid of separate bid
+and offer medians), so a participant with a large position *marked* at the
 fix has an incentive to push the price during it. The signature is
 threefold, and `FixAnalyzer.analyze` flags only when all three hold:
 an outsized share of window volume, a price run-up into the fix
 *aligned* with the participant's net flow, and reversion after the
-window — impact that decays is the footprint of pressure, not
+window. Impact that decays is the footprint of pressure, not
 information. Notice this is §5's markout logic wearing a compliance
 badge: the same physics that tells a maker it was run over tells a
 surveillance officer who did the running.
@@ -575,7 +627,7 @@ surveillance officer who did the running.
 ### 10. Derivatives in five minutes
 
 A **forward** is an agreement to trade at a future date at a price fixed
-now. The fair forward price isn't a prediction — it's arbitrage arithmetic:
+now. The fair forward price isn't a prediction; it is arbitrage arithmetic:
 spot adjusted for the interest-rate difference between the two currencies
 (in FX these adjustments are quoted as **swap points**). An **NDF**
 (non-deliverable forward) does the same for restricted currencies, settling
@@ -583,9 +635,9 @@ the *difference* in USD.
 
 An **option** is the right, without the obligation, to buy (**call**) or
 sell (**put**) at a fixed **strike** price. Its value has two parts: what
-it's worth if exercised now, plus **time value** — the chance things
+it's worth if exercised now, plus **time value**: the chance things
 improve before expiry. **Black-Scholes** (1973) prices this under
-simplifying assumptions; its real, enduring gift is the **greeks** — the
+simplifying assumptions; its lasting contribution is the **greeks**, the
 sensitivities (delta: per $1 of spot; gamma: how delta changes; vega: per
 vol point; theta: per day) that let you *hedge*. Market makers in options
 aren't betting on direction: they hedge delta continuously and trade
@@ -593,101 +645,115 @@ aren't betting on direction: they hedge delta continuously and trade
 
 One assumption Black-Scholes gets visibly wrong: constant volatility. The
 market prices crashes as more likely than the model says, so implied vol
-varies by strike — the **smile**. FX quotes the smile in its own dialect
+varies by strike: the **smile**. FX quotes the smile in its own dialect
 (ATM / risk-reversal / butterfly, by delta), and pricing **exotics**
 (barriers, touches, digitals) consistently with the smile needs corrections
-like **vanna-volga** — implemented here and cross-checked with Monte Carlo,
-because two independent methods agreeing is the cheapest form of truth.
+like **vanna-volga**, implemented here and cross-checked with Monte Carlo:
+if two independent methods disagree, one of them has a bug.
+
+One FX trap is worth knowing early. The quoted butterfly is a **broker
+(market) strangle**: the price of the 25-delta strangle at the single vol
+ATM + BF. It is not the average wing vol of the smile. `FxVolSurface` by
+default solves for the smile butterfly that reprices the quoted strangle
+(Clark 2011, *Foreign Exchange Option Pricing*, section 3.6);
+`ButterflyQuote.SMILE_STRANGLE` reads the input as a smile butterfly
+instead.
 
 *In this library:* `pricing/` (BlackScholes, BinomialTree, VolSurface,
 SabrModel, exotics, VannaVolga), `fx/` (SwapPointsCurve, Ndf, FxVolSurface),
-`hedging/` (DeltaHedger and friends), `rates/` (curves, day counts — yes,
-finance has multiple definitions of how long a year is).
+`hedging/` (DeltaHedger and friends), `rates/` (curves and day counts;
+finance has several definitions of how long a year is).
 
 ### 10b. Rates: the price of time
 
 A dollar today and a dollar in ten years are different assets, and the
 exchange rate between them is an interest rate. Money can be lent for
-any horizon, so there isn't one rate but a **yield curve** — a rate
+any horizon, so there isn't one rate but a **yield curve**, a rate
 per maturity. Every future cash flow in finance (bond coupons, swap
 legs, a forward's settlement) is valued by asking the curve one
 question: what is $1 at date T worth today? That number is the
 **discount factor**.
 
-You can't observe the curve directly — the market quotes *instruments*
+You can't observe the curve directly. The market quotes *instruments*
 (deposits, futures, par swaps), each bundling many cash flows.
 **Bootstrapping** unbundles them: solve for the 1-year discount factor
 from the 1-year instrument, use it to solve the 2-year, and walk out
 the curve one maturity at a time. `rates/YieldCurve.java` implements
 the classic version (`bootstrapAnnualParSwaps`), stores zero rates at
 pillar tenors, and answers the three questions everything else asks:
-`zeroRate(t)`, `discountFactor(t)`, and `forwardRate(t1, t2)` — the
+`zeroRate(t)`, `discountFactor(t)`, and `forwardRate(t1, t2)`, the
 rate the curve *implies* for lending between two future dates. Forwards
 are (roughly) the curve's derivative, so a small kink in the zeros
-becomes a large swing in the forwards — which is why desks judge a
+becomes a large swing in the forwards. That is why desks judge a
 curve build by its forwards, not its zeros.
 
 A **bond** is a bundle of cash flows on a schedule, so a curve prices
-it directly (`rates/BondPricer.priceFromCurve`) — or you compress the
+it directly (`rates/BondPricer.priceFromCurve`), or you compress the
 whole curve into one number, the **yield**, and convert both ways
 (`priceFromYield`, `yieldToMaturity`). The sensitivities are the desk
-vocabulary: **duration** (`macaulayDuration` — the PV-weighted average
-time to cash flow; `modifiedDuration` — percentage price change per
+vocabulary: **duration** (`macaulayDuration`, the PV-weighted average
+time to cash flow; `modifiedDuration`, the percentage price change per
 unit yield), **convexity** (the curvature that makes duration hedges
-drift as rates move), and above all **DV01** (`dv01` — dollars lost
+drift as rates move), and above all **DV01** (`dv01`, the dollars lost
 per one-basis-point rise, the unit rates traders actually speak).
 
 But "the yield rises 1bp" is a fiction: the curve rarely moves in
-parallel — it steepens, flattens, twists. **Key-rate durations** slice
-DV01 across the curve: bump ONE pillar by 1bp, hold the rest, reprice,
+parallel; it steepens, flattens and twists. **Key-rate durations** slice
+DV01 across the curve: bump one pillar by 1bp, hold the rest, reprice,
 repeat per pillar. `rates/KeyRateDurations.keyRateDv01s` returns that
-vector, and `parallelDv01` is the consistency check — the slices must
+vector, and `parallelDv01` is the consistency check: the slices must
 sum back to the parallel number, and the tests pin that they do.
 
 *Real-life case:* a desk is long $50M of a 10-year corporate bond and
 wants to be flat rates (keeping only the credit exposure). The naive
-hedge — sell 10-year futures matching the bond's total DV01 — is flat
+hedge (sell 10-year futures matching the bond's total DV01) is flat
 to parallel moves only; a steepening that lifts the 10y point while
 the 5y sits still leaves the "hedged" book bleeding. The KRD vector
 shows where the risk actually lives: mostly at the 10y node, but a
 meaningful slice at 5y and 7y from the coupons. Hedge each node with
 the futures contract that drives it and the position survives
-steepeners, flatteners, and butterflies — not just the parallel shift
-that never happens.
+steepeners, flatteners and butterflies, not just the parallel shift
+that rarely happens.
 
-**Day counts: how long is a year?** Real term sheets disagree —
-ACT/360 (money markets), ACT/365 (GBP), 30/360 (US corporates),
-ACT/ACT (governments) — and `rates/DayCount.yearFraction` implements
-each exactly. This is not pedantry: accrue a coupon on ACT/365 when
-the term sheet says ACT/360 and every accrual is misstated by ~1.4% —
-a real, recurring source of PnL breaks between you and your
-counterparty. `rates/BusinessCalendar.java` handles the other half of
+**Day counts: how long is a year?** Real term sheets disagree: ACT/360
+(money markets), ACT/365 fixed (GBP), 30/360 and 30E/360 (US and euro
+corporates), ACT/ACT ISDA (swap legs) and ACT/ACT ICMA (government
+bonds). `rates/DayCount` implements each. ACT/ACT ICMA depends on the
+coupon period, so it has its own method,
+`DayCount.actActIcma(start, end, periodStart, periodEnd, frequency)`,
+which gives exactly `1/frequency` for a full regular period. This is not
+pedantry: accrue a coupon on ACT/365 when the term sheet says ACT/360 and
+every accrual is misstated by about 1.4%, a real and recurring source of
+PnL breaks between you and your counterparty. `rates/BusinessCalendar.java` handles the other half of
 date reality: payment dates that land on weekends or holidays roll by
 convention (`Roll.MODIFIED_FOLLOWING` — forward, unless that crosses
 month-end), settlement is T+n *business* days (`addBusinessDays`), and
 FX pairs settle on the union of two centers' calendars (`union`).
-`BondPricer.dirtyPrice`/`cleanPrice`/`accruedInterest` put it all
-together with real dates.
+`BondPricer.dirtyPrice`, `cleanPrice` and `accruedInterest` put it all
+together with real dates, using the street convention: round coupons of
+`c/f`, ACT/ACT ICMA (or the bond's 30/360 variant) for the accrued
+fraction, and discounting on unadjusted coupon dates with fractional
+period exponents. `BondPricer.yieldFromCleanPrice` inverts it.
 
 **Making rates move: short-rate models.** For risk simulation and
 curve-dependent pricing you need a model of how rates evolve.
 `rates/ShortRateModels.java` implements the workhorse trio in closed
-form: **Vasicek** (Gaussian mean reversion — tractable everywhere,
-honest about its flaw: rates can go negative, which post-2015 is a
-feature as much as a bug), **CIR** (the square-root diffusion keeps
-rates non-negative — `cirFeller` tells you when they stay strictly
+form: **Vasicek** (Gaussian mean reversion, tractable everywhere, with
+one known flaw: rates can go negative, which after 2015 is a feature as
+much as a bug), **CIR** (the square-root diffusion keeps
+rates non-negative, and `cirFeller` tells you when they stay strictly
 positive), and **Hull-White** (Vasicek with the drift fitted so the
-model reprices *today's* curve exactly — the production choice,
-because a rates model that disagrees with the discount curve it hedges
-against is wrong by construction). Each has a simulation step for
+model reprices *today's* curve exactly; desks prefer it because a rates
+model that disagrees with the discount curve it hedges against is wrong
+by construction). Each has a simulation step for
 Monte Carlo scenarios: `vasicekStep` is exact (the transition is
-Gaussian — no discretization error), `cirStep` is full-truncation
+Gaussian, so there is no discretization error), `cirStep` is full-truncation
 Euler (never sources volatility from a negative rate).
 
 ### 10c. Credit, commodities, indexes and private markets
 
 One instrument was still missing from 10b: the swap itself. The curve
-was bootstrapped FROM par swaps, and `rates/SwapPricer.java` closes the
+was bootstrapped from par swaps, and `rates/SwapPricer.java` closes the
 loop by pricing an actual swap position off it: the fixed-leg annuity is
 `sum DF(t_i)`, the par rate is `(1 - DF(T)) / annuity` (the float leg is
 worth par in a single-curve world, so it needs no forecasting), and a
@@ -758,7 +824,7 @@ with storage cost u and **convenience yield** y (the value of holding
 the physical -- heating oil before a cold snap); `impliedCarry` inverts
 this to read the market's `u - y` off the quotes. *Real-life case:* the
 USO oil fund in 2020. Retail investors bought it as a bet on spot oil
-recovering. Spot oil DID recover -- and the fund still lost heavily,
+recovering. Spot oil did recover -- and the fund still lost heavily,
 because deep contango charged the long roll yield month after month.
 Over a decade the roll term, not the spot view, has dominated most
 commodity index returns; it is the single most misunderstood fact about
@@ -781,7 +847,7 @@ cost of any scheme is `turnover(w1, w2) = 0.5 * sum |w1 - w2|`, the
 one-way fraction of the portfolio that must trade. *Real-life case:* a
 fund tracking an equal-weight index computes the turnover between this
 quarter's weights and 1/N, multiplies by its impact model's cost per
-dollar traded, and knows its tracking bleed BEFORE the rebalance --
+dollar traded, and knows its tracking bleed before the rebalance --
 which is how equal-weight products decide between exact replication and
 optimized sampling.
 
@@ -791,11 +857,11 @@ the investor) times, and NAVs that are appraisals.
 `markets/PrivateMarketAnalytics.java` is the toolkit for that world.
 **IRR** -- the rate that zeroes `sum cf_t / (1+irr)^t` -- is
 money-weighted, so it rewards the manager's cash-flow timing, which a
-time-weighted return deliberately ignores; that is why PE quotes IRR and
+time-weighted return ignores by design; that is why PE quotes IRR and
 mutual funds must not. The multiples cross-check it: **TVPI** =
 (distributions + NAV) / contributions, **DPI** = distributions /
-contributions, **RVPI** = NAV / contributions -- and DPI is the honest
-one, because you cannot spend RVPI. Benchmarking against "the S&P
+contributions, **RVPI** = NAV / contributions. DPI is the one that
+counts, because you cannot spend RVPI. Benchmarking against "the S&P
 returned X%" is meaningless for irregular cash flows, so **Kaplan-Schoar
 PME** grows every flow forward at the index's return and takes
 `(FV(distributions) + NAV) / FV(contributions)`: above 1, the fund beat
@@ -811,38 +877,42 @@ r_true_t = (r_obs_t - phi * r_obs_{t-1}) / (1 - phi)
 *Real-life case:* an endowment's PE sleeve reports 8% volatility against
 public equity's 16%, and the optimizer wants to triple the allocation.
 Desmooth the NAV series first (phi fitted from the reported returns' own
-autocorrelation) and the honest volatility comes back near public-market
+autocorrelation) and the underlying volatility comes back near public-market
 levels -- the diversification was an artifact of the appraisal lag, and
 the allocation decision changes accordingly.
 
-### 11. Backtesting honestly
+### 11. Backtesting without fooling yourself
 
 A **backtest** replays history against your strategy. The ways it lies to
 you are well-catalogued, and this library implements defenses for each:
 costs and impact (unrealistically free fills), look-ahead (using data you
 couldn't have had), survivorship (§8), overfitting (§8), execution fantasy
-(assuming every limit order fills — reality depends on queue position;
-assuming FX orders always fill — reality includes last-look rejects, which
+(assuming every limit order fills, when reality depends on queue position;
+assuming FX orders always fill, when reality includes last-look rejects, which
 cluster on exactly the trades that were about to be profitable). The
 **deflated Sharpe ratio** even adjusts your performance stat for how many
 strategies you tried before finding this one.
 
 *In this library:* `backtest/` (bar-level, execution-aware, tick-level with
-queue positions, last look), `backtest/validation/`, `data/TickCapture` +
-replay for deterministic tick-level history.
+queue positions, last look), `backtest/validation/`, `data/TickCapture` and
+replay for deterministic tick-level history. Two defaults matter:
+`BacktestConfig.defaults()` charges 1 bp commission and 3 bp slippage and
+fills orders at the next bar's open (`BacktestConfig.frictionless()`
+switches costs off for teaching), and walk-forward analysis carries an
+open position across fold boundaries instead of closing it at each one.
 
-**Was the *search* honest?** A single backtest can be clean and the
+**Was the *search* sound?** A single backtest can be clean and the
 process that selected it still rotten. Four more defenses:
 
 - **Purged K-fold with embargo.** Ordinary K-fold cross-validation
-  leaks on financial data, and the leak is subtle: a sample's LABEL is
+  leaks on financial data, and the leak is subtle: a sample's label is
   usually computed from bars that come *after* it (a "5-bar forward
   return"). Put bar 99 in training and bar 100 in test, and bar 99's
-  label was computed from bars 100–104 — the model has already seen
+  label was computed from bars 100 to 104, so the model has already seen
   the test answer. `backtest/validation/PurgedKFold.splits` purges
   every training sample whose label window overlaps the test fold and
   adds an **embargo** buffer after it (serial correlation means
-  features just past the fold still echo test-period information) —
+  features just past the fold still echo test-period information),
   and refuses any split that leaves a fold with no training data,
   because silently training on nothing is how "great" fold scores
   happen.
@@ -852,101 +922,104 @@ process that selected it still rotten. Four more defenses:
   (`backtest/validation/OverfitProbability.java`): split time into
   blocks, form every symmetric in-sample/out-of-sample combination,
   and ask how often the in-sample winner lands *below the median* out
-  of sample. That fraction is the **PBO** — below 0.1 the selection is
+  of sample. That fraction is the **PBO**: below 0.1 the selection is
   finding something real; at 0.5 it's pure noise-mining and the "best"
   backtest is meaningless however good it looks.
 - **The deflated Sharpe, wired in.** The deflated Sharpe ratio above
-  isn't a separate ritual here — `GridSearchOptimizer.deflatedSharpeOfWinner`
+  isn't a separate ritual here. `GridSearchOptimizer.deflatedSharpeOfWinner`
   takes the ranked grid-search results and judges the winner's Sharpe
   against what the best of N zero-skill trials would have scored
-  anyway. The search that created the multiple-testing problem hands
+  anyway, with N taken from `effectiveTrials` because neighbouring grid
+  points are correlated. The search that created the multiple-testing problem hands
   you its own haircut.
 - **Compared to what?** A standalone Sharpe answers "was this good?";
   an allocator asks "was this good *compared to just buying the
-  index*?" — `backtest/BenchmarkComparison.java` computes beta (how
+  index*?" `backtest/BenchmarkComparison.java` computes beta (how
   much of the strategy is the benchmark in disguise), Jensen alpha,
   tracking error, information ratio, and up/down capture. And
   "max drawdown 18%" hides the number that actually fires clients:
-  how LONG the pain lasted. `backtest/DrawdownAnalytics.java` walks
-  every peak-to-recovery episode — depth, duration, time under water —
+  how long the pain lasted. `backtest/DrawdownAnalytics.java` walks
+  every peak-to-recovery episode (depth, duration, time under water)
   and surfaces a drawdown still open at series end instead of hiding
-  it, because that is often the honest state of the strategy today.
+  it, because that is often the current state of the strategy.
 
-### The desk playbooks — pairs, toxicity, the central risk book, rolls
+### The desk playbooks: pairs, toxicity, the central risk book, rolls
 
 Four more things real desks do every day, each a small world of its own.
 These build on everything above, so read §1–§11 first.
 
 **Pairs trading, or: betting on a rubber band.** Some price
-relationships are tethered — two share classes of one company, a stock
+relationships are tethered: two share classes of one company, a stock
 and its ADR, cash equities and index futures, on-the-run vs off-the-run
-bonds. When the SPREAD between them stretches, you sell the expensive
+bonds. When the spread between them stretches, you sell the expensive
 leg, buy the cheap one, and wait for the tether to pull them back.
 Three questions decide whether this is a strategy or a slow-motion
 accident:
 
 1. *Is the spread actually tethered?* A *cointegration test* asks
-   whether the spread is statistically stationary — two random walks
+   whether the spread is statistically stationary. Two random walks
    can look correlated for years and then never come back.
 2. *How fast does it snap back?* Fit an **Ornstein-Uhlenbeck** process
    to the spread: the fitted **half-life** (how long the spread takes
    to close half its gap) is your expected holding period, and the
    **z-score** (how many stationary standard deviations you are from
    the mean) is your entry and exit signal. A 200-day half-life is not
-   a trade — it's an index fund with extra steps. And a spread that
-   shows NO mean reversion in-sample must be refused, not fitted:
+   a trade. And a spread that
+   shows no mean reversion in-sample must be refused, not fitted:
    fitting a rubber-band model to a random walk is how pairs desks die
    (this library's fit literally throws in that case).
 3. *How do you get in without owning half a trade?* The moment you own
-   one leg without the other, you're not a pairs trader — you're just
-   long (or short) in disguise. **Legging risk** is THE execution risk
-   of spread trading: work the ILLIQUID leg patiently (it's the
-   constraint), let the LIQUID leg chase each fill at the spread
-   ratio, and cap the imbalance HARD — at the cap, stop adding risk
-   entirely and cross the hedge leg to get flat, whatever it costs.
+   one leg without the other, you're not a pairs trader; you're just
+   long (or short) in disguise. **Legging risk** is the main execution
+   risk of spread trading: work the illiquid leg patiently (it is the
+   constraint), let the liquid leg chase each fill at the spread
+   ratio, and set a hard cap on the imbalance. At the cap, stop adding
+   risk entirely and cross the hedge leg to get flat, whatever it costs.
 
 *Real-life case:* a desk sees two dual-listed shares 2.5 z-scores
 apart with a fitted half-life of 8 days. Entry: sell the rich listing,
 buy the cheap one, ratio-locked, legging cap at 5% of the position.
 Exit: z back under 0.5, or the cointegration breaks (a takeover
-announcement is a rubber band CUT — exit everything, the tether is
-gone).
+announcement cuts the rubber band: exit everything, because the tether
+is gone).
 
-*In this library:* `hedging/CointegrationTest.java` (question 1),
-`microstructure/OrnsteinUhlenbeck.java` (question 2 — κ/θ/σ, half-life,
+*In this library:* `hedging/CointegrationTest.java` (question 1;
+`engleGranger(a, b, lags)` adds ADF lags and MacKinnon 2010
+finite-sample critical values),
+`microstructure/OrnsteinUhlenbeck.java` (question 2: κ/θ/σ, half-life,
 z-score, and the refusal), `execution/SpreadExecutionAlgo.java`
-(question 3 — the legging cap), cookbook recipe 15 runs the whole
-chain. Two refinements the desks add:
-`microstructure/VarianceRatio.java` answers the question BEFORE
-question 1 — is this series trending, mean-reverting, or a random
-walk? (under a random walk variance grows linearly with horizon, so
-the ratio is 1; mean reversion cancels, momentum compounds) — and
+(question 3: the legging cap), and cookbook recipe 15 runs the whole
+chain. Desks add two refinements.
+`microstructure/VarianceRatio.java` answers the question that comes
+before question 1: is this series trending, mean-reverting, or a random
+walk? Under a random walk variance grows linearly with horizon, so
+the ratio is 1; mean reversion cancels, momentum compounds. And
 `microstructure/KalmanBeta.java` replaces the static hedge ratio with
-a time-varying one: relationships DRIFT, a β fitted on last year is
+a time-varying one: relationships drift, a β fitted on last year is
 stale by spring, and the filter tracks the current β while a
 full-sample OLS averages the drift into a number that was never true
 on any single day (the test demonstrates exactly that).
 
 **Flow toxicity, or: knowing when to stop quoting.** §5 explained
-adverse selection — the people most eager to trade with you know
+adverse selection: the people most eager to trade with you know
 something. **VPIN** turns that into a live dial: bucket trades by
-VOLUME (informed trading compresses clock time, but volume time it
+volume (informed trading compresses clock time, but volume time it
 cannot hide from), score each bucket's buy/sell imbalance, average the
 last fifty buckets. Balanced two-way flow reads near 0; one-sided,
-informed flow reads toward 1 — famously elevated in the hour before
-the 2010 flash crash. A market maker watching VPIN climb doesn't argue
+informed flow reads toward 1. It was elevated in the hour before
+the 2010 flash crash (Easley, López de Prado and O'Hara 2012). A market maker watching VPIN climb doesn't argue
 with it: widen the spread, cut the quote size, or stop quoting. Being
 the last one quoting into informed flow is how you buy the top tick of
 every move.
 
-And when you have no quote data at all — a 20-year backtest, an
-emerging market, history before your capture started — you can still
-ESTIMATE liquidity from bars alone: Roll's estimator reads the spread
+And when you have no quote data at all (a 20-year backtest, an
+emerging market, history before your capture started) you can still
+estimate liquidity from bars alone: Roll's estimator reads the spread
 out of bid-ask bounce (trade prices ping-ponging leave a negative
 autocorrelation fingerprint), Corwin-Schultz reads it from daily
 high-low ranges, and Amihud's ratio (|return| per dollar traded) ranks
-which names punish size. Estimators, not measurements — rank with
-them, don't mark books with them.
+which names punish size. These are estimators, not measurements: rank
+with them, don't mark books with them.
 
 *In this library:* `microstructure/Vpin.java`,
 `microstructure/TradeClassifier.java` (feeds it aggressor sides when
@@ -957,22 +1030,22 @@ cookbook recipe 17 wires VPIN into a quoting defense.
 firm's trading floor: the cash equities desk just bought 2M of an
 index's risk from a client, and three desks away the ETF desk sold 2M
 of nearly the same risk. If both desks hedge with the street, the firm
-paid the spread TWICE for risk it never net had. A **central risk
-book** fixes this by seeing every desk's position in ONE factor space:
+paid the spread twice for risk it never net had. A **central risk
+book** fixes this by seeing every desk's position in one factor space:
 equity deltas per symbol (an option's delta and cash shares land on
-the SAME factor), FX exposure per CURRENCY (so EURUSD spot, a EURUSD
+the same factor), FX exposure per currency (so EURUSD spot, a EURUSD
 option's delta, and an NDF's forward all net at the currency level),
 vega and gamma per underlying. What survives the netting is the only
-risk worth paying to hedge — and even then, the CRB hedges only the
-EXCESS beyond its warehouse band, because inventory that will net
+risk worth paying to hedge, and even then the CRB hedges only the
+excess beyond its warehouse band, because inventory that will net
 against tomorrow's flow is an asset, not a problem.
 
-The CRB is also a BUSINESS, with three revenue mechanics you can now
+The CRB is also a business, with three revenue mechanics you can now
 read as code: it *internalizes* client flow that reduces its risk (and
-gives the client back part of the saved spread — being worth trading
-with is the moat), it *skews* its quotes to attract the flow it wants
-(long inventory → shade both quotes down → the ask becomes the
-attractive side), and it routes its own hedges through ITSELF first —
+gives the client back part of the saved spread, because being worth
+trading with keeps the flow coming), it *skews* its quotes to attract the flow it wants
+(long inventory, so shade both quotes down, so the ask becomes the
+attractive side), and it routes its own hedges through itself first:
 the firm's own offsetting inventory is a dark pool with zero cost and
 zero information leakage. The close-of-day question is one number:
 did the spread we captured pay for the hedging we did?
@@ -983,68 +1056,68 @@ equity band breaches, the cost-aware hedger notices the cheap ES-proxy
 future can't satisfy a per-symbol band and escalates to the direct
 program trade, the hedge routes to a clean midpoint pool while the
 15bps-markout pool gets nothing (internal crossing is the router's
-standing FIRST priority — that day there happened to be nothing
-crossable) — and the day still nets positive after every cost. That
+standing first priority, but that day there was nothing crossable),
+and the day still nets positive after every cost. That
 exact day runs in `crb/CrbRealWorldScenarioTest.java` (under
 `src/test`).
 
-*In this library:* the whole `crb/` package —
+*In this library:* the whole `crb/` package.
 [CENTRAL_RISK_BOOK.md](CENTRAL_RISK_BOOK.md) is the guided tour,
 cookbook recipe 14 the runnable day.
 
 **Rolls and anti-gaming, or: the trades everyone can see coming.**
 Two execution problems are special because your intentions are
-PREDICTABLE. First, the futures roll: every futures position must
+predictable. First, the futures roll: every futures position must
 migrate from the expiring contract to the next one, everyone knows
-roughly when, and liquidity migrates on a well-known S-curve — roll
+roughly when, and liquidity migrates on a well-known S-curve. Roll
 too early and you pay wide back-month spreads, too late and you join
-the last-day scramble. The answer is to roll IN STEP with the
+the last-day scramble. The answer is to roll in step with the
 migration, executing each day's slice as a calendar spread. Second,
 the metronome problem: a TWAP that fires identical child orders on an
 exact clock is detected by predators within minutes, and every
-subsequent child gets leaned on. The fix is seeded randomness — jitter
+subsequent child gets leaned on. The fix is seeded randomness: jitter
 child sizes and times enough to kill the pattern while preserving the
-total EXACTLY and keeping every child auditable (same seed, same
+total exactly and keeping every child auditable (same seed, same
 schedule: compliance can replay why each child fired when it did).
 
 *In this library:* `execution/FuturesRollAlgo.java` (the migration
 curve, with a curve that doesn't end at 100% rejected as the delivery
 risk it is), `execution/AntiGamingJitter.java`,
-`execution/OrderPlacementPolicy.java` (the smallest repeated decision
-— post passively or cross — as expected-cost arithmetic instead of
+`execution/OrderPlacementPolicy.java` (the smallest repeated decision,
+post passively or cross, as expected-cost arithmetic instead of
 habit).
 
-**The volatility zoo — six kinds, one map.** "Volatility" is six
+**The volatility zoo: six kinds, one map.** "Volatility" is six
 different things wearing one word, and confusing them is expensive:
 
-1. **Historical volatility** — how much the price DID move, measured
+1. **Historical volatility**: how much the price did move, measured
    from past returns: `risk/RiskMetrics.annualizedVolatility` (the
    plain standard deviation) and `volatility/EwmaVolatility` (recent
-   moves weighted more — the RiskMetrics λ=0.94 classic).
-2. **Implied volatility** — the market's forecast, read backwards out
-   of an option's PRICE: `pricing/BlackScholes.impliedVol`,
+   moves weighted more, the RiskMetrics λ = 0.94 classic).
+2. **Implied volatility**: the market's forecast, read backwards out
+   of an option's price: `pricing/BlackScholes.impliedVol`,
    `pricing/Black76.impliedVol`, and the smile structures
    (`pricing/VolSurface`, `fx/FxVolSurface`, `pricing/VannaVolga`).
-   Historical looks back; implied is what people are PAYING for.
-3. **Realized volatility** — what actually happened over a window,
+   Historical looks back; implied is what people are paying for.
+3. **Realized volatility**: what actually happened over a window,
    built from intraday returns: `microstructure/JumpRobustVolatility`
-   (and its key trick: bipower variation separates a headline JUMP
+   (and its key trick: bipower variation separates a headline jump
    from a genuine volatility regime), forecast by `volatility/HarRv`.
-4. **Market volatility** — the whole market's expected turbulence,
-   famously tracked by the VIX, the "fear index":
+4. **Market volatility**: the whole market's expected turbulence,
+   tracked by the VIX, the "fear index".
    `volatility/VolatilityIndex` computes it model-free from an option
-   chain — every out-of-the-money option contributes its 1/K² slice
-   to a portfolio whose payoff IS variance, so the portfolio's price
+   chain: every out-of-the-money option contributes its 1/K² slice
+   to a portfolio whose payoff is variance, so the portfolio's price
    reveals the market's expectation with no pricing model assumed.
-   The put skew is IN the index, which is why VIX sits above ATM
+   The put skew is in the index, which is why VIX sits above ATM
    implied vol.
-5. **Idiosyncratic volatility** — the company's own story: earnings,
-   management, product launches. It diversifies away across names.
-6. **Systematic volatility** — the economy's story: rates, inflation,
-   macro shocks. It does NOT diversify away — only index hedges
+5. **Idiosyncratic volatility**: the company's own story (earnings,
+   management, product launches). It diversifies away across names.
+6. **Systematic volatility**: the economy's story (rates, inflation,
+   macro shocks). It does not diversify away; only index hedges
    remove it. `volatility/VolatilityDecomposition` splits any stock's
-   variance EXACTLY into 5 + 6 via the single-factor regression
-   (β²·market variance + residual); the R² is the systematic share —
+   variance exactly into 5 and 6 via the single-factor regression
+   (β²·market variance + residual). The R² is the systematic share:
    a utility near 0.7 is mostly a market proxy, a biotech near 0.05
    is mostly its own story, and the two need entirely different
    hedges.
@@ -1055,25 +1128,28 @@ different things wearing one word, and confusing them is expensive:
 
 ### 12. The latency ladder, or: what a nanosecond buys
 
-- 1 **ns**: light travels ~30cm; a modern CPU core executes a few
+- 1 **ns**: light travels about 30 cm; a modern CPU core executes a few
   instructions.
-- ~100 ns: a main-memory access (this is why cache locality matters).
-- ~1 **µs** (1,000 ns): this library's *entire* tick-to-order path, twice over.
-- ~50 µs: a fast Java garbage-collection pause (ZGC-class; older collectors
-  pause for *milliseconds*) — even the fast one is 100× our whole budget.
-- ~1 **ms**: network round trip within a city; an OS deciding to run
-  another thread for "a moment."
+- About 100 ns: a main-memory access (this is why cache locality matters).
+- 1 **µs** (1,000 ns): the scale this library's tick-to-order path is
+  designed for. Measured figures, with the machine and JVM they came
+  from, are in [BENCHMARKS.md](BENCHMARKS.md).
+- Tens of µs: a short Java garbage-collection pause even with a
+  low-pause collector such as ZGC; older collectors pause for
+  *milliseconds*. Either is far longer than the whole hot path.
+- About 1 **ms**: network round trip within a city; an OS deciding to
+  run another thread for "a moment."
 
 Two lessons fall out. First, at these scales *the enemy is anything
 irregular*: a code path that's usually 500ns but occasionally 50µs is worse
 than one that's always 800ns, which is why we obsess over **tail latency**
 (p99, p99.9) rather than averages. Second, some slowness you cannot code
 away (the OS preempting your thread, the GC) — you can only *avoid
-triggering it*, measure it, and attribute it honestly.
+triggering it*, measure it, and attribute it correctly.
 
 *In this repo:* `docs/ULTRA_LOW_LATENCY.md` maps four tiers of latency work,
-from pure-JDK (this library) down to kernel bypass and FPGAs — knowing the
-boundary is the skill.
+from pure-JDK (this library) down to kernel bypass and FPGAs, and says
+where each tier's boundary lies.
 
 ### 13. Garbage collection, and why we allocate nothing
 
@@ -1089,15 +1165,20 @@ then only *reuses*: no `new`, no autoboxing (`Long` vs `long` — the
 capital-L one is an object!), no Strings, no iterators, no lambdas that
 capture variables.
 
-And because claims are cheap, it's **proven two ways**: (1) each hot class
-has a test that reads the JVM's per-thread allocation counter before and
-after 500,000 operations and asserts ~zero bytes; (2) benchmarks run under
-**Epsilon GC** — a special JVM collector that *never collects* and simply
-crashes when memory runs out. A million operations under Epsilon without a
-crash is not an argument, it's a proof.
+The claim is checked two ways. (1) Hot classes in the trading,
+market-data, order-book and execution packages have tests that read the
+JVM's per-thread allocation counter
+(`ThreadMXBean.getThreadAllocatedBytes`) around a long run of operations
+after warm-up and require exactly zero bytes (the smallest of a few
+runs, so a stray JIT allocation does not fail the build). (2) The
+benchmarks can run under **Epsilon GC** (`-XX:+UnlockExperimentalVMOptions
+-XX:+UseEpsilonGC`), a JVM collector that *never collects* and stops the
+JVM when memory runs out. A long session under Epsilon that does not run
+out of memory shows the path never needed the collector.
 
-*Try it:* open any `*Test.java` with "AllocationFree" in a method name —
-the pattern is 10 lines and you'll recognize it everywhere afterwards.
+*Try it:* search the tests for `getThreadAllocatedBytes`
+(`execution/HftSorTest.java` is one). The pattern is about ten lines and
+you will recognise it everywhere afterwards.
 
 ### 14. Data structures for speed
 
@@ -1139,16 +1220,16 @@ buffer. Zero copies, zero allocation.
 
 *In this library:* `marketdata/TickRingBuffer.java` (ring),
 `orderbook/BookPrimitives.java` (bitmap scans + open addressing, shared by
-the two hot-lane books: `HftOrderBook` and `L3BookBuilder` — the readable
-`OrderBook` deliberately uses none of this), `sbe/*Flyweight.java` and
+the two hot-lane books, `HftOrderBook` and `L3BookBuilder`; the readable
+`OrderBook` uses none of this so that it stays readable), `sbe/*Flyweight.java` and
 `fix/FixMarketDataView.java` (flyweights), `orderbook/HftOrderBook.java`
 (all of it at once).
 
 ### 15. Threads and the memory model, in plain words
 
 Modern CPUs and compilers reorder and cache aggressively. If thread A
-writes `position = 5` and thread B reads it, B may see the *old* value —
-indefinitely — unless the code establishes ordering. Java's rules for this
+writes `position = 5` and thread B reads it, B may see the *old* value,
+possibly indefinitely, unless the code establishes ordering. Java's rules for this
 are the **Java Memory Model**.
 
 The idiom used here is **release/acquire**: the writer publishes with a
@@ -1158,29 +1239,35 @@ locks and expresses exactly what a ring buffer needs: *the cursor moved,
 therefore the data behind it is ready.* In Java you spell this with
 **VarHandles** (`setRelease`/`getAcquire`).
 
-There's an honest war story in the docs: the risk gate's checks measured
-~1ns single-threaded, but that speed relied on the JIT hoisting reads out
-of loops — unsafe once other threads write fills concurrently. Making it
-correct (per-element acquire/release) made it ~3ns. The library took the
-3ns and documented why: **correct-but-3ns beats fast-but-wrong**, and
-claims got updated everywhere. That's the culture the codebase tries to
-teach.
+The docs record one such trade-off. The risk gate's checks were faster
+single-threaded when the JIT could hoist reads out of loops, but that is
+unsafe once other threads write fills concurrently. Per-element
+acquire/release made the gate correct and somewhat slower; the library
+kept the correct version and documented the cost (figures in
+[BENCHMARKS.md](BENCHMARKS.md)).
 
-### 16. Measuring latency without lying
+### 16. Measuring latency
 
-Averages hide disasters — one 40ms pause in a million 400ns operations
+Averages hide disasters: one 40 ms pause in a million 400 ns operations
 barely moves the mean. Latency work uses **percentiles**: p50 (median),
 p99, p99.9, max. Collecting them must itself be allocation-free, so
 `util/LatencyRecorder.java` implements a log-scaled histogram (HdrHistogram
-style): nanosecond resolution where it matters, fixed memory.
+style) with 128 sub-buckets per power of two, exact below 128 ns, in
+fixed memory. A reported percentile is the upper bound of its bucket, so
+it never understates the true quantile.
 
 Java has a warm-up quirk: code starts interpreted and gets compiled by the
 **JIT** only after thousands of executions. Benchmarks must warm up first
-or they measure the interpreter. And when a benchmark *does* show a 1.6ms
-spike, whose fault is it — your code or the OS? `util/HiccupMonitor.java`
-answers by running a thread that does *nothing* but sleep 1ms and check how
-late it wakes up: if the do-nothing thread also stalled 1.6ms, the
-*platform* owns that tail, not your code. Every benchmark here prints both.
+or they measure the interpreter. And when a benchmark *does* show a
+1.6 ms spike, whose fault is it: your code or the OS?
+`util/HiccupMonitor.java` answers by running a thread that does
+*nothing* but wait a fixed interval and record how late it wakes up. If
+the do-nothing thread also stalled 1.6 ms, the *platform* owns that
+tail, not your code. The default mode parks the thread, which on
+Windows is bound to the system timer tick, so read Windows figures from
+it as an upper bound; `HiccupMonitor.spinning(...)` busy-reads
+`nanoTime` instead and measures only time the thread was not running.
+The latency benchmarks run a hiccup monitor alongside.
 
 *Try it:* `examples/HftLatencyBenchmark.java` and friends — each is a
 single-file, readable benchmark you can run from the CLI.
@@ -1190,29 +1277,29 @@ single-file, readable benchmark you can run from the CLI.
 **FIX** is finance's venerable text protocol: `35=D|55=EURUSD|54=1|38=1000000`
 (tag=value, delimited by an invisible byte-1 character). Human-debuggable,
 universally supported, verbose. Tag 35 is the message type, and three of
-them carry most of trading: `35=D` (NewOrderSingle — "I want to trade"),
-`35=8` (ExecutionReport — the venue's answer), `35=W`/`35=X` (market data
-snapshot / incremental — the prices).
+them carry most of trading: `35=D` (NewOrderSingle, "I want to trade"),
+`35=8` (ExecutionReport, the venue's answer), `35=W`/`35=X` (market data
+snapshot and incremental, the prices).
 
 **The life of an order, end to end.** Follow one BUY from decision to
 position:
 
 1. *The strategy decides.* A signal crosses a threshold (§7); the
-   pre-trade risk gate (§9) approves in ~3ns.
+   pre-trade risk gate (§9) approves it.
 2. *Encode.* The order becomes a `35=D` NewOrderSingle. Session lane:
    `FixSession.sendNewOrderSingle(clOrdId, symbol, side, qty,
-   limitPrice, tif)` builds it with the String-based `FixMessage` —
-   fine for its purpose. Hot lane: `fix/FixOrderEncoder.java` writes
-   the same message with zero allocation — one reusable byte buffer
+   limitPrice, tif)` builds it with the String-based `FixMessage`,
+   which is fine for its purpose. Hot lane: `fix/FixOrderEncoder.java` writes
+   the same message with zero allocation: one reusable byte buffer
    (body first, then the `8=FIX.4.4|9=len|` prefix written *backwards*
    in front of it), digits rendered directly (no `Long.toString`),
    symbols pre-registered as bytes, the timestamp's date part cached
    until the UTC day rolls. Every encoded message is round-tripped
-   through the validated parser in tests — fast and correct, proven
-   together.
+   through the validated parser in tests, so speed and correctness are
+   checked together.
 3. *The wire.* TCP to the venue's gateway, over a session (below).
 4. *The venue matches.* Your order meets someone's resting order in
-   the venue's book — exactly the mechanics of §2, run by them
+   the venue's book, with exactly the mechanics of §2, run by them
    instead of you.
 5. *The answer comes back.* An ExecutionReport (`35=8`): `execType`
    `'0'` = accepted, `'F'` = fill, `'8'` = rejected. The session
@@ -1221,15 +1308,16 @@ position:
    lane reads the same bytes through the `fix/FixExecReportView.java`
    flyweight without materializing anything.
 6. *Position updated.* The **ClOrdID** you chose in step 2 is the
-   thread that ties every report back to its order — correlation is
+   thread that ties every report back to its order. Correlation is
    yours to manage, not the venue's.
 
-**The session layer** is where the unglamorous reliability lives —
-`fix/FixSession.java` implements all of it. A session starts with a
+**The session layer** is where the unglamorous reliability lives, and
+`fix/FixSession.java` implements it. A session starts with a
 **Logon handshake** and stays alive by **heartbeats**: send one after
 each idle heartbeat interval, and if nothing arrives for 1.5 intervals,
-send a **TestRequest** ("are you alive? prove it") — a peer that stays
-silent to 2.5 intervals is declared dead and disconnected. That
+send a **TestRequest** ("are you alive? prove it"). A peer that stays
+silent to 2.5 intervals is declared dead and disconnected; only a
+Heartbeat that echoes the TestReqID clears the request. That
 escalation matters because TCP won't tell you about a dead peer for
 minutes; a trading system needs to know in seconds, because *its
 orders may still be alive at the venue*.
@@ -1238,47 +1326,54 @@ Every message carries a **sequence number**. When the receiver sees
 seq 4,835 while expecting 4,833, it sends a **ResendRequest** for the
 gap; the peer replays application messages flagged
 `PossDupFlag(43)` (so a fill is never booked twice) and coalesces
-admin messages into a `SequenceReset-GapFill(4)` — nobody needs old
-heartbeats back. A `FileSessionStore` persists sequence numbers and
-sent messages so recovery works across a process restart, not just a
-dropped socket. This dance is the part that pages you at 3am if done
+admin messages into a `SequenceReset-GapFill(4)`, since nobody needs old
+heartbeats back. `FileSessionStore` writes every sent message to a
+CRC-32C journal that is forced to disk before the message reaches the
+socket, so after a crash a ResendRequest replays the real orders rather
+than covering them with a GapFill. A torn record at the end of the
+journal is truncated on open. This dance is the part that pages you at 3am if done
 wrong: a desync at reconnect means you don't know which of your
 orders the venue thinks exist.
 
 **The inbound side: market data.** Three dialects, one trade-off:
 
-- **ITCH** (`marketdata/ItchCodec.java`): the L3 binary style —
-  fixed-offset messages, native integers, millions per second (§3).
+- **ITCH** (`marketdata/ItchCodec.java`): the L3 binary style, with
+  fixed-offset messages, binary integers and millions of messages per
+  second (§3).
 - **FIX market data** (`fix/FixMarketDataView.java`): `35=W` full
-  snapshots and `35=X` incremental updates — the lingua franca of
+  snapshots and `35=X` incremental updates, the common language of
   e-FX bank streams. It's still tag=value text, so this library reads
   it with a flyweight: one pass over the framed bytes into
   preallocated primitive arrays, entry order preserved (for tiered LP
-  streams, position IS the tier).
-- **SBE-style binary** (`sbe/` — `QuoteFlyweight`, `TradeFlyweight`,
+  streams, position is the tier).
+- **SBE-style binary** (`sbe/`: `QuoteFlyweight`, `TradeFlyweight`,
   `OrderFlyweight`, with `BinaryMarketDataClient` feeding the bus):
-  fixed offsets and native-endian integers. Reading a price is a
-  *cast*, not a parse.
+  every message starts with the standard 8-byte SBE header (block
+  length, template id, schema id, version), fields sit at fixed offsets
+  in little-endian order, and prices and sizes are int64 mantissas with
+  an int8 exponent (`sbe/Decimal64.java`). Reading a price is a load,
+  not a parse.
 
 Why binary wins on the hot path: tag=value must scan every byte to
 find delimiters, branch per tag, and convert ASCII digits to numbers;
-a fixed-layout binary message needs none of that — field offsets are
-compile-time constants. Same information, a fraction of the work; and
+a fixed-layout binary message needs none of that, since field offsets
+are compile-time constants. Same information, a fraction of the work; and
 since a flyweight makes even the text path allocation-free, the
 difference binary buys is work, not garbage.
 
-Everywhere on these paths, prices travel as **scaled longs** — 1.08505
-becomes mantissa 108505 with 5 decimals — because `double` cannot
+Everywhere on these paths, prices travel as **scaled longs**: 1.08505
+becomes mantissa 108505 with 5 decimals, because `double` cannot
 represent most decimal fractions exactly, and rounding errors in
 prices are how you fail audits. Feed-to-order never touches a double.
 
-*Real-life: the 500ns after your strategy says BUY.* Signal update on
-the incoming tick: ~50ns. Risk gate: ~3ns. FIX encode via
-`FixOrderEncoder`: ~100ns of digit-writing into a buffer that already
-exists. Handoff to the venue thread through a ring buffer (§14): one
-release store. Socket write: the kernel takes over. Notice what is
+*Real-life: the path after your strategy says BUY.* Signal update on
+the incoming tick. Risk gate. FIX encode via `FixOrderEncoder`,
+digit-writing into a buffer that already exists. Handoff to the venue
+thread through a ring buffer (§14): one release store. Socket write:
+the kernel takes over. Measured costs per stage are in
+[BENCHMARKS.md](BENCHMARKS.md). Notice what is
 *absent* from that path: no String, no parsing, no allocation, no
-lock, no syscall until the very last step — every section of Part II
+lock, no syscall until the very last step. Every section of Part II
 was about removing exactly those.
 
 ### 18. Scaling out and staying safe
@@ -1286,29 +1381,32 @@ was about removing exactly those.
 One core, one engine has a throughput ceiling. The scaling answer here is
 **shared-nothing sharding**: run N independent engine stacks (own bus, own
 gate, own venue thread), partition symbols across them, and let *nothing*
-be shared on the hot path — because one shared `synchronized` counter makes
+be shared on the hot path, because one shared `synchronized` counter makes
 N shards slower than one (that experiment is written up in
 ULTRA_LOW_LATENCY.md; the fix was per-shard, cache-line-spaced counters).
 
-What legitimately *must* span shards — firm-wide risk — runs as a slow
-observer: a monitor thread sums positions across all gates every few ms
-and flips per-gate **kill switches** on breach. The hot path only ever
+What legitimately *must* span shards (firm-wide risk) runs as a slow
+observer: a monitor thread (`GlobalRiskAggregator.start(...)`) sums
+positions and working orders across all gates every few milliseconds
+and flips per-gate **kill switches** on breach. Engaging a kill switch
+also sends a cancel-all to the venue. The hot path only ever
 *reads one boolean*. Fast paths stay fast; safety stays global.
 
 *In this library:* `trading/ShardedTradingEngine.java`,
 `trading/GlobalRiskAggregator.java`.
 
-**Surviving the overnight.** Everything the models *learn* — volume
-curves, venue fill rates, alpha weights — lives in memory, and a desk
+**Surviving the overnight.** Everything the models *learn* (volume
+curves, venue fill rates, alpha weights) lives in memory, and a desk
 that relearns it from zero every morning trades half-blind until lunch.
 The fix is a **checkpoint**: at end of day, write every model's learned
-state into one file; at the next session start, restore it. The two
-details that make this production-grade rather than a toy: the save is
-**atomic** (written to a temp file, then renamed over the old one — a
-crash mid-save can corrupt nothing, yesterday's file survives), and the
-restore is **honest about time** (learned state comes back; intraday
-state — today's running totals, a pending spread spike — deliberately does
-not, because it belonged to yesterday). *In this library:*
+state into one file; at the next session start, restore it. Two details
+matter. The save is **atomic**: the state is written to a temp file
+that is forced to the device, renamed over the old one, and the
+directory is forced after the rename, so a crash or power loss leaves
+either yesterday's file or today's, never a partial one. And the
+restore is **selective about time**: learned state comes back, but
+intraday state (today's running totals, a pending spread spike) does
+not, because it belonged to yesterday. *In this library:*
 `persist/Checkpoint.java`, with `writeState`/`readState` on every model
 that learns across days.
 
@@ -1316,21 +1414,23 @@ that learns across days.
 
 Worth studying as a checklist for your own projects:
 
-- **Allocation-counter tests** — every zero-alloc claim, proven (§13).
-- **Model-based equivalence** — the fast order book vs the readable one,
+- **Allocation-counter tests**: every zero-allocation claim is tested (§13).
+- **Model-based equivalence**: the fast order book vs the readable one,
   identical random inputs, demand identical state. The readable version is
   the spec.
-- **Property tests** — e.g. "a FOK either fills entirely or changes
+- **Property tests**: for example "a FOK either fills entirely or changes
   nothing," asserted over thousands of randomized books; "symmetric last
   look rejects both directions 50/50" asserted over randomized moves.
-- **Differential tests** — the optimized NBBO fast path vs brute-force
+- **Differential tests**: the optimized NBBO fast path vs brute-force
   recomputation, 20,000 random updates.
-- **Load floors** — throughput regression tripwires set ~20× below measured
-  desktop numbers: CI fails if the pipeline ever gets *dramatically*
-  slower, without flaking on slow runners.
-- **Honest limits as tests** — the load test *budgets* dropped messages
-  under OS preemption instead of pretending an unpinned desktop can promise
-  zero drops. Tests encode what the platform can actually guarantee.
+- **Load and timing tests**: throughput tripwires set far below measured
+  desktop numbers, so they catch a dramatic slowdown without flaking on
+  slow runners. They are tagged `load` or `timing` and skipped by the
+  default build; `./mvnw -Pfull test` and the nightly workflow run them.
+- **Platform limits as tests**: the load test *budgets* dropped messages
+  under OS preemption instead of pretending an unpinned desktop can
+  promise zero drops. Tests encode what the platform can actually
+  guarantee.
 
 ---
 
@@ -1340,45 +1440,46 @@ Worth studying as a checklist for your own projects:
 
 ```bash
 git clone https://github.com/AshJha0/Quant-Finance-Library && cd Quant-Finance-Library
-mvn package                        # builds + runs all tests — watch them pass
+./mvnw package                     # needs JDK 25; builds and runs the default test suite
 java -cp target/classes com.quantfinlib.examples.QuickStartDemo
-java -cp target/classes com.quantfinlib.examples.LiveTradingDemo   # live Binance ticks → paper trading → browser dashboard
+java -cp target/classes com.quantfinlib.examples.LiveTradingDemo   # live Binance ticks, paper trading, browser dashboard
 ```
 
 **Read code in this order** (each step uses the previous ones):
 
-1. `core/Bar.java`, `indicators/StreamingIndicators.java` — the simplest lane.
-2. `orderbook/OrderBook.java` — matching, readable (§2).
-3. `marketdata/TickRingBuffer.java` — your first lock-free structure (§14).
-4. `trading/HftRiskGate.java` — risk + memory model (§9, §15).
-5. `orderbook/HftOrderBook.java` — everything from §14 in one file.
-6. `marketdata/L3BookBuilder.java` + `fx/FxTierBook.java` — the two market
+1. `core/Bar.java`, `indicators/StreamingIndicators.java`: the simplest lane.
+2. `orderbook/OrderBook.java`: matching, readable (§2).
+3. `marketdata/TickRingBuffer.java`: your first lock-free structure (§14).
+4. `trading/HftRiskGate.java`: risk and the memory model (§9, §15).
+5. `orderbook/HftOrderBook.java`: everything from §14 in one file.
+6. `marketdata/L3BookBuilder.java` and `fx/FxTierBook.java`: the two market
    structures side by side (§3, §4).
-7. `backtest/Backtester.java` → the `alpha` package (§8, §11), then the
-   search-honesty tools: `backtest/validation/PurgedKFold.java` →
-   `OverfitProbability.java` → `backtest/BenchmarkComparison.java` +
+7. `backtest/Backtester.java`, then the `alpha` package (§8, §11), then the
+   search-validation tools: `backtest/validation/PurgedKFold.java`,
+   `OverfitProbability.java`, `backtest/BenchmarkComparison.java` and
    `DrawdownAnalytics.java` (§11).
-8. `optimization/PortfolioOptimizer.java` → `RiskParityOptimizer.java` →
-   `BlackLitterman.java` → `ConstrainedPortfolioOptimizer.java` (§8b) —
+8. `optimization/PortfolioOptimizer.java`, `RiskParityOptimizer.java`,
+   `BlackLitterman.java`, `ConstrainedPortfolioOptimizer.java` (§8b):
    forecasts into weights, and why the naive optimizer can't be trusted
    with your forecasts.
-9. `microstructure/VolumeCurve.java` → `SignalEngine.java` →
-   `OnlineAlphaLearner.java` → `execution/BenchmarkExecutor.java` →
-   `PortfolioExecutor.java` → `persist/Checkpoint.java` — the execution
-   intelligence stack from live inputs to basket schedule to overnight
+9. `microstructure/VolumeCurve.java`, `SignalEngine.java`,
+   `OnlineAlphaLearner.java`, `execution/BenchmarkExecutor.java`,
+   `PortfolioExecutor.java`, `persist/Checkpoint.java`: the execution
+   stack from live inputs to basket schedule to overnight
    (§6, §7, §18).
 10. The desk playbooks (end of Part I): `microstructure/OrnsteinUhlenbeck.java`
-    → `execution/SpreadExecutionAlgo.java` (a pairs trade end to end),
+    and `execution/SpreadExecutionAlgo.java` (a pairs trade end to end),
     `microstructure/Vpin.java` (toxicity), then the whole `crb/` package
     with [CENTRAL_RISK_BOOK.md](CENTRAL_RISK_BOOK.md) as the guide and
     `crb/CrbRealWorldScenarioTest.java` (under `src/test`) as a
     realistic trading week you can step through in a debugger.
-11. The rates lane (§10b): `rates/YieldCurve.java` → `BondPricer.java` →
-    `KeyRateDurations.java` → `ShortRateModels.java` — curve to bond to
-    hedge to simulation, each file under 200 lines.
-12. The risk stack: [MARKET_RISK.md](MARKET_RISK.md) maps all fourteen
-    steps from market data to Basel/FRTB; `risk/VarEngine.java` →
-    `risk/StressTester.java` → `risk/FrtbEs.java` is the reading spine,
+11. The rates lane (§10b): `rates/YieldCurve.java`, `BondPricer.java`,
+    `DayCount.java`, `KeyRateDurations.java`, `ShortRateModels.java`:
+    curve to bond to hedge to simulation.
+12. The risk stack: [MARKET_RISK.md](MARKET_RISK.md) maps the steps
+    from market data to Basel/FRTB; `risk/TailRisk.java`,
+    `risk/VarEngine.java`, `risk/StressTester.java` and `risk/FrtbEs.java`
+    are the reading spine,
     and `risk/MarketRiskTest.java` (under `src/test`) shows every
     formula pinned by hand. Then the compliance view (§9b):
     `regulatory/MarketQualityMetrics.java` and `regulatory/FixAnalyzer.java`
@@ -1387,10 +1488,10 @@ java -cp target/classes com.quantfinlib.examples.LiveTradingDemo   # live Binanc
     under `src/test` — watch a logon, a fill and a gap-fill happen) and
     `fix/FixOrderEncoder.java`, the same message written the readable way
     and the fast way.
-14. `docs/COOKBOOK.md` — three hundred end-to-end recipes to modify and re-run.
-15. Part IV below — once the above feels familiar, test yourself: 1000 real
-    quant/trading/HFT practice questions, each answered and tied back to
-    a class you've now read.
+14. `docs/COOKBOOK.md`: end-to-end recipes to modify and re-run.
+15. Part IV below: once the above feels familiar, test yourself with the
+    knowledge check. It is organised by topic, and every question has a
+    worked answer tied back to a class you have now read.
 
 **Exercises** (in rough order of difficulty):
 
@@ -1398,13 +1499,13 @@ java -cp target/classes com.quantfinlib.examples.LiveTradingDemo   # live Binanc
    `StreamingIndicators` with a test proving it matches a batch
    computation.
 2. Write an allocation-counter test for it (copy any existing one).
-3. `OrderBook` already has `mid()`; `HftOrderBook` deliberately doesn't.
+3. `OrderBook` already has `mid()`; `HftOrderBook` does not.
    Add it (from `bestBidTick`/`bestAskTick`), then extend the equivalence
    test so both books' mids are compared after every random operation.
 4. Build a tiny strategy in the backtester: buy when queue imbalance > 0.5
    on replayed ticks. Measure how costs change the result.
 5. Run `HftBookBenchmark` before and after replacing `HftOrderBook`'s
-   bitmap scan with a linear loop — *measure* what the bitmap buys.
+   bitmap scan with a linear loop, and *measure* what the bitmap buys.
 
 **Glossary shortcut** — if you hit an unknown term anywhere in the docs:
 bid/ask/spread/mid (§1), limit/market/IOC/FOK/post-only (§2), L1/L2/L3,
@@ -1432,11 +1533,6 @@ model, release/acquire, VarHandle (§15), percentile, p99, JIT, warm-up,
 hiccup (§16), FIX, tag=value, scaled long, SBE, sequence recovery,
 heartbeat, TestRequest, ClOrdID, ExecutionReport (§17),
 sharding, shared-nothing, checkpoint, atomic rename (§18).
-
-One closing thought. This library's recurring lesson isn't a data structure
-or a formula — it's a habit: **measure, don't assume; prove, don't claim;
-and when reality imposes a limit, document the limit instead of hiding
-it.** That habit transfers to every system you will ever build.
 
 ## Part IV — The exercise room
 
@@ -25501,1087 +25597,1167 @@ the skeleton, honesty is the spine.
 
 ## How to use this guide
 
-Don't read it like a script — scripted answers die on the first follow-up. For
-each question you want to own, do three things:
+Parts I to III are meant to be read in order. Part IV is different: it is
+a knowledge check, organised by topic, with a worked answer for each
+question and the class that implements the idea. Do not memorise the
+answers. For each topic you want to understand properly, do three things:
 
-1. **Run the class's test.** Every class cited above is pinned by tests
-   under `src/test/java/com/quantfinlib/` — usually `<Class>Test.java`,
-   sometimes a themed suite (`ComponentVar` lives in
-   `RiskAllocationTest`). Run it and read what it asserts — the
-   assertions are the claims from the model answer, pinned to numbers
-   (`mvn test -Dtest=RiskAllocationTest` style).
+1. **Run the class's test.** Every class cited above is covered by tests
+   under `src/test/java/com/quantfinlib/`, usually `<Class>Test.java` and
+   sometimes a themed suite (`ComponentVar` is tested in
+   `RiskAllocationTest`). Run it (`./mvnw test -Dtest=RiskAllocationTest`)
+   and read what it asserts: the assertions are the claims in the worked
+   answer, pinned to numbers.
 2. **Read the javadoc, then the code.** The javadoc headers in this library
-   are written as explanations, not API listings — most of the model
-   answers above are compressed from them. The classes are deliberately
-   small; almost every one cited here reads in one sitting.
-3. **Re-derive one number.** Pick a single assertion — the Feller ratio, a
-   component-VaR share, the deflated Sharpe of a grid winner, a
-   backward-shift probe run — and reproduce it by hand or in a scratch
-   `main`. Explaining a number you have personally re-derived sounds
-   completely different from reciting one, and it shows.
+   are written as explanations with references, not API listings, and most
+   worked answers are condensed from them. Most classes are small enough
+   to read in one sitting.
+3. **Re-derive one number.** Pick a single assertion (the Feller ratio, a
+   component-VaR share, the deflated Sharpe of a grid winner, the
+   Acerbi-Tasche ES of losses 1 to 1000) and reproduce it by hand or in a
+   scratch `main`. Re-deriving a number is the quickest way to find out
+   whether you understand the convention behind it.
 
-If a term here is unfamiliar, Parts I–III above teach all of them from
-zero; [COOKBOOK.md](COOKBOOK.md) has runnable recipes for the workflows
-these questions come from; [ULTRA_LOW_LATENCY.md](ULTRA_LOW_LATENCY.md) is
-the deep end of Round 5.
+If a term is unfamiliar, Parts I to III teach it from zero.
+[COOKBOOK.md](COOKBOOK.md) has runnable recipes for the workflows the
+questions come from, [MARKET_RISK.md](MARKET_RISK.md) covers the risk
+stack in depth, and [ULTRA_LOW_LATENCY.md](ULTRA_LOW_LATENCY.md) covers
+the low-latency topics in more depth than Part II.
 
 ---
 
 ## Appendix -- The formula reference
 
-The library's headline formulas, one line of math and one line of
-meaning each, in the exact conventions the code implements (signs and
-factors verified against the class named -- when the code's convention
-differs from a textbook's, the code's is what is written here).
+The library's main formulas, each with one line of math and one line of
+meaning, in the conventions the code implements. Each entry names the
+class (and method where useful) and a published source. Where the code's
+convention differs from a textbook's, the code's convention is the one
+written here. `N` is the standard normal CDF and `phi` its density
+throughout.
 
 **Options and exotics**
 
 - `d1 = (ln(S/K) + (r - q + sigma^2/2) T) / (sigma sqrt(T))`,
   `d2 = d1 - sigma sqrt(T)`;
-  `call = S e^{-qT} N(d1) - K e^{-rT} N(d2)` -- the Black-Scholes
-  vanilla; the code's `carry` parameter IS the yield q (dividend yield
-  for equities, foreign rate for FX), not the net cost-of-carry.
-  `pricing/BlackScholes.java`.
+  `call = S e^{-qT} N(d1) - K e^{-rT} N(d2)`. The Black-Scholes vanilla
+  with a continuous yield. The code's `carry` parameter is the yield q
+  (dividend yield for equities, foreign rate for FX), not the net
+  cost of carry. `pricing/BlackScholes.java`; Black and Scholes (1973),
+  Merton (1973) for the yield.
 - `call = e^{-rT} (F N(d1) - K N(d2))`,
-  `d1 = (ln(F/K) + sigma^2 T/2) / (sigma sqrt(T))` -- Black-76 on a
-  forward: discounting and carry separate cleanly, the quoting standard
-  for futures options, caps and swaptions. `pricing/Black76.java`.
-- `call - put = S e^{-qT} - K e^{-rT} = e^{-rT} (F - K)` -- put-call
+  `d1 = (ln(F/K) + sigma^2 T/2) / (sigma sqrt(T))`. Black-76 on a
+  forward: discounting and carry separate cleanly, which makes it the
+  quoting standard for futures options, caps and swaptions.
+  `pricing/Black76.java`; Black (1976).
+- `call - put = S e^{-qT} - K e^{-rT} = e^{-rT} (F - K)`. Put-call
   parity, model-free; the swaption version `payer - receiver =
-  annuity * (F - K)` is pinned in `rates/RatesOptions.java`.
-- `sigma^2 = sigma1^2 + sigma2^2 - 2 rho sigma1 sigma2` -- Margrabe: an
-  exchange option is a vanilla on the RATIO of two assets, priced with
-  the spread's variance and zero strike. `pricing/ExchangeOption.java`.
+  annuity * (F - K)` is pinned in `rates/RatesOptions.java`. Stoll (1969).
+- `sigma^2 = sigma1^2 + sigma2^2 - 2 rho sigma1 sigma2`. Margrabe: an
+  option to exchange one asset for another is a vanilla on the ratio of
+  the two, priced with the ratio's variance and zero rate.
+  `pricing/ExchangeOption.java`; Margrabe (1978).
 - `sigma_K^2 = sigma1^2 - 2 rho sigma1 sigma2 f + sigma2^2 f^2`,
-  `f = F2 / (F2 + K)` -- Kirk's approximation: treat `F2 + K` as one
-  lognormal leg, then Margrabe; exact in the K = 0 limit.
-  `pricing/ExchangeOption.java`.
-- `F_quanto = S exp((r_d - q - rho sigma_S sigma_FX) T)` -- the quanto
-  drift correction: fixing the conversion rate shifts the forward by the
-  asset-FX covariance; the payoff's vol stays sigma_S.
-  `pricing/QuantoOption.java`.
-- `sigma^2 = (2/T) sum_i (dK_i / K_i^2) e^{rT} Q(K_i)
-  - (1/T) (F/K0 - 1)^2` -- the variance-swap / VIX replication: a
-  1/K^2-weighted strip of OTM options IS realized variance, no model
-  assumed. `volatility/VolatilityIndex.java`,
-  `pricing/VarianceSwap.java`.
-- `K_vol ~ sqrt(E[V]) - Var(V) / (8 E[V]^{3/2})` -- Brockhaus-Long: a
-  vol swap strikes BELOW the root of the variance strike (Jensen), by an
-  amount that needs a vol-of-vol model -- why vol swaps are not
-  model-free. `pricing/VarianceSwap.java`.
-- Garman-Kohlhagen is Black-Scholes with `q = r_foreign` -- an FX option
-  is an option on an asset whose "dividend" is the foreign interest
-  rate. `pricing/BlackScholes.java` (carry = foreign rate).
+  `f = F2 / (F2 + K)`. Kirk's approximation for a spread option: treat
+  `F2 + K` as one lognormal leg, then apply Margrabe; exact when K = 0.
+  `pricing/ExchangeOption.java`; Kirk (1995).
+- `F_quanto = S exp((r_f - q - rho sigma_S sigma_X) T)`, price
+  `= e^{-r_d T} [w F_quanto N(w d1) - w K N(w d2)]` with vol sigma_S. The
+  quanto forward: the foreign asset drifts at its own rate r_f, and paying
+  the foreign payoff at a fixed conversion rate shifts the drift by the
+  asset-FX covariance (rho is the correlation of the asset with the FX rate
+  quoted as domestic per foreign). Discounting is at the domestic rate r_d.
+  `pricing/QuantoOption.java` (`quantoForward(spot, foreignRate,
+  assetYield, ...)`, `price`); Reiner (1992); Hull, *Options, Futures and
+  Other Derivatives*, quanto section.
+- `sigma^2 = (2/T) sum_i (dK_i / K_i^2) e^{rT} Q(K_i) - (1/T) (F/K0 - 1)^2`.
+  The variance-swap and VIX replication: a 1/K^2-weighted strip of
+  out-of-the-money options replicates realised variance with no model.
+  `volatility/VolatilityIndex.java`, `pricing/VarianceSwap.java`;
+  Demeterfi, Derman, Kamal and Zou (1999); Cboe VIX white paper.
+- `K_vol ~ sqrt(E[V]) - Var(V) / (8 E[V]^{3/2})`. Brockhaus-Long: a vol
+  swap strikes below the square root of the variance strike (Jensen), by
+  an amount that needs a vol-of-vol model, which is why vol swaps are not
+  model-free. `pricing/VarianceSwap.java`; Brockhaus and Long (2000).
+- Garman-Kohlhagen is Black-Scholes with `q = r_foreign`: an FX option is
+  an option on an asset whose "dividend" is the foreign interest rate.
+  `pricing/BlackScholes.java` (carry = foreign rate); Garman and Kohlhagen
+  (1983).
+- `call = df [(F - K) N(d) + sigma_N sqrt(T) phi(d)]`,
+  `put = df [(K - F) N(-d) + sigma_N sqrt(T) phi(d)]`,
+  `d = (F - K) / (sigma_N sqrt(T))`. Bachelier (normal) model: the forward
+  follows `dF = sigma_N dW`, so forwards and strikes may be negative and
+  sigma_N is in absolute rate units (0.0080 = 80 bp a year).
+  `pricing/Bachelier.java` (price, delta, vega, impliedVol); Bachelier
+  (1900); Andersen and Piterbarg (2010), vol. 1, section 7.1.
 - `sigma_impl(f, k) ~ alpha / (fk)^{(1-beta)/2} * z/x(z) * (1 +
-  correction * T)` -- Hagan's SABR lognormal implied-vol expansion:
-  beta fixed by convention, (alpha, rho, nu) calibrated to the smile.
-  `pricing/SabrModel.java`.
+  correction * T)`. Hagan's SABR lognormal implied-vol expansion: beta
+  fixed by convention, (alpha, rho, nu) calibrated to the smile by
+  Levenberg-Marquardt; `calibrateToAtm` takes alpha from the ATM cubic.
+  `pricing/SabrModel.java`; Hagan, Kumar, Lesniewski and Woodward (2002);
+  West (2005) for the ATM cubic.
 - `dv = kappa (theta - v) dt + sigma_v sqrt(v) dW2`,
-  `d<W1,W2> = rho dt` -- Heston stochastic variance; priced by
-  integrating the "little trap" characteristic function (Albrecher et
-  al.), stable at long maturities; Feller ratio
-  `2 kappa theta / sigma_v^2 >= 1` keeps v strictly positive.
-  `pricing/Heston.java`.
+  `d<W1,W2> = rho dt`. Heston stochastic variance, priced by integrating
+  the "little trap" form of the characteristic function, which is stable
+  at long maturities. The Feller ratio `2 kappa theta / sigma_v^2 >= 1`
+  keeps v strictly positive. `pricing/Heston.java`; Heston (1993),
+  Albrecher, Mayer, Schoutens and Tistaert (2007).
 - `u = e^{sigma sqrt(dt)}`, `d = 1/u`,
-  `p = (e^{(r-q) dt} - d) / (u - d)` -- the CRR binomial tree's
-  risk-neutral up-probability; converges to Black-Scholes as dt -> 0.
-  `pricing/BinomialTree.java`.
+  `p = (e^{(r-q) dt} - d) / (u - d)`. The CRR binomial tree's
+  risk-neutral up-probability; it converges to Black-Scholes as dt
+  goes to 0. Zero volatility throws rather than returning NaN.
+  `pricing/BinomialTree.java`; Cox, Ross and Rubinstein (1979).
 
 **Volatility models**
 
-- `h_t = omega + alpha r_{t-1}^2 + beta h_{t-1}` -- GARCH(1,1);
-  persistence `alpha + beta`, unconditional variance
-  `omega / (1 - alpha - beta)`; fitted with variance targeting
-  `omega = sigma_bar^2 (1 - alpha - beta)`. `volatility/Garch11.java`.
+- `h_t = omega + alpha r_{t-1}^2 + beta h_{t-1}` on demeaned returns.
+  GARCH(1,1): persistence `alpha + beta`, unconditional variance
+  `omega / (1 - alpha - beta)`. Fitted by full maximum likelihood over
+  (omega, alpha, beta), with omega estimated rather than targeted:
+  the Gaussian negative log-likelihood
+  `(1/2) sum_t (ln 2pi + ln h_t + r_t^2 / h_t)` is minimised by
+  Nelder-Mead on parameters transformed so that omega > 0 and
+  alpha + beta < 1, from several starts, with `h_0` the sample variance.
+  `estimate(returns, Innovation)` adds Student-t innovations and
+  Bollerslev-Wooldridge robust standard errors.
+  `volatility/Garch11.java`; Bollerslev (1986), Bollerslev and Wooldridge
+  (1992).
 - `h_t = omega + (alpha + gamma 1{r_{t-1} < 0}) r_{t-1}^2 +
-  beta h_{t-1}` -- GJR-GARCH: down moves add gamma extra variance (the
-  leverage effect); persistence `alpha + gamma/2 + beta`.
-  `volatility/GjrGarch11.java`.
+  beta h_{t-1}`. GJR-GARCH: down moves add gamma extra variance (the
+  leverage effect); persistence `alpha + gamma/2 + beta` for symmetric
+  innovations. Fitted by maximum likelihood as above.
+  `volatility/GjrGarch11.java`; Glosten, Jagannathan and Runkle (1993).
 - `ln h_t = omega + beta ln h_{t-1} + alpha (|z_{t-1}| - sqrt(2/pi)) +
-  gamma z_{t-1}` -- EGARCH: log variance needs no positivity
-  constraints, gamma carries the asymmetry. `volatility/Egarch11.java`.
-- `h_t = lambda h_{t-1} + (1 - lambda) r_{t-1}^2` -- RiskMetrics EWMA:
-  GARCH with no mean reversion, one parameter.
-  `volatility/EwmaVolatility.java`.
-- `RV_{t+1} = c + b_d RV_t + b_w RV_{t-4:t} + b_m RV_{t-21:t}` -- HAR-RV
-  (Corsi): tomorrow's realized variance regressed on daily, weekly and
-  monthly averages -- the long-memory workhorse.
-  `volatility/HarRv.java`.
-- `BV ~ (pi/2) sum |r_t| |r_{t-1}|` -- bipower variation: products of
-  CONSECUTIVE absolute returns are jump-robust (a jump enters once, not
-  squared); RV minus BV isolates the jump part.
-  `microstructure/JumpRobustVolatility.java`.
+  gamma z_{t-1}`, `z = r / sqrt(h)`. EGARCH: log variance needs no
+  positivity constraints, and gamma carries the asymmetry.
+  `volatility/Egarch11.java`; Nelson (1991).
+- `h_t = lambda h_{t-1} + (1 - lambda) r_{t-1}^2`. RiskMetrics EWMA:
+  GARCH with no mean reversion and one parameter. The recursion is seeded
+  causally with bias-corrected weights rather than with the full-sample
+  variance, which would leak the future into early values; an overload
+  takes an explicit seed. `volatility/EwmaVolatility.java`;
+  J.P. Morgan/Reuters, *RiskMetrics Technical Document* (1996).
+- `RV_{t+1} = c + b_d RV_t + b_w RV_{t-4:t} + b_m RV_{t-21:t}`. HAR-RV:
+  tomorrow's realised variance regressed on daily, weekly and monthly
+  averages, fitted by Householder QR; `fitWithErrors` adds Newey-West
+  standard errors and `fitLog` fits the log form.
+  `volatility/HarRv.java`; Corsi (2009).
+- `BV = (pi/2) sum |r_t| |r_{t-1}|`. Bipower variation: products of
+  consecutive absolute returns are robust to jumps (a jump enters one
+  factor, not a square), so RV minus BV isolates the jump part.
+  `microstructure/JumpRobustVolatility.java`; Barndorff-Nielsen and
+  Shephard (2004).
 - `beta = Cov(r_a, r_m) / Var(r_m)`;
-  `sigma_a^2 = beta^2 sigma_m^2 + sigma_eps^2` -- realized beta and the
-  variance decomposition identity; R^2 is the systematic share.
-  `volatility/VolatilityDecomposition.java`, `risk/RiskMetrics.java`.
+  `sigma_a^2 = beta^2 sigma_m^2 + sigma_eps^2`. Realised beta and the
+  single-factor variance decomposition; R^2 is the systematic share.
+  `volatility/VolatilityDecomposition.java`, `risk/RiskMetrics.java`;
+  Sharpe (1964).
 
 **Risk**
 
-- `VaR = z_c * sqrt(w' Sigma w)` -- delta-normal VaR: the Gaussian loss
-  quantile of a linear book. `risk/VarEngine.java`.
-- `q_loss(p) = -mu + sigma (z_p + (z_p^2 - 1) s/6)` -- the
-  Cornish-Fisher quantile (s = loss skew) for delta-gamma books: short
-  gamma fattens the loss tail and the expansion prices that in.
-  `risk/VarEngine.java`.
-- `ES = sigma * phi(z_c) / (1 - c)` -- Gaussian expected shortfall in
-  closed form; the Cornish-Fisher version multiplies by
-  `(1 + z_c s/6)` and reduces to this exactly at zero gamma.
-  `risk/VarEngine.java`.
+- `VaR = z_c * sqrt(w' Sigma w)`. Delta-normal VaR: the Gaussian loss
+  quantile of a linear book. `risk/VarEngine.java`; *RiskMetrics
+  Technical Document* (1996).
+- `q_loss(p) = -mu + sigma (z_p + (z_p^2 - 1) s/6)`. The Cornish-Fisher
+  quantile (s = loss skew) for delta-gamma books: short gamma fattens the
+  loss tail and the expansion prices that in. `risk/VarEngine.java`
+  (deltaGammaVar); Cornish and Fisher (1937), Zangari (1996).
+- `ES = -mu + sigma * phi(z_c) / (1 - c)`. Gaussian expected shortfall in
+  closed form; the code's Cornish-Fisher version multiplies the tail term
+  by `(1 + z_c s/6)` and reduces to the Gaussian value at zero skew.
+  `risk/VarEngine.java` (deltaGammaEs); McNeil, Frey and Embrechts (2015),
+  section 2.3.
 - `VaR_p = u + (beta/xi) (((1-p) / (N_u/n))^{-xi} - 1)`;
-  `ES = (VaR + beta - xi u) / (1 - xi)` -- the GPD tail (peaks over
-  threshold u): extrapolate quantiles BEYOND the sample along the fitted
-  tail; xi >= 1 means the tail mean does not exist and the code refuses.
-  `risk/ExtremeValueTheory.java`.
+  `ES = (VaR + beta - xi u) / (1 - xi)`. The generalised Pareto tail over
+  threshold u (peaks over threshold): extrapolate quantiles beyond the
+  sample along the fitted tail. For xi >= 1 the tail mean does not exist
+  and the code refuses. `fitPotMle` fits by maximum likelihood with
+  standard errors. `risk/ExtremeValueTheory.java`; McNeil and Frey (2000);
+  McNeil, Frey and Embrechts (2015), section 5.2.
 - `marginal_i = (Sigma w)_i / sigma_p`;
-  `component_i = w_i * marginal_i`, `sum_i component_i = sigma_p` --
-  Euler risk allocation: components sum EXACTLY to portfolio risk, and a
-  hedge's component is negative. `risk/ComponentVar.java`.
-- `Sigma* = delta * mu I + (1 - delta) S`, `delta = bbar^2 / d^2` --
+  `component_i = w_i * marginal_i`, `sum_i component_i = sigma_p`. Euler
+  risk allocation: components sum exactly to portfolio risk, and a
+  hedge's component is negative. `risk/ComponentVar.java`; Tasche (1999).
+- `Sigma* = delta * mu I + (1 - delta) S`, `delta = bbar^2 / d^2`.
   Ledoit-Wolf shrinkage: pull the noisy sample covariance toward the
-  scaled identity, with intensity chosen from the data itself.
-  `risk/CovarianceShrinkage.java`.
-- `f* = mu / sigma^2` -- the (continuous) Kelly fraction; nobody bets
-  full Kelly, and `halfKelly` is the practitioner's standard.
-  `backtest/portfolio/PositionSizing.java`.
+  scaled identity, with intensity estimated from the data;
+  `constantCorrelation` shrinks toward the constant-correlation target
+  instead. `risk/CovarianceShrinkage.java`; Ledoit and Wolf (2004, 2003).
+- `f* = mu / sigma^2`. The continuous-time Kelly fraction; `halfKelly` is
+  the usual practice, since the estimate of mu is noisy.
+  `backtest/portfolio/PositionSizing.java`; Kelly (1956), Thorp (2006).
 
-**Performance and honesty**
+**Performance and selection bias**
 
 - `Sharpe = (mean(r) * periods - rf) / (stdev(r) * sqrt(periods))`;
   Sortino replaces stdev with downside deviation below the MAR;
-  `IR = active return / tracking error` -- the ratio family.
-  `risk/RiskMetrics.java`, `backtest/BenchmarkComparison.java`.
-- `PSR = N((SR - SR*) sqrt(n-1) / sqrt(1 - g3 SR + (g4-1)/4 SR^2))` --
-  probabilistic Sharpe: the chance the TRUE Sharpe beats SR*, with the
-  estimator's variance widened by skew g3 and kurtosis g4 (raw, not
-  excess). `backtest/validation/SharpeValidation.java`.
-- `SR* = sd * ((1-gamma_E) z_{1-1/K} + gamma_E z_{1-1/(K e)})` -- the
-  expected best Sharpe of K zero-skill trials (gamma_E = Euler's
-  constant); the deflated Sharpe is the PSR against THIS benchmark
-  instead of zero. `backtest/validation/SharpeValidation.java`.
-- `n* = 1 + (1 - g3 SR + (g4-1)/4 SR^2) (z_conf / (SR - SR*))^2` --
-  minimum track record length: how many periods of this performance
-  before the PSR clears confidence.
-  `backtest/validation/SharpeValidation.java`.
+  `IR = active return / tracking error`. The ratio family.
+  `risk/RiskMetrics.java`, `backtest/BenchmarkComparison.java`; Sharpe
+  (1966, 1994), Sortino and Price (1994).
+- `PSR = N((SR - SR*) sqrt(n-1) / sqrt(1 - g3 SR + (g4-1)/4 SR^2))`.
+  Probabilistic Sharpe: the probability that the true Sharpe exceeds SR*,
+  with the estimator's variance widened by skew g3 and kurtosis g4 (raw,
+  not excess). `backtest/validation/SharpeValidation.java`; Bailey and
+  López de Prado (2012).
+- `SR* = sd * ((1-gamma_E) z_{1-1/K} + gamma_E z_{1-1/(K e)})`. The
+  expected best Sharpe of K zero-skill trials (gamma_E is Euler's
+  constant); the deflated Sharpe is the PSR against this benchmark
+  instead of zero. `GridSearchOptimizer.effectiveTrials` supplies K for a
+  grid of correlated trials. `backtest/validation/SharpeValidation.java`;
+  Bailey and López de Prado (2014).
+- `n* = 1 + (1 - g3 SR + (g4-1)/4 SR^2) (z_conf / (SR - SR*))^2`.
+  Minimum track record length: how many periods of this performance are
+  needed before the PSR clears the confidence level.
+  `backtest/validation/SharpeValidation.java`; Bailey and López de Prado
+  (2012).
 
 **Execution and microstructure**
 
 - `x_j = X sinh(kappa (T - t_j)) / sinh(kappa T)`,
   `cosh(kappa tau) = 1 + lambda sigma^2 tau^2 / (2 etaTilde)` with
-  `etaTilde = eta - gamma tau/2` -- Almgren-Chriss: the urgency kappa
-  balances impact cost against variance risk; kappa -> 0 recovers TWAP.
-  `microstructure/AlmgrenChriss.java`.
-- `impact = Y * sigma_daily * sqrt(Q / ADV)` -- the square-root impact
-  law: cost scales with the root of size, in daily-vol units.
-  `microstructure/MarketImpactModel.java`.
-- `dp = lambda q + noise`, `lambda = E[q dp] / E[q^2]` -- Kyle's lambda:
-  price impact per unit of signed volume, LEARNED from the tape by
-  regression through the origin. `microstructure/KylesLambda.java`.
-- `p / (1 + p)` -- the classic POV bug: target participation p measured
-  against volume INCLUDING your own fills converges to p/(1+p), not p;
-  the ledger must exclude own fills. `execution/PovTracker.java`.
+  `etaTilde = eta - gamma tau/2`. Almgren-Chriss: the urgency kappa
+  balances temporary-impact cost against variance risk; as kappa goes to
+  0 the schedule becomes TWAP. `microstructure/AlmgrenChriss.java`;
+  Almgren and Chriss (2000), section 3.
+- `executed fraction(f) = 1 - sinh(kT (1 - f)) / sinh(kT)`, f the elapsed
+  fraction of the horizon. The same trajectory as cumulative progress,
+  used by `BenchmarkExecutor.IMPLEMENTATION_SHORTFALL` with urgency kT
+  from `withShortfallUrgency` (default 2). `execution/BenchmarkExecutor.java`;
+  Almgren and Chriss (2000).
+- `impact = Y * sigma_daily * sqrt(Q / ADV)`. The square-root impact law:
+  cost scales with the square root of size, in daily-vol units.
+  `MarketImpactModel.estimate` uses only bars before the trade bar.
+  `microstructure/MarketImpactModel.java`; Grinold and Kahn (2000),
+  Almgren, Thum, Hauptmann and Li (2005).
+- `dp = lambda q + noise`, `lambda = E[q dp] / E[q^2]`. Kyle's lambda:
+  price impact per unit of signed net flow over one aggregation window,
+  estimated from the tape by regression through the origin.
+  `microstructure/KylesLambda.java`; Kyle (1985).
+- `target = p / (1 - p) * othersVolume`, so that
+  `executed / (executed + others) = p`. POV as a share of total volume.
+  Targeting `p * totalVolume` with your own fills included realises only
+  `p / (1 + p)` (9.1% at p = 10%). `realizedParticipation()` reports
+  `executed / (executed + others)`, and p must be below 1.
+  `execution/PovTracker.java`, `execution/BenchmarkExecutor.java`.
 
 **Market making and hedging**
 
 - `r = mid - q gamma sigma^2 tau`;
-  `delta_total = gamma sigma^2 tau + (2/gamma) ln(1 + gamma/kappa)` --
-  Avellaneda-Stoikov: reservation price shades against inventory q, the
-  optimal spread adds a liquidity term from the fill-intensity decay
-  kappa. `trading/AvellanedaStoikov.java`.
-- `band = ((3/2) k S Gamma^2 / lambda)^{1/3}` -- Whalley-Wilmott: the
-  no-trade band around delta under proportional cost k; the cube root is
-  why the band is so insensitive to its inputs -- and you rehedge to the
-  band EDGE, not the center. `hedging/WhalleyWilmott.java`.
+  `delta_total = gamma sigma^2 tau + (2/gamma) ln(1 + gamma/kappa)`.
+  Avellaneda-Stoikov: the reservation price shades against inventory q,
+  and the optimal spread adds a liquidity term from the fill-intensity
+  decay kappa. `trading/AvellanedaStoikov.java`; Avellaneda and Stoikov
+  (2008).
+- `band = ((3/2) e^{-r(T-t)} k S Gamma^2 / lambda)^{1/3}`. Whalley-Wilmott:
+  the no-trade band around delta under proportional cost k and risk
+  aversion lambda. The cube root makes the band insensitive to its
+  inputs, and you rehedge to the band edge, not the centre. The
+  short overload omits the discount factor (r(T-t) = 0).
+  `hedging/WhalleyWilmott.java` (bandHalfWidth); Whalley and Wilmott (1997).
 
 **Rates**
 
 - `D_mod = D_mac / (1 + y/f)`; `DV01 = D_mod * price * 1e-4`; convexity
-  is the second-order term that makes duration hedges drift -- the bond
-  sensitivity ladder. `rates/BondPricer.java`.
+  is the second-order term that makes duration hedges drift.
+  `rates/BondPricer.java`; Macaulay (1938), Fabozzi, *Bond Markets,
+  Analysis and Strategies*.
 - `y(t) = b0 + b1 (1 - e^{-x})/x + b2 ((1 - e^{-x})/x - e^{-x})`,
-  `x = t / lambda` -- Nelson-Siegel: level, slope and curvature loadings
-  (lambda here is a TIME constant; some texts write x = lambda t).
-  `rates/NelsonSiegel.java`.
-- `parRate = (1 - DF(T)) / annuity`, `annuity = sum DF(t_i)`;
-  `payerPv = annuity * (parRate - K)` -- the single-curve swap
-  identities; the float leg is worth `1 - DF(T)` with no forecasting.
-  `rates/SwapPricer.java`.
+  `x = t / lambda`. Nelson-Siegel: level, slope and curvature loadings.
+  Lambda here is a time constant; some texts write x = lambda t.
+  `rates/NelsonSiegel.java`; Nelson and Siegel (1987).
+- `parRate = (1 - DF(T)) / annuity`, `annuity = sum tau_i DF(t_i)`;
+  `payerPv = annuity * (parRate - K)`. The single-curve swap identities;
+  the float leg is worth `1 - DF(T)` with no forecasting.
+  `rates/SwapPricer.java`; Hull, *Options, Futures and Other
+  Derivatives*, chapter on swaps.
 - `F = (DF(start) - DF(end)) / annuity`;
-  `swaption = annuity * Black76(F, K, sigma, T_expiry, rate = 0)` --
-  the annuity-numeraire form: all discounting lives in the annuity,
-  which is why the Black-76 leg is called with rate zero.
-  `rates/RatesOptions.java`.
+  `swaption = annuity * Black76(F, K, sigma, T_expiry, rate = 0)`. The
+  annuity-numeraire form: all discounting sits in the annuity, so the
+  Black leg is called with rate zero. `RatesOptions.VolModel` selects
+  lognormal, shifted lognormal or normal (Bachelier) vol, so negative
+  rates and any accrual frequency are supported.
+  `rates/RatesOptions.java`; Black (1976), Andersen and Piterbarg (2010).
 
 **Credit**
 
-- `Q(t) = exp(-integral_0^t h(s) ds)` -- survival from the hazard rate;
+- `Q(t) = exp(-integral_0^t h(s) ds)`. Survival from the hazard rate;
   piecewise-constant h makes it a product of exponentials, exact.
-  `credit/CreditCurve.java`.
+  `credit/CreditCurve.java`; O'Kane (2008), chapter 3.
 - `parSpread = protectionPv / riskyAnnuity`;
-  `upfront = protectionPv - coupon * riskyAnnuity` -- the CDS two-leg
-  identities; the risky annuity is the desk's spread-DV01.
-  `credit/CdsPricer.java`.
-- `S ~ h (1 - R)` -- the credit triangle: spread, hazard and recovery
-  determine each other on a flat curve; 300bp at 40% recovery means
-  h ~ 5%. `credit/CreditCurve.java`.
-- `price = sum cf_i exp(-(z(t_i) + z) t_i)` -- the Z-spread z: one
-  constant shift of the whole risk-free curve that reprices the bond;
+  `upfront = protectionPv - coupon * riskyAnnuity`. The CDS two-leg
+  identities; the risky annuity is the desk's spread DV01.
+  `credit/CdsPricer.java`; O'Kane (2008), chapter 6.
+- `S ~ h (1 - R)`. The credit triangle: on a flat curve spread, hazard
+  and recovery determine each other; 300 bp at 40% recovery means h of
+  about 5%. `credit/CreditCurve.java`; O'Kane (2008).
+- `price = sum cf_i exp(-(z(t_i) + z) t_i)`. The Z-spread z: one constant
+  shift of the whole risk-free curve that reprices the bond;
   `zSpread - cdsParSpread` is the CDS-bond basis.
-  `credit/CreditSpreads.java`.
+  `credit/CreditSpreads.java`; O'Kane (2008), chapter 5.
 
 **Commodities, indexes and private markets**
 
-- `rollYield = ln(F_near / F_far) / (t_far - t_near)` -- annualized roll
-  yield, positive in backwardation: the return component the curve
-  shape, not the spot view, pays. `commodities/CommodityCurve.java`.
-- `F = S exp((r + u - y) t)` -- cash-and-carry: storage cost u and
-  convenience yield y set the curve; `ln(F/S)/t - r` reads the implied
-  `u - y` off the quotes. `commodities/CommodityCurve.java`.
-- `sum_t cf_t / (1 + irr)^t = 0` -- IRR, the money-weighted return
-  (contributions negative, distributions positive); no sign change, no
-  IRR, and the code throws rather than inventing one.
+- `rollYield = ln(F_near / F_far) / (t_far - t_near)`. Annualised roll
+  yield, positive in backwardation: the return component paid by the
+  curve shape, not by the spot view. `commodities/CommodityCurve.java`
+  (annualizedRollYield); Erb and Harvey (2006).
+- `F = S exp((r + u - y) t)`. Cash and carry: storage cost u and
+  convenience yield y set the curve; `impliedCarry` reads `u - y` off the
+  quotes as `ln(F/S)/t - r`. `commodities/CommodityCurve.java`; Hull,
+  chapter on commodity futures.
+- `sum_t cf_t / (1 + irr)^t = 0`. IRR, the money-weighted return
+  (contributions negative, distributions positive). Without a sign change
+  there is no IRR, and the code throws rather than returning one.
   `markets/PrivateMarketAnalytics.java`.
-- `PME = (FV(distributions) + NAV) / FV(contributions)` -- Kaplan-Schoar
-  public-market equivalent, every flow grown at the index; above 1 beats
-  buying the index on the fund's own dates.
-  `markets/PrivateMarketAnalytics.java`.
-- `r_true_t = (r_obs_t - phi r_obs_{t-1}) / (1 - phi)` -- Geltner
-  desmoothing: invert the AR(1) appraisal filter and the laundered
-  volatility comes back. `markets/PrivateMarketAnalytics.java`.
+- `PME = (FV(distributions) + NAV) / FV(contributions)`. Kaplan-Schoar
+  public-market equivalent, with every flow grown at the index; above 1
+  the fund beat buying the index on its own dates.
+  `markets/PrivateMarketAnalytics.java`; Kaplan and Schoar (2005).
+- `r_true_t = (r_obs_t - phi r_obs_{t-1}) / (1 - phi)`. Geltner
+  desmoothing: invert the AR(1) appraisal filter and the smoothed-away
+  volatility comes back. `markets/PrivateMarketAnalytics.java`; Geltner
+  (1993).
 - `level = sum(price * shares * float) / divisor`;
   `newDivisor = oldDivisor * newAgg / oldAgg`;
-  `turnover = 0.5 sum |w1 - w2|` -- index continuity and the cost of a
-  weighting scheme. `markets/IndexConstruction.java`.
+  `turnover = 0.5 sum |w1 - w2|`. Index continuity and the cost of a
+  weighting scheme. `markets/IndexConstruction.java`; S&P Dow Jones
+  Indices, *Index Mathematics Methodology*.
 
 **Black-Scholes greeks**
 
-- `delta_call = e^{-qT} N(d1)`, `delta_put = e^{-qT} (N(d1) - 1)` -- S
-  spot, K strike, r rate, q carry yield, sigma vol, T years, N the
-  standard normal CDF: the hedge ratio, shares held per option sold.
-  The pitfall is the `e^{-qT}` prefix -- on FX and dividend-paying books
-  a "textbook N(d1)" hedge is systematically over-hedged.
-  `pricing/BlackScholes.java` (delta).
-- `gamma = e^{-qT} phi(d1) / (S sigma sqrt(T))` -- phi the normal
-  density; identical for calls and puts. Gamma is the rate delta drifts
-  as spot moves -- the rebalancing bill of a delta hedge; it explodes
-  ATM near expiry, which is why pin risk is a gamma story.
-  `pricing/BlackScholes.java` (gamma).
-- `vega = S e^{-qT} phi(d1) sqrt(T)` -- price change per 1.00 of vol
-  (divide by 100 for per-vol-point); identical for calls and puts, and
-  largest ATM at long maturity. Pitfall: quoting conventions -- desks
-  speak in vol points, the formula is per 1.00.
-  `pricing/BlackScholes.java` (vega).
+All greeks below are from `pricing/BlackScholes.java` or
+`pricing/HigherOrderGreeks.java`; the reference is Haug, *The Complete
+Guide to Option Pricing Formulas* (2007), chapter 2. At zero volatility
+the code returns the deterministic limits rather than NaN.
+
+- `delta_call = e^{-qT} N(d1)`, `delta_put = e^{-qT} (N(d1) - 1)`. The
+  hedge ratio, shares held per option. The `e^{-qT}` factor matters: on
+  FX and dividend-paying books a plain `N(d1)` hedge is systematically
+  too large. (delta)
+- `gamma = e^{-qT} phi(d1) / (S sigma sqrt(T))`, the same for calls and
+  puts. Gamma is the rate at which delta drifts as spot moves, the
+  rebalancing bill of a delta hedge. It explodes at the money near
+  expiry, which is why pin risk is a gamma problem. (gamma)
+- `vega = S e^{-qT} phi(d1) sqrt(T)`: price change per 1.00 of vol
+  (divide by 100 for a vol point), the same for calls and puts, largest
+  at the money at long maturity. (vega)
 - `theta_call = -S e^{-qT} phi(d1) sigma / (2 sqrt(T))
-  - r K e^{-rT} N(d2) + q S e^{-qT} N(d1)` -- time decay PER YEAR
-  (divide by 365 for per-day). The first term is the gamma rent; the
-  rate terms mean theta can be POSITIVE for deep-ITM puts -- decay is
-  not always a cost. `pricing/BlackScholes.java` (theta).
-- `rho_call = K T e^{-rT} N(d2)`, `rho_put = -K T e^{-rT} N(-d2)` --
-  sensitivity to the domestic rate per 1.00; grows linearly with
-  maturity, which is why rho is ignored on weeklies and hedged on
-  5-year notes. `pricing/BlackScholes.java` (rho).
-- `vanna = -e^{-qT} phi(d1) d2 / sigma` -- d(delta)/d(sigma) =
-  d(vega)/d(S); identical for calls and puts. THE skew Greek: a
-  delta-hedged book with vanna loses on the down-spot-up-vol move that
-  equity markets actually make. `pricing/HigherOrderGreeks.java`
-  (vanna).
-- `volga = vega * d1 d2 / sigma` -- vega convexity (vomma), identical
-  for calls and puts; positive for wings, near zero ATM. A vega-hedged
-  book with volga re-exposes itself the moment vol moves -- the second
-  Greek the vanna-volga method charges the smile for.
-  `pricing/HigherOrderGreeks.java` (volga).
+  - r K e^{-rT} N(d2) + q S e^{-qT} N(d1)`: time decay per year (divide
+  by 365 for a day). The first term is the cost of carrying gamma; the
+  rate terms can make theta positive for deep in-the-money puts. (theta)
+- `rho_call = K T e^{-rT} N(d2)`, `rho_put = -K T e^{-rT} N(-d2)`:
+  sensitivity to the domestic rate per 1.00. It grows linearly with
+  maturity, which is why it is ignored on weeklies and hedged on long
+  dated options. (rho)
+- `vanna = -e^{-qT} phi(d1) d2 / sigma`: d(delta)/d(sigma) =
+  d(vega)/d(S), the same for calls and puts. The skew greek: a
+  delta-hedged book with vanna loses on the down-spot, up-vol move that
+  equity markets tend to make. (HigherOrderGreeks.vanna)
+- `volga = vega * d1 d2 / sigma`: vega convexity (vomma), the same for
+  calls and puts, positive in the wings and near zero at the money. A
+  vega-hedged book with volga is exposed again as soon as vol moves.
+  (HigherOrderGreeks.volga)
 - `crossGamma = -phi(d1) / (S2 sigmaHat sqrt(T))`,
-  `sigmaHat^2 = sigma1^2 + sigma2^2 - 2 rho sigma1 sigma2` -- the
-  two-asset second-order term d2V/dS1 dS2 of a Margrabe exchange
-  option; negative, because the option loses convexity when the legs
-  move together. Per-asset gammas alone miss this entirely.
-  `pricing/HigherOrderGreeks.java` (exchangeCrossGamma).
+  `sigmaHat^2 = sigma1^2 + sigma2^2 - 2 rho sigma1 sigma2`: the
+  two-asset second-order term d2V/dS1 dS2 of a Margrabe exchange option.
+  It is negative because the option loses convexity when the legs move
+  together; per-asset gammas miss it. (HigherOrderGreeks.exchangeCrossGamma)
 
 **Digitals, barriers and touches**
 
-- `cashOrNothing = payout * e^{-rT} N(s d2)` -- s = +1 call / -1 put:
-  a fixed payout if spot finishes beyond the strike, the market's
-  "European digital". Its delta near expiry near the strike is a
-  spike -- digitals are replicated and risk-managed as tight call
-  spreads, not delta-hedged naked. `pricing/DigitalOption.java`
-  (cashOrNothing).
-- `assetOrNothing = S e^{-qT} N(s d1)`; and the identity
-  `vanilla = assetOrNothing - K * cashOrNothing(payout = 1)` -- pays
-  the underlying itself if ITM. The decomposition identity is the
-  teaching point: every vanilla IS a pair of digitals, which is why
-  digital risk hides inside every book. `pricing/DigitalOption.java`
-  (assetOrNothing).
+- `cashOrNothing = payout * e^{-rT} N(s d2)`, s = +1 call, -1 put: a fixed
+  payout if spot finishes beyond the strike. Near expiry and near the
+  strike its delta is a spike, so desks risk-manage digitals as tight call
+  spreads; `cashOrNothingSkewAdjusted` prices the call-spread limit on the
+  smile. `pricing/DigitalOption.java`; Reiner and Rubinstein (1991b).
+- `assetOrNothing = S e^{-qT} N(s d1)`, with the identity
+  `vanilla = assetOrNothing - K * cashOrNothing(payout = 1)`. Every
+  vanilla is a pair of digitals, which is why digital risk sits inside
+  every option book. `pricing/DigitalOption.java`; Reiner and Rubinstein
+  (1991b).
 - `c_di = S e^{-qT} (H/S)^{2 lambda} N(y)
   - K e^{-rT} (H/S)^{2 lambda - 2} N(y - sigma sqrt(T))`,
   `lambda = (r - q + sigma^2/2)/sigma^2`,
-  `y = ln(H^2/(S K))/(sigma sqrt(T)) + lambda sigma sqrt(T)` -- the
-  Reiner-Rubinstein reflection-principle down-and-in call (barrier H
-  in the OTM region, H <= K). Reverse barriers (barrier ITM) need the
-  full eight-case decomposition and are refused, not approximated.
-  `pricing/BarrierOption.java` (downAndInCall).
-- `KO = vanilla - KI` -- in-out parity: holding knock-in plus
-  knock-out replicates the vanilla, so only one formula is ever
-  needed. Pitfall: parity holds per barrier/strike configuration and
-  without rebates -- add a rebate and the identity silently breaks.
-  `pricing/BarrierOption.java` (downAndOutCall).
+  `y = ln(H^2/(S K))/(sigma sqrt(T)) + lambda sigma sqrt(T)`. The
+  down-and-in call for H <= K, one of the Reiner-Rubinstein building
+  blocks. `BarrierOption.price` covers all eight single-barrier types,
+  including reverse barriers (barrier in the money), with cash rebates,
+  and is pinned to Haug's table 4-13; a barrier already breached throws.
+  `pricing/BarrierOption.java`; Reiner and Rubinstein (1991a), Haug (2007)
+  section 4.17.
+- `KO = vanilla - KI`. In-out parity: knock-in plus knock-out replicates
+  the vanilla, so one formula gives the other. It holds without rebates;
+  with a rebate the identity needs the rebate terms.
+  `pricing/BarrierOption.java`; Haug (2007).
 - `P(touch) = N((-h + mT)/(sigma sqrt(T)))
-  + e^{2mh/sigma^2} N((-h - mT)/(sigma sqrt(T)))` -- m = r - q -
-  sigma^2/2 the log drift, h = ln(H/S) the barrier log-distance
-  (upper barrier form; the lower barrier mirrors signs): the
-  probability GBM touches the barrier before T, by reflection. A
-  useful sanity anchor: an ATM-forward barrier is touched with
-  probability near 1 as T grows. `pricing/TouchOption.java`
-  (hitProbability).
+  + e^{2mh/sigma^2} N((-h - mT)/(sigma sqrt(T)))`, with
+  `m = r - q - sigma^2/2` the log drift and `h = ln(H/S)` (upper barrier;
+  the lower barrier mirrors the signs). The probability that GBM touches
+  the barrier before T, by the reflection principle.
+  `pricing/TouchOption.java` (hitProbability); Shreve, *Stochastic
+  Calculus for Finance II* (2004), section 7.2.
 - `oneTouch = payout e^{-rT} P(touch)`,
-  `noTouch = payout e^{-rT} (1 - P(touch))` -- pay-at-expiry
-  convention (pay-at-hit differs by discounting to the hitting time).
-  Desks quote one-touches AS discounted hit probabilities, which is
-  why the probability itself is exposed. `pricing/TouchOption.java`
-  (oneTouch, noTouch).
+  `noTouch = payout e^{-rT} (1 - P(touch))`. The pay-at-expiry
+  convention; pay-at-hit differs by discounting to the hitting time. Desks
+  quote one-touches as discounted hit probabilities.
+  `pricing/TouchOption.java`; Wystup, *FX Options and Structured
+  Products* (2006).
 
 **Asian options and structured notes**
 
 - `E[ln G] = ln S + (r - q - sigma^2/2) T (n+1)/(2n)`,
-  `Var[ln G] = sigma^2 T (n+1)(2n+1)/(6 n^2)` -- Kemna-Vorst: the
-  geometric average of lognormals is lognormal, so the geometric Asian
-  has an exact Black-76-style closed form on these two moments. As
-  n -> infinity, Var -> sigma^2 T / 3: continuous averaging cuts
-  variance to a THIRD, which is why Asians are cheap. At n = 1 the
-  formula collapses to vanilla Black-Scholes exactly.
-  `pricing/AsianOption.java` (geometricPrice).
+  `Var[ln G] = sigma^2 T (n+1)(2n+1)/(6 n^2)`. Kemna-Vorst: the geometric
+  average of lognormals is lognormal, so the geometric Asian has an exact
+  closed form on these two moments. As n grows, Var tends to
+  `sigma^2 T / 3`, which is why Asians are cheap. At n = 1 the formula is
+  vanilla Black-Scholes. `pricing/AsianOption.java` (geometricPrice);
+  Kemna and Vorst (1990).
 - `M1 = (S/n) sum_i e^{g t_i}`,
   `M2 = (S/n)^2 sum_i sum_j e^{g(t_i + t_j) + sigma^2 min(t_i, t_j)}`,
-  `Var[ln A] = ln(M2 / M1^2)`, `g = r - q` -- Turnbull-Wakeman: the
-  arithmetic average's first two moments are EXACT under GBM; price
-  Black-76 style on a lognormal matched to them. AM-GM guarantees the
-  arithmetic call >= the geometric call pathwise -- the geometric
-  price is the classic Monte Carlo control variate. Error grows with
-  sigma^2 T; the double sum is O(n^2). `pricing/AsianOption.java`
-  (arithmeticPrice).
+  `Var[ln A] = ln(M2 / M1^2)`, `g = r - q`. Turnbull-Wakeman: the
+  arithmetic average's first two moments are exact under GBM; price on a
+  lognormal matched to them. The arithmetic call is always worth at least
+  the geometric one, which makes the geometric price a good Monte Carlo
+  control variate. The approximation error grows with sigma^2 T. The code
+  evaluates the double sum in O(n). `pricing/AsianOption.java`
+  (arithmeticPrice); Turnbull and Wakeman (1991).
 - `price(K) = BS(K; sigma_atm)
   + sum_i w_i(K) [BS(K_i; sigma_i) - BS(K_i; sigma_atm)]`,
   `w_1(K) = vega(K)/vega(K_1)
-  * ln(K_2/K) ln(K_3/K) / (ln(K_2/K_1) ln(K_3/K_1))` (cyclic) -- the
+  * ln(K_2/K) ln(K_3/K) / (ln(K_2/K_1) ln(K_3/K_1))` (cyclic). The
   vanna-volga smile adjustment from three pillars (25-delta put, ATM,
-  25-delta call): the market cost of hedging vega, vanna and volga at
-  the pillars. Exact AT the pillars; between them it is an
-  interpolation, not a model -- do not extrapolate it far into the
-  wings. `pricing/VannaVolga.java` (price, impliedVol).
-- `reverseConvertible = (par + coupon) DF(T) - (par/K) put(K)` -- a
-  bond plus a SOLD put struck at K: below K at expiry the holder gets
-  shares worth S_T/K of par. The "9% coupon" is put premium in
-  disguise -- the entire product in one identity, and the test IS the
-  decomposition. `pricing/StructuredNotes.java` (reverseConvertible).
+  25-delta call). It is exact at the pillars and an interpolation between
+  them. `impliedVol` inverts the out-of-the-money option, and beyond the
+  10-delta strikes it holds the vol flat or continues it smoothly instead
+  of using the unbounded quadratic weights. `pricing/VannaVolga.java`;
+  Castagna and Mercurio (2007).
+- `reverseConvertible = (par + coupon) DF(T) - (par/K) put(K)`. A bond
+  plus a sold put struck at K: below K at expiry the holder receives
+  shares worth S_T/K of par, so the high coupon is put premium.
+  `pricing/StructuredNotes.java` (reverseConvertible); Hull, chapter on
+  exotic options.
 - `capitalProtectedNote = protection * par * DF(T)
-  + participation * (par/S0) * call(S0)` -- a zero-coupon floor plus
-  a participation slice of ATM calls; `participationFor` inverts the
-  identity for the rate the option budget affords. Low rates or high
-  vol mean thin participation -- why these notes die at zero rates.
-  `pricing/StructuredNotes.java` (capitalProtectedNote,
-  participationFor).
-- `discountCertificate = S e^{-qT} - call(cap)` -- the covered call:
-  buy the underlying at a discount, sell away the upside beyond the
-  cap. The discount to spot IS the call premium received -- if the
-  quoted discount is smaller, the difference is the issuer's margin.
-  `pricing/StructuredNotes.java` (discountCertificate).
-- Autocallable = coupons + early-redemption feature - a sold
-  (European) knock-in put: priced by antithetic Monte Carlo under GBM,
-  observation-date monitoring, fixed seed for reproducibility. The
-  knock-in put is deeply smile-sensitive, so a flat-vol price is a
-  first pricer, not a desk mark -- feed a downside-strike vol from the
-  surface as the first-order correction. `pricing/Autocallable.java`
-  (price).
+  + participation * (par/S0) * call(S0)`. A zero-coupon floor plus a
+  participation slice of at-the-money calls; `participationFor` inverts
+  the identity for the participation the option budget affords. Low rates
+  or high vol mean thin participation. `pricing/StructuredNotes.java`.
+- `discountCertificate = S e^{-qT} - call(cap)`. A covered call: buy the
+  underlying at a discount and sell the upside beyond the cap. The
+  discount to spot is the call premium; a smaller quoted discount is the
+  issuer's margin. `pricing/StructuredNotes.java`.
+- Autocallable = coupons + early redemption - a sold knock-in put, priced
+  by antithetic Monte Carlo under GBM with observation-date monitoring and
+  a fixed seed (`SplittableRandom`). The knock-in put is very
+  smile-sensitive, so a flat-vol price is a first estimate; feed a
+  downside-strike vol from the surface as the first correction.
+  `pricing/Autocallable.java`; Bouzoubaa and Osseiran, *Exotic Options and
+  Hybrids* (2010).
 
 **Dividends, forwards and FX conventions**
 
 - `S* = S - sum_i d_i e^{-r t_i}` (ex-dates t_i <= T),
-  `F = S* e^{(r - borrow) T}` -- the escrowed-dividend model: strip
-  the PV of dated cash dividends from spot and diffuse the remainder;
-  borrow cost enters exactly like a continuous yield. A continuous
-  dividend yield misprices single stocks around ex-dates -- calls
-  spanning an ex-date are worth measurably less than the yield
-  approximation says. `pricing/DividendSchedule.java` (adjustedSpot,
-  forward, europeanPrice).
-- `F = S (1 + r_d T) / (1 + r_f T)`; `points = F - S` -- covered
-  interest parity from SIMPLE deposit rates (the convention deposits
-  are quoted in), and FX forwards trade as points, not outrights.
-  Inverting the quoted points gives the implied carry `(1/T) ln(F/S)`
-  in CONTINUOUS form -- mixing the two compounding conventions
-  manufactures a spurious ~12bp "basis" at 1y/5% that is convention,
-  not arbitrage; the real gap to deposit rates is the cross-currency
-  basis, not free money. `pricing/ForwardCurve.java`
-  (theoreticalForward, forwardPoints, impliedRateDifferential),
-  `fx/SwapPointsCurve.java` (impliedCarry).
-- `A/B * B/C = A/C` (shared middle currency),
-  `A/C / B/C = A/B` (shared quote currency) -- the two cross-rate
-  compositions that cover every triangulation (EURUSD * USDJPY =
-  EURJPY; EURUSD / GBPUSD = EURGBP). Pitfall: compose BID with ASK
-  correctly per leg direction -- a mid-based cross hides the double
-  spread you actually pay. `fx/CrossRateEngine.java`,
-  `pricing/TriangularArbitrage.java` (impliedCrossMid).
-- `edge = max(ac.bid - ab.ask * bc.ask, ab.bid * bc.bid - ac.ask)`
-  (each path in bps of its own buy-leg cost) -- triangular arbitrage
-  on DEALABLE bid/ask quotes:
-  both round-trip paths checked, positive means executable edge
-  before fees. Using mids instead of dealable sides is the classic
-  false-positive generator. `pricing/TriangularArbitrage.java`
+  `F = S* e^{(r - borrow) T}`. The escrowed-dividend model: strip the PV of
+  dated cash dividends from spot and diffuse the remainder; borrow cost
+  enters like a continuous yield. A continuous yield misprices single
+  stocks around ex-dates. `bosVandermarkPrice` splits each dividend
+  between spot and strike instead. `pricing/DividendSchedule.java`; Hull,
+  chapter on dividends; Bos and Vandermark (2002).
+- `F = S (1 + r_d T) / (1 + r_f T)`; `points = F - S`. Covered interest
+  parity from simple deposit rates (the convention deposits are quoted
+  in); FX forwards trade as points, not outrights. Inverting the points
+  gives the implied carry `(1/T) ln(F/S)` in continuous form, so mixing
+  the two conventions manufactures a spurious "basis" of about 12 bp at
+  1y and 5%. The real gap to deposit rates is the cross-currency basis.
+  `pricing/ForwardCurve.java` (theoreticalForward, forwardPoints,
+  impliedRateDifferential), `fx/SwapPointsCurve.java` (impliedCarry with a
+  day count; `preSpot` for today and tomorrow); Clark (2011), chapter 1.
+- `A/B * B/C = A/C` and `A/C / B/C = A/B`. The two cross-rate
+  compositions that cover every triangulation (EURUSD * USDJPY = EURJPY;
+  EURUSD / GBPUSD = EURGBP). Compose bid with ask per leg direction: a
+  mid-based cross hides the double spread you pay.
+  `fx/CrossRateEngine.java`, `pricing/TriangularArbitrage.java`
+  (impliedCrossMid); Clark (2011), chapter 1.
+- `edge = max(ac.bid - ab.ask * bc.ask, ab.bid * bc.bid - ac.ask)` (each
+  path in bp of its own buy-leg cost). Triangular arbitrage on dealable
+  quotes: both round-trip paths are checked, and a positive value is
+  executable edge before fees. Using mids instead of dealable sides
+  produces false positives. `pricing/TriangularArbitrage.java`
   (arbitrageBps).
-- `settlement = baseNotional * (fixing - contractRate) / fixing` --
-  the NDF cash settlement to the buyer of base currency, paid in the
-  deliverable currency: dividing by the fixing converts the
-  quote-currency difference back into deliverable units. The fixing
-  DATE precedes the settlement date by the currency's fixing lag (2
-  local business days for most Asian NDFs, 1 for BRL PTAX).
-  `fx/Ndf.java` (settlementAmount, fixingLagDays).
-- `vol(25d call) = atm + bf25 + rr25/2`,
-  `vol(25d put) = atm + bf25 - rr25/2` -- FX smiles are quoted as ATM,
-  risk reversal (call vol minus put vol) and butterfly (average wing
-  vol over ATM), not as strike/vol pairs; these identities recover the
-  pillar vols. RR carries the skew sign, BF the smile curvature.
-  `fx/FxVolSurface.java` (Builder).
-- `K_dns = F e^{+sigma^2 T / 2}` (forward delta),
-  `K_dns = F e^{-sigma^2 T / 2}` (premium-adjusted) -- the
-  delta-neutral-straddle "ATM" strike where call and put deltas
-  cancel. Pitfall: FX "ATM" is NOT the forward; the convention
-  (premium-adjusted or not) flips the sign of the offset, and mixing
-  conventions misplaces every pillar. `fx/FxVolSurface.java`
-  (dnsStrike).
-- `K = F exp(-N^{-1}(delta) sigma sqrt(T) + sigma^2 T / 2)` -- strike
-  from a target forward call delta (delta = N(d1) inverted in closed
-  form); premium-adjusted deltas (delta = (K/F) N(d2)) are
-  non-monotone in strike and are solved numerically on the OTM
-  branch, which is the market's resolution of the ambiguity.
-  `fx/FxVolSurface.java` (strikeForDelta).
+- `settlement = baseNotional * (fixing - contractRate) / fixing`. The NDF
+  cash settlement to the buyer of the base currency, paid in the
+  deliverable currency. The fixing date precedes settlement by the
+  currency's fixing lag. The default lag table is documented as not yet
+  verified against the EMTA templates; an overload takes an explicit lag.
+  `fx/Ndf.java` (settlementAmount, fixingLagDays); EMTA NDF templates.
+- `vol(25d call) = atm + bf_s + rr/2`, `vol(25d put) = atm + bf_s - rr/2`.
+  FX smiles are quoted as ATM, risk reversal (call vol minus put vol) and
+  butterfly. These identities hold for the smile butterfly bf_s. The
+  market quote is usually the broker strangle bf_m: the 25-delta strangle
+  priced at the single vol `atm + bf_m`. By default
+  (`ButterflyQuote.BROKER_STRANGLE`) the builder solves for the bf_s whose
+  smile reprices that strangle, jointly at 25 and 10 delta; with zero risk
+  reversal the two coincide. `fx/FxVolSurface.java` (Builder,
+  smileButterfly25); Clark (2011), sections 3.5 and 3.6.
+- `K_dns = F e^{+sigma^2 T / 2}` (forward delta, no premium adjustment),
+  `K_dns = F e^{-sigma^2 T / 2}` (premium-adjusted). The delta-neutral
+  straddle "ATM" strike, where call and put deltas cancel. FX "ATM" is not
+  the forward, and the premium convention flips the sign of the offset.
+  `AtmConvention` selects DNS or ATM forward. `fx/FxVolSurface.java`
+  (dnsStrike); Clark (2011), section 3.3; Reiswich and Wystup (2010).
+- `K = F exp(-N^{-1}(delta) sigma sqrt(T) + sigma^2 T / 2)`. Strike from a
+  forward call delta (`delta = N(d1)` inverted in closed form).
+  Premium-adjusted deltas (`delta = (K/F) N(d2)`) are not monotone in
+  strike and are solved numerically on the out-of-the-money branch; spot
+  deltas carry the extra `e^{-r_f T}` factor. `DeltaConvention` selects
+  forward or spot, with or without premium adjustment.
+  `fx/FxVolSurface.java` (strikeForDelta); Reiswich and Wystup (2010).
 
 **Short-rate models and curve fitting**
 
 - `P = e^{A(T) - B(T) r}`, `B(T) = (1 - e^{-aT})/a`,
-  `A(T) = (B - T)(b - sigma^2/(2a^2)) - sigma^2 B^2/(4a)` -- the
-  Vasicek zero-coupon bond under `dr = a(b - r)dt + sigma dW`: a mean
-  reversion speed, b the long-run rate. Gaussian, tractable, and
-  honest about its flaw: rates can go negative -- post-2015, a feature
-  as much as a bug. `rates/ShortRateModels.java` (vasicekBond).
-- `r <- b + (r - b) e^{-a dt}
-  + sigma sqrt((1 - e^{-2a dt})/(2a)) z` -- the EXACT Vasicek
-  transition (Gaussian, no discretization error): simulate with any
-  step size without bias. Pitfall: naive Euler on the same SDE has
-  O(dt) bias for free -- use the exact step when it exists.
-  `rates/ShortRateModels.java` (vasicekStep).
+  `A(T) = (B - T)(b - sigma^2/(2a^2)) - sigma^2 B^2/(4a)`. The Vasicek
+  zero-coupon bond under `dr = a(b - r)dt + sigma dW`, with a the mean
+  reversion speed and b the long-run rate. Gaussian and tractable; rates
+  can go negative. `rates/ShortRateModels.java` (vasicekBond); Vasicek
+  (1977).
+- `r <- b + (r - b) e^{-a dt} + sigma sqrt((1 - e^{-2a dt})/(2a)) z`. The
+  exact Vasicek transition (Gaussian, no discretisation error), so any
+  step size is unbiased; Euler on the same SDE has O(dt) bias.
+  `rates/ShortRateModels.java` (vasicekStep); Glasserman (2004), section
+  3.3.
 - `P = A(T) e^{-B(T) r}`, `h = sqrt(a^2 + 2 sigma^2)`,
   `B(T) = 2(e^{hT} - 1) / (2h + (a + h)(e^{hT} - 1))`,
-  `A(T) = [2h e^{(a+h)T/2} / (2h + (a+h)(e^{hT}-1))]^{2ab/sigma^2}`
-  -- the CIR bond under `dr = a(b - r)dt + sigma sqrt(r) dW`; the
-  square-root diffusion keeps rates non-negative, strictly positive
-  when the Feller condition `2ab >= sigma^2` holds. Simulation uses
-  full-truncation Euler (vol sourced from max(r, 0)) so a slightly
-  negative discrete path never produces NaN vol.
-  `rates/ShortRateModels.java` (cirBond, cirFeller, cirStep).
+  `A(T) = [2h e^{(a+h)T/2} / (2h + (a+h)(e^{hT}-1))]^{2ab/sigma^2}`. The
+  CIR bond under `dr = a(b - r)dt + sigma sqrt(r) dW`; the square-root
+  diffusion keeps rates non-negative, and strictly positive when the
+  Feller condition `2ab >= sigma^2` holds. Simulation uses full-truncation
+  Euler (vol taken from max(r, 0)), so a slightly negative discrete path
+  never produces a NaN vol. `rates/ShortRateModels.java` (cirBond,
+  cirFeller, cirStep); Cox, Ingersoll and Ross (1985); Lord, Koekkoek and
+  van Dijk (2010) for full truncation.
 - `P(t,T) = [P(0,T)/P(0,t)]
   * exp(B (f(0,t) - r) - sigma^2 B^2 (1 - e^{-2at})/(4a))`,
-  `B = (1 - e^{-aT})/a` -- Hull-White: Vasicek with the drift fitted
-  so the model reprices TODAY'S curve exactly (at t = 0 with
-  r = f(0,0) this returns the curve's own discount factor). No
-  explicit theta(t) is needed for bond pricing -- the curve plus a
-  Gaussian convexity adjustment is the whole formula.
-  `rates/ShortRateModels.java` (hullWhiteBond,
-  instantaneousForward).
+  `B = (1 - e^{-a(T-t)})/a`. Hull-White: Vasicek with the drift fitted so
+  the model reprices today's curve exactly (at t = 0 with r = f(0,0) it
+  returns the curve's own discount factor). No explicit theta(t) is needed
+  for bond pricing. `rates/ShortRateModels.java` (hullWhiteBond,
+  instantaneousForward); Hull and White (1990); Brigo and Mercurio (2006),
+  section 3.3.
 - `z(t) = b0 + b1 f1(t/l1) + b2 f2(t/l1) + b3 f2(t/l2)`,
-  `f1(x) = (1 - e^{-x})/x`, `f2(x) = f1(x) - e^{-x}` -- Svensson:
-  Nelson-Siegel plus a SECOND hump, the form central banks publish
-  (the ECB daily curve is exactly this). For fixed lambdas the model
-  is linear in the betas -- an exact OLS solve per grid node, no
-  local-minimum roulette; with b3 = 0 it IS Nelson-Siegel, so it
-  never fits worse in-sample. `rates/Svensson.java` (fit).
+  `f1(x) = (1 - e^{-x})/x`, `f2(x) = f1(x) - e^{-x}`. Svensson:
+  Nelson-Siegel plus a second hump, the form several central banks
+  publish. For fixed lambdas the model is linear in the betas, so each
+  grid node is an exact least-squares solve; with b3 = 0 it is
+  Nelson-Siegel, so it never fits worse in sample.
+  `rates/Svensson.java` (fit); Svensson (1994).
 - `cap = sum_i Black76call(f_i, K, sigma, t_{i-1})`,
-  `f_i = (DF(t_{i-1})/DF(t_i) - 1)/tau` -- a cap is a strip of
-  independent caplets, each a Black-76 call on that period's SIMPLE
-  forward rate, fixing at the period start. Pitfall: the first period
-  is already fixed at T = 0, so its caplet carries no optionality --
-  the code includes it at discounted intrinsic value.
-  `rates/RatesOptions.java` (cap, floor).
+  `f_i = (DF(t_{i-1})/DF(t_i) - 1)/tau`. A cap is a strip of caplets,
+  each a call on that period's simple forward rate, fixing at the period
+  start. The first period is already fixed at T = 0, so the code includes
+  it at discounted intrinsic value. `RatesOptions.VolModel` switches the
+  caplet model to shifted lognormal or normal. `rates/RatesOptions.java`
+  (cap, floor); Black (1976), Brigo and Mercurio (2006), section 1.5.
 
-**Curve and bond mechanics**
+**Day counts, curves and bonds**
 
+- ACT/360: `days / 360`; ACT/365F: `days / 365`; 30/360 (bond basis):
+  `[360 (Y2-Y1) + 30 (M2-M1) + (D2-D1)] / 360` with the US day-31 rules;
+  30E/360: both day-31s become 30; 30E/360 ISDA: also month-end February
+  becomes 30, except a February termination date; ACT/ACT ISDA: days in
+  each calendar year over that year's length. `rates/DayCount.java`
+  (`THIRTY_E_360`, `THIRTY_E_360_ISDA`, `ACT_ACT_ISDA`); ISDA 2006
+  Definitions, section 4.16.
+- `ACT/ACT ICMA = days(start, end) / (frequency * days(periodStart,
+  periodEnd))`, with [periodStart, periodEnd) the regular coupon period
+  containing the accrual. A full regular period is exactly 1/frequency.
+  `DayCount.actActIcma(start, end, periodStart, periodEnd, frequency)`;
+  the two-date `yearFraction` throws for this convention because it needs
+  the period. ICMA Rule 251; ISDA 2006 Definitions, section 4.16(c).
+- `BUS/252 = business days in [start, end) / 252`. The Brazilian
+  convention. `DayCount.bus252(calendar, start, end)`; ANBIMA.
 - `DF(t) = e^{-z(t) t}`;
-  `f(t1, t2) = (z(t2) t2 - z(t1) t1) / (t2 - t1)` -- discount factor
-  and the implied continuously-compounded forward between two tenors:
-  the market's own break-even rate for the future period, no forecast
-  involved. Pitfall: linear interpolation on zero rates leaves small
-  forward-rate kinks at the pillars -- known wart, stated.
-  `rates/YieldCurve.java` (discountFactor, forwardRate).
+  `f(t1, t2) = (z(t2) t2 - z(t1) t1) / (t2 - t1)`. Discount factor and the
+  implied continuously compounded forward between two tenors, the
+  market's own break-even rate for the future period. Linear
+  interpolation on zero rates leaves small forward kinks at the pillars.
+  `rates/YieldCurve.java` (discountFactor, forwardRate); Hagan and West
+  (2006).
 - `DF_n = (1 - parRate_n * A_{n-1}) / (1 + parRate_n)`,
-  `A_{n-1} = sum_{i<n} DF_i` -- the par-swap bootstrap step: walk
-  quotes shortest to longest, each pillar solving the ONE discount
-  factor that reprices that quote given the factors already solved.
-  The result reprices every input exactly -- the definition of a
-  usable curve. `rates/YieldCurve.java` (bootstrapAnnualParSwaps).
-- `price = sum_{i=1..n} c/(1 + y/f)^i + F/(1 + y/f)^n` -- the bond
-  pricing sum from a yield: c the periodic coupon, F face, y annual
-  yield, f compounding frequency. Yield from price inverts this by
-  root search; the map is monotone in y, so the inverse is unique --
-  which is exactly why "the" yield exists.
-  `rates/BondPricer.java` (priceFromYield, yieldToMaturity).
-- `dirty = clean + accrued`,
-  `accrued = coupon * fractionOfPeriodElapsed` -- the invoice
-  arithmetic: bonds QUOTE clean but SETTLE dirty. Pitfall: comparing
-  a quoted (clean) price against a curve-discounted (dirty) PV
-  without the accrued adjustment creates a phantom arbitrage every
+  `A_{n-1} = sum_{i<n} DF_i`. The annual par-swap bootstrap step: walk the
+  quotes shortest to longest, each pillar solving the one discount factor
+  that reprices its quote given the factors already solved. The result
+  reprices every input exactly. `rates/YieldCurve.java`
+  (bootstrapAnnualParSwaps); Hagan and West (2006).
+- `price = sum_{i=1..n} c/(1 + y/f)^i + F/(1 + y/f)^n`. The bond price at
+  a coupon date from a yield (c the periodic coupon, F face, y the annual
+  yield, f the frequency). The map is monotone in y, so the yield
+  `yieldToMaturity` finds by root search is unique.
+  `rates/BondPricer.java` (priceFromYield, yieldToMaturity); Fabozzi.
+- `P_dirty = sum_{k=0}^{N-1} C/(1 + y/f)^{k + w} + F/(1 + y/f)^{N-1+w}`,
+  `C = F c / f`, `w = 1 - elapsed fraction of the current period`. The
+  street convention between coupon dates: round coupons, the elapsed
+  fraction by ACT/ACT ICMA (or the bond's 30/360 variant), and
+  discounting on unadjusted coupon dates. It reproduces Microsoft Excel's
+  published PRICE and YIELD examples. `BondPricer.dirtyPrice(face,
+  couponRate, frequency, settlement, maturity, yield, dayCount[,
+  endOfMonth])`, `yieldFromCleanPrice`; SIFMA *Standard Formulas*,
+  section A.
+- `dirty = clean + accrued`, `accrued = F (c/f) * elapsed fraction of the
+  period`. Bonds quote clean and settle dirty; comparing a clean quote
+  with a curve-discounted (dirty) PV creates a phantom arbitrage every
   coupon period. `rates/BondPricer.java` (dirtyPrice, cleanPrice,
-  accruedInterest).
+  accruedInterest); Fabozzi.
 - `KRD_i = [P(z_i - 1bp) - P(z_i + 1bp)] / 2`;
-  `sum_i KRD_i ~ parallel DV01` -- key-rate DV01s: bump ONE curve
-  node, reprice, central difference; the vector is the hedging recipe
-  and its sum recovers the parallel risk (a consistency check the
-  tests pin). Curves rarely move in parallel -- a single DV01 hides
-  WHERE the risk lives. `rates/KeyRateDurations.java` (keyRateDv01s,
-  parallelDv01).
+  `sum_i KRD_i ~ parallel DV01`. Key-rate DV01s: bump one curve node,
+  reprice, take the central difference. The vector is the hedging recipe
+  and its sum recovers the parallel risk, a consistency check the tests
+  pin. `rates/KeyRateDurations.java` (keyRateDv01s, parallelDv01); Ho
+  (1992).
 
 **Credit and counterparty**
 
-- `riskyAnnuity = sum_i dt DF(t_i) Q(t_i) + accrual-on-default` --
-  the PV of 1 unit per year paid while the name survives (quarterly
-  grid, half-period accrual on default): the credit desk's spread
-  DV01, the PnL per 1bp of spread move. Every CDS number divides by
-  it. `credit/CdsPricer.java` (riskyAnnuity).
-- Hazard bootstrap: per pillar, solve h in `upfront(h) = 0` by
-  bisection on [1e-9, 10] given all shorter pillars -- the credit
-  analogue of the curve bootstrap, producing piecewise-constant
-  hazards that reprice every quoted CDS exactly. A quote no hazard
-  can explain THROWS rather than returning the bracket bound -- a
-  distressed curve deserves an error, not a silent 1000% hazard.
-  `credit/CreditCurve.java` (bootstrap).
-- `CVA = LGD * sum_i EE(t_i) [Q(t_{i-1}) - Q(t_i)] DF(t_i)` -- the
-  price of the counterparty: expected exposure per bucket, times the
-  probability of defaulting IN that bucket, discounted, times loss
-  given default. Assumes exposure and default are independent -- no
-  wrong-way risk, which UNDERSTATES CVA exactly when exposure grows
-  as the counterparty weakens. `credit/CvaApproximator.java` (cva).
-- `exposure = max(0, netMtm)
-  + (0.4 + 0.6 NGR) sum |notional| addOn(tenor)` -- the
-  current-exposure-method total exposure: net current
-  exposure per netting set plus NGR-scaled BIS-style notional add-ons by tenor
-  bucket (FX: 1% under 1y, 5% for 1-5y, 7.5% beyond). Crude by
-  construction -- an add-on table cannot see offsetting trades'
-  correlation. `risk/CounterpartyExposureTracker.java`
-  (currentExposure, potentialFutureExposure, addOnFactor).
+- `riskyAnnuity = sum_i dt DF(t_i) Q(t_i) + accrual-on-default`. The PV
+  of 1 a year paid while the name survives (quarterly grid, half-period
+  accrual on default): the credit desk's spread DV01.
+  `credit/CdsPricer.java` (riskyAnnuity); O'Kane (2008), chapter 6.
+- Hazard bootstrap: per pillar, solve h in `upfront(h) = 0` by bisection
+  on [1e-9, 10] given all shorter pillars. The credit analogue of the
+  curve bootstrap, producing piecewise-constant hazards that reprice every
+  quoted CDS. A quote no hazard can explain throws instead of returning
+  the bracket bound. `credit/CreditCurve.java` (bootstrap); O'Kane (2008),
+  chapter 7.
+- `CVA = LGD * sum_i EE(t_i) [Q(t_{i-1}) - Q(t_i)] DF(t_i)`. Expected
+  exposure per bucket, times the probability of default in that bucket,
+  discounted, times loss given default. It assumes exposure and default
+  are independent, so it has no wrong-way risk and understates CVA when
+  exposure grows as the counterparty weakens.
+  `credit/CvaApproximator.java` (cva); Gregory, *Counterparty Credit Risk
+  and Credit Value Adjustment* (2012).
+- `exposure = max(0, netMtm) + (0.4 + 0.6 NGR) sum |notional| addOn(tenor)`.
+  The current-exposure-method total: net current exposure per netting set
+  plus NGR-scaled notional add-ons by tenor bucket (FX: 1% under 1y, 5%
+  for 1 to 5y, 7.5% beyond). An add-on table cannot see the correlation
+  of offsetting trades. `risk/CounterpartyExposureTracker.java`
+  (currentExposure, potentialFutureExposure, addOnFactor); Basel
+  Committee, current exposure method (1995 netting amendment).
 
 **Risk engines**
 
-- `histVaR = -quantile(P&L, 1 - c)` (floored at 0) -- historical VaR:
-  replay actual factor-return rows through the book's exposures and
-  read the empirical loss quantile; no distribution assumed, exactly
-  as fat-tailed as the sample was. Pitfall: it cannot see a loss
-  larger than the window contained -- calm windows produce brave VaRs.
-  `risk/RiskMetrics.java` (historicalVar), `risk/VarEngine.java`
-  (historicalVar).
-- `ES = mean(losses > VaR)` -- historical expected shortfall: the
-  average of the tail BEYOND the VaR quantile, the answer to "how bad
-  is bad". ES is subadditive where VaR is not, which is why FRTB
-  replaced VaR with ES as the capital measure. `risk/RiskMetrics.java`
-  (expectedShortfall, conditionalVar), `risk/VarEngine.java`.
-- `dx = L z`, `L L' = Sigma`, `P&L = delta' dx` -- Monte Carlo VaR:
-  Cholesky-correlated Gaussian factor draws through the exposure map;
-  converges to delta-normal for a linear book (tested), and exists so
-  the same harness can price non-linear books by full revaluation.
-  `risk/VarEngine.java` (monteCarloVar, fullRevaluationVar).
-- `P&L = delta' dx + (1/2) dx' Gamma dx` -- the delta-gamma expansion
-  of book P&L: the quadratic term is what makes a short-gamma book's
-  loss tail fatter than any Gaussian says; its skew feeds the
-  Cornish-Fisher quantile. Pitfall: delta-gamma is still a LOCAL
-  expansion -- a barrier book's cliff risk needs full revaluation.
+- `VaR = L_(ceil(c n))`, the lower empirical quantile of the loss sample
+  `L_(1) <= ... <= L_(n)`. Historical VaR: replay actual factor-return
+  rows through the book's exposures and read the empirical loss quantile.
+  It cannot see a loss larger than the window contained.
+  `risk/TailRisk.java`, `risk/VarEngine.java` (historicalVar);
+  `risk/RiskMetrics.historicalVar` uses the interpolated return
+  percentile, floored at 0. Jorion, *Value at Risk* (2007), chapter 10.
+- `ES = (L_(n) + ... + L_(n-k+1) + (w - k) L_(n-k)) / w`,
+  `w = (1 - c) n`, `k = floor(w)`. The Acerbi-Tasche estimator of
+  expected shortfall: the mean of the worst `(1-c) n` losses, with a
+  fractional weight on the boundary observation. It never falls below
+  VaR; losses 1 to 1000 at 97.5% give ES = 988.0. One estimator is shared
+  by `VarEngine`, `FrtbEs.es975`, `RiskMetrics.expectedShortfall` and
+  `conditionalVar`, `SimulationResult` and `HedgingErrorDistribution`.
+  `risk/TailRisk.java`; Acerbi and Tasche (2002), Proposition 4.1.
+- `dx = L z`, `L L' = Sigma`, `P&L = delta' dx`. Monte Carlo VaR:
+  correlated Gaussian factor draws through the exposure map. It converges
+  to delta-normal for a linear book, and the same harness revalues
+  non-linear books in full. The Cholesky factor is
+  `PsdMatrices.choleskyPsd`, which accepts rank-deficient matrices and
+  rejects indefinite ones. `risk/VarEngine.java` (monteCarloVar,
+  fullRevaluationVar); Glasserman (2004), section 9.1.
+- Filtered historical simulation: divide each historical return by its
+  EWMA volatility on that day, multiply by today's volatility, then take
+  the empirical quantile. `VarEngine.filteredHistoricalVar`; Barone-Adesi,
+  Giannopoulos and Vosper (1999); Hull and White (1998).
+- `P&L = delta' dx + (1/2) dx' Gamma dx`. The delta-gamma expansion: the
+  quadratic term makes a short-gamma book's loss tail fatter than a
+  Gaussian, and its skew feeds the Cornish-Fisher quantile. It is still a
+  local expansion; a barrier book needs full revaluation.
+  `CentralRiskBook.report` uses it for its VaR and ES.
   `risk/VarEngine.java` (deltaGammaVar, deltaGammaEs),
-  `risk/StressTester.java` (scenarioPnl).
-- `incrVaR = VaR(book + position) - VaR(book)` -- incremental VaR:
-  the honest price of ADDING a position, which differs from its
-  component VaR (the Euler share of what is already there). Component
-  answers "who owns the risk"; incremental answers "what does this
-  trade cost" -- confusing the two misprices hedges.
-  `risk/ComponentVar.java` (incremental, allocate).
-- `ES = sqrt( sum_j [ES_j sqrt((LH_j - LH_{j-1})/10)]^2 )` -- the
-  FRTB liquidity-horizon cascade (MAR33): base 10-day ES scaled up by
-  how long each factor class takes to exit under stress (10 to 120
-  days), aggregated in quadrature over the nested factor subsets.
-  `risk/FrtbEs.java` (liquidityHorizonEs, es975).
-- `IMCC = ES_current * (ES_stressed,reduced / ES_current,reduced)` --
-  FRTB stress calibration: anchor today's ES to the worst historical
-  period, using the reduced factor set observable in both windows as
-  the bridge. The ratio is FLOORED at 1 (MAR33.6) -- a stressed period
-  calmer than today must never discount capital.
-  `risk/FrtbEs.java` (stressCalibratedEs).
+  `risk/StressTester.java` (scenarioPnl); Jorion (2007), chapter 15.
+- `incrVaR = VaR(book + position) - VaR(book)`. Incremental VaR, the
+  cost of adding a position, which differs from its component VaR (the
+  Euler share of what is already there). `risk/ComponentVar.java`
+  (incremental, allocate); Jorion (2007), chapter 7.
+- `ES = sqrt( sum_j [ES_j sqrt((LH_j - LH_{j-1})/10)]^2 )`. The FRTB
+  liquidity-horizon cascade: base 10-day ES scaled up by how long each
+  factor class takes to exit under stress (10 to 120 days), aggregated
+  in quadrature over the nested factor subsets. `risk/FrtbEs.java`
+  (liquidityHorizonEs, es975); BCBS MAR33.4.
+- `ES = ES_R,S * max(1, ES_F,C / ES_R,C)`, with the check
+  `ES_R,C >= 0.75 ES_F,C`. FRTB stressed calibration: ES of the reduced
+  factor set in the stress period, scaled up by the ratio of full-set to
+  reduced-set ES in the current period, never scaled down. A reduced set
+  that explains less than 75% of current full-set ES is rejected.
+  `FrtbEs.stressCalibratedEs`, `FrtbEs.MIN_REDUCED_SET_COVERAGE`; BCBS
+  MAR33.5 to MAR33.7.
 - `dx* = -(L / (delta' Sigma delta)) Sigma delta`;
-  `sigmas = L / sqrt(delta' Sigma delta)` -- reverse stress: the
-  MOST PROBABLE factor move that produces target loss L on a linear
-  book lies along Sigma delta, and its Mahalanobis distance says how
-  implausible the breaking move is. A book broken by a 2-sigma move
-  has a problem today. `risk/StressTester.java` (reverseStress).
+  `sigmas = L / sqrt(delta' Sigma delta)`. Reverse stress: the most
+  probable factor move producing target loss L on a linear book lies
+  along `Sigma delta`, and its Mahalanobis distance says how implausible
+  that move is. `risk/StressTester.java` (reverseStress); Breuer,
+  Jandačka, Rheinberger and Summer (2009).
 
 **Model validation and dependence**
 
-- `LR_pof = -2 ln[ (1-p)^{n-x} p^x / ((1-x/n)^{n-x} (x/n)^x) ]` --
-  Kupiec proportion-of-failures: are there as many VaR exceptions x
-  in n days as the confidence promised (p = 1 - c)? Chi-squared(1),
-  two-sided -- too FEW exceptions also rejects (an over-conservative
-  model misallocates capital). `risk/VarBacktest.java` (test).
-- Christoffersen independence: LR test that exceptions do not follow
-  exceptions (first-order Markov), chi-squared(1); conditional
-  coverage adds it to Kupiec, chi-squared(2) -- a model right on
-  average but wrong in crises passes POF and fails HERE, which is
-  the failure mode that matters. `risk/VarBacktest.java` (test).
+- `LR_pof = -2 ln[ (1-p)^{n-x} p^x / ((1-x/n)^{n-x} (x/n)^x) ]`. Kupiec
+  proportion of failures: does the count of VaR exceptions x in n days
+  match the promised rate p = 1 - c? Chi-squared(1), two-sided, so too few
+  exceptions also rejects. `risk/VarBacktest.java` (test); Kupiec (1995).
+- Christoffersen independence: an LR test that exceptions do not follow
+  exceptions (first-order Markov), chi-squared(1); conditional coverage
+  adds it to Kupiec, chi-squared(2). A model right on average but wrong in
+  crises passes the first test and fails this one. `risk/VarBacktest.java`
+  (test); Christoffersen (1998).
+- `Z2 = 1 - sum_t L_t 1{L_t > VaR_t} / (T (1-c) ES_t)`. The
+  Acerbi-Szekely unconditional ES backtest: E[Z2] = 0 under a correct ES
+  forecast, and negative values mean realised tail losses exceed it. For
+  T = 250 at 97.5% the published thresholds are -0.70 (5%) and -1.80
+  (0.01%). `VarBacktest.acerbiSzekelyZ2`; Acerbi and Szekely (2014).
 - PLAT: Spearman correlation and Kolmogorov-Smirnov statistic between
-  hypothetical and risk-theoretical daily P&L; GREEN needs corr >
-  0.80 and KS < 0.09 (MAR32) -- the exam a risk model must pass to
-  keep internal-model approval. Failing usually means missing risk
-  factors, not bad math. `risk/PnlAttribution.java` (test,
-  ksStatistic).
-- `HHI = sum_i share_i^2`, `effectiveN = 1 / HHI` -- concentration:
-  equal weights give HHI = 1/N, a single name gives 1. Effective N is
-  the honest diversification count -- a 50-name book with HHI 0.10
-  is a 10-name book wearing a costume. `risk/ConcentrationRisk.java`
-  (herfindahlIndex, effectivePositions).
-- `Sigma = V L V'` -- PCA: eigenvectors of the covariance matrix,
-  ordered by explained variance (cyclic Jacobi, exact for symmetric
-  matrices). On a yield curve the first three components ARE level,
-  slope and curvature. Pitfall: components are statistical, not
-  causal -- they rotate when the sample changes. `risk/Pca.java`.
+  hypothetical and risk-theoretical daily P&L; green needs correlation
+  above 0.80 and KS below 0.09. `risk/PnlAttribution.java` (test,
+  ksStatistic); BCBS MAR32.
+- `HHI = sum_i share_i^2`, `effectiveN = 1 / HHI`. Concentration: equal
+  weights give HHI = 1/N, a single name gives 1. A 50-name book with HHI
+  0.10 behaves like 10 equal names. `risk/ConcentrationRisk.java`
+  (herfindahlIndex, effectivePositions); Herfindahl (1950).
+- `Sigma = V L V'`. PCA: eigenvectors of the covariance matrix ordered by
+  explained variance (cyclic Jacobi). On a yield curve the first three
+  components are level, slope and curvature. Components are statistical,
+  not causal, and rotate when the sample changes. `risk/Pca.java`,
+  `PsdMatrices.symmetricEigen`; Litterman and Scheinkman (1991); Golub and
+  Van Loan (2013), section 8.5.
+- Nearest correlation matrix: alternating projections between the PSD
+  cone and the unit-diagonal set, with Dykstra's correction, for a
+  pairwise-estimated matrix that is not positive semidefinite.
+  `PsdMatrices.nearestCorrelation`; `nearestPsd` is the Frobenius-nearest
+  PSD matrix. Higham (2002); Higham (1988).
 - `rho_S = Pearson(ranks)`; `tau = P(concordant) - P(discordant)`;
-  `rho_pearson = sin(pi tau / 2)` -- the rank-dependence family:
-  robust to outliers and any monotone transform, and the sine
-  identity converts Kendall's tau into an elliptical copula
-  correlation without distributional damage. `risk/Dependence.java`
-  (spearman, kendallTau, pearsonFromKendall).
-- `u = N(L z)` componentwise, `L L' = correlation` -- the Gaussian
-  copula sampler: correlated uniforms to feed through any marginals'
-  inverse CDFs. It has NO tail dependence -- joint extremes are
-  asymptotically independent, the property famously blamed for
-  pre-2008 CDO models; the Student-t copula with few df restores
-  clustered extremes. `risk/GaussianCopula.java`.
-- `z_robust = (x - median) / (1.4826 * MAD)` -- the robust z-score:
-  median/MAD ignores up to half the sample being contaminated, and
-  1.4826 rescales MAD to stdev units under normality. A detector
-  whose baseline includes the anomalies inflates its own scale and
-  misses exactly what it hunts. `ml/AnomalyDetector.java`
-  (detectQuoteStuffing, detectPriceSpikes).
+  `rho = sin(pi tau / 2)`. The rank-dependence family, unaffected by
+  outliers and monotone transforms; the sine identity maps Kendall's tau
+  to the correlation parameter of an elliptical copula.
+  `risk/Dependence.java` (spearman, kendallTau, pearsonFromKendall);
+  Lindskog, McNeil and Schmock (2003).
+- `u = N(L z)` componentwise, `L L' = correlation`. The Gaussian copula
+  sampler: correlated uniforms to feed through any marginals' inverse
+  CDFs. It has no tail dependence (joint extremes are asymptotically
+  independent); the Student-t copula with few degrees of freedom restores
+  clustered extremes. `sample` and `sampleT` take a
+  `java.util.random.RandomGenerator`. `risk/GaussianCopula.java`; Li
+  (2000); McNeil, Frey and Embrechts (2015), chapter 7.
+- `z_robust = (x - median) / (1.4826 * MAD)`. The robust z-score: median
+  and MAD tolerate up to half the sample being contaminated, and 1.4826
+  rescales MAD to standard-deviation units under normality.
+  `ml/AnomalyDetector.java` (detectQuoteStuffing, detectPriceSpikes);
+  Rousseeuw and Croux (1993).
 
 **Portfolio construction**
 
-- `w_i (Sigma w)_i = w_j (Sigma w)_j` for all i, j -- the risk-parity
-  (equal risk contribution) condition, solved by multiplicative
-  fixed-point iteration on marginal contributions. Pitfall: ERC says
-  nothing about RETURN -- it is an answer to "no single position
-  dominates risk", not "this is optimal".
+- `min_w w' Sigma w` (optionally `- w' mu / riskAversion`) subject to
+  `1'w = 1`, `mu'w = target` and bounds. Mean-variance as a convex
+  quadratic program, solved exactly by an active-set method, so frontier
+  points hit their target return exactly. `maxSharpe` throws when no
+  asset's expected return exceeds the risk-free rate.
+  `optimization/PortfolioOptimizer.java`,
+  `optimization/ConstrainedPortfolioOptimizer.java`,
+  `optimization/QuadraticProgram.java`; Markowitz (1952); Nocedal and
+  Wright, *Numerical Optimization* (2006), section 16.5.
+- `w_i (Sigma w)_i / w' Sigma w = b_i`. Risk budgeting (equal risk
+  contribution when every b_i = 1/n), solved through Spinu's convex
+  problem `min_x (1/2) x' Sigma x - sum_i b_i ln x_i` over x > 0, whose
+  minimiser satisfies `x_i (Sigma x)_i = b_i`; then `w = x / 1'x`. Damped
+  Newton steps converge in a few iterations, including on nearly
+  collinear assets. Risk parity says nothing about return.
   `optimization/RiskParityOptimizer.java` (equalRiskContribution,
-  riskContributions).
-- `Pi = deltaRA * Sigma w_mkt` -- Black-Litterman equilibrium
-  returns: reverse-optimize the market portfolio under risk aversion
-  deltaRA. The cure for mean-variance hypersensitivity: start from
-  returns the MARKET already implies instead of noisy estimates.
-  `optimization/BlackLitterman.java` (impliedEquilibriumReturns).
-- `mu = [(tau Sigma)^{-1} + P' Om^{-1} P]^{-1}
-  [(tau Sigma)^{-1} Pi + P' Om^{-1} Q]` -- the Black-Litterman
-  posterior: blend equilibrium Pi with views Q (pick matrix P, view
-  variances Om; smaller Om = more confident). Pitfall: tau and Om are
-  in the SAME units fight -- scaling one against the other silently
-  reweights every view. `optimization/BlackLitterman.java`
-  (posteriorReturns).
+  riskBudget, riskContributions); Spinu (2013); Maillard, Roncalli and
+  Teiletche (2010).
+- `Pi = deltaRA * Sigma w_mkt`. Black-Litterman equilibrium returns:
+  reverse-optimise the market portfolio under risk aversion deltaRA, so
+  the starting point is the returns the market already implies.
+  `optimization/BlackLitterman.java` (impliedEquilibriumReturns); Black
+  and Litterman (1992).
+- `mu = Pi + tau Sigma P' (P tau Sigma P' + Om)^{-1} (Q - P Pi)`. The
+  Black-Litterman posterior mean in view space (pick matrix P, views Q,
+  view covariance Om; smaller Om means more confidence). This form is
+  algebraically equal to the textbook precision-weighted form but does not
+  need Sigma to be invertible. `posterior` also returns the covariance of
+  the mean and `Sigma + M`; `heLittermanOmega` sets
+  `Om = diag(P tau Sigma P')`. Tau and Om are in the same units, so
+  scaling one against the other reweights every view.
+  `optimization/BlackLitterman.java` (posteriorReturns, posterior); He and
+  Litterman (1999); Meucci (2010).
+- `min_w -alpha'w + gamma w' Sigma w + lambda ||w - w0||_1` subject to
+  position and trade boxes and neutrality equalities. Turnover-aware
+  optimisation, solved by ADMM. `alpha/TurnoverAwareOptimizer.java`; Boyd,
+  Parikh, Chu, Peleato and Eckstein (2011).
 - `w_i = (1/sigma_i) / sum_j (1/sigma_j)`;
-  `leverage = targetVol / currentVol` -- inverse-volatility weights
-  and volatility targeting: the two simplest risk-based sizing rules,
-  and the backbone of "risk premia" products. Pitfall: vol targeting
-  sells into vol spikes by construction -- it is short crash
-  convexity. `backtest/portfolio/PositionSizing.java`
-  (inverseVolatilityWeights, volatilityTargetLeverage).
-- `qty = equity * riskFraction / |entry - stop|` -- fixed-fractional
+  `leverage = targetVol / currentVol`. Inverse-volatility weights and
+  volatility targeting, the two simplest risk-based sizing rules. Vol
+  targeting sells into vol spikes by construction.
+  `backtest/portfolio/PositionSizing.java` (inverseVolatilityWeights,
+  volatilityTargetLeverage); Moreira and Muir (2017).
+- `qty = equity * riskFraction / |entry - stop|`. Fixed-fractional
   sizing: hitting the stop loses exactly riskFraction of equity.
-  The formula every prop shop teaches first, and the reason "where
-  is your stop" precedes "how big is your position".
-  `backtest/portfolio/PositionSizing.java`
-  (fixedFractionalQuantity).
-- `f = W - (1 - W)/R` -- the discrete Kelly fraction from win rate W
-  and payoff ratio R (avgWin/avgLoss): the growth-optimal bet from a
-  trade record. A Kelly above ~0.25 usually means the sample is too
-  small or the wins too lucky -- treat it as an overfit alarm, not a
-  size. `backtest/TradeAnalytics.java` (analyze).
+  `backtest/portfolio/PositionSizing.java` (fixedFractionalQuantity);
+  Vince (1990).
+- `f* = argmax_{f in [0,1]} sum_i ln(1 + f r_i)` over per-trade returns
+  r_i. The empirical Kelly fraction of a trade record: the fraction of
+  equity per trade that maximises realised log growth. The fixed-odds form
+  `W - (1 - W)/R` is not used, because currency P&L of a compounding book
+  is not a fixed-odds bet. A Kelly above about 0.25 usually means the
+  sample is too small or the wins too lucky. `backtest/TradeAnalytics.java`
+  (analyze); Kelly (1956), Thorp (2006), section 2.
 
 **Performance and trade analytics**
 
-- `CAGR = (end/start)^{periodsPerYear/(n-1)} - 1` -- the compound
-  annual growth rate off an equity curve of n points. Pitfall: CAGR
-  and mean return diverge by the variance drag `sigma^2/2` -- quoting
-  arithmetic mean as "annual return" flatters every volatile
-  strategy. `backtest/PerformanceAnalytics.java` (compute).
-- `Calmar = CAGR / maxDrawdown` -- return per unit of worst pain; the
-  allocator's ratio for anything with redemption risk. Pitfall: max
-  drawdown is a single order statistic -- Calmar on a short track
-  record is mostly noise. `backtest/PerformanceAnalytics.java`
-  (compute).
-- `profitFactor = grossProfit / grossLoss` -- dollars won per dollar
-  lost, on realized trades; below ~1.2 the edge rarely survives
-  costs. Complements win rate: a 90% win rate with profit factor 0.9
-  is a losing strategy that feels like winning.
-  `backtest/PerformanceAnalytics.java` (compute).
-- `expectancy = W * avgWin - L * avgLoss` (L the loss rate;
-  scratch trades count in neither);
-  `payoff = avgWin / avgLoss` -- the per-trade edge and the trade
-  signature. A 40% win rate needs payoff above 1.5 for positive
-  expectancy -- the arithmetic that kills most "high win rate"
-  systems whose few losses are huge. `backtest/TradeAnalytics.java`
-  (analyze).
-- `downsideDev = sqrt( mean( min(r - MAR, 0)^2 ) )` -- the Sortino
-  denominator: only returns below the minimum acceptable return
-  count as risk. Pitfall: with few below-MAR observations the
-  estimate is fragile -- a Sortino three times the Sharpe often just
-  means a short sample. `risk/RiskMetrics.java` (downsideDeviation,
-  sortinoRatio).
+- `CAGR = (end/start)^{periodsPerYear/(n-1)} - 1`. Compound annual growth
+  off an equity curve of n points. CAGR and the arithmetic mean return
+  differ by roughly the variance drag `sigma^2/2`, so quoting the mean
+  flatters volatile strategies. `backtest/PerformanceAnalytics.java`
+  (compute); Bacon, *Practical Portfolio Performance Measurement and
+  Attribution* (2008).
+- `Calmar = CAGR / maxDrawdown`. Return per unit of worst drawdown; max
+  drawdown is a single order statistic, so on a short record Calmar is
+  mostly noise. `backtest/PerformanceAnalytics.java`; Young (1991).
+- `profitFactor = grossProfit / grossLoss`. Currency won per unit lost on
+  realised trades. A 90% win rate with profit factor 0.9 is a losing
+  strategy. `backtest/PerformanceAnalytics.java`; Bacon (2008).
+- `expectancy = W * avgWin - L * avgLoss` (L the loss rate; scratch trades
+  count in neither); `payoff = avgWin / avgLoss`. The per-trade edge: a
+  40% win rate needs a payoff above 1.5 for positive expectancy.
+  `backtest/TradeAnalytics.java` (analyze); Tharp (1998).
+- `downsideDev = sqrt( mean( min(r - MAR, 0)^2 ) )`. The Sortino
+  denominator: only returns below the minimum acceptable return count as
+  risk. With few observations below MAR the estimate is fragile.
+  `risk/RiskMetrics.java` (downsideDeviation, sortinoRatio); Sortino and
+  Price (1994).
 - `alpha = (mean(r_s) - beta * mean(r_b)) * periods`;
   `TE = stdev(r_s - r_b) * sqrt(periods)`;
-  `upCapture = mean(r_s | r_b > 0) / mean(r_b | r_b > 0)` -- the
-  benchmark-relative family: Jensen alpha (return left after paying
-  for benchmark exposure), tracking error, and capture ratios (the
-  dream profile: up > 1, down < 1).
-  `backtest/BenchmarkComparison.java` (compare).
-- `depth = 1 - trough/peak` per episode; `timeUnderWater =
-  fraction of periods below the running peak` -- drawdown STRUCTURE:
-  duration, not just depth, is what fires clients. An open episode at
-  the end of a backtest (recoveryIndex = -1) is often the honest
-  state of the strategy today. `backtest/DrawdownAnalytics.java`
-  (analyze), `risk/RiskMetrics.java` (maxDrawdown).
+  `upCapture = mean(r_s | r_b > 0) / mean(r_b | r_b > 0)`. Jensen alpha,
+  tracking error and capture ratios.
+  `backtest/BenchmarkComparison.java` (compare); Jensen (1968).
+- `depth = 1 - trough/peak` per episode; `timeUnderWater` is the fraction
+  of periods below the running peak. Drawdown structure: duration as well
+  as depth. An episode still open at the end of a backtest has
+  `recoveryIndex = -1`. `backtest/DrawdownAnalytics.java` (analyze),
+  `risk/RiskMetrics.java` (maxDrawdown); Magdon-Ismail and Atiya (2004).
 
 **Strategy validation and factor research**
 
-- `lambda = ln(w / (1 - w))`, `w = OOS rank of the IS winner /
-  (N + 1)`; `PBO = fraction of combinations with lambda <= 0` --
-  CSCV probability of backtest overfitting: over every symmetric
-  in-sample/out-of-sample block split, how often does the in-sample
-  winner land below the out-of-sample median? Above ~0.5 the
-  selection process is picking noise. PBO judges the PROCESS; the
-  deflated Sharpe judges one track record.
-  `backtest/validation/OverfitProbability.java` (cscv, cscvSharpe).
+- `lambda = ln(w / (1 - w))`, `w = OOS rank of the IS winner / (N + 1)`;
+  `PBO = fraction of combinations with lambda <= 0`. CSCV probability of
+  backtest overfitting: over every symmetric in-sample/out-of-sample block
+  split, how often does the in-sample winner land below the out-of-sample
+  median? Above about 0.5 the selection process is picking noise.
+  `backtest/validation/OverfitProbability.java` (cscv, cscvSharpe);
+  Bailey, Borwein, López de Prado and Zhu (2017).
 - `train = [0, t0 - h) union [t1 + h + embargo, n)` for test fold
-  [t0, t1), label horizon h -- purged K-fold with embargo: drop every
-  training sample whose label window overlaps a test label window,
-  plus an embargo buffer for serial-correlation echo. Ordinary K-fold
-  on financial data trains on the test answers -- the skill it finds
-  is leakage. `backtest/validation/PurgedKFold.java` (splits).
-- Stationary block bootstrap: resample blocks of geometric mean
-  length L (restart probability 1/L, circular wrap), `L ~ n^{1/3}` as
-  the rule of thumb -- the Sharpe ratio's sampling distribution from
-  one history. An iid bootstrap destroys autocorrelation and
-  UNDERSTATES the uncertainty -- the classic way to be falsely
-  confident. `backtest/validation/BlockBootstrap.java`
-  (sharpeSamples, resample).
-- `VR(q) = Var(q-period returns) / (q * Var(1-period returns))` --
-  the Lo-MacKinlay variance ratio: 1 under a random walk, above 1
-  trending, below 1 mean-reverting, with a z-statistic to separate
-  signal from sampling noise. Run it BEFORE choosing momentum vs
-  reversion -- fitting a mean-reversion model to a random walk is how
-  pairs desks die. `microstructure/VarianceRatio.java` (test).
+  [t0, t1) and label horizon h. Purged K-fold with embargo: drop every
+  training sample whose label window overlaps a test label window, plus
+  an embargo buffer for serial correlation.
+  `backtest/validation/PurgedKFold.java` (splits); López de Prado,
+  *Advances in Financial Machine Learning* (2018), chapter 7.
+- Stationary block bootstrap: resample blocks of geometric mean length L
+  (restart probability 1/L, circular wrap), with `L ~ n^{1/3}` as a rule
+  of thumb. An iid bootstrap destroys autocorrelation and understates the
+  uncertainty. `backtest/validation/BlockBootstrap.java` (sharpeSamples,
+  resample); Politis and Romano (1994).
+- `VR(q) = Var(q-period returns) / (q * Var(1-period returns))`. The
+  Lo-MacKinlay variance ratio: 1 under a random walk, above 1 trending,
+  below 1 mean-reverting, with a z-statistic.
+  `microstructure/VarianceRatio.java` (test); Lo and MacKinlay (1988).
+- `Omega = gamma_0 + 2 sum_{l=1..L} (1 - l/(L+1)) gamma_l`,
+  `gamma_l = (1/n) sum_t (x_t - xbar)(x_{t-l} - xbar)`,
+  `SE(mean) = sqrt(Omega / n)`. Newey-West HAC variance with Bartlett
+  weights. `automaticLag` is the Andrews AR(1) plug-in bandwidth, and
+  `lagFor(x, h)` takes at least `h - 1` for h-bar overlapping windows.
+  `alpha/NeweyWest.java`; Newey and West (1987), Andrews (1991).
 - `IC_t = SpearmanCorr(scores_t, forwardReturns_t)`;
-  `IR = mean(IC)/std(IC)`; `t = mean(IC)/(std(IC)/sqrt(n))` -- the
-  factor-quality trio: per-date rank information coefficient, its
-  consistency, and its significance. Evaluation dates step by the
-  horizon so forward windows do not overlap -- overlapping windows
-  inflate the t-stat through serial correlation, the classic way
-  factor research fools itself. `alpha/SignalEvaluator.java`
-  (evaluate).
-- Fama-MacBeth: per period regress the cross-section of forward
+  `IR = mean(IC)/std(IC)`; `t = mean(IC) / SE_NW`. The factor-quality
+  trio: per-date rank information coefficient, its consistency, and its
+  significance. The IC is computed at every bar, so h-bar forward windows
+  overlap; the t-stat uses the Newey-West standard error at lag
+  `max(h - 1, Andrews)`, and the iid `mean/(std/sqrt(n))` is reported as
+  `naiveTStat` for comparison. `alpha/SignalEvaluator.java` (evaluate);
+  Grinold and Kahn (2000), Newey and West (1987).
+- Fama-MacBeth: in each period regress the cross-section of forward
   returns on exposures (one premium lambda_k per factor per period);
-  `premium = mean_t(lambda_t)`, t-stat from the time series -- each
-  period contributes ONE observation, which absorbs the
-  cross-sectional correlation that wrecks pooled regressions. A
-  significant intercept means returns your factors do not explain.
-  `alpha/FamaMacBeth.java` (fit).
-- `AIC = 2k - 2 ln L`; `BIC = k ln n - 2 ln L` -- the admission
-  charge for parameters (lower is better): AIC for forecasting, BIC
-  for identifying structure. Only comparable across models fitted to
-  the SAME data on the same likelihood scale -- comparing across
-  transformed targets is meaningless and undetectable.
-  `volatility/InformationCriteria.java` (aic, bic).
-- Calendar anomaly t-stats: per-day-of-week and turn-of-month mean
-  returns each carry `t = mean / (std / sqrt(n))` -- because most
-  published calendar effects decayed after publication, and |t| < 2
-  is decoration, not signal. `alpha/CalendarAnomalies.java`
-  (dayOfWeek, turnOfMonth).
+  `premium = mean_t(lambda_t)`, with a Newey-West t-stat on the time
+  series of lambda_t. Each period contributes one observation, which
+  absorbs the cross-sectional correlation that breaks pooled regressions.
+  `alpha/FamaMacBeth.java` (fit); Fama and MacBeth (1973).
+- `AIC = 2k - 2 ln L`; `BIC = k ln n - 2 ln L`. Penalties for parameters
+  (lower is better); only comparable across models fitted to the same
+  data on the same likelihood scale. `volatility/InformationCriteria.java`
+  (aic, bic); Akaike (1974), Schwarz (1978).
+- Calendar anomalies: per-day-of-week and turn-of-month mean returns,
+  each with a Newey-West t-stat (`naiveTStat` keeps the iid version). Most
+  published calendar effects weakened after publication.
+  `alpha/CalendarAnomalies.java` (dayOfWeek, turnOfMonth); McLean and
+  Pontiff (2016).
 
 **Mean reversion and pairs machinery**
 
 - `dx = kappa (theta - x) dt + sigma dW`; AR(1) map
   `x_{t+1} = a + b x_t + eps` with `b = e^{-kappa dt}`;
-  `halfLife = ln(2)/kappa`; `stationary sd = sigma / sqrt(2 kappa)`
-  -- the Ornstein-Uhlenbeck fit behind every pairs trade: half-life
-  is the holding-period estimate, the z-score
-  `(x - theta)/sd_stationary` is the entry trigger. A fitted b >= 1
-  THROWS -- no mean reversion in sample is a refusal, not an
-  infinite half-life. Small-sample OLS bias makes short-sample
-  half-lives optimistic. `microstructure/OrnsteinUhlenbeck.java`
-  (fit, Params.zScore).
-- Engle-Granger: regress `A = a + b B + e`, then ADF (no constant) on
-  the residual; cointegrated at 5% when the ADF t-stat < -3.34
-  (two-variable asymptotics; -3.90 at 1%) -- the statistical license
-  for a pairs trade. High return correlation is NOT enough; the
-  SPREAD must be stationary. `hedging/CointegrationTest.java`
-  (engleGranger, adfTStatistic).
-- State space `[alpha, beta]_t = [alpha, beta]_{t-1} + noise(q)`,
-  observation `y = alpha + beta x + noise(r)` -- the Kalman-filter
-  time-varying hedge ratio: q is how fast you believe the
-  relationship drifts (0 collapses to recursive least squares), r how
-  noisy each print is; only their RATIO matters. A hedge sized off a
-  beta the filter itself distrusts (high betaVariance) is a position,
-  not a hedge. `microstructure/KalmanBeta.java` (onObservation).
-- `h* = cov(asset, hedge) / var(hedge)`;
-  `effectiveness = rho^2` -- the minimum-variance hedge ratio and the
-  fraction of variance it removes. Pitfall: h* fitted on returns
-  hedges RETURNS -- a price-level hedge (cointegration weights) is a
-  different object. `hedging/MinimumVarianceHedge.java` (hedgeRatio,
-  hedgeEffectiveness).
-- `N = (beta_target - beta) * V / (F * multiplier)` -- futures
-  contracts to move a portfolio of value V from beta to beta_target
-  (F the futures price); target 0 for the full hedge. Negative N
-  means sell. `hedging/MinimumVarianceHedge.java`
-  (betaAdjustmentContracts, fullHedgeContracts).
-- `cov_ij <- lambda cov_ij + (1 - lambda) r_i r_j` -- the streaming
-  EWMA covariance matrix (zero-mean convention), kept
-  positive-semidefinite by full-vector rank-1 updates: a sample with
-  ANY non-finite return is dropped whole, because updating only the
-  clean pairs breaks PSD. `microstructure/EwmaCovariance.java`
-  (covariance, minVarianceHedgeRatio, portfolioVariance).
+  `halfLife = ln(2)/kappa`; `stationary sd = sigma / sqrt(2 kappa)`. The
+  Ornstein-Uhlenbeck fit behind a pairs trade: half-life estimates the
+  holding period, and `(x - theta)/sd_stationary` is the entry signal. A
+  fitted b >= 1 throws. Small-sample OLS bias makes short-sample
+  half-lives optimistic. `microstructure/OrnsteinUhlenbeck.java` (fit,
+  Params.zScore); Uhlenbeck and Ornstein (1930).
+- Engle-Granger: regress `A = a + b B + e`, then run an ADF test (no
+  constant) on the residual. The two-argument form uses the asymptotic
+  two-variable critical values (-3.34 at 5%, -3.90 at 1%);
+  `engleGranger(a, b, lags)` adds ADF lags and MacKinnon's finite-sample
+  critical values (`criticalValue(level, T)`). High return correlation is
+  not enough; the spread must be stationary.
+  `hedging/CointegrationTest.java` (engleGranger, adfTStatistic); Engle
+  and Granger (1987), MacKinnon (2010).
+- State `[alpha, beta]_t = [alpha, beta]_{t-1} + noise(q)`, observation
+  `y = alpha + beta x + noise(r)`. The Kalman-filter time-varying hedge
+  ratio: q is how fast the relationship drifts (0 gives recursive least
+  squares), r how noisy each print is, and only their ratio matters.
+  `microstructure/KalmanBeta.java` (onObservation); Kalman (1960).
+- `h* = cov(asset, hedge) / var(hedge)`; `effectiveness = rho^2`. The
+  minimum-variance hedge ratio and the share of variance it removes. A
+  ratio fitted on returns hedges returns; a price-level hedge
+  (cointegration weights) is a different object.
+  `hedging/MinimumVarianceHedge.java` (hedgeRatio, hedgeEffectiveness);
+  Ederington (1979).
+- `N = (beta_target - beta) * V / (F * multiplier)`. Futures contracts to
+  move a portfolio of value V from beta to beta_target (F the futures
+  price); target 0 for a full hedge, and negative N means sell.
+  `hedging/MinimumVarianceHedge.java` (betaAdjustmentContracts,
+  fullHedgeContracts); Hull, chapter on hedging with futures.
+- `cov_ij <- lambda cov_ij + (1 - lambda) r_i r_j`. The streaming EWMA
+  covariance (zero-mean convention), kept positive semidefinite by
+  full-vector rank-1 updates; a sample with any non-finite return is
+  dropped whole. `microstructure/EwmaCovariance.java` (covariance,
+  minVarianceHedgeRatio, portfolioVariance); *RiskMetrics Technical
+  Document* (1996).
 
 **Microstructure signals**
 
 - `microprice = I * ask + (1 - I) * bid`,
-  `I = bidSize / (bidSize + askSize)` -- the size-weighted fair
-  value: a heavy bid pushes fair value toward the ASK (the thin side
-  is where price goes). Better short-horizon fair value than the mid;
-  the mid is what the microprice converges to when the book is
-  balanced. `orderbook/BookAnalytics.java` (microprice),
-  `pricing/FairValueEngine.java` (microprice).
+  `I = bidSize / (bidSize + askSize)`. The size-weighted mid: a heavy bid
+  pushes fair value toward the ask. `orderbook/BookAnalytics.java`
+  (microprice), `pricing/FairValueEngine.java` (microprice); Stoikov
+  (2018) discusses this weighted mid and a refined microprice.
 - `QI = (bidSize - askSize) / (bidSize + askSize)`; trade imbalance =
-  decayed signed aggressor volume / decayed total volume -- the two
-  classic next-tick predictors, in [-1, 1]. Pitfall: queue imbalance
-  at the inside says nothing about depth behind it -- a thin +0.9
-  book flips on one cancel. `microstructure/FlowSignals.java`
-  (queueImbalance, tradeImbalance).
-- OFI (Cont-Kukanov-Stoikov, best level): bid price/size increase or
-  ask decrease is buying pressure, the mirror is selling pressure;
-  exponentially time-decayed into a "recent net flow" signal.
-  Pitfall: a one-sided or non-dealable quote must be a signal GAP,
-  not phantom flow -- feed artifacts read as aggressive sweeps
-  otherwise. `microstructure/FlowSignals.java` (ofi, onQuote).
-- `VPIN = (1/n) sum |buyVol - sellVol| / bucketVolume` -- flow
-  toxicity in VOLUME time: trades fill fixed-volume buckets, each
-  scores its absolute imbalance, VPIN averages the last n buckets.
-  Near 0 = balanced two-way flow; toward 1 = one-sided (informed)
-  flow -- famously elevated before the 2010 flash crash.
-  `microstructure/Vpin.java` (vpin).
-- `lambda(t) = mu + sum_{t_i < t} alpha e^{-beta (t - t_i)}` -- the
-  exponential Hawkes self-exciting intensity: each event adds alpha
-  of intensity that decays at beta, so activity breeds activity. The
-  branching ratio `alpha/beta` is the expected children per event --
-  at >= 1 the process is explosive and the constructor refuses it.
-  `microstructure/HawkesIntensity.java` (intensity, burstScore).
-- Lee-Ready: at/above the ask = buy, at/below the bid = sell; at the
-  mid, uptick = buy, downtick = sell, equal price repeats the last
-  call -- the aggressor-classification glue for tapes that do not
-  disclose the initiator. ~85% accuracy is the literature's number,
-  which is why the signals it feeds are decayed averages, not
-  per-trade truths. `microstructure/TradeClassifier.java` (classify).
-- `s = 2 sqrt(-cov(dp_t, dp_{t-1}))` -- Roll's implied effective
-  spread: bid-ask bounce creates negative autocovariance in price
-  CHANGES, and the spread falls out of it. Positive autocovariance
-  (trending sample) returns NaN -- "zero spread" would be a claim,
-  NaN is an honest shrug. `microstructure/LiquidityMeasures.java`
-  (rollSpread).
-- Corwin-Schultz: the spread from two consecutive HIGH-LOW ranges --
-  variance grows with time but the spread does not, so one 2-day
-  range against two 1-day ranges isolates the spread; negative
-  estimates clamp to 0 (standard practice, stated).
-  `microstructure/LiquidityMeasures.java` (corwinSchultzSpread).
-- `Amihud = mean( |r_t| / dollarVolume_t )` -- price impact per
-  currency unit traded, the cross-sectional illiquidity ranker
-  (multiply by 1e6 for the conventional per-million quote). Rank
-  with it; do not mark books with it.
-  `microstructure/LiquidityMeasures.java` (amihudIlliquidity).
-- `P(fill) = exp(-(qtyAhead + orderQty) / expectedTradedQty)` --
-  queue-position fill probability under exponentially distributed
-  level volume: you fill when executions chew through everyone ahead
-  of you plus yourself. Calibrate expectedTradedQty from observed
-  level turnover. `microstructure/QueueModel.java`
-  (fillProbability).
-- `P(touch) = 2 N(-d / (sigma sqrt(T)))` -- the driftless
-  reflection-principle probability the price travels distance d
-  within horizon T; composed with the queue-clearing probability
-  (independence approximation, a mild UNDERestimate since the flow
-  that moves price also eats queues) it scores passive placement away
-  from the touch. `microstructure/FillProbabilityModel.java`
-  (touchProbability, passiveFillProbability).
+  decayed signed aggressor volume / decayed total volume. Two next-tick
+  predictors in [-1, 1]. Queue imbalance at the inside says nothing about
+  depth behind it. `microstructure/FlowSignals.java` (queueImbalance,
+  tradeImbalance); Gould and Bonart (2016).
+- OFI at the best level: a bid price or size increase, or an ask
+  decrease, is buying pressure; the mirror is selling pressure;
+  exponentially time-decayed. A one-sided or non-dealable quote is a gap
+  in the signal, not flow. `microstructure/FlowSignals.java` (ofi,
+  onQuote); Cont, Kukanov and Stoikov (2014).
+- `VPIN = (1/n) sum |buyVol - sellVol| / bucketVolume`. Flow toxicity in
+  volume time: trades fill fixed-volume buckets, each scores its absolute
+  imbalance, and VPIN averages the last n buckets.
+  `microstructure/Vpin.java` (vpin); Easley, López de Prado and O'Hara
+  (2012).
+- `lambda(t) = mu + sum_{t_i < t} alpha e^{-beta (t - t_i)}`. The
+  exponential Hawkes self-exciting intensity. The branching ratio
+  `alpha/beta` is the expected number of children per event; at 1 or
+  above the process is explosive and the constructor refuses it. `fit`
+  calibrates (mu, alpha, beta) by maximum likelihood.
+  `microstructure/HawkesIntensity.java` (intensity, burstScore, fit);
+  Hawkes (1971), Ozaki (1979).
+- Lee-Ready: at or above the ask is a buy, at or below the bid a sell; at
+  the mid, an uptick is a buy and a downtick a sell, and an unchanged
+  price repeats the last call. About 85% accuracy in the literature.
+  `microstructure/TradeClassifier.java` (classify); Lee and Ready (1991).
+- `s = 2 sqrt(-cov(dp_t, dp_{t-1}))`. Roll's implied effective spread:
+  bid-ask bounce creates negative autocovariance in price changes.
+  Positive autocovariance returns NaN rather than a zero spread.
+  `microstructure/LiquidityMeasures.java` (rollSpread); Roll (1984).
+- Corwin-Schultz: the spread from two consecutive high-low ranges.
+  Variance grows with time but the spread does not, so one 2-day range
+  against two 1-day ranges isolates the spread; negative estimates are
+  set to 0. `microstructure/LiquidityMeasures.java`
+  (corwinSchultzSpread); Corwin and Schultz (2012).
+- `Amihud = mean( |r_t| / dollarVolume_t )`. Price impact per currency
+  unit traded, a cross-sectional illiquidity ranking (multiply by 1e6 for
+  the usual per-million quote). `microstructure/LiquidityMeasures.java`
+  (amihudIlliquidity); Amihud (2002).
+- `P(fill) = exp(-(qtyAhead + orderQty) / expectedTradedQty)`.
+  Queue-position fill probability under exponentially distributed level
+  volume: you fill when executions consume everyone ahead of you plus
+  your own size. `microstructure/QueueModel.java` (fillProbability).
+- `P(touch) = 2 N(-d / (sigma sqrt(T)))`. The driftless reflection
+  probability that price travels distance d within T; multiplied by the
+  queue-clearing probability (an independence approximation that slightly
+  underestimates) it scores passive placement away from the touch.
+  `microstructure/FillProbabilityModel.java` (touchProbability,
+  passiveFillProbability); Shreve (2004), section 3.7.
 
 **Execution and transaction cost analysis**
 
-- `IS_bps = sign * (avgExecPrice - arrivalMid) / arrivalMid * 1e4` --
-  implementation shortfall against the arrival mid: THE parent-order
-  benchmark, because the arrival price is the only one the decision
-  saw. Positive = cost, for buys and sells alike (the sign
-  convention that stops sells reporting negative "costs").
-  `microstructure/TransactionCostAnalyzer.java` (analyze).
+- `IS_bps = sign * (avgExecPrice - arrivalMid) / arrivalMid * 1e4`.
+  Implementation shortfall against the arrival mid; positive is a cost
+  for buys and sells alike. `BestExecutionAnalyzer.implementationShortfall`
+  splits it into delay, execution and opportunity cost.
+  `microstructure/TransactionCostAnalyzer.java` (analyze); Perold (1988).
 - `effective = 2 sign (price - mid_exec) / mid_exec`;
   `realized = 2 sign (price - mid_later) / mid_later`;
   `impact = 2 sign (mid_later - mid_exec) / mid_exec`, so
-  `effective ~ realized + impact` -- the spread decomposition: what
-  the taker paid, what the maker KEPT after adverse selection, and
-  the information content of the trade. A venue with high effective
-  but high realized spread is expensive; high effective and LOW
-  realized means informed flow, not greed.
+  `effective ~ realized + impact`. What the taker paid, what the maker
+  kept after adverse selection, and the information in the trade.
   `regulatory/MarketQualityMetrics.java` (effectiveSpreadBps,
-  realizedSpreadBps, priceImpactBps).
+  realizedSpreadBps, priceImpactBps); SEC Rule 605; Bessembinder (2003).
 - VWAP slice allocation: `qty_i = totalQty * v_i / sum(v)` with
-  largest-remainder integer rounding so slices sum EXACTLY to the
-  parent; TWAP is the flat-profile special case. Pitfall: fractional
-  rounding drift on long schedules silently over- or under-executes
-  without the exact-sum allocator. `execution/VwapScheduler.java`
-  (schedule, allocateProportionally), `execution/TwapScheduler.java`
-  (schedule).
-- `pick arm maximizing mean_i + sqrt(2 ln N / n_i)` -- UCB1: the
-  optimism bonus shrinks as an arm is tried, so exploration decays
-  exactly as evidence accumulates, with logarithmic regret. Rewards
-  must be mapped into [0, 1] -- a mis-scaled reward silently breaks
-  the exploration balance, which is why the gate enforces it.
-  `execution/Ucb1Selector.java` (select, record).
+  largest-remainder integer rounding so slices sum exactly to the parent;
+  TWAP is the flat-profile case. `execution/VwapScheduler.java` (schedule,
+  allocateProportionally), `execution/TwapScheduler.java` (schedule);
+  Berkowitz, Logue and Noser (1988) for the VWAP benchmark.
+- `pick the arm maximising mean_i + sqrt(2 ln N / n_i)`. UCB1: the
+  optimism bonus shrinks as an arm is tried, giving logarithmic regret.
+  Rewards must lie in [0, 1], which the code enforces.
+  `execution/Ucb1Selector.java` (select, record); Auer, Cesa-Bianchi and
+  Fischer (2002).
 - `temporary = eta * participationRate`;
   `permanent = gamma * sigma_daily * (Q/ADV)`;
-  `expectedCost = permanent/2 + temporary` -- the two-part impact
-  model behind scheduling: temporary impact prices SPEED, permanent
-  impact prices INFORMATION, and the schedule average pays half the
-  permanent. `microstructure/MarketImpactModel.java`
-  (temporaryImpactBps, permanentImpactBps, expectedCostBps).
+  `expectedCost = permanent/2 + temporary`. The two-part impact model
+  behind scheduling: temporary impact prices speed, permanent impact
+  prices information, and the schedule average pays half the permanent
+  part. `microstructure/MarketImpactModel.java` (temporaryImpactBps,
+  permanentImpactBps, expectedCostBps); Almgren, Thum, Hauptmann and Li
+  (2005).
 - `skew = -(inventory/limit) * skewFraction * halfSpread`;
   `bid = mid (1 + (-halfSpread + skew)/1e4)`,
-  `ask = mid (1 + (+halfSpread + skew)/1e4)` -- inventory-skewed
-  quoting: long inventory shades BOTH quotes down (sell what you
-  hold, stop accumulating) -- the Avellaneda-Stoikov intuition
-  without the vol/horizon machinery, capped so the quote never
-  crosses itself. `crb/SkewedQuoter.java` (quote).
+  `ask = mid (1 + (+halfSpread + skew)/1e4)`. Inventory-skewed quoting:
+  long inventory shades both quotes down, capped so the quote never
+  crosses itself. `crb/SkewedQuoter.java` (quote); Avellaneda and Stoikov
+  (2008) for the underlying idea.
 - Call-auction uncross: choose the price with (1) maximum executable
-  volume, (2) minimum residual imbalance among ties, (3) closest to
-  the reference among remaining ties -- the standard exchange
-  rulebook hierarchy behind every open, close, and volatility-halt
-  reopening. `microstructure/Auction.java` (uncross, indicative).
+  volume, (2) minimum residual imbalance among ties, (3) closest to the
+  reference price among remaining ties. `microstructure/Auction.java`
+  (uncross, indicative); exchange rulebooks, for example the Nasdaq Cross
+  rules.
 
 **Indexes, corporate actions and private markets**
 
-- `w_i = p_i s_i f_i / sum_j p_j s_j f_j` -- float-adjusted market-cap
-  weights (price, shares outstanding, float factor): the
-  self-rebalancing scheme -- price moves change weights with no
-  trading, which is exactly why cap-weight turnover is so low.
+- `w_i = p_i s_i f_i / sum_j p_j s_j f_j`. Float-adjusted cap weights
+  (price, shares outstanding, float factor): price moves change weights
+  without trading, which keeps cap-weight turnover low.
   `markets/IndexConstruction.java` (capWeights, priceWeights,
-  equalWeights).
-- `TVPI = (D + NAV) / C`, `DPI = D / C`, `RVPI = NAV / C` -- the
-  private-fund multiples (C contributions, D distributions): TVPI is
-  total value, DPI the part already REAL, RVPI the part still marked.
-  Early in a fund's life TVPI is mostly RVPI -- an appraisal, not an
-  outcome; DPI is the number that cannot be marked up.
-  `markets/PrivateMarketAnalytics.java` (tvpi, dpi, rvpi).
-- Split r-for-1: prior prices / r, volume * r; cash dividend d:
-  prior prices * `(prevClose - d) / prevClose` -- CRSP-style
-  back-adjustment so returns across ex-dates reflect economics, not
-  mechanical drops. Without it every dividend prints as a fake
-  negative return -- the difference between toy and usable equity
-  backtests. `data/CorporateActions.java` (adjust).
+  equalWeights); S&P Dow Jones Indices, *Index Mathematics Methodology*.
+- `TVPI = (D + NAV) / C`, `DPI = D / C`, `RVPI = NAV / C`. Private-fund
+  multiples (C contributions, D distributions). Early in a fund's life
+  TVPI is mostly RVPI, an appraisal; DPI is the part already paid out.
+  `markets/PrivateMarketAnalytics.java` (tvpi, dpi, rvpi); ILPA reporting
+  guidelines.
+- Split r-for-1: prior prices / r, volume * r; cash dividend d: prior
+  prices * `(prevClose - d) / prevClose`. CRSP-style back-adjustment so
+  returns across ex-dates reflect economics, not mechanical drops.
+  `data/CorporateActions.java` (adjust); CRSP data definitions.
 
 **Range and regime volatility**
 
-- `sigma^2 = mean( ln(H/L)^2 ) / (4 ln 2)` -- Parkinson: the high-low
-  range carries ~4.9x the information of close-to-close under
-  driftless GBM. Biased UP by drift (trend books as range) and DOWN
-  by discrete sampling (the observed high understates the true
-  high). `volatility/RangeVolatility.java` (parkinson).
-- `sigma^2 = mean( 0.5 ln(H/L)^2 - (2 ln 2 - 1) ln(C/O)^2 )` --
-  Garman-Klass: adds open/close to the range, ~7.4x efficient; still
-  assumes zero drift. `volatility/RangeVolatility.java`
-  (garmanKlass).
-- `sigma^2 = mean( ln(H/C) ln(H/O) + ln(L/C) ln(L/O) )` --
-  Rogers-Satchell: drift-INDEPENDENT by construction -- the range
-  estimator to reach for on trending series.
-  `volatility/RangeVolatility.java` (rogersSatchell).
+- `sigma^2 = mean( ln(H/L)^2 ) / (4 ln 2)`. Parkinson: the high-low range
+  carries about 4.9 times the information of close-to-close returns
+  under driftless GBM; biased up by drift and down by discrete sampling.
+  `volatility/RangeVolatility.java` (parkinson); Parkinson (1980).
+- `sigma^2 = mean( 0.5 ln(H/L)^2 - (2 ln 2 - 1) ln(C/O)^2 )`. Garman-Klass:
+  adds open and close to the range, about 7.4 times as efficient; still
+  assumes zero drift. `volatility/RangeVolatility.java` (garmanKlass);
+  Garman and Klass (1980).
+- `sigma^2 = mean( ln(H/C) ln(H/O) + ln(L/C) ln(L/O) )`. Rogers-Satchell:
+  independent of drift by construction. `volatility/RangeVolatility.java`
+  (rogersSatchell); Rogers and Satchell (1991).
 - `sigma^2 = sigma_o^2 + k sigma_c^2 + (1 - k) sigma_rs^2`,
-  `k = 0.34 / (1.34 + (m+1)/(m-1))` -- Yang-Zhang: overnight-gap
-  variance (open over prior close) plus open-to-close variance plus
-  the Rogers-Satchell term, with the variance-minimizing weight k
-  over m periods. Drift-independent AND gap-aware -- the practical
-  default for daily bars on markets that close.
-  `volatility/RangeVolatility.java` (yangZhang).
-- Two-state Gaussian HMM by Baum-Welch EM; `expectedDuration =
-  1 / (1 - p_stay)` -- regime detection: state 1 is always the
-  high-vol regime, and the smoothed high-vol probability is the
-  de-levering signal. Pitfall: EM finds a LOCAL likelihood maximum
-  -- regime labels near the boundary are estimates, not facts.
-  `ml/RegimeDetector.java` (fit, RegimeModel.expectedDuration).
+  `k = 0.34 / (1.34 + (m+1)/(m-1))`. Yang-Zhang: overnight-gap variance
+  plus open-to-close variance plus the Rogers-Satchell term, with the
+  variance-minimising weight k over m periods. Drift-independent and
+  gap-aware. `volatility/RangeVolatility.java` (yangZhang); Yang and Zhang
+  (2000).
+- Two-state Gaussian HMM fitted by Baum-Welch EM from five starts, with
+  emission densities in log space; `expectedDuration = 1 / (1 - p_stay)`.
+  State 1 is the high-vol regime. The filtered probability
+  (`filteredHighVolProbability`) uses data up to each date and is the
+  real-time signal; the smoothed probability uses the whole sample and is
+  for ex-post labelling only; `viterbi` gives the most likely path. EM
+  finds a local maximum. `ml/RegimeDetector.java` (fit, viterbi,
+  RegimeModel.expectedDuration); Hamilton (1989), Rabiner (1989).
 
 **Technical indicators**
 
-- `EMA_t = alpha p_t + (1 - alpha) EMA_{t-1}`, `alpha = 2/(n + 1)`
-  -- the exponential moving average: n names the CENTER of mass, not
-  a window; ~86% of the weight sits in the last n bars. The building
-  block of MACD, ATR smoothing and signal lines.
-  `indicators/Indicators.java` (ema).
-- `RSI = 100 - 100/(1 + RS)`, `RS = avgGain / avgLoss` (Wilder
-  smoothing, `avg <- (avg (n-1) + x)/n`) -- the momentum oscillator:
-  70/30 are the conventional bands. Pitfall: in a strong trend RSI
-  saturates and stays "overbought" for weeks -- it is a
-  mean-reversion tool, not a trend filter.
-  `indicators/Indicators.java` (rsi).
+- `EMA_t = alpha p_t + (1 - alpha) EMA_{t-1}`, `alpha = 2/(n + 1)`. The
+  exponential moving average: n sets the decay rather than a window,
+  and about 86% of the weight sits in the last n bars.
+  `indicators/Indicators.java` (ema); Murphy, *Technical Analysis of the
+  Financial Markets* (1999).
+- `RSI = 100 - 100/(1 + RS)`, `RS = avgGain / avgLoss` with Wilder
+  smoothing `avg <- (avg (n-1) + x)/n`. The momentum oscillator, with 70
+  and 30 as the usual bands; in a strong trend it stays "overbought" for
+  weeks. Pinned to the published StockCharts example.
+  `indicators/Indicators.java` (rsi); Wilder (1978).
 - `MACD = EMA_12 - EMA_26`; `signal = EMA_9(MACD)`;
-  `histogram = MACD - signal` -- trend-following via the difference
-  of two smoothings; the histogram's sign changes are the crossover
-  events. All three lines lag by construction -- that is the price
-  of smoothing, not a bug. `indicators/Indicators.java` (macd).
-- `upper/lower = SMA_n +- k * stdev_n` -- Bollinger bands: a
-  rolling z-score dressed as a channel (k = 2 classic). Band WIDTH
-  is a volatility signal in its own right -- the squeeze precedes
-  the move. `indicators/Indicators.java` (bollinger).
-- `TR = max(H - L, |H - C_prev|, |L - C_prev|)`; `ATR = smoothed TR`
-  -- true range counts the overnight gap the plain high-low range
-  misses; ATR is the unit stops and position sizes are quoted in.
-  `indicators/Indicators.java` (trueRange, atr).
-- `VWAP_t = sum_{i<=t} tp_i v_i / sum_{i<=t} v_i`,
-  `tp = (H + L + C)/3` -- the cumulative volume-weighted average
-  price, anchored at the session start: the institutional
-  benchmark. Pitfall: VWAP is an AVERAGE, not support/resistance --
-  late in the day it barely moves, by construction.
-  `indicators/Indicators.java` (vwap).
+  `histogram = MACD - signal`. Trend-following via the difference of two
+  smoothings; all three lines lag by construction.
+  `indicators/Indicators.java` (macd); Appel (2005).
+- `upper/lower = SMA_n +- k * stdev_n`. Bollinger bands, a rolling
+  z-score drawn as a channel (k = 2 by convention). Band width is itself
+  a volatility signal. `indicators/Indicators.java` (bollinger); Bollinger
+  (2001).
+- `TR = max(H - L, |H - C_prev|, |L - C_prev|)`; ATR is TR smoothed with
+  Wilder's method. True range counts the overnight gap the plain range
+  misses. `indicators/Indicators.java` (trueRange, atr); Wilder (1978).
+- `VWAP_t = sum_{i<=t} tp_i v_i / sum_{i<=t} v_i`, `tp = (H + L + C)/3`.
+  The cumulative volume-weighted average price anchored at the first bar
+  of the series; late in a session it barely moves.
+  `TechnicalFilters.priceAboveVwap` uses a rolling 20-bar VWAP instead.
+  `indicators/Indicators.java` (vwap); Berkowitz, Logue and Noser (1988).
 
 **Numerical machinery**
 
-- `S_{t+dt} = S_t exp((mu - sigma^2/2) dt + sigma sqrt(dt) z)` --
-  the exact GBM log-Euler step (z standard normal): exact in
-  distribution for constant coefficients, so daily steps carry no
-  discretization bias. Forgetting the `-sigma^2/2` Ito correction
-  inflates every simulated drift -- the most common Monte Carlo bug
-  in existence. `simulation/MonteCarloSimulator.java` (simulate).
-- Antithetic variates: run each path with z and -z and average --
-  the payoff's monotone-in-z component cancels, roughly halving
-  variance for free (`pricing/Autocallable.java`, price).
-  Deterministic per-path seeding makes every price reproducible and
-  every test exact (`simulation/MonteCarloSimulator.java`, which is
-  plain Monte Carlo, no antithetics).
-- `A = L L'` (lower-triangular L) -- the Cholesky factorization that
-  turns independent Gaussians into correlated ones (`x = L z`). A
-  non-positive-definite input FAILS LOUDLY: pairwise-estimated
-  correlations that no joint distribution can have must not be
-  silently repaired into a different risk model.
-  `util/MathUtils.java` (cholesky).
-- Acklam's rational approximation for `N^{-1}(p)`, |error| <
-  1.15e-9; Abramowitz-Stegun 26.2.17 for `N(x)`, |error| < 7.5e-8 --
-  the two normal primitives every pricer above stands on: fast,
-  dependency-free, and accurate far beyond quoting precision.
-  `util/MathUtils.java` (normInv, normCdf).
-- Implied vol by bisection on [1e-4, 5.0], 200 halvings; a price
-  below intrinsic or above the max Black-Scholes price returns NaN
-  -- a stale or rounded market price must surface as "no vol", not
-  silently come back as the 500% search bound and poison a smile.
-  `pricing/BlackScholes.java` (impliedVol).
-- `beta = cov(y, x) / var(x)`, `alpha = mean(y) - beta mean(x)` --
-  the OLS pair every estimator above reduces to: hedge ratios,
-  betas, AR(1) fits and factor loadings are all this one formula
-  pointed at different data. Pitfall: OLS minimizes VERTICAL error
-  -- when both series are noisy (prices, not returns), the slope is
-  attenuated toward zero. `util/MathUtils.java` (covariance,
-  correlation), `risk/RiskMetrics.java` (beta).
+- `S_{t+dt} = S_t exp((mu - sigma^2/2) dt + sigma sqrt(dt) z)`. The exact
+  GBM log-Euler step: exact in distribution for constant coefficients.
+  Leaving out the `-sigma^2/2` correction inflates every simulated drift.
+  `simulation/MonteCarloSimulator.java` (simulate draws the exact terminal
+  value; simulatePaths gives correlated multi-asset paths); Glasserman
+  (2004), section 3.2.
+- Antithetic variates: run each path with z and -z and average. The part
+  of the payoff that is monotone in z cancels, which reduces variance at
+  no extra cost. `pricing/Autocallable.java` (price) and
+  `MonteCarloSimulator.simulatePaths`/`price` with `antithetic = true`,
+  which also report standard errors; seeded `SplittableRandom` streams
+  make results reproducible. Glasserman (2004), section 4.2.
+- `A = L L'` (lower-triangular L). The Cholesky factorisation that turns
+  independent Gaussians into correlated ones (`x = L z`).
+  `MathUtils.cholesky` fails on a matrix that is not positive definite;
+  `PsdMatrices.choleskyPsd` accepts positive semidefinite (rank-deficient)
+  matrices and rejects indefinite ones, which should be repaired
+  explicitly with `nearestCorrelation`. `util/MathUtils.java`,
+  `risk/PsdMatrices.java`; Golub and Van Loan (2013), section 4.2.
+- `N(x) = erfc(-x/sqrt(2)) / 2` with erfc from Cody's rational Chebyshev
+  approximations, accurate to about 1e-15 relative error down to
+  x = -37.5. `N^{-1}(p)`: Acklam's rational approximation (absolute error
+  below 1.15e-9) refined by one Halley step against the double-precision
+  CDF, which brings it to double precision. `util/MathUtils.java`
+  (normCdf, normInv, logNormPdf); Cody (1969), Acklam (2003).
+- Implied volatility by a safeguarded Newton iteration on the normalised
+  Black function `b(x, s) = e^{x/2} N(x/s + s/2) - e^{-x/2} N(x/s - s/2)`,
+  `x = ln(F/K)`, `s = sigma sqrt(T)`. An in-the-money quote is first
+  converted to the out-of-the-money one by parity, Newton runs on ln b
+  below the inflection point and on b above it, and every step stays
+  inside a shrinking bracket. A price equal to intrinsic gives 0; a price
+  outside the attainable range gives NaN rather than a search bound.
+  `pricing/ImpliedVolatility.java`, used by `BlackScholes.impliedVol` and
+  `Black76.impliedVol`; Jäckel (2015) for the normalisation.
+- `beta = cov(y, x) / var(x)`, `alpha = mean(y) - beta mean(x)`. The
+  simple OLS pair behind hedge ratios, betas, AR(1) fits and factor
+  loadings. OLS minimises vertical error, so when x is noisy the slope is
+  biased toward zero. `alpha/Ols.java` solves the multivariate case by
+  Householder QR with classical and HAC errors. `util/MathUtils.java`
+  (covariance, correlation), `risk/RiskMetrics.java` (beta); Greene,
+  *Econometric Analysis*, chapter 3; Golub and Van Loan (2013), section
+  5.3.
+- `variance = sum (x - mean)^2 / (n - 1)` for n >= 2. `MathUtils.variance`,
+  `stdDev`, `stdDevSample` and `stdDevP` return NaN when there are too
+  few observations rather than 0, so a one-point window cannot pass as a
+  zero-risk asset. `util/MathUtils.java`.
