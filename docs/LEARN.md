@@ -2512,8 +2512,13 @@ initialize with moments, polish with MLE, and treat a large gap between
 the two estimates as a specification alarm rather than picking your
 favorite.
 
-*In this library:* `volatility/Garch11.java` (`fit` -- the numerical
-maximum-likelihood route, likelihood in the code),
+*In this library:* `volatility/Garch11.java` (`fit` and `estimate` --
+full maximum likelihood over omega, alpha, beta, with the admissible
+region mapped onto unconstrained variables and Nelder-Mead run from
+three starts, Student-t innovations as an option, and both observed
+information and Bollerslev-Wooldridge robust standard errors; the
+robust ones are the QMLE answer when the Gaussian likelihood is
+wrong),
 `microstructure/OrnsteinUhlenbeck.java` (`fit` -- the exact AR(1)
 moment mapping, closed form); running both philosophies side by side is
 the whole comparison.
@@ -2624,10 +2629,12 @@ two regimes when F is comfortably positive, and that SABR's beta
 parameter spans the same spectrum -- beta = 1 lognormal, beta = 0
 normal.
 
-*In this library:* `rates/RatesOptions.java` (the lognormal Black-76
-cap/floor/swaption quoter -- the javadoc states the flat-lognormal
-convention, which is precisely the assumption this question breaks),
-`pricing/SabrModel.java` (beta as the lognormal-to-normal dial).
+*In this library:* `rates/RatesOptions.java` (cap/floor/swaption pricers
+with a `RatesOptions.VolModel` of lognormal, shifted lognormal or normal,
+so negative forwards price under the last two; `swaptionImpliedVol`
+inverts a price under each model), `pricing/Bachelier.java` (the normal
+model: price, delta, vega and implied normal vol), `pricing/SabrModel.java`
+(beta as the lognormal-to-normal dial).
 
 ### 54. "A 10-year par swap and a 10-year par bond, same notional. Compare their DV01s -- and who actually pays for the difference?"
 
@@ -2819,16 +2826,22 @@ month-end) changes the payment date, hence the accrual period, hence
 the price. These are not exotic corner cases -- USD money markets are
 ACT/360, US Treasuries ACT/ACT, many corporates 30/360, and swaps mix
 conventions per leg, so any system that hard-codes one convention is
-wrong on most instruments it touches. The deeper point: anyone
-who wave this off as back-office trivia have not reconciled a
-portfolio; the pedantry *is* the P&L, and the first question a rates
-quant asks about any yield is "under which convention?"
+wrong on most instruments it touches. Bond markets add one more
+convention that surprises people: the street yield convention accrues
+and discounts on the unadjusted coupon dates, so a coupon that rolls
+from a Saturday to a Monday is paid later but is not discounted for the
+extra days; a pricer that discounts on adjusted dates disagrees with
+Bloomberg and Excel by a few cents per hundred. The first question to ask
+about any yield is "under which convention?"
 
 *In this library:* `rates/DayCount.java` (the conventions, each
-documented with when it applies), `rates/BusinessCalendar.java` (roll
-rules -- its javadoc walks the weekend-roll-changes-the-payment case),
-`rates/BondPricer.java` (the calendar-aware pricer where both plug in,
-so the $40k experiment is directly runnable).
+documented with when it applies, including ACT/ACT ICMA, 30E/360 and
+30E/360 ISDA), `rates/BusinessCalendar.java` (roll rules, stubs and the
+end-of-month rule; schedules are computed from a fixed anchor so they do
+not drift), `rates/BondPricer.java` (street-convention `dirtyPrice`,
+`cleanPrice`, `accruedInterest` and `yieldFromCleanPrice`, which take a
+day count and an end-of-month flag, so the $40k experiment is directly
+runnable by switching the day count).
 
 ---
 
@@ -12601,10 +12614,12 @@ out-of-sample at daily-to-monthly horizons. Practical care: feed it
 genuine daily realized variance (intraday squared returns summed) and
 give the fit enough history for the monthly window plus a margin.
 
-*In this library:* `volatility/HarRv.java` -- OLS fit returning
-(intercept, betaDaily, betaWeekly, betaMonthly), the daily/weekly/
-monthly construction, and a javadoc insisting on realized daily
-variance as input; combine with intraday RV built from
+*In this library:* `volatility/HarRv.java` -- OLS fit by Householder QR
+returning (intercept, betaDaily, betaWeekly, betaMonthly), the
+daily/weekly/monthly construction, `fitWithErrors` with Newey-West
+standard errors (the overlapping weekly and monthly regressors make the
+residuals autocorrelated), `fitLog`/`forecastLog` for the log-HAR
+variant, and a javadoc insisting on realized daily variance as input; combine with intraday RV built from
 `microstructure/JumpRobustVolatility.java`.
 
 ### 428. "Implied vol is usually above subsequent realized. Is that a free lunch?"
