@@ -136,15 +136,16 @@ class ExoticOptionsTest {
     }
 
     @Test
-    void reverseAndBreachedBarriersAreRejected() {
+    void breachedBarriersAreRejectedAndReverseOnesPriced() {
         assertThrows(IllegalArgumentException.class, // breached down barrier
                 () -> BarrierOption.downAndOutCall(S, 1.10, 1.09, R, Q, VOL, T));
-        assertThrows(IllegalArgumentException.class, // reverse: H > K on a call
-                () -> BarrierOption.downAndOutCall(1.20, 1.02, 1.05, R, Q, VOL, T));
         assertThrows(IllegalArgumentException.class, // breached up barrier
                 () -> BarrierOption.upAndOutPut(S, 1.08, 1.05, R, Q, VOL, T));
-        assertThrows(IllegalArgumentException.class, // reverse: H < K on a put
-                () -> BarrierOption.upAndOutPut(1.00, 1.15, 1.10, R, Q, VOL, T));
+        // Down barrier above the strike on a call (H > K): now priced in closed
+        // form, and in + out still gives the vanilla.
+        double out = BarrierOption.downAndOutCall(1.20, 1.02, 1.05, R, Q, VOL, T);
+        double in = BarrierOption.downAndInCall(1.20, 1.02, 1.05, R, Q, VOL, T);
+        assertEquals(BlackScholes.price(OptionType.CALL, 1.20, 1.02, R, Q, VOL, T), in + out, 1e-12);
     }
 
     // ------------------------------------------------------------------
