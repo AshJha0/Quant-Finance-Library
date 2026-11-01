@@ -1,25 +1,35 @@
 package com.quantfinlib.trading;
 
+import com.quantfinlib.marketdata.StridedSequences;
 import com.quantfinlib.orderbook.Side;
 
-import java.util.concurrent.atomic.AtomicLong;
-
 /**
- * Zero-allocation single-producer / single-consumer ring buffer for order
- * messages — the order-entry mirror of the market-data
- * {@code TickRingBuffer}: preallocated primitive slots, cache-line-padded
- * sequences, acquire/release publication, and producer/consumer sequence
- * caching.
+ * Zero-allocation single-producer / single-consumer ring buffer for
+ * order-entry messages, the order-side mirror of
+ * {@code marketdata.TickRingBuffer}: preallocated primitive slots, strided
+ * sequences on separate cache lines, acquire/release publication and
+ * sequence caching.
+ *
+ * <p>Each slot carries a message type: {@link #NEW}, {@link #CANCEL},
+ * {@link #REPLACE} or {@link #CANCEL_ALL}. The consumer dispatches each to
+ * the matching {@link OrderListener} method.</p>
  */
 public final class OrderRingBuffer {
 
-    @SuppressWarnings("unused")
-    private static final class PaddedSequence extends AtomicLong {
-        private volatile long p1, p2, p3, p4, p5, p6, p7;
-    }
+    public static final byte NEW = 0;
+    public static final byte CANCEL = 1;
+    public static final byte REPLACE = 2;
+    public static final byte CANCEL_ALL = 3;
+
+    private static final int HEAD = 0;
+    private static final int TAIL = 1;
+    private static final int CACHED_HEAD = 2;
+    private static final int CACHED_TAIL = 3;
 
     private static final Side[] SIDES = {Side.BUY, Side.SELL};
 
+    private final byte[] types;
+    private final byte[] flags;
     private final long[] orderIds;
     private final int[] symbolIds;
     private final byte[] sides;
@@ -28,25 +38,14 @@ public final class OrderRingBuffer {
     private final long[] timestamps;
     private final int mask;
     private final int capacity;
+    private final StridedSequences seq = new StridedSequences(4);
 
-    private final PaddedSequence head = new PaddedSequence();
-    private final PaddedSequence tail = new PaddedSequence();
-    // Local sequence caches padded apart — same reasoning as TickRingBuffer:
-    // the trading thread stores cachedHead and the venue thread cachedTail,
-    // and sharing a line with each other or the slot-array fields would put
-    // false sharing back on the submit path.
-    @SuppressWarnings("unused")
-    private long hp1, hp2, hp3, hp4, hp5, hp6, hp7;
-    private long cachedHead;
-    @SuppressWarnings("unused")
-    private long tp1, tp2, tp3, tp4, tp5, tp6, tp7;
-    private long cachedTail;
-    @SuppressWarnings("unused")
-    private long ep1, ep2, ep3, ep4, ep5, ep6, ep7;
-
+    /** @param requestedCapacity rounded up to the next power of two */
     public OrderRingBuffer(int requestedCapacity) {
         this.capacity = Integer.highestOneBit(Math.max(2, requestedCapacity - 1)) * 2;
         this.mask = capacity - 1;
+        this.types = new byte[capacity];
+        this.flags = new byte[capacity];
         this.orderIds = new long[capacity];
         this.symbolIds = new int[capacity];
         this.sides = new byte[capacity];
@@ -55,49 +54,80 @@ public final class OrderRingBuffer {
         this.timestamps = new long[capacity];
     }
 
-    /** Producer side (trading thread). Returns false when full. */
+    /** Producer side: publishes a new order with no flags. Returns false when full. */
     public boolean publish(long orderId, int symbolId, Side side, long quantity,
                            double price, long timestampNanos) {
-        long t = tail.getPlain();
-        if (t - cachedHead >= capacity) {
-            cachedHead = head.getAcquire();
-            if (t - cachedHead >= capacity) {
+        return publish(NEW, OrderListener.FLAG_NONE, orderId, symbolId, side, quantity, price,
+                timestampNanos);
+    }
+
+    /**
+     * Producer side (single trading thread). Publishes one message of the
+     * given type; unused fields may be zero (for {@link #CANCEL_ALL},
+     * {@code symbolId} may be {@link OrderListener#ALL_SYMBOLS}). Returns
+     * false when the ring is full.
+     */
+    public boolean publish(byte type, int orderFlags, long orderId, int symbolId, Side side,
+                           long quantity, double price, long timestampNanos) {
+        long t = seq.getPlain(TAIL);
+        if (t - seq.getPlain(CACHED_HEAD) >= capacity) {
+            seq.setPlain(CACHED_HEAD, seq.getAcquire(HEAD));
+            if (t - seq.getPlain(CACHED_HEAD) >= capacity) {
                 return false;
             }
         }
         int i = (int) (t & mask);
+        types[i] = type;
+        flags[i] = (byte) orderFlags;
         orderIds[i] = orderId;
         symbolIds[i] = symbolId;
-        sides[i] = (byte) (side == Side.BUY ? 0 : 1);
+        sides[i] = (byte) (side == Side.SELL ? 1 : 0);
         quantities[i] = quantity;
         prices[i] = price;
         timestamps[i] = timestampNanos;
-        tail.setRelease(t + 1);
+        seq.setRelease(TAIL, t + 1);
         return true;
     }
 
-    /** Consumer side (venue thread). Drains up to {@code limit} orders into the sink. */
+    /**
+     * Consumer side (venue thread). Drains up to {@code limit} messages into
+     * the sink. If the sink throws, the message that threw counts as
+     * consumed (the head moves past it) before the exception propagates.
+     */
     public int drainTo(OrderListener sink, int limit) {
-        long h = head.getPlain();
+        long h = seq.getPlain(HEAD);
+        long cachedTail = seq.getPlain(CACHED_TAIL);
         if (h >= cachedTail) {
-            cachedTail = tail.getAcquire();
+            cachedTail = seq.getAcquire(TAIL);
+            seq.setPlain(CACHED_TAIL, cachedTail);
             if (h >= cachedTail) {
                 return 0;
             }
         }
         int n = (int) Math.min(cachedTail - h, limit);
-        for (int k = 0; k < n; k++) {
-            int i = (int) (h & mask);
-            sink.onOrder(orderIds[i], symbolIds[i], SIDES[sides[i]],
-                    quantities[i], prices[i], timestamps[i]);
-            h++;
+        long start = h;
+        try {
+            for (int k = 0; k < n; k++) {
+                int i = (int) (h & mask);
+                h++;
+                switch (types[i]) {
+                    case NEW -> sink.onNewOrder(orderIds[i], symbolIds[i], SIDES[sides[i]],
+                            quantities[i], prices[i], flags[i], timestamps[i]);
+                    case CANCEL -> sink.onCancel(orderIds[i], symbolIds[i], timestamps[i]);
+                    case REPLACE -> sink.onReplace(orderIds[i], symbolIds[i], SIDES[sides[i]],
+                            quantities[i], prices[i], timestamps[i]);
+                    case CANCEL_ALL -> sink.onCancelAll(symbolIds[i], timestamps[i]);
+                    default -> throw new IllegalStateException("bad message type " + types[i]);
+                }
+            }
+        } finally {
+            seq.setRelease(HEAD, h);
         }
-        head.setRelease(h);
-        return n;
+        return (int) (h - start);
     }
 
     public boolean isEmpty() {
-        return head.getAcquire() >= tail.getAcquire();
+        return seq.getAcquire(HEAD) >= seq.getAcquire(TAIL);
     }
 
     public int capacity() {

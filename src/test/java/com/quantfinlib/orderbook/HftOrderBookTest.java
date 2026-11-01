@@ -132,7 +132,7 @@ class HftOrderBookTest {
         assertEquals(5, b.qtyAtTick(Side.SELL, 1005));
         // Empty bid side: a sell market fills nothing and rests nothing.
         assertEquals(0, b.submitMarket(Side.SELL, 20, 4));
-        assertEquals(0, b.restingOrders() - 1);            // only the 1005 remainder rests
+        assertEquals(1, b.restingOrders());                // only the 1005 remainder rests
     }
 
     // ------------------------------------------------------------------
@@ -157,7 +157,7 @@ class HftOrderBookTest {
             if (kind < 6 || alive.isEmpty()) {
                 Side side = rnd.nextBoolean() ? Side.BUY : Side.SELL;
                 int tick = MIN + rnd.nextInt(MAX - MIN + 1);
-                long qty = 1 + rnd.nextInt(100);
+                long qty = 1L + rnd.nextInt(100);
                 long fastId = fast.submitLimit(side, tick, qty, op);
                 long refId = reference.submitLimit(side, tick / 100.0, qty, op);
                 assertTrue(fastId > 0);
@@ -176,7 +176,7 @@ class HftOrderBookTest {
                         "cancel disagreement at op " + op);
             } else {
                 Side side = rnd.nextBoolean() ? Side.BUY : Side.SELL;
-                long qty = 1 + rnd.nextInt(150);
+                long qty = 1L + rnd.nextInt(150);
                 fast.submitMarket(side, qty, op);
                 reference.submitMarket(side, qty, op);
             }
@@ -233,7 +233,7 @@ class HftOrderBookTest {
                 }
                 boolean buy = rnd.nextBoolean();
                 int tick = buy ? rnd.nextInt(90) : 110 + rnd.nextInt(90);
-                long qty = 1 + rnd.nextInt(1000);
+                long qty = 1L + rnd.nextInt(1000);
                 long id = b.submitLimit(buy ? Side.BUY : Side.SELL, tick, qty, op);
                 assertTrue(id > 0);
                 expected.put(id, qty);
@@ -272,12 +272,17 @@ class HftOrderBookTest {
         var mx = (com.sun.management.ThreadMXBean)
                 java.lang.management.ManagementFactory.getThreadMXBean();
         long tid = Thread.currentThread().threadId();
-        long before = mx.getThreadAllocatedBytes(tid);
-        for (int i = 0; i < 500_000; i++) {
-            ringSize = churn(b, rnd, ring, ringSize, i);
+        // Exactly zero after warm-up; a bounded retry absorbs a one-off
+        // JIT or class-loading allocation inside the first window.
+        long allocated = -1;
+        for (int attempt = 0; attempt < 5 && allocated != 0; attempt++) {
+            long before = mx.getThreadAllocatedBytes(tid);
+            for (int i = 0; i < 500_000; i++) {
+                ringSize = churn(b, rnd, ring, ringSize, i);
+            }
+            allocated = mx.getThreadAllocatedBytes(tid) - before;
         }
-        long allocated = mx.getThreadAllocatedBytes(tid) - before;
-        assertTrue(allocated < 100_000,
+        assertTrue(allocated == 0,
                 "book churn allocated " + allocated + " bytes (trades=" + b.tradeCount() + ")");
         assertTrue(b.tradeCount() > 0, "the loop must exercise matching, not just resting");
     }

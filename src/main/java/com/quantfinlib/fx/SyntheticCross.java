@@ -25,8 +25,8 @@ public final class SyntheticCross {
 
     /**
      * All-in synthetic ASK (cost to BUY the cross via the legs).
-     * MULTIPLY (A/B × B/C = A/C): buy both legs → askA × askB.
-     * DIVIDE (A/C ÷ B/C = A/B): buy leg A, sell leg B → askA ÷ bidB.
+     * Multiply (A/B × B/C = A/C): buy both legs → askA × askB.
+     * Divide (A/C ÷ B/C = A/B): buy leg A, sell leg B → askA ÷ bidB.
      */
     public static double syntheticAsk(Op op, double bidA, double askA,
                                       double bidB, double askB) {
@@ -34,7 +34,7 @@ public final class SyntheticCross {
     }
 
     /**
-     * All-in synthetic BID (proceeds of SELLING the cross via the legs):
+     * All-in synthetic BID (proceeds of selling the cross via the legs):
      * the mirror of {@link #syntheticAsk}.
      */
     public static double syntheticBid(Op op, double bidA, double askA,
@@ -44,11 +44,11 @@ public final class SyntheticCross {
 
     /**
      * Savings per unit of buying synthetically instead of directly
-     * (positive = the legs are cheaper). NaN when either route is unpriced —
+     * (positive = the legs are cheaper). NaN when either route is unpriced,
      * where "unpriced" means NaN, zero (the Java default and what an empty
-     * {@code FxTierBook} tier reads as) or negative — so an unquoted book
-     * can never masquerade as an attractive route, including via the
-     * divide-by-zero infinity a raw {@link #syntheticBid} would produce.
+     * {@code FxTierBook} tier reads as) or negative. An unquoted book
+     * can therefore never masquerade as an attractive route, including via
+     * the divide-by-zero infinity a raw {@link #syntheticBid} would produce.
      */
     public static double buySavings(double directAsk, Op op, double bidA, double askA,
                                     double bidB, double askB) {

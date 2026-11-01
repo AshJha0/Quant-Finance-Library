@@ -5,11 +5,11 @@ import com.quantfinlib.pricing.BlackScholes.OptionType;
 /**
  * Tick-frequency Greek estimation without tick-frequency repricing: a full
  * Black-Scholes evaluation anchors the position, and every tick updates
- * price/delta by the delta-gamma Taylor expansion — a handful of multiplies,
- * zero allocation — while the anchor is refreshed off the hot path.
+ * price/delta by the delta-gamma Taylor expansion (a handful of multiplies,
+ * zero allocation) while the anchor is refreshed off the hot path.
  *
  * <pre>
- *   price(S) ≈ price₀ + Δ₀·(S−S₀) + ½·Γ₀·(S−S₀)²
+ *   price(S, t) ≈ price₀ + Δ₀·(S−S₀) + ½·Γ₀·(S−S₀)² + Θ₀·(t − t₀)
  *   delta(S) ≈ Δ₀ + Γ₀·(S−S₀)
  * </pre>
  *
@@ -57,12 +57,28 @@ public final class IncrementalGreeks {
     }
 
     /**
-     * The hot path: delta-gamma update from the anchor. No allocation, no
-     * transcendental math — two multiplies and three adds.
+     * The hot path with no time elapsed since the anchor: delta-gamma update
+     * only. Use {@link #onTick(double, double)} when ticks arrive over a
+     * meaningful fraction of a day, or the estimate misses the time decay.
      */
     public void onTick(double spot) {
+        onTick(spot, 0.0);
+    }
+
+    /**
+     * The hot path: delta-gamma-theta update from the anchor,
+     *
+     * <pre>  price ≈ price₀ + Δ₀·dS + ½Γ₀·dS² + Θ₀·dt</pre>
+     *
+     * <p>with {@code dt = yearsSinceAnchor} and Θ₀ = ∂V/∂t per year as
+     * {@link BlackScholes#theta} defines it (negative for a long vanilla).
+     * Delta is updated by gamma only; its time drift (charm) is not
+     * included. No allocation, no transcendental math.</p>
+     */
+    public void onTick(double spot, double yearsSinceAnchor) {
         double dS = spot - baseSpot;
-        estimatedPrice = basePrice + baseDelta * dS + 0.5 * baseGamma * dS * dS;
+        estimatedPrice = basePrice + baseDelta * dS + 0.5 * baseGamma * dS * dS
+                + baseTheta * yearsSinceAnchor;
         estimatedDelta = baseDelta + baseGamma * dS;
         lastSpot = spot;
     }

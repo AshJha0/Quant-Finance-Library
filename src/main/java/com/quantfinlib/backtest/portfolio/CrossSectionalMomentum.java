@@ -24,16 +24,24 @@ import java.util.Map;
  *
  * <p><b>Why point-in-time matters here specifically</b>: momentum is the
  * factor survivorship bias flatters most. The stocks that delisted are
- * disproportionately the past losers a short book would have held — remove
+ * disproportionately the past losers a short book would have held. Remove
  * them from the universe and the short side looks artificially safe, while
  * the long side never picks a name that was about to be acquired away.
  * Ranking over {@code universe.isMember(symbol, now)} and running on the
  * {@linkplain PortfolioBacktester survivorship-aware overload} closes both
  * gaps (a {@code null} universe reproduces the naive everything-always-
- * tradeable behavior — useful for measuring the bias).</p>
+ * tradeable behavior, which is useful for measuring the bias).</p>
  *
  * <p>Candidates also need {@code lookback} bars of history at the rebalance
  * bar; earlier bars produce an empty book (the engine holds cash).</p>
+ *
+ * <p><b>Prices.</b> Momentum is computed on the series passed to
+ * {@link #init}: they must be split and dividend adjusted, or a 2:1 split
+ * inside the window reads as −50% and the name is shorted. With the
+ * survivorship-aware engine, which needs unadjusted prices for cash
+ * accounting, use the price-pair overload
+ * {@code PortfolioBacktester.run(strategy, unadjusted, adjusted, ...)}: the
+ * strategy then receives the adjusted copy.</p>
  */
 public final class CrossSectionalMomentum implements PortfolioStrategy {
 
@@ -80,7 +88,7 @@ public final class CrossSectionalMomentum implements PortfolioStrategy {
 
     @Override
     public void init(Map<String, BarSeries> data) {
-        this.data = data;
+        this.data = new java.util.LinkedHashMap<>(data);
         this.symbols = new ArrayList<>(data.keySet());
         this.clock = data.values().iterator().next();
     }
@@ -92,7 +100,7 @@ public final class CrossSectionalMomentum implements PortfolioStrategy {
         }
         long now = clock.timestamp(index);
 
-        // The point-in-time step: rank ONLY the names that are members at
+        // The point-in-time step: rank only the names that are members at
         // this bar. Dead and dropped stocks never enter the cross-section.
         // Primitive arrays + MathUtils.pairSort: no boxed Doubles/Integers
         // through a comparator per rebalance.

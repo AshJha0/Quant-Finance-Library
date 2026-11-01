@@ -10,8 +10,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Asian options pinned by their limits: one fixing IS vanilla
- * Black-Scholes (exact), zero vol IS discounted intrinsic on the forward
+ * Asian options pinned by their limits: one fixing is vanilla
+ * Black-Scholes (exact), zero vol is discounted intrinsic on the forward
  * average (hand computation), AM-GM orders arithmetic above geometric,
  * and averaging cheapens the call versus its vanilla cousin.
  */
@@ -36,7 +36,7 @@ class AsianOptionTest {
 
     @Test
     void averagingCheapensTheCallVersusVanilla() {
-        // The average has less variance AND (with r > q) a lower forward
+        // The average has less variance and (with r > q) a lower forward
         // than the terminal price: the ATM Asian call must be worth less.
         double vanilla = BlackScholes.price(CALL, S, 100, R, Q, VOL, T);
         double geo = AsianOption.geometricPrice(CALL, S, 100, R, Q, VOL, T, 12);
@@ -130,5 +130,28 @@ class AsianOptionTest {
                         Double.POSITIVE_INFINITY, 4));
         assertThrows(IllegalArgumentException.class,
                 () -> AsianOption.arithmeticPrice(CALL, -1, 100, R, Q, VOL, T, 4));
+    }
+
+    @Test
+    void linearTimeSecondMomentMatchesTheDoubleSum() {
+        // Brute-force Turnbull-Wakeman with the O(n^2) double sum.
+        double spot = 100, k = 97, r = 0.05, q = 0.02, vol = 0.35, t = 1.5;
+        for (int n : new int[]{1, 2, 7, 52, 365}) {
+            double h = t / n, g = r - q, m1 = 0, m2 = 0;
+            for (int i = 1; i <= n; i++) {
+                m1 += Math.exp(g * i * h);
+                for (int j = 1; j <= n; j++) {
+                    m2 += Math.exp(g * (i + j) * h + vol * vol * Math.min(i, j) * h);
+                }
+            }
+            m1 *= spot / n;
+            m2 *= spot * spot / ((double) n * n);
+            double sd = Math.sqrt(Math.log(m2 / (m1 * m1)));
+            double d1 = (Math.log(m1 / k) + 0.5 * sd * sd) / sd;
+            double ref = Math.exp(-r * t) * (m1 * com.quantfinlib.util.MathUtils.normCdf(d1)
+                    - k * com.quantfinlib.util.MathUtils.normCdf(d1 - sd));
+            assertEquals(ref, AsianOption.arithmeticPrice(BlackScholes.OptionType.CALL, spot, k, r, q,
+                    vol, t, n), 1e-12 * ref, "n=" + n);
+        }
     }
 }

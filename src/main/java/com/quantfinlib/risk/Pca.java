@@ -1,18 +1,20 @@
 package com.quantfinlib.risk;
 
 /**
- * Principal component analysis of a covariance matrix — the risk-factor
+ * Principal component analysis of a covariance matrix: the risk-factor
  * compressor. A yield curve has a dozen tenors but three real risk
- * factors (level, slope, curvature — the classic result this class
+ * factors (level, slope, curvature; the classic result this class
  * reproduces on curve data); an equity book has hundreds of names but a
  * handful of factors carrying most of the variance. PCA finds them:
  * the eigenvectors of the covariance matrix, ordered by how much
  * variance each explains.
  *
  * <p>Implementation is the cyclic Jacobi eigenvalue algorithm — exact
- * for symmetric matrices, dependency-free, and comfortably fast at risk
- * dimensions (tens of factors; it is O(n³) per sweep and converges in a
- * handful of sweeps). Eigenvalues clip at zero: a covariance matrix is
+ * for symmetric matrices, dependency-free, and fast at risk dimensions
+ * (tens of factors; it is O(n³) per sweep and converges in a handful of
+ * sweeps). Beyond about 50 factors it becomes slow; a several-hundred-name
+ * equity book needs Householder tridiagonalisation plus QR, or a Lanczos
+ * method for the leading components, which this class does not provide. Eigenvalues clip at zero: a covariance matrix is
  * PSD in exact arithmetic, and a tiny negative eigenvalue is numerical
  * noise, not an imaginary risk factor. Research lane, deterministic.</p>
  */
@@ -123,7 +125,7 @@ public final class Pca {
 
     private static void jacobi(double[][] m, double[][] v) {
         int n = m.length;
-        // Convergence must be RELATIVE to the matrix's own scale — the
+        // Convergence must be relative to the matrix's own scale — the
         // caller chooses the units (return fractions vs currency², ~1e16
         // apart), so absolute thresholds either never trigger (burning
         // all sweeps on a converged matrix) or trigger too early.
@@ -137,7 +139,7 @@ public final class Pca {
             return;                        // the zero matrix is already diagonal
         }
         double offTol = 1e-24 * normSq;
-        // The per-element skip threshold must be CONSISTENT with the total
+        // The per-element skip threshold must be consistent with the total
         // off-diagonal stop: if every element sits below skipTol, their
         // summed squares must already satisfy off < offTol — otherwise all
         // rotations get skipped while the stop never fires, and the sweep

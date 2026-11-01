@@ -65,7 +65,7 @@ class PortfolioExecutorTest {
         var config = new PortfolioExecutor.Config(300_000, Double.POSITIVE_INFINITY);
         var pe = new PortfolioExecutor(2, config);
         int buy = pe.add(BenchmarkExecutor.of(Side.BUY, 10_000, Benchmark.TWAP));
-        int sell = pe.add(BenchmarkExecutor.of(Side.SELL, 10_000, Benchmark.TWAP));
+        pe.add(BenchmarkExecutor.of(Side.SELL, 10_000, Benchmark.TWAP));
         pe.onFill(buy, 2_000, 100);            // net +200k
 
         long[] due = new long[2];
@@ -112,7 +112,7 @@ class PortfolioExecutorTest {
         int sell = pe.add(BenchmarkExecutor.of(Side.SELL, 20_000, Benchmark.TWAP));
 
         // Calm buy leg, wild sell leg (vol regime 1 -> sell child self-damps
-        // AND earns double risk weight when the budget binds).
+        // and earns double risk weight when the budget binds).
         var buyState = MarketState.neutral(100, 0.5);
         var sellState = new MarketState(100, 0, 1.0, Double.POSITIVE_INFINITY, 0.5, 0, 0);
         long[] due = new long[2];
@@ -120,7 +120,7 @@ class PortfolioExecutorTest {
 
         // Band pass 1: buys 1M vs sells 500k -> buys scaled to 600k (6,000).
         // Capacity: total 1.1M > 1M; weights buy 600k, sell 1M -> buy cut to
-        // 375k (3,750), sell keeps 500k -> net now -125k: RE-VIOLATED.
+        // 375k (3,750), sell keeps 500k -> net now -125k: re-violated.
         // Band pass 2: sells scaled to 475k (4,750) -> net exactly -100k.
         assertEquals(3_750, due[buy]);
         assertEquals(4_750, due[sell]);
@@ -134,7 +134,7 @@ class PortfolioExecutorTest {
     void covarianceUpgradesCapacityFromDiagonalToBasketRisk() {
         // Three equal buys; A and B move together, C is independent. Under
         // the diagonal fallback (all vols equal) the budget splits evenly —
-        // but A+B are ONE concentrated risk, and the covariance model sees
+        // but A+B are one concentrated risk, and the covariance model sees
         // it: the correlated pair carries MRC 0.4 each vs C's 0.2, so it
         // gets more of the binding budget.
         var cov = new com.quantfinlib.microstructure.EwmaCovariance(3, 0.97);
@@ -261,13 +261,18 @@ class PortfolioExecutorTest {
         var mx = (com.sun.management.ThreadMXBean)
                 java.lang.management.ManagementFactory.getThreadMXBean();
         long tid = Thread.currentThread().threadId();
-        long before = mx.getThreadAllocatedBytes(tid);
-        for (int i = 0; i < 500_000; i++) {
-            pe.decide(0.5, states, due);
-            blackhole += due[0] + due[3];
+        // Exactly zero after warm-up; a bounded retry absorbs a one-off
+        // JIT or class-loading allocation inside the first window.
+        long allocated = -1;
+        for (int attempt = 0; attempt < 5 && allocated != 0; attempt++) {
+            long before = mx.getThreadAllocatedBytes(tid);
+            for (int i = 0; i < 500_000; i++) {
+                pe.decide(0.5, states, due);
+                blackhole += due[0] + due[3];
+            }
+            allocated = mx.getThreadAllocatedBytes(tid) - before;
         }
-        long allocated = mx.getThreadAllocatedBytes(tid) - before;
-        assertTrue(allocated < 100_000, "decide allocated " + allocated + " bytes");
+        assertTrue(allocated == 0, "decide allocated " + allocated + " bytes");
         assertTrue(blackhole != 0);
     }
 }

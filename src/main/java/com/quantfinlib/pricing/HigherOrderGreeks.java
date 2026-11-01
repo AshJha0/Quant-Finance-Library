@@ -9,7 +9,7 @@ import com.quantfinlib.util.MathUtils;
  *
  * <ul>
  *   <li><b>Vanna</b> {@code ∂²V/∂S∂σ} — how delta drifts when vol moves
- *       (equivalently, how vega drifts when spot moves). THE skew-hedging
+ *       (equivalently, how vega drifts when spot moves). The skew-hedging
  *       Greek: a delta-hedged book with vanna is not hedged through a
  *       spot-vol move, which is how equity markets actually move
  *       (down-spot, up-vol);</li>
@@ -17,7 +17,7 @@ import com.quantfinlib.util.MathUtils;
  *       vega-hedged book with volga re-exposes itself as soon as vol
  *       moves. Vanna and volga are the two Greeks the
  *       {@link VannaVolga} pricing method charges the smile for;</li>
- *   <li><b>Cross-gamma</b> — for a TWO-asset position, the P&amp;L term
+ *   <li><b>Cross-gamma</b> — for a two-asset position, the P&amp;L term
  *       {@code ∂²V/∂S₁∂S₂} that plain per-asset gammas miss; supplied
  *       here for the exchange-option/basket case under a correlation
  *       (the general multi-asset case needs the full Hessian of your
@@ -25,7 +25,7 @@ import com.quantfinlib.util.MathUtils;
  * </ul>
  *
  * <p>Same conventions as {@code BlackScholes}: {@code carry} is the
- * continuous YIELD q (dividend yield; the foreign rate for FX), so the
+ * continuous yield q (dividend yield; the foreign rate for FX), so the
  * spot prefix is {@code e^{−qT}} and the drift is {@code r − q} —
  * exactly the parameters you already pass to
  * {@code BlackScholes.delta/vega}, and the tests pin these formulas as
@@ -66,11 +66,11 @@ public final class HigherOrderGreeks {
 
     /**
      * Cross-gamma of a Margrabe exchange option (the right to exchange
-     * asset 2 for asset 1) — the canonical two-asset second-order term:
+     * asset 2 for asset 1), the canonical two-asset second-order term:
      * {@code ∂²V/∂S₁∂S₂ = −φ(d₁)/(S₂·σ̂·√T)} where
      * {@code σ̂² = σ₁² + σ₂² − 2ρσ₁σ₂}. Negative: the exchange option
      * loses convexity when the two legs move together. For a generic
-     * basket, differentiate YOUR pricer numerically instead — this is
+     * basket, differentiate your pricer numerically instead; this is
      * the closed form worth having, not a universal answer.
      */
     public static double exchangeCrossGamma(double spot1, double spot2, double vol1,

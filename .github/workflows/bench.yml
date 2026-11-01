@@ -9,25 +9,31 @@ name: Benchmarks (Linux)
 on:
   workflow_dispatch:
 
+# Recommended JDK 25 low-latency flags (docs/ULTRA_LOW_LATENCY.md section 8);
+# each step adds a fixed heap (-Xms = -Xmx).
+env:
+  JVM_LOWLAT: -XX:+UseZGC -XX:+UseCompactObjectHeaders -XX:+AlwaysPreTouch -XX:+PerfDisableSharedMem
+
 jobs:
   bench:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Set up JDK 24
+      - name: Set up JDK 25
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '24'
+          java-version: '25'
           cache: maven
       - name: Compile
-        run: mvn -B --no-transfer-progress -DskipTests compile
+        run: ./mvnw -B --no-transfer-progress -DskipTests compile
       - name: HFT market data benchmark
         run: |
           {
             echo '## HFT market data benchmark (shared runner — indicative only)'
             echo '```'
-            java -Xms1g -Xmx1g -XX:+AlwaysPreTouch -cp target/classes \
+            java -Xms1g -Xmx1g $JVM_LOWLAT -cp target/classes \
               com.quantfinlib.examples.HftLatencyBenchmark
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
@@ -36,7 +42,7 @@ jobs:
           {
             echo '## HFT order path benchmark (shared runner — indicative only)'
             echo '```'
-            java -Xms1g -Xmx1g -XX:+AlwaysPreTouch -cp target/classes \
+            java -Xms1g -Xmx1g $JVM_LOWLAT -cp target/classes \
               com.quantfinlib.examples.HftOrderBenchmark
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
@@ -45,7 +51,7 @@ jobs:
           {
             echo '## HFT quoter benchmark (shared runner — indicative only)'
             echo '```'
-            java -Xms1g -Xmx1g -XX:+AlwaysPreTouch -cp target/classes \
+            java -Xms1g -Xmx1g $JVM_LOWLAT -cp target/classes \
               com.quantfinlib.examples.HftQuoterBenchmark
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
@@ -54,7 +60,7 @@ jobs:
           {
             echo '## HFT matching engine benchmark (shared runner — indicative only)'
             echo '```'
-            java -Xms1g -Xmx1g -XX:+AlwaysPreTouch -cp target/classes \
+            java -Xms1g -Xmx1g $JVM_LOWLAT -cp target/classes \
               com.quantfinlib.examples.HftBookBenchmark
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
@@ -63,11 +69,11 @@ jobs:
           {
             echo '## Scale benchmarks (shared runner — indicative only)'
             echo '```'
-            java -Xms2g -Xmx2g -XX:+AlwaysPreTouch -cp target/classes \
+            java -Xms2g -Xmx2g $JVM_LOWLAT -cp target/classes \
               com.quantfinlib.examples.ScaleBenchmark 100 2000000 0
-            java -Xms2g -Xmx2g -XX:+AlwaysPreTouch -cp target/classes \
+            java -Xms2g -Xmx2g $JVM_LOWLAT -cp target/classes \
               com.quantfinlib.examples.ScaleBenchmark 10000 1000000 0.0002
-            java -Xms1g -Xmx1g -XX:+AlwaysPreTouch -cp target/classes \
+            java -Xms1g -Xmx1g $JVM_LOWLAT -cp target/classes \
               com.quantfinlib.examples.ShardScaleBenchmark 2
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"

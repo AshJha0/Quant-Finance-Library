@@ -1,6 +1,6 @@
 /**
- * Data in, out, and preparation — the bridge between real-world files/feeds
- * and the analytics stack:
+ * Loading, recording, replaying and aligning market data. The main
+ * classes:
  * {@link com.quantfinlib.data.CsvBarLoader} (RFC-4180-tolerant CSV bars),
  * {@link com.quantfinlib.data.HttpBarFetcher} (CSV over HTTP),
  * {@link com.quantfinlib.data.TickFileWriter}/{@link com.quantfinlib.data.TickFileReader}

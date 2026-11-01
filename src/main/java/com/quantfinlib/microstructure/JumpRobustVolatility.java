@@ -8,30 +8,30 @@ import com.quantfinlib.util.MathUtils;
  * headline print enters as r² and reads as a volatility regime shift for
  * the estimator's whole memory. Bipower variation (Barndorff-Nielsen &amp;
  * Shephard, 2004) fixes this with a beautifully simple trick: use the
- * product of CONSECUTIVE absolute returns, {@code (π/2)·|rₜ|·|rₜ₋₁|},
+ * product of consecutive absolute returns, {@code (π/2)·|rₜ|·|rₜ₋₁|},
  * instead of r². Diffusion moves both factors together, so the product
- * estimates the same σ²; a single jump inflates only ONE factor of two
+ * estimates the same σ²; a single jump inflates only one factor of two
  * neighboring products instead of one whole squared term — its weight in
  * the estimate collapses.
  *
- * <p>Both estimators run side by side on time-decayed rates per second:
- * {@link #volPerSqrtSecond} is the jump-robust (bipower) volatility — the
+ * <p>Both estimators run side by side on time-decayed rates per second.
+ * {@link #volPerSqrtSecond} is the jump-robust (bipower) volatility, the
  * one to feed {@link VolatilityCurve} and any model that should read
- * regimes, not headlines — while {@link #rawVolPerSqrtSecond} is the
+ * regimes, not headlines. {@link #rawVolPerSqrtSecond} is the
  * squared-return volatility, and {@link #jumpFraction} is the share of
  * raw variance the robust estimator attributes to jumps
  * ({@code 1 − BV/RV}, clamped to [0,1]).</p>
  *
  * <p>Gap discipline: a non-finite return or non-positive Δt drops the
- * sample AND resets the consecutive-return pairing — multiplying across a
- * feed gap would pair returns that were never neighbors. The first return
- * after a gap therefore updates only the raw estimator; the bipower leg
- * resumes one sample later. Irregular sampling is handled exactly: the
- * two-return product is normalized by {@code √(Δtₜ·Δtₜ₋₁)} (each |r|
- * scales with √ of ITS OWN interval), so event-time feeds — where
- * activity accelerates precisely when volatility bursts — do not bias
- * the estimator. Zero allocation per event, single writer, one instance
- * per symbol.</p>
+ * sample and resets the consecutive-return pairing, because multiplying
+ * across a feed gap would pair returns that were never neighbors. The
+ * first return after a gap therefore updates only the raw estimator; the
+ * bipower leg resumes one sample later. Irregular sampling is handled
+ * exactly: the two-return product is normalized by {@code √(Δtₜ·Δtₜ₋₁)}
+ * (each |r| scales with √ of its own interval), so event-time feeds,
+ * where activity accelerates precisely when volatility bursts, do not
+ * bias the estimator. Zero allocation per event, single writer, one
+ * instance per symbol.</p>
  */
 public final class JumpRobustVolatility {
 
@@ -78,7 +78,7 @@ public final class JumpRobustVolatility {
 
         double absRet = Math.abs(ret);
         if (hasPrev) {
-            // Each |r| carries √ of its OWN interval, so the product is
+            // Each |r| carries √ of its own interval, so the product is
             // normalized by the geometric mean of the two — exact under
             // irregular sampling, where dt-of-the-moment normalization
             // would read a cadence change as a volatility change.

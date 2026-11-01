@@ -153,7 +153,7 @@ class HftOrderBookTifTest {
             long tradedBefore = resting[0];
             long booked = totalBooked(b);
             Side side = rnd.nextBoolean() ? Side.BUY : Side.SELL;
-            long qty = 1 + rnd.nextInt(400);
+            long qty = 1L + rnd.nextInt(400);
             int limit = MIN + rnd.nextInt(MAX - MIN + 1);
             long filled = b.submitFok(side, limit, qty, 999);
             if (filled == 0) {
@@ -192,19 +192,24 @@ class HftOrderBookTifTest {
         var mx = (com.sun.management.ThreadMXBean)
                 java.lang.management.ManagementFactory.getThreadMXBean();
         long tid = Thread.currentThread().threadId();
-        long before = mx.getThreadAllocatedBytes(tid);
-        for (int i = 0; i < 500_000; i++) {
-            tifChurn(b, rnd, i);
+        // Exactly zero after warm-up; a bounded retry absorbs a one-off
+        // JIT or class-loading allocation inside the first window.
+        long allocated = -1;
+        for (int attempt = 0; attempt < 5 && allocated != 0; attempt++) {
+            long before = mx.getThreadAllocatedBytes(tid);
+            for (int i = 0; i < 500_000; i++) {
+                tifChurn(b, rnd, i);
+            }
+            allocated = mx.getThreadAllocatedBytes(tid) - before;
         }
-        long allocated = mx.getThreadAllocatedBytes(tid) - before;
-        assertTrue(allocated < 100_000, "TIF churn allocated " + allocated + " bytes");
+        assertTrue(allocated == 0, "TIF churn allocated " + allocated + " bytes");
         assertTrue(b.tradeCount() > 0);
     }
 
     private static void tifChurn(HftOrderBook b, java.util.SplittableRandom rnd, int i) {
         Side side = rnd.nextBoolean() ? Side.BUY : Side.SELL;
         int tick = MIN + rnd.nextInt(MAX - MIN + 1);
-        long qty = 1 + rnd.nextInt(60);
+        long qty = 1L + rnd.nextInt(60);
         switch (i & 3) {
             case 0 -> b.submitPostOnly(side, tick, qty, i);
             case 1 -> b.submitIoc(side, tick, qty, i);

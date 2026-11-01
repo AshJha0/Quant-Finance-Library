@@ -4,24 +4,24 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * DRAWDOWN structure — because "max drawdown 18%" hides the number that
- * actually fires clients: how LONG the pain lasted. A strategy that loses
+ * Drawdown structure — because "max drawdown 18%" hides the number that
+ * actually fires clients: how long the pain lasted. A strategy that loses
  * 18% and recovers in three weeks and one that spends two years under
  * water have the same max drawdown and completely different survival
  * odds. Redemptions, risk-committee reviews and career risk are all
- * functions of drawdown DURATION, not just depth.
+ * functions of drawdown duration, not just depth.
  *
  * <p>The walk: track the running peak; a drawdown episode opens the first
  * period equity dips below it and closes when equity regains the peak
  * (recovery) or the series ends (still open — {@code recoveryIndex = -1},
  * a fact worth surfacing, not hiding: an open drawdown at the end of a
- * backtest is often the honest state of the strategy today).</p>
+ * backtest is often the actual state of the strategy today).</p>
  *
  * <ul>
  *   <li><b>depth</b> — 1 − trough/peak per episode;</li>
  *   <li><b>duration</b> — periods from the peak to recovery (or to the
  *       last bar for an open episode);</li>
- *   <li><b>time under water</b> — the fraction of ALL periods spent below
+ *   <li><b>time under water</b> — the fraction of all periods spent below
  *       the running peak. A strategy under water 60% of the time is
  *       painful to hold even when each individual dip is shallow;</li>
  *   <li><b>episodes</b> — the full chronological list, so callers can
@@ -58,6 +58,9 @@ public final class DrawdownAnalytics {
      */
     public record Result(double maxDepth, int maxDuration, double timeUnderWater,
                          List<Drawdown> episodes) {
+        public Result {
+            episodes = List.copyOf(episodes);
+        }
     }
 
     private DrawdownAnalytics() {

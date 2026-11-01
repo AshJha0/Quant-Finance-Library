@@ -7,11 +7,11 @@ import java.util.Random;
  * fires identical children on a metronome is a gift to anyone watching
  * the tape: predators detect the clock in a handful of intervals and
  * lean on every child. The counter-measure is controlled jitter that
- * keeps the SCHEDULE honest while killing the pattern:
+ * keeps the schedule on track while removing the pattern:
  *
  * <ul>
  *   <li><b>Size jitter</b> — each child ±{@code sizeFraction}, with the
- *       differences redistributed so the TOTAL is preserved exactly
+ *       differences redistributed so the total is preserved exactly
  *       (the parent must complete; anti-gaming never changes what gets
  *       done, only how recognizable it looks);</li>
  *   <li><b>Time jitter</b> — each firing time ±{@code timeFraction} of
@@ -19,13 +19,13 @@ import java.util.Random;
  *       reorder) and end time never exceeded.</li>
  * </ul>
  *
- * <p>Deterministic per seed — replayable in backtests, auditable in
+ * <p>Deterministic per seed: replayable in backtests, auditable in
  * production (compliance can reconstruct exactly why each child fired
  * when it did). Research/warm lane. Relationship to
  * {@link TwapScheduler#scheduleRandomized}: that method jitters TWAP
- * slice SIZES at construction; this class is the generic overlay — it
+ * slice sizes at construction. This class is the generic overlay; it
  * jitters any existing child plan (VWAP, benchmark-executor,
- * hand-built) and adds the TIME dimension the schedulers do not
+ * hand-built) and adds the time dimension the schedulers do not
  * randomize.</p>
  */
 public final class AntiGamingJitter {
@@ -54,7 +54,7 @@ public final class AntiGamingJitter {
 
     /**
      * Jitters child sizes ±{@code sizeFraction}, preserving the total
-     * EXACTLY and never producing a negative child. Perturbations are
+     * exactly and never producing a negative child. Perturbations are
      * paired (child i gives what child i+1 takes), so the completion
      * curve wanders inside a one-child envelope of the original.
      */

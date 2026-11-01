@@ -126,4 +126,60 @@ class PaperTradingTest {
         gw.submitMarket("X", Side.BUY, 100);
         assertEquals(100_000 - 10_000 - 10, gw.cash(), 1e-6);   // notional + 10bps fee
     }
+
+    @Test
+    void fillsAreLimitedByDisplayedSizeAndConsumeIt() {
+        PaperTradingGateway gw = new PaperTradingGateway(1_000_000);
+        gw.onQuote("X", 99, 500, 101, 300);
+        long a = gw.submitLimit("X", Side.BUY, 200, 101);     // takes 200 of 300
+        long b = gw.submitLimit("X", Side.BUY, 200, 101);     // only 100 left
+        assertEquals(OrderStatus.FILLED, gw.status(a));
+        assertEquals(OrderStatus.PARTIALLY_FILLED, gw.status(b));
+        assertEquals(100, gw.filledQuantity(b));
+        assertEquals(300, gw.position("X"), 1e-9);
+        // A new quote refreshes size: the resting 100 fills.
+        gw.onQuote("X", 99, 500, 100.5, 1_000);
+        assertEquals(OrderStatus.FILLED, gw.status(b));
+        assertEquals(400, gw.position("X"), 1e-9);
+
+        // Market order larger than displayed: partial fill, remainder cancelled.
+        gw.onQuote("X", 99, 50, 101, 1_000);
+        long m = gw.submitMarket("X", Side.SELL, 80);
+        assertEquals(OrderStatus.CANCELED, gw.status(m));
+        assertEquals(50, gw.filledQuantity(m));
+        assertEquals(350, gw.position("X"), 1e-9);
+        // A partially filled order can still be cancelled.
+        gw.onQuote("X", 99, 1_000, 101, 10);
+        long p = gw.submitLimit("X", Side.BUY, 30, 101);
+        assertEquals(OrderStatus.PARTIALLY_FILLED, gw.status(p));
+        assertTrue(gw.cancel(p));
+        assertEquals(OrderStatus.CANCELED, gw.status(p));
+    }
+
+    @Test
+    void listenersRunOutsideTheGatewayLock() throws Exception {
+        PaperTradingGateway gw = new PaperTradingGateway(1_000_000);
+        gw.onQuote("X", 99, 101);
+        // A listener that needs the gateway from ANOTHER thread would deadlock
+        // if it ran while the submitting thread held the gateway monitor.
+        gw.addExecutionListener((id, sym, side, px, qty, ts) -> {
+            Thread t = new Thread(gw::snapshot);
+            t.start();
+            try {
+                t.join(2_000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            assertFalse(t.isAlive(), "listener ran under the gateway lock");
+        });
+        gw.submitMarket("X", Side.BUY, 10);
+        assertEquals(10, gw.position("X"), 1e-9);
+    }
+
+    @Test
+    void invalidLimitPricesAreRejected() {
+        PaperTradingGateway gw = new PaperTradingGateway(1_000);
+        assertEquals(OrderStatus.REJECTED, gw.status(gw.submitLimit("X", Side.BUY, 1, Double.NaN)));
+        assertEquals(OrderStatus.REJECTED, gw.status(gw.submitLimit("X", Side.BUY, 1, -1)));
+    }
 }

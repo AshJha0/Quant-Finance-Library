@@ -127,7 +127,7 @@ class UniverseCsvLoaderTest {
         assertThrows(IllegalArgumentException.class, () -> UniverseCsvLoader.parse(List.of()));
         // A >19-digit corrupted timestamp fails in the detection pass —
         // and still carries the row number (hand-curated files: which row
-        // is wrong IS the error message).
+        // is wrong is the error message).
         IllegalArgumentException e4 = assertThrows(IllegalArgumentException.class,
                 () -> UniverseCsvLoader.parse(List.of(
                         "symbol,event,date,end_date,value,acquirer_shares,acquirer",

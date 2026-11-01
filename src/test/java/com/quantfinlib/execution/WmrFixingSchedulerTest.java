@@ -52,7 +52,7 @@ class WmrFixingSchedulerTest {
     void zeroQuantityChildrenAndOverflowOffsetsAreRejectedAtScheduleTime() {
         // More slices than shares = zero-qty children = venue rejects
         // mid-window; and a huge window would overflow slice offsets
-        // negative — children due BEFORE the window opens.
+        // negative — children due before the window opens.
         assertThrows(IllegalArgumentException.class,
                 () -> WmrFixingScheduler.schedule(3, 10));
         assertThrows(IllegalArgumentException.class,

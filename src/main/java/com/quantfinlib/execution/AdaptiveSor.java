@@ -29,7 +29,7 @@ import java.util.Map;
  *       {@link VenueQuote#latencyNanos} once observed;</li>
  *   <li><b>Adverse selection</b> — a venue whose fills are followed by
  *       reversion ({@link VenueScorecard#postFillMarkout} negative) charges
- *       that reversion as a per-share cost: two identical quotes are NOT
+ *       that reversion as a per-share cost: two identical quotes are not
  *       equal when one venue's fills systematically fade;</li>
  *   <li><b>Hidden liquidity</b> — dark pools are probed with sizes learned
  *       from realized probe fills ({@link VenueScorecard#onDarkProbe}),
@@ -40,13 +40,13 @@ import java.util.Map;
  *       would join.</li>
  * </ul>
  *
- * <p>The plan for the worked example — Exchange A: 10,000 shares at 120µs,
- * Exchange B: 8,000 at 80µs (same price), Dark Pool: unknown — is exactly
+ * <p>The plan for the worked example (Exchange A: 10,000 shares at 120µs;
+ * Exchange B: 8,000 at 80µs, same price; Dark Pool: unknown) is exactly
  * the classic answer: B's 8,000 first (equal price, lower latency), the
  * remaining 2,000 to A, and a simultaneous dark probe. Probe legs are
  * <b>additive and contingent</b> ({@link RoutingDecision#probes}): the
  * executor sends them alongside the lit legs and, on dark fills, cancels
- * lit remainder — the router plans, the executor manages overfill.</p>
+ * lit remainder. The router plans; the executor manages overfill.</p>
  *
  * <p><b>Cross-asset</b>: prices are raw doubles, so the same router serves
  * equities (exchanges + dark pools) and FX (ECN/matching venues + mid-match
@@ -56,8 +56,8 @@ import java.util.Map;
  * {@code fx.LpRouter}, which prices last-look rejects and hold time
  * natively from {@code fx.LpScorecard}.</p>
  *
- * <p>Research/decision lane (allocates the plan); the per-decision cost is
- * microseconds, spent once per parent slice, not per tick. Venue identity
+ * <p>Research/decision lane (allocates the plan); the decision runs
+ * once per parent slice, not per tick (timings in docs/BENCHMARKS.md). Venue identity
  * is by name, mapped once to dense scorecard ids at registration.</p>
  */
 public final class AdaptiveSor {
@@ -94,6 +94,10 @@ public final class AdaptiveSor {
      */
     public record RoutingDecision(List<RouteLeg> lit, List<RouteLeg> probes,
                                   long routedQty, long unrouted) {
+        public RoutingDecision {
+            lit = List.copyOf(lit);
+            probes = List.copyOf(probes);
+        }
     }
 
     private final VenueScorecard scorecard;
@@ -210,7 +214,7 @@ public final class AdaptiveSor {
     }
 
     /**
-     * Fill probability for a PASSIVE child joining a queue with
+     * Fill probability for a passive child joining a queue with
      * {@code qtyAhead} ahead of it — the queue-position leg of the routing
      * checklist, delegated to {@link QueueModel}. Feed {@code qtyAhead}
      * from {@code marketdata.L3BookBuilder.sharesAhead} when you track the

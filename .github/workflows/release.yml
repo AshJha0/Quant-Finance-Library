@@ -7,19 +7,33 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Set up JDK 24
+      - name: Set up JDK 25
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '24'
+          java-version: '25'
           cache: maven
+      - name: Check the tag matches the pom version
+        run: |
+          version=$(./mvnw -B -q --no-transfer-progress help:evaluate -Dexpression=project.version -DforceStdout)
+          tag="${GITHUB_REF_NAME#v}"
+          echo "pom version: $version, tag: $tag"
+          if [ "$version" != "$tag" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match project.version $version"
+            exit 1
+          fi
       - name: Build, test and package
-        run: mvn -B --no-transfer-progress package
+        run: ./mvnw -B --no-transfer-progress verify
       - name: Create GitHub release with jars
         env:
           GH_TOKEN: ${{ github.token }}

@@ -23,8 +23,8 @@ package com.quantfinlib.fx;
  *
  * <p>A venue with no quote (or an explicitly {@link #clear cleared} one)
  * holds NaN and never wins the scan. Crossed composites (bid ≥ ask across
- * venues) are real in e-FX — latency between feeds — and are reported via
- * {@link #isCrossed()} rather than "fixed" silently.</p>
+ * venues) are real in e-FX because of latency between feeds, and are
+ * reported via {@link #isCrossed()} rather than "fixed" silently.</p>
  */
 public final class AggregatedBook {
 

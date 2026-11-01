@@ -1,44 +1,44 @@
 package com.quantfinlib.markets;
 
 /**
- * PRIVATE-MARKET analytics — the toolkit for the asset class where the
+ * Private-market analytics — the toolkit for the asset class where the
  * usual machinery fails on purpose: no daily prices, cash flows the
  * manager (not the investor) times, and NAVs that are appraisals rather
  * than trades.
  *
  * <ul>
- *   <li><b>IRR</b> — the money-weighted return: the rate that zeroes the
+ *   <li><b>IRR</b>: the money-weighted return, the rate that zeroes the
  *       NPV of the fund's cash flows plus terminal NAV. It rewards the
- *       manager's TIMING (which a time-weighted return deliberately
- *       ignores), which is why PE quotes IRR and mutual funds may not.
- *       Solved by bisection with an explicit sign-change/bracket check —
+ *       manager's timing (which a time-weighted return
+ *       ignores by design), which is why PE quotes IRR and mutual funds may not.
+ *       Solved by bisection with an explicit sign-change/bracket check:
  *       cash flows that never change sign have no IRR, and this throws
  *       rather than inventing one.</li>
  *   <li><b>Multiples</b> — TVPI = (distributions + NAV)/contributions,
  *       DPI = distributions/contributions (the "cash back" ratio),
  *       RVPI = NAV/contributions (the part still an appraisal). DPI is
- *       the honest one: you cannot spend RVPI.</li>
- *   <li><b>Kaplan-Schoar PME</b> — the public-market equivalent: grow
- *       every contribution and distribution forward at the INDEX's
+ *       realised cash: you cannot spend RVPI.</li>
+ *   <li><b>Kaplan-Schoar PME</b>: the public-market equivalent. Grow
+ *       every contribution and distribution forward at the index's
  *       return and take {@code (FV(distributions) + NAV) /
  *       FV(contributions)}. PME &gt; 1 means the fund beat just buying
- *       the index with the same cash flows on the same dates — the only
- *       fair benchmark for irregular cash flows, and the reason "our IRR
- *       beat the S&amp;P's return" is not evidence.</li>
+ *       the index with the same cash flows on the same dates. It is the
+ *       only fair benchmark for irregular cash flows, and the reason "our
+ *       IRR beat the S&amp;P's return" is not evidence.</li>
  *   <li><b>Geltner desmoothing</b> — appraisal NAVs are AR(1)-smoothed
  *       versions of true returns ({@code r_obs_t = (1-phi) r_true_t +
- *       phi r_obs_{t-1}}), which UNDERSTATES volatility and correlation
+ *       phi r_obs_{t-1}}), which understates volatility and correlation
  *       to public markets ("volatility laundering"). Inverting,
  *       {@code r_true_t = (r_obs_t - phi r_obs_{t-1}) / (1 - phi)},
- *       recovers a series whose risk numbers can sit honestly next to
+ *       recovers a series whose risk numbers are comparable with
  *       public-market ones. The inversion is exact: smoothing then
  *       desmoothing round-trips to machine precision (pinned).</li>
  * </ul>
  *
  * <p>Cash-flow sign convention throughout: contributions (money in)
- * NEGATIVE, distributions (money out) POSITIVE — the investor's
+ * negative, distributions (money out) positive. That is the investor's
  * perspective, matching every spreadsheet's XIRR. Period-indexed flows
- * (annual/quarterly — caller's choice, IRR is per period). Research
+ * (annual or quarterly, caller's choice; IRR is per period). Research
  * lane, deterministic.</p>
  */
 public final class PrivateMarketAnalytics {
@@ -110,7 +110,7 @@ public final class PrivateMarketAnalytics {
     /**
      * Kaplan-Schoar PME. Arrays are period-aligned with
      * {@code indexLevels} (same length); contributions/distributions are
-     * the POSITIVE amounts flowing in each period.
+     * the positive amounts flowing in each period.
      *
      * @return PME; &gt; 1 = fund beat the index on its own cash-flow dates
      */

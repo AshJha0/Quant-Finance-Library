@@ -8,15 +8,15 @@ import com.quantfinlib.util.MathUtils;
  * Technical screening filters evaluated on the most recent bar. All filters
  * are NaN-safe and return {@code false} when the series is too short.
  *
- * <p>Design contract worth stating: a screen answers "does this stock look
- * like X TODAY", so every filter reads only the LAST valid indicator value
- * — never a history of signals (that is a backtest's job, over in
+ * <p>Design contract: a screen answers "does this stock look
+ * like X today", so every filter reads only the last valid indicator value,
+ * never a history of signals (that is a backtest's job, over in
  * {@code backtest}). "Too short = false" rather than "too short = throw"
- * is deliberate: a screen runs across an entire universe, and one
+ * is intended: a screen runs across an entire universe, and one
  * recently-listed ticker with 30 bars must silently drop out of an
  * SMA(200) screen, not kill the run for the other 2,999 names. The cost
  * of that choice is that {@code rsiBelow(14, 70)} and "not enough data"
- * are indistinguishable in the output — compose an explicit
+ * are indistinguishable in the output. Compose an explicit
  * length/liquidity pre-filter first when the distinction matters.
  * Filters compose via {@link ScreenFilter#and}/{@code or}/{@code negate};
  * feed survivors to {@link RankingEngine} to order them.</p>
@@ -27,36 +27,36 @@ public final class TechnicalFilters {
     }
 
     public static ScreenFilter rsiBelow(int period, double value) {
-        return s -> lastValid(Indicators.rsi(s.series().closes(), period)) < value;
+        return s -> lastValid(Indicators.rsi(s.series().closesCopy(), period)) < value;
     }
 
     public static ScreenFilter rsiAbove(int period, double value) {
-        return s -> lastValid(Indicators.rsi(s.series().closes(), period)) > value;
+        return s -> lastValid(Indicators.rsi(s.series().closesCopy(), period)) > value;
     }
 
     public static ScreenFilter priceAboveSma(int period) {
-        return s -> s.lastClose() > lastValid(Indicators.sma(s.series().closes(), period));
+        return s -> s.lastClose() > lastValid(Indicators.sma(s.series().closesCopy(), period));
     }
 
     public static ScreenFilter priceBelowSma(int period) {
-        return s -> s.lastClose() < lastValid(Indicators.sma(s.series().closes(), period));
+        return s -> s.lastClose() < lastValid(Indicators.sma(s.series().closesCopy(), period));
     }
 
     public static ScreenFilter priceAboveEma(int period) {
-        return s -> s.lastClose() > lastValid(Indicators.ema(s.series().closes(), period));
+        return s -> s.lastClose() > lastValid(Indicators.ema(s.series().closesCopy(), period));
     }
 
     /** MACD line above its signal line on the last bar. */
     public static ScreenFilter macdBullish() {
         return s -> {
-            Indicators.Macd m = Indicators.macd(s.series().closes(), 12, 26, 9);
+            Indicators.Macd m = Indicators.macd(s.series().closesCopy(), 12, 26, 9);
             int i = s.series().size() - 1;
-            return valid(m.line()[i], m.signal()[i]) && m.line()[i] > m.signal()[i];
+            return valid(m.line(i), m.signal(i)) && m.line(i) > m.signal(i);
         };
     }
 
     public static ScreenFilter adxAbove(int period, double value) {
-        return s -> lastValid(Indicators.adx(s.series(), period).adx()) > value;
+        return s -> lastValid(Indicators.adx(s.series(), period).adxCopy()) > value;
     }
 
     /** ATR as a fraction of price below the threshold (low-volatility screen). */
@@ -67,21 +67,51 @@ public final class TechnicalFilters {
         };
     }
 
+    /** {@link #priceAboveVwap(int)} over the last 20 bars. */
     public static ScreenFilter priceAboveVwap() {
-        return s -> s.lastClose() > lastValid(Indicators.vwap(s.series()));
+        return priceAboveVwap(20);
+    }
+
+    /**
+     * Last close above the volume-weighted average typical price
+     * {@code (H+L+C)/3} of the last {@code window} bars. A VWAP anchored at
+     * the first bar of a multi-year series is a meaningless level; a rolling
+     * window keeps it comparable with the current price. Falls back to the
+     * equal-weighted mean when the window has no volume.
+     */
+    public static ScreenFilter priceAboveVwap(int window) {
+        if (window < 1) {
+            throw new IllegalArgumentException("window must be >= 1");
+        }
+        return s -> {
+            com.quantfinlib.core.BarSeries b = s.series();
+            int n = b.size();
+            int from = Math.max(0, n - window);
+            double pv = 0;
+            double v = 0;
+            double plain = 0;
+            for (int i = from; i < n; i++) {
+                double typical = (b.high(i) + b.low(i) + b.close(i)) / 3;
+                pv += typical * b.volume(i);
+                v += b.volume(i);
+                plain += typical;
+            }
+            double vwap = v > 0 ? pv / v : plain / (n - from);
+            return s.lastClose() > vwap;
+        };
     }
 
     public static ScreenFilter superTrendBullish(int period, double multiplier) {
         return s -> {
             Indicators.SuperTrend st = Indicators.superTrend(s.series(), period, multiplier);
-            return st.direction()[s.series().size() - 1] == 1;
+            return st.direction(s.series().size() - 1) == 1;
         };
     }
 
     /** Close above the upper Bollinger band (volatility breakout). */
     public static ScreenFilter bollingerBreakout(int period, double k) {
         return s -> {
-            double upper = lastValid(Indicators.bollinger(s.series().closes(), period, k).upper());
+            double upper = lastValid(Indicators.bollinger(s.series().closesCopy(), period, k).upperCopy());
             return !Double.isNaN(upper) && s.lastClose() > upper;
         };
     }
@@ -91,7 +121,7 @@ public final class TechnicalFilters {
         return s -> {
             Indicators.Ichimoku ich = Indicators.ichimoku(s.series(), 9, 26, 52);
             int i = s.series().size() - 1;
-            double a = ich.senkouA()[i], b = ich.senkouB()[i];
+            double a = ich.senkouA(i), b = ich.senkouB(i);
             return valid(a, b) && s.lastClose() > Math.max(a, b);
         };
     }
@@ -120,7 +150,7 @@ public final class TechnicalFilters {
             if (n < lookback + 2) {
                 return false;
             }
-            double avg = MathUtils.mean(series.volumes(), n - 1 - lookback, n - 1);
+            double avg = MathUtils.mean(series.volumesCopy(), n - 1 - lookback, n - 1);
             return avg > 0 && series.volume(n - 1) > multiplier * avg;
         };
     }

@@ -76,13 +76,13 @@ class AmericanAndSabrTest {
         }
         SabrModel.Params fit = SabrModel.calibrate(F, T, BETA, strikes, vols);
 
-        assertTrue(fit.rmse() < 5e-4, "rmse=" + fit.rmse());
-        assertEquals(ALPHA, fit.alpha(), 0.02);
-        assertEquals(RHO, fit.rho(), 0.10);
-        assertEquals(NU, fit.nu(), 0.15);
+        assertTrue(fit.rmse() < 1e-10, "rmse=" + fit.rmse());
+        assertEquals(ALPHA, fit.alpha(), 1e-8);
+        assertEquals(RHO, fit.rho(), 1e-6);
+        assertEquals(NU, fit.nu(), 1e-6);
         // Fitted smile reproduces an unquoted strike.
         double interp = SabrModel.impliedVol(F, 85, T, fit.alpha(), fit.beta(), fit.rho(), fit.nu());
         double truth = SabrModel.impliedVol(F, 85, T, ALPHA, BETA, RHO, NU);
-        assertEquals(truth, interp, 0.003);
+        assertEquals(truth, interp, 1e-9);
     }
 }

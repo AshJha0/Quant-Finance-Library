@@ -8,7 +8,7 @@ import com.quantfinlib.rates.YieldCurve;
  * exchange.
  *
  * <p>A credit default swap is insurance with a running premium: the
- * protection BUYER pays {@code spread} per year (quarterly, accruing to
+ * protection buyer pays {@code spread} per year (quarterly, accruing to
  * the default date) and receives {@code 1 - R} of notional if the name
  * defaults before maturity. The pricing identities, per unit notional:</p>
  *
@@ -81,7 +81,7 @@ public final class CdsPricer {
     }
 
     /**
-     * Upfront points (per unit notional) the protection BUYER pays on a
+     * Upfront points (per unit notional) the protection buyer pays on a
      * contract with fixed running coupon {@code contractSpread}.
      */
     public static double upfront(CreditCurve credit, YieldCurve discount,
@@ -100,7 +100,7 @@ public final class CdsPricer {
                     "maturityYears must be positive and finite, got " + maturityYears);
         }
         // The legs are summed on the quarterly grid starting at gridStep();
-        // a maturity below one grid step has NO coupon dates, so the annuity
+        // a maturity below one grid step has no coupon dates, so the annuity
         // and protection leg are both empty -- parSpread would be 0/0 = NaN.
         // Throw instead of leaking NaN (house rule).
         if (maturityYears < CreditCurve.gridStep()) {

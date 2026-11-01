@@ -77,7 +77,7 @@ class SignalEngineTest {
     void volatilityIsZeroForAFrozenMid() {
         SignalEngine e = new SignalEngine(1, cfg());
         for (int i = 0; i <= 50; i++) {
-            e.onQuote(0, 99.99, 100, 100.01, 100, SEC + i * 100 * MS);
+            e.onQuote(0, 99.99, 100, 100.01, 100, SEC + 100L * i * MS);
         }
         assertEquals(0, e.volPerSqrtSecond(0), 1e-12);
     }
@@ -183,7 +183,7 @@ class SignalEngineTest {
         assertEquals(spreadBefore, e.spread(0), 1e-15);
         assertEquals(0, e.queueImbalance(0), 1e-12);
         // The next two-sided quote re-seeds every estimator: the huge apparent
-        // jump across the gap must NOT count as a return — vol rebuilds from 0
+        // jump across the gap must not count as a return — vol rebuilds from 0
         // rather than spiking or resuming the stale pre-gap value.
         e.onQuote(0, 200.00, 100, 200.02, 100, 4 * SEC);
         assertEquals(0, e.volPerSqrtSecond(0), 1e-15,
@@ -212,11 +212,11 @@ class SignalEngineTest {
 
     @Test
     void gapReseedsEveryEstimatorSymmetrically() {
-        // After a gap, vol and quote-intensity must rebuild from scratch —
-        // not resume their pre-gap levels — just like momentum/spread/depth.
+        // After a gap, vol and quote-intensity must rebuild from scratch
+        // (not resume their pre-gap levels), just like momentum/spread/depth.
         SignalEngine e = new SignalEngine(1, cfg());
         for (int i = 0; i <= 30; i++) {
-            e.onQuote(0, 100 + i * 0.1, 100, 100.02 + i * 0.1, 100, SEC + i * 10 * MS);
+            e.onQuote(0, 100 + i * 0.1, 100, 100.02 + i * 0.1, 100, SEC + 10L * i * MS);
         }
         assertTrue(e.volPerSqrtSecond(0) > 0);
         assertTrue(e.quoteIntensityPerSecond(0) > 0);

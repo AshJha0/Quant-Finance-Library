@@ -28,7 +28,7 @@ public final class BookAnalytics {
      * value than the mid when the book is imbalanced.
      */
     public static double microprice(OrderBook book) {
-        return microprice(book.bestBid(), book.bestAsk(), book.bestBidSize(), book.bestAskSize());
+        return microprice(book.bestBid(), book.bestAsk(), (double) book.bestBidSize(), (double) book.bestAskSize());
     }
 
     public static double microprice(double bid, double ask, double bidSize, double askSize) {

@@ -1,19 +1,19 @@
 package com.quantfinlib.crb;
 
 /**
- * The central risk book's ECONOMICS ledger — the number the desk head
+ * The central risk book's economics ledger — the number the desk head
  * actually asks for at the close: did the spread we captured by
  * internalizing pay for the hedging we did? A CRB that nets
  * beautifully but hedges expensively is a cost center with good
  * graphics.
  *
- * <p>Accounting model (realized flow economics, deliberately simple
+ * <p>Accounting model (realized flow economics, kept simple
  * and stated): internalized client flow captures the street half
  * spread minus whatever improvement was given back
  * ({@code notional·(halfSpread − improvement)/1e4}); routed flow
  * captures nothing (it went to the street); hedge executions cost
  * their all-in bps; router allocations cost their blended expected
- * bps. Inventory MARK-TO-MARKET P&amp;L is deliberately out of scope —
+ * bps. Inventory mark-to-market P&amp;L is out of scope:
  * that is the risk report's domain ({@code CentralRiskBook.report}),
  * and mixing realized spread economics with unrealized inventory marks
  * is how desks fool themselves. All notionals positive, all bps
@@ -104,7 +104,7 @@ public final class CrbPnlLedger {
 
     /**
      * The desk's realized economics: captured spread minus hedging and
-     * routing costs. POSITIVE means the netting engine paid for its own
+     * routing costs. Positive means the netting engine paid for its own
      * risk management — the CRB's entire commercial argument.
      */
     public double netEconomics() {

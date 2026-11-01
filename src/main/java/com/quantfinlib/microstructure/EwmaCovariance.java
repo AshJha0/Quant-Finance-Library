@@ -8,31 +8,30 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 /**
- * Streaming EWMA covariance matrix — the multi-asset risk picture that
+ * Streaming EWMA covariance matrix: the multi-asset risk picture that
  * single-symbol volatility cannot see. RiskMetrics-style: one return
  * vector per sampling interval, {@code cov ← λ·cov + (1−λ)·rᵢrⱼ}, with
- * the classic zero-mean convention (intraday returns have negligible mean
- * at these horizons; carrying decayed means would double the state for a
- * correction smaller than the estimation noise — a documented choice, not
- * an oversight).
+ * the classic zero-mean convention. Intraday returns have negligible
+ * mean at these horizons; carrying decayed means would double the state
+ * for a correction smaller than the estimation noise (a documented
+ * choice, not an oversight).
  *
  * <p><b>Who consumes it.</b> {@code execution.PortfolioExecutor}
  * documents its capacity allocation as the <em>diagonal</em> approximation
  * of multi-asset Almgren-Chriss; {@link #marginalContribution} is the
  * missing off-diagonal piece — feed the matrix via
  * {@code PortfolioExecutor.useRiskModel} and scarce liquidity flows to the
- * symbols whose remaining position contributes most to BASKET risk, not
+ * symbols whose remaining position contributes most to basket risk, not
  * just to their own. {@link #minVarianceHedgeRatio} is the live hedge
  * beta (cov/var) for cross hedging.</p>
  *
  * <p><b>Discipline.</b> The matrix stays positive-semidefinite because
  * every update is a full-vector rank-1 outer product: a sample containing
- * ANY non-finite return is dropped whole (updating only the clean pairs
+ * any non-finite return is dropped whole (updating only the clean pairs
  * would break PSD and silently skew correlations). Each pair seeds from
  * its first observation rather than ramping from 0. The lower triangle
- * lives in one flat array — zero allocation per sample, O(n²) work, which
- * at basket sizes (tens of symbols) on an interval cadence is
- * microseconds. Single writer.</p>
+ * lives in one flat array — zero allocation per sample, O(n²) work per
+ * update. Single writer.</p>
  */
 public final class EwmaCovariance {
 
@@ -72,7 +71,7 @@ public final class EwmaCovariance {
 
     /**
      * One sampling interval: every symbol's return over the interval that
-     * just closed (0 for a symbol that did not move — that IS its return).
+     * just closed (0 for a symbol that did not move — that is its return).
      * A vector containing any non-finite entry is dropped entirely: a
      * partial update would break positive-semidefiniteness, so a bad print
      * on one symbol must not corrupt the whole matrix.
@@ -147,10 +146,10 @@ public final class EwmaCovariance {
 
     /**
      * Marginal contribution to portfolio risk:
-     * {@code out[i] = wᵢ·(Σw)ᵢ / (w'Σw)} — the fraction of total basket
+     * {@code out[i] = wᵢ·(Σw)ᵢ / (w'Σw)}, the fraction of total basket
      * variance symbol i's position is responsible for (contributions sum
      * to 1; a natural hedge contributes negatively). All zeros while the
-     * portfolio variance is not positive — no risk picture, no signal.
+     * portfolio variance is not positive: no risk picture, no signal.
      *
      * @return the portfolio variance {@code w'Σw}, so a caller gating on
      *         "is there a risk picture?" needs exactly one call — a

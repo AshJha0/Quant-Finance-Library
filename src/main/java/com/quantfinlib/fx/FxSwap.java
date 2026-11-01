@@ -6,9 +6,10 @@ import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 
 /**
- * An FX swap: two offsetting FX exchanges — buy (sell) base currency on the
- * near date, sell (buy) it back on the far date — the instrument behind
- * funding, position rolls, and most of the daily FX forward volume.
+ * An FX swap: two offsetting FX exchanges (buy, or sell, base currency on
+ * the near date; sell, or buy, it back on the far date). It is the
+ * instrument behind funding, position rolls, and most of the daily FX
+ * forward volume.
  *
  * <p>An at-market swap has zero value at inception: both legs trade at the
  * prevailing outrights, so only the <em>points differential</em> between the
@@ -88,8 +89,8 @@ public final class FxSwap {
      * short — so an at-market swap marks to ~zero on its own curve.
      *
      * <p><b>Aged swaps</b>: a leg whose settlement date lies before the
-     * marking curve's spot has already settled — its P&amp;L is realized
-     * cash in the books, not mark-to-market — so it contributes zero here.
+     * marking curve's spot has already settled. Its P&amp;L is realized
+     * cash in the books, not mark-to-market, so it contributes zero here.
      * Routine daily marking of a seasoned swap therefore values only the
      * remaining live leg(s).</p>
      */

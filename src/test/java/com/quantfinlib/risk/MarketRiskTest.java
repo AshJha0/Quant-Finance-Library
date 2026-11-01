@@ -189,7 +189,7 @@ class MarketRiskTest {
                 "long gamma cushions the same tail");
 
         // Delta-gamma ES (closed-form Cornish-Fisher tail mean): with
-        // gamma = 0 it IS delta-normal ES, exactly; with short gamma it
+        // gamma = 0 it is delta-normal ES, exactly; with short gamma it
         // exceeds both its own VaR and the Gaussian ES.
         assertEquals(VarEngine.deltaNormalEs(exposures, cov, 0.99),
                 VarEngine.deltaGammaEs(exposures, new double[2][2], cov, 0.99), 1e-9,
@@ -280,7 +280,7 @@ class MarketRiskTest {
 
     @Test
     void evtIgnoresTiesAtTheThreshold() {
-        // Discretized losses: ten observations sit EXACTLY at the threshold
+        // Discretized losses: ten observations sit exactly at the threshold
         // value (P&L snapped to ticks does this) — counted as y = 0
         // exceedances they would deflate both PWMs and bias the shape.
         double[] losses = new double[100];
@@ -322,17 +322,17 @@ class MarketRiskTest {
         assertEquals(200_000, ladder[4], 1e-6);
 
         // The delta-gamma ladder shows the curvature the linear one hides:
-        // short gamma costs 0.5 * 1e7 * 0.01 = 50k at BOTH +/-10% rungs.
+        // short gamma costs 0.5 * 1e7 * 0.01 = 50k at both +/-10% rungs.
         double[] dgLadder = StressTester.sensitivityLadder(exposures, gamma, 0, 0.10, 4);
         assertEquals(-250_000, dgLadder[0], 1e-6, "the down rung is WORSE short gamma");
         assertEquals(0, dgLadder[2], 1e-6);
         assertEquals(150_000, dgLadder[4], 1e-6);
 
-        // Reverse stress: the returned shock loses EXACTLY the target.
+        // Reverse stress: the returned shock loses exactly the target.
         double[][] cov = {{4e-4, 1e-4}, {1e-4, 2.25e-4}};
         double[] expo2 = {1_000_000, -500_000};
         var reverse = StressTester.reverseStress(expo2, cov, 50_000);
-        assertEquals(-50_000, StressTester.scenarioPnl(expo2, reverse.shocks()), 1e-6,
+        assertEquals(-50_000, StressTester.scenarioPnl(expo2, reverse.shocksCopy()), 1e-6,
                 "the breaking scenario breaks by exactly the asked amount");
         assertEquals(50_000 / VarEngine.portfolioStdev(expo2, cov),
                 reverse.mahalanobisSigmas(), 1e-9, "and reports its own implausibility");
@@ -352,18 +352,36 @@ class MarketRiskTest {
                 new int[]{10, 20, 60});
         assertEquals(Math.sqrt(264), es, 1e-12);
 
-        // The stressed ratio scales capital up, never down.
-        assertEquals(150, FrtbEs.stressCalibratedEs(100, 30, 20), 1e-12, "ratio 1.5");
-        assertEquals(100, FrtbEs.stressCalibratedEs(100, 10, 20), 1e-12,
-                "a calm stressed period floors at 1, never discounts");
+        // MAR33: ES = ES_R,S * max(1, ES_F,C / ES_R,C). The stressed
+        // reduced-set ES is the base. (The previous version scaled the
+        // current full ES by a stressed/current ratio floored at 1, which
+        // is not the rule; those pins were 150 and 100.)
+        assertEquals(187.5, FrtbEs.stressCalibratedEs(100, 150, 80), 1e-12, "150 * 100/80");
+        assertEquals(30, FrtbEs.stressCalibratedEs(80, 30, 80), 1e-12,
+                "full = reduced: ratio 1, ES is the stressed reduced ES");
+        assertEquals(30, FrtbEs.stressCalibratedEs(70, 30, 80), 1e-12,
+                "full/reduced below 1 floors at 1");
+        assertThrows(IllegalArgumentException.class,
+                () -> FrtbEs.stressCalibratedEs(100, 30, 74.9),
+                "reduced set must explain >= 75% of full current ES");
+        assertEquals(40.0 / 3, FrtbEs.stressCalibratedEs(100, 10, 75), 1e-12,
+                "exactly 75% coverage is allowed");
 
-        // ES 97.5 of a known tail: losses 1..1000; VaR = 975th value, ES =
-        // mean of 975..1000 (26 values) = 987.5 exactly.
+        // ES 97.5 of losses 1..1000: (1-c)n = 25 tail observations,
+        // 976..1000, mean 988.0 (Acerbi-Tasche). The old estimator also
+        // averaged the VaR point 975 and pinned 987.5.
         double[] losses = new double[1000];
         for (int i = 0; i < 1000; i++) {
             losses[i] = i + 1;
         }
-        assertEquals(987.5, FrtbEs.es975(losses), 1e-9, "mean of 975..1000");
+        assertEquals(988.0, FrtbEs.es975(losses), 1e-9, "mean of 976..1000");
+        // 250-day window: w = 6.25, ES = (250+...+245 + 0.25*244)/6.25.
+        double[] year = new double[250];
+        for (int i = 0; i < 250; i++) {
+            year[i] = 250 - i;          // unsorted on purpose
+        }
+        double expected = (250 + 249 + 248 + 247 + 246 + 245 + 0.25 * 244) / 6.25;
+        assertEquals(expected, FrtbEs.es975(year), 1e-12, "fractional boundary weight");
 
         assertEquals(FrtbEs.TrafficLight.GREEN, FrtbEs.TrafficLight.of(4));
         assertEquals(FrtbEs.TrafficLight.AMBER, FrtbEs.TrafficLight.of(5));
@@ -406,7 +424,7 @@ class MarketRiskTest {
     // ------------------------------------------------------------------
 
     @Test
-    void gjrFindsTheLeverageEffectAndItsAbsenceHonestly() {
+    void gjrFindsTheLeverageEffectAndItsAbsence() {
         // Simulate a GJR process with a strong planted leverage term.
         Random rnd = new Random(42);
         int n = 4_000;
@@ -428,7 +446,7 @@ class MarketRiskTest {
         assertTrue(fit.logLikelihood() > Garch11.fit(r).logLikelihood(),
                 "the model that generated the data likelihood-beats the symmetric one");
 
-        // Symmetric GARCH data: the honest answer is gamma ~ 0.
+        // Symmetric GARCH data: the correct answer is gamma ~ 0.
         double[] sym = new double[n];
         double hs = 2e-6 / (1 - 0.08 - 0.9);
         for (int t = 0; t < n; t++) {

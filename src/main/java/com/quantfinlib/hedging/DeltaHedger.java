@@ -14,6 +14,13 @@ import com.quantfinlib.pricing.BlackScholes.OptionType;
  * of continuous, costless rebalancing at the true volatility; in practice it
  * spreads with rebalancing interval, transaction costs, and the gap between
  * implied and realized volatility.</p>
+ *
+ * <p>Accounting: the premium goes into a cash account that compounds at
+ * {@code rate}; the shares held earn the continuous {@code carry} (paid
+ * into cash), consistent with the Black-Scholes-Merton drift {@code r − q}
+ * used for pricing (Hull, Options, Futures and Other Derivatives, ch. 17).
+ * Without the carry leg a q = 3% hedge would show a mean loss of roughly
+ * {@code ∫ Δ·S·q dt}.</p>
  */
 public final class DeltaHedger {
 
@@ -46,6 +53,10 @@ public final class DeltaHedger {
      * @param path        underlying prices; {@code path[0]} at inception,
      *                    {@code path[n-1]} at expiry
      * @param dtYears     time between path points (e.g. 1/252 for daily)
+     * @param rate        continuously compounded cash rate (annual)
+     * @param carry       continuous yield paid by the underlying (dividend
+     *                    yield, or the foreign rate for FX), annual; it is
+     *                    credited to the hedge position each step
      * @param hedgeVol    volatility used for pricing and hedging (implied vol)
      * @param expiryYears option expiry; should equal {@code (path.length-1) * dtYears}
      */
@@ -76,7 +87,13 @@ public final class DeltaHedger {
                 rebalances++;
                 held = target;
             }
-            cash *= Math.exp(rate * dtYears);   // cash account accrues interest
+            // Cash accrues at the rate; the shares held over the step pay the
+            // continuous carry (dividend yield, or foreign rate for FX) into
+            // cash at the step end. Holding h shares from t_i to t_{i+1} has
+            // total return S_{i+1}·e^{q·dt}, so the payment is
+            // h·S_{i+1}·(e^{q·dt} − 1); a short hedge (h < 0) pays it.
+            cash = cash * Math.exp(rate * dtYears)
+                    + held * path[i + 1] * Math.expm1(carry * dtYears);
         }
 
         double finalSpot = path[n - 1];

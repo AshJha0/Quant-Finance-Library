@@ -41,8 +41,8 @@ class PortfolioBacktestTest {
                 constantWeights(Map.of("UP", 0.6, "DOWN", 0.4)),
                 twoAssets(), PortfolioBacktester.Config.defaults());
 
-        assertEquals(400, r.equityCurve().length);
-        assertTrue(r.equityCurve()[399] > 0);
+        assertEquals(400, r.equityCurveLength());
+        assertTrue(r.equityCurve(399) > 0);
         assertTrue(r.totalCosts() > 0);
         assertEquals(2, r.finalPositions().size());
         assertTrue(r.finalPositions().get("UP") > 0);

@@ -208,7 +208,7 @@ class HedgingTest {
                 "halfLife=" + analysis.halfLifeBars());
         assertTrue(Math.abs(analysis.lastZScore()) < 5);
         // The hedged spread is far less volatile than the raw leg.
-        assertTrue(MathUtils.stdDev(analysis.spread()) < 0.1 * MathUtils.stdDev(a));
+        assertTrue(MathUtils.stdDev(analysis.spreadCopy()) < 0.1 * MathUtils.stdDev(a));
     }
 
     @Test

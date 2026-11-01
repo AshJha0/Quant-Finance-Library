@@ -14,9 +14,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Direct pins for the shared hot-lane primitives. These are exercised
- * transitively by every book test, but the subtlest code in the library —
- * the circular backward-shift rule in {@code mapRemoveAt} — deserves an
- * oracle that hammers it by name: a wrong circular comparator corrupts
+ * transitively by every book test, but the subtlest code in the library
+ * (the circular backward-shift rule in {@code mapRemoveAt}) deserves an
+ * oracle that hammers it by name. A wrong circular comparator corrupts
  * probe chains only after a deletion in a wrapped run, which transitive
  * tests may never produce.
  */
@@ -64,7 +64,7 @@ class BookPrimitivesTest {
     void mapSurvivesRandomChurnAgainstHashMapOracle() {
         // Capacity 64, load <= 0.5 (max 30 live keys). Interleaved
         // insert/remove churn, verified key-by-key against a HashMap after
-        // EVERY operation. Deterministic seed; ~250 removals guarantee many
+        // every operation. Deterministic seed; ~250 removals guarantee many
         // deletions inside probe runs that straddle the array wrap, which
         // is exactly where a wrong backward-shift comparator corrupts state.
         int capacity = 64;
@@ -80,7 +80,7 @@ class BookPrimitivesTest {
             if (oracle.size() < 30 && (oracle.isEmpty() || rnd.nextBoolean())) {
                 long key;
                 do {
-                    key = 1 + rnd.nextInt(1_000_000); // strictly positive, 0 is the sentinel
+                    key = 1L + rnd.nextInt(1_000_000); // strictly positive, 0 is the sentinel
                 } while (oracle.containsKey(key));
                 BookPrimitives.mapPut(keys, vals, mask, key, nextVal);
                 oracle.put(key, nextVal);

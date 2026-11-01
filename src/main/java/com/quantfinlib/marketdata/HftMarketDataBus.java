@@ -1,14 +1,17 @@
 package com.quantfinlib.marketdata;
 
+import com.quantfinlib.util.IdleStrategy;
+import com.quantfinlib.util.ThreadPlacement;
+
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicLongArray;
 import java.util.concurrent.atomic.AtomicReferenceArray;
-import java.util.concurrent.locks.LockSupport;
+import java.util.concurrent.ThreadFactory;
 
 /**
- * Ultra-low-latency market data bus. The hot path — {@link #publish} through
- * {@link TickListener#onTick} — performs <b>zero allocation, zero locking, and
- * zero map lookups</b>:
+ * Ultra-low-latency market data bus. The hot path ({@link #publish} through
+ * {@link TickListener#onTick}) performs <b>zero allocation, zero locking,
+ * and zero map lookups</b>:
  *
  * <ul>
  *   <li>Ticks travel through a preallocated primitive {@link TickRingBuffer}.</li>
@@ -25,9 +28,19 @@ import java.util.concurrent.locks.LockSupport;
  *
  * <p><b>Dispatch cost note:</b> each subscribed listener is an interface
  * call; with three or more distinct {@link TickListener} implementations on
- * one symbol the call site goes megamorphic (~10-20&nbsp;ns per listener,
+ * one symbol the call site goes megamorphic (a virtual call per listener,
  * no inlining). Keep the per-symbol listener count at one or two and fan
  * out inside your own listener when you need more consumers.</p>
+ *
+ * <h2>Failure containment</h2>
+ * <p>Every listener call is wrapped: an exception from one listener is
+ * counted ({@link #listenerErrorCount()}), the first one is kept
+ * ({@link #failure()}), the failure action set with
+ * {@link #onListenerFailure(Runnable)} runs (typically a risk-gate kill),
+ * and dispatch continues with the next listener and the next tick. The
+ * consumer thread also carries an uncaught-exception handler, so if it dies
+ * from an {@link Error} the bus reports {@link #isHealthy()} false and the
+ * failure action still runs. A dead or failing bus is never silent.</p>
  */
 public final class HftMarketDataBus implements AutoCloseable {
 
@@ -36,7 +49,8 @@ public final class HftMarketDataBus implements AutoCloseable {
     private final SymbolRegistry registry = new SymbolRegistry();
     private final TickRingBuffer ring;
     private final int maxSymbols;
-    private final boolean busySpin;
+    private final IdleStrategy idle;          // consumer thread only
+    private ThreadFactory threadFactory = ThreadPlacement.daemon("hft-market-data-consumer");
     private final AtomicLongArray latestPriceBits;
     private final AtomicReferenceArray<TickListener[]> symbolListeners;
     private volatile TickListener[] globalListeners = NO_LISTENERS;
@@ -44,18 +58,38 @@ public final class HftMarketDataBus implements AutoCloseable {
 
     private volatile boolean running;
     // Consumer-thread counter in its own object (no line sharing with the
-    // producer-written ringFull) and updated once per DRAIN BATCH with a
+    // producer-written ringFull) and updated once per drain batch with a
     // release store — a per-tick volatile store would pay a StoreLoad
     // fence on every dispatch for an observability-only number.
     private final java.util.concurrent.atomic.AtomicLong processed =
             new java.util.concurrent.atomic.AtomicLong();
-    private long ringFull;             // single-writer (producer thread)
+    // Producer-written backpressure counter on its own line, read by
+    // monitors in opaque mode (a plain field may legally read stale forever).
+    private final StridedSequences producerCounters = new StridedSequences(1);
+    private final java.util.concurrent.atomic.AtomicLong listenerErrors =
+            new java.util.concurrent.atomic.AtomicLong();
+    private volatile Throwable failure;
+    private volatile boolean consumerDead;
+    private volatile Runnable failureAction;
     private Thread consumer;
 
     public HftMarketDataBus(int ringCapacity, int maxSymbols, boolean busySpin) {
+        this(ringCapacity, maxSymbols, busySpin ? IdleStrategy.busySpin() : IdleStrategy.parking(200));
+    }
+
+    /**
+     * @param ringCapacity tick ring size (rounded up to a power of two)
+     * @param maxSymbols   dense symbol-id space
+     * @param idle         what the consumer thread does when the ring is empty;
+     *                     owned by that thread from {@link #start()} on
+     */
+    public HftMarketDataBus(int ringCapacity, int maxSymbols, IdleStrategy idle) {
+        if (idle == null) {
+            throw new IllegalArgumentException("idle strategy is required");
+        }
+        this.idle = idle;
         this.ring = new TickRingBuffer(ringCapacity);
         this.maxSymbols = maxSymbols;
-        this.busySpin = busySpin;
         this.latestPriceBits = new AtomicLongArray(maxSymbols);
         this.symbolListeners = new AtomicReferenceArray<>(maxSymbols);
         long nan = Double.doubleToRawLongBits(Double.NaN);
@@ -108,8 +142,12 @@ public final class HftMarketDataBus implements AutoCloseable {
             return;
         }
         running = true;
-        consumer = new Thread(this::consumeLoop, "hft-market-data-consumer");
-        consumer.setDaemon(true);
+        consumerDead = false;
+        consumer = threadFactory.newThread(this::consumeLoop);
+        consumer.setUncaughtExceptionHandler((t, e) -> {
+            consumerDead = true;
+            recordFailure(e);
+        });
         consumer.start();
     }
 
@@ -124,6 +162,21 @@ public final class HftMarketDataBus implements AutoCloseable {
             }
             consumer = null;
         }
+    }
+
+    /**
+     * Replaces the factory that creates the consumer thread (naming, CPU
+     * placement; see {@link ThreadPlacement}). Takes effect at the next {@link #start()}.
+     *
+     * @param factory thread factory
+     * @return this bus
+     */
+    public synchronized HftMarketDataBus threadFactory(ThreadFactory factory) {
+        if (factory == null) {
+            throw new IllegalArgumentException("factory is required");
+        }
+        this.threadFactory = factory;
+        return this;
     }
 
     @Override
@@ -142,7 +195,7 @@ public final class HftMarketDataBus implements AutoCloseable {
     public boolean publish(int symbolId, double price, double size, long timestampNanos) {
         boolean ok = ring.publish(symbolId, price, size, timestampNanos);
         if (!ok) {
-            ringFull++;
+            producerCounters.incrementOpaque(0);
         }
         return ok;
     }
@@ -152,12 +205,37 @@ public final class HftMarketDataBus implements AutoCloseable {
         TickListener[] ls = symbolListeners.get(symbolId);
         if (ls != null) {
             for (TickListener l : ls) {
-                l.onTick(symbolId, price, size, timestampNanos);
+                deliver(l, symbolId, price, size, timestampNanos);
             }
         }
         TickListener[] gs = globalListeners;
         for (TickListener l : gs) {
+            deliver(l, symbolId, price, size, timestampNanos);
+        }
+    }
+
+    private void deliver(TickListener l, int symbolId, double price, double size,
+                         long timestampNanos) {
+        try {
             l.onTick(symbolId, price, size, timestampNanos);
+        } catch (RuntimeException e) {
+            listenerErrors.incrementAndGet();
+            recordFailure(e);
+        }
+    }
+
+    private void recordFailure(Throwable e) {
+        if (failure == null) {
+            failure = e;
+        }
+        Runnable action = failureAction;
+        if (action != null) {
+            try {
+                action.run();
+            } catch (RuntimeException ignored) {
+                // The failure is already recorded; a failing action must not
+                // take the consumer thread down with it.
+            }
         }
     }
 
@@ -166,16 +244,10 @@ public final class HftMarketDataBus implements AutoCloseable {
             int n = ring.drainTo(dispatcher, 1024);
             if (n > 0) {
                 processed.setRelease(processed.getPlain() + n);
-            } else {
-                if (!running && ring.isEmpty()) {
-                    return;
-                }
-                if (busySpin) {
-                    Thread.onSpinWait();
-                } else {
-                    LockSupport.parkNanos(200);
-                }
+            } else if (!running && ring.isEmpty()) {
+                return;
             }
+            idle.idle(n);
         }
     }
 
@@ -192,6 +264,35 @@ public final class HftMarketDataBus implements AutoCloseable {
         return latestPrice(registry.id(symbol));
     }
 
+    /**
+     * Action run on the consumer thread after any listener exception, and
+     * from the uncaught-exception handler if the consumer thread dies.
+     * Typical use: {@code bus.onListenerFailure(() -> gate.kill(true))}.
+     */
+    public void onListenerFailure(Runnable action) {
+        this.failureAction = action;
+    }
+
+    /** False once any listener has thrown or the consumer thread has died. */
+    public boolean isHealthy() {
+        return failure == null && !consumerDead;
+    }
+
+    /** True if the consumer thread terminated abnormally. */
+    public boolean isConsumerDead() {
+        return consumerDead;
+    }
+
+    /** The first listener or consumer-thread failure, or null. */
+    public Throwable failure() {
+        return failure;
+    }
+
+    /** Listener exceptions caught and contained so far. */
+    public long listenerErrorCount() {
+        return listenerErrors.get();
+    }
+
     public long processedCount() {
         return processed.get();
     }
@@ -202,6 +303,6 @@ public final class HftMarketDataBus implements AutoCloseable {
      * mean ticks were lost — that is the caller's backpressure policy.
      */
     public long ringFullCount() {
-        return ringFull;
+        return producerCounters.getOpaque(0);
     }
 }

@@ -1,8 +1,8 @@
 package com.quantfinlib.rates;
 
 /**
- * VANILLA interest-rate swap pricing off the {@link YieldCurve} — the
- * missing middle between the curve (which the bootstrap builds FROM par
+ * Vanilla interest-rate swap pricing off the {@link YieldCurve} — the
+ * missing middle between the curve (which the bootstrap builds from par
  * swaps) and {@link RatesOptions} (which prices options ON forward
  * swaps): the PV, par rate and DV01 of an actual swap position.
  *
@@ -17,14 +17,14 @@ package com.quantfinlib.rates;
  * </pre>
  *
  * <p>The float leg needs no forecasting in a single-curve world: it is
- * worth par at inception, i.e. {@code 1 - DF(T)} per unit notional —
+ * worth par at inception, i.e. {@code 1 - DF(T)} per unit notional,
  * which is exactly why the par rate has that closed form. DV01 is the
  * bump-and-reprice sensitivity to a parallel 1bp shift of the zero
  * curve: for a fresh par swap on a flat cc curve it is
  * {@code annuity * e^z * 1bp * notional} (the tests pin exactly that;
  * the desk shorthand {@code annuity * 1bp} is the sensitivity to the
- * SIMPLE par rate, a different derivative, ~e^z away). A swap struck at
- * the par rate must PV to zero — an identity, tested at 1e-12.</p>
+ * simple par rate, a different derivative, ~e^z away). A swap struck at
+ * the par rate must PV to zero: an identity, tested at 1e-12.</p>
  *
  * <p>Stated simplifications: single curve (no OIS/projection split),
  * annual fixed leg, spot start. Research lane, deterministic.</p>
@@ -50,7 +50,7 @@ public final class SwapPricer {
     }
 
     /**
-     * PV per unit notional of a PAYER swap (pay fixed {@code fixedRate},
+     * PV per unit notional of a payer swap (pay fixed {@code fixedRate},
      * receive float). Negate for the receiver.
      */
     public static double payerPv(YieldCurve curve, int tenorYears, double fixedRate) {

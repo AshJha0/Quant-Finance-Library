@@ -55,7 +55,7 @@ class SeriesAlignerTest {
                 return Map.of("A", 0.5, "B", 0.5);
             }
         }, aligned, PortfolioBacktester.Config.defaults());
-        assertEquals(3, r.equityCurve().length);
+        assertEquals(3, r.equityCurveLength());
     }
 
     @Test

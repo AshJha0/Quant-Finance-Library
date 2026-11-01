@@ -21,7 +21,7 @@ class EdgeCasePinsTest {
 
     @Test
     void alreadyTouchingPaysEvenAtExpiry() {
-        // Spot sitting exactly on the barrier IS a touch — including at
+        // Spot sitting exactly on the barrier is a touch — including at
         // T=0, where the general formula would otherwise say "no time
         // left, probability 0".
         assertEquals(1.0, TouchOption.hitProbability(100, 100, 0.02, 0, 0.2, 0.0), 0.0);
@@ -33,7 +33,7 @@ class EdgeCasePinsTest {
     @Test
     void minimumSampleHistoricalEsIsTheSingleWorstLoss() {
         // 20 scenarios at 99%: the VaR index lands on the maximum loss and
-        // the ES averages exactly ONE observation — VaR == ES. Legal, but
+        // the ES averages exactly one observation — VaR == ES. Legal, but
         // a desk should know its "tail average" is a single point.
         double[] exposures = {1.0};
         double[][] scenarios = new double[20][1];
@@ -49,7 +49,7 @@ class EdgeCasePinsTest {
     @Test
     void lastLookAcceptsAMoveExactlyAtTolerance() {
         // The FX Global Code gate is symmetric and inclusive: a move of
-        // exactly the tolerance is accepted in BOTH directions; one tick
+        // exactly the tolerance is accepted in both directions; one tick
         // beyond is rejected in both.
         LastLookGate gate = new LastLookGate(0.0005);
         assertTrue(gate.accept(true, 1.0000, 1.0005));
@@ -74,7 +74,7 @@ class EdgeCasePinsTest {
 
     @Test
     void nelsonSiegelRefusesAnUnfittableGridLoudly() {
-        // Four observations at the SAME tenor: every lambda node's normal
+        // Four observations at the same tenor: every lambda node's normal
         // matrix is singular, so no fit exists — the failure must be a
         // clear throw, not a garbage curve from a half-solved node.
         assertThrows(IllegalArgumentException.class, () -> NelsonSiegel.fit(

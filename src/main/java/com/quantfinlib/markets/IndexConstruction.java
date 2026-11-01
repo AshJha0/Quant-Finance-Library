@@ -1,7 +1,7 @@
 package com.quantfinlib.markets;
 
 /**
- * INDEX construction — the arithmetic behind "the market was up 1%".
+ * Index construction — the arithmetic behind "the market was up 1%".
  * Three weighting schemes produce three different markets from the same
  * stocks:
  *
@@ -16,19 +16,19 @@ package com.quantfinlib.markets;
  *       company size — a historical accident kept alive by
  *       tradition;</li>
  *   <li><b>equal-weighted</b>: constant 1/N. Systematically tilts small
- *       and must TRADE every rebalance to stay equal — the turnover is
+ *       and must trade every rebalance to stay equal — the turnover is
  *       the price of the tilt.</li>
  * </ul>
  *
- * <p>The <b>DIVISOR</b> is how a level series survives membership and
+ * <p>The <b>divisor</b> is how a level series survives membership and
  * share changes: {@code level = sum(price * shares * float) / divisor}.
  * When a member is added, dropped or re-floated, the divisor is rescaled
- * so the level is CONTINUOUS through the change —
- * {@code newDivisor = oldDivisor * newAggregate / oldAggregate} — so the
- * index only ever moves for price reasons (pinned by test: a member swap
- * leaves the level unchanged at the instant of the swap).
+ * so the level is continuous through the change:
+ * {@code newDivisor = oldDivisor * newAggregate / oldAggregate}. The
+ * index therefore only ever moves for price reasons (pinned by test: a
+ * member swap leaves the level unchanged at the instant of the swap).
  * {@code turnover(w1, w2) = 0.5 * sum |w1 - w2|} is the one-way fraction
- * of the portfolio that must trade between two weight vectors — the
+ * of the portfolio that must trade between two weight vectors, the
  * index-tracking cost driver. Research lane, deterministic.</p>
  */
 public final class IndexConstruction {
@@ -85,7 +85,7 @@ public final class IndexConstruction {
     }
 
     /**
-     * The rescaled divisor that keeps the level CONTINUOUS through a
+     * The rescaled divisor that keeps the level continuous through a
      * membership/share/float change: pass the aggregate cap before and
      * after the change (both at the same instant).
      */

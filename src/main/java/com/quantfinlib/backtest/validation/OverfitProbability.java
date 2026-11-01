@@ -7,15 +7,15 @@ import java.util.List;
 import java.util.function.ToDoubleFunction;
 
 /**
- * PROBABILITY OF BACKTEST OVERFITTING via combinatorially symmetric
+ * Probability of backtest overfitting via combinatorially symmetric
  * cross-validation — CSCV (Bailey, Borwein, Lopez de Prado &amp; Zhu 2015,
  * "The probability of backtest overfitting").
  *
- * <p>{@link SharpeValidation} asks whether ONE track record is luck. This
- * class asks the prior question: is the SELECTION PROCESS itself broken?
+ * <p>{@link SharpeValidation} asks whether one track record is luck. This
+ * class asks the prior question: is the selection process itself broken?
  * When a desk tries N parameter sets and reports the best, the reported
  * Sharpe is a maximum of N draws — and the right diagnostic is: how often
- * does the in-sample winner turn out to be a BELOW-MEDIAN performer out of
+ * does the in-sample winner turn out to be a below-median performer out of
  * sample?</p>
  *
  * <p>The construction: take the T&times;N matrix of per-period returns
@@ -37,9 +37,10 @@ import java.util.function.ToDoubleFunction;
  *
  * <p><b>PBO = the fraction of combinations with {@code lambda <= 0}</b>:
  * the probability that the config you would have picked is an
- * out-of-sample loser. Rules of thumb: PBO &lt; 0.1 — selection is finding
- * something real; PBO &ge; 0.5 — the selection is pure noise-mining and
- * the "best" backtest is meaningless regardless of how good it looks.</p>
+ * out-of-sample loser. Rules of thumb: PBO &lt; 0.1 means selection is
+ * finding something real; PBO &ge; 0.5 means the selection is pure
+ * noise-mining and the "best" backtest is meaningless regardless of how
+ * good it looks.</p>
  *
  * <p>Trailing periods that don't fill a whole block are dropped (stated:
  * with T = 1007 and S = 8, each block is 125 periods and the last 7 are
@@ -53,13 +54,75 @@ public final class OverfitProbability {
     /** Hard cap on blocks: C(16,8)=12,870 combinations. */
     private static final int MAX_BLOCKS = 16;
 
-    /**
-     * @param pbo          fraction of IS/OOS splits whose in-sample winner
-     *                     ranked at or below the out-of-sample median
-     * @param combinations number of symmetric splits evaluated, C(S, S/2)
-     * @param logits       one lambda per combination (enumeration order)
-     */
-    public record Result(double pbo, int combinations, double[] logits) {
+    public static final class Result {
+        private final double pbo;
+        private final int combinations;
+        private final double[] logits;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         *
+         * @param pbo fraction of IS/OOS splits whose in-sample winner ranked at or below the out-of-sample median
+         * @param combinations number of symmetric splits evaluated, C(S, S/2)
+         * @param logits one lambda per combination (enumeration order)
+         */
+        public Result(double pbo, int combinations, double[] logits) {
+            this.pbo = pbo;
+            this.combinations = combinations;
+            this.logits = logits == null ? null : logits.clone();
+        }
+
+        /** {@code pbo} (fraction of IS/OOS splits whose in-sample winner ranked at or below the out-of-sample median). */
+        public double pbo() {
+            return pbo;
+        }
+
+        /** {@code combinations} (number of symmetric splits evaluated, C(S, S/2)). */
+        public int combinations() {
+            return combinations;
+        }
+
+        /** Element {@code i} of {@code logits} (one lambda per combination (enumeration order)). */
+        public double logits(int i) {
+            return logits[i];
+        }
+
+        /** Length of {@code logits}. */
+        public int logitsLength() {
+            return logits.length;
+        }
+
+        /** A fresh copy of {@code logits}. */
+        public double[] logitsCopy() {
+            return logits == null ? null : logits.clone();
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Result o)) {
+                return false;
+            }
+            return Double.compare(pbo, o.pbo) == 0
+                    && combinations == o.combinations
+                    && java.util.Arrays.equals(logits, o.logits);
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + Double.hashCode(pbo);
+            h = 31 * h + Integer.hashCode(combinations);
+            h = 31 * h + java.util.Arrays.hashCode(logits);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "Result[" + "pbo=" + pbo + ", " + "combinations=" + combinations + ", " + "logits=" + java.util.Arrays.toString(logits) + "]";
+        }
     }
 
     private OverfitProbability() {

@@ -14,7 +14,7 @@ import java.util.Objects;
  * into a backtestable strategy with a fluent API.
  *
  * <pre>{@code
- * double[] close = series.closes();
+ * double[] close = series.closesCopy();
  * double[] fast = Indicators.ema(close, 12);
  * double[] slow = Indicators.ema(close, 26);
  *
@@ -98,15 +98,27 @@ public final class StrategyBuilder {
             // Rules close over precomputed indicator arrays; nothing to do.
         }
 
+        /**
+         * Position-unaware form, for callers that do not track a position:
+         * treats the book as flat, so only the entry rule is consulted.
+         */
         @Override
         public Signal onBar(int index) {
-            if (entry.isSatisfied(index)) {
-                return Signal.BUY;
+            return onBar(index, 0);
+        }
+
+        /**
+         * Long: the exit rule alone decides (SELL or hold); the entry rule is
+         * not consulted, so a level-type entry such as "RSI above 50" cannot
+         * mask an exit that fires on the same bar. Flat: the entry rule
+         * decides (BUY or hold).
+         */
+        @Override
+        public Signal onBar(int index, double position) {
+            if (position > 0) {
+                return exit.isSatisfied(index) ? Signal.SELL : Signal.HOLD;
             }
-            if (exit.isSatisfied(index)) {
-                return Signal.SELL;
-            }
-            return Signal.HOLD;
+            return entry.isSatisfied(index) ? Signal.BUY : Signal.HOLD;
         }
 
         @Override

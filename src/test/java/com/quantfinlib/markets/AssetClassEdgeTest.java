@@ -23,7 +23,7 @@ class AssetClassEdgeTest {
 
     @Test
     void flatCommodityCurveIsNeitherShapeAndCarriesMinusR() {
-        // All futures AT spot: both shape tests are strict, so both are
+        // All futures at spot: both shape tests are strict, so both are
         // false; ln(F/F) = 0 makes the roll yield exactly zero and the
         // implied carry exactly -r (ln(F/S)/t = 0).
         CommodityCurve flat = CommodityCurve.of(100,

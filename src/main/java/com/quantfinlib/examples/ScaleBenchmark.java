@@ -36,8 +36,9 @@ public final class ScaleBenchmark {
              HftMarketDataBus bus = new HftMarketDataBus(1 << 16, maxSymbols, true);
              HftOrderGateway gateway = new HftOrderGateway(1 << 16, gate, true)) {
 
-            long[] delivered = {0};
-            gateway.addOrderListener((id, sym, side, qty, px, ts) -> delivered[0]++);
+            // In-process venue: acknowledges orders and confirms replaces, so
+            // the quoter maintains one working order per side by cancel/replace.
+            gateway.addOrderListener(new com.quantfinlib.trading.LoopbackVenue(gateway));
 
             HftQuoter quoter = new HftQuoter(gateway, maxSymbols,
                     HftQuoter.Config.of(100_000, 0.0002).withSkewPerUnit(1e-10));
@@ -51,7 +52,7 @@ public final class ScaleBenchmark {
             HftQuoter.Config crossCfg = HftQuoter.Config.of(100_000, 0.0002)
                     .withSkewPerUnit(1e-10)
                     // Move-gated: interval effectively infinite so suppression
-                    // is governed purely by minMove (BOTH gates must pass).
+                    // is governed purely by minMove (both gates must pass).
                     .withConflation(crossMinMove == 0 ? 0 : Long.MAX_VALUE / 4, crossMinMove);
             CrossRateEngine engine = new CrossRateEngine(bus);
             for (int c = 0; c < crosses; c++) {
@@ -95,10 +96,12 @@ public final class ScaleBenchmark {
             System.out.printf("  Inbound: %.2f million ticks/sec sustained "
                             + "(~%.1f us consumer budget per direct tick)%n",
                     measured / (elapsed / 1e9) / 1e6, elapsed / 1e3 / measured);
-            System.out.printf("  Orders:  %.2f million/sec delivered; quoteUpdates=%d, "
-                            + "suppressed=%d, rejectedSides=%d%n",
-                    delivered[0] / (elapsed / 1e9) / 1e6,
-                    quoter.quoteUpdates(), quoter.suppressedUpdates(), quoter.rejectedSides());
+            System.out.printf("  Order messages: %.2f million/sec delivered (new + replace); "
+                            + "quoteUpdates=%d, replaces=%d, deferred=%d, suppressed=%d, "
+                            + "rejectedSides=%d%n",
+                    gateway.deliveredCount() / (elapsed / 1e9) / 1e6,
+                    quoter.quoteUpdates(), quoter.replaces(), quoter.deferredSides(),
+                    quoter.suppressedUpdates(), quoter.rejectedSides());
             System.out.println("  " + hiccups.summary());
         }
     }

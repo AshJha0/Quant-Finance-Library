@@ -21,12 +21,12 @@ class PortfolioConstructionTest {
     void riskParityEqualizesContributions() {
         PortfolioOptimizer.Allocation erc =
                 RiskParityOptimizer.equalRiskContribution(MU, COV);
-        double[] rc = RiskParityOptimizer.riskContributions(erc.weights(), COV);
+        double[] rc = RiskParityOptimizer.riskContributions(erc.weightsCopy(), COV);
         for (double contribution : rc) {
             assertEquals(0.25, contribution, 1e-6);
         }
         double sum = 0;
-        for (double w : erc.weights()) {
+        for (double w : erc.weightsCopy()) {
             assertTrue(w > 0);
             sum += w;
         }
@@ -39,8 +39,8 @@ class PortfolioConstructionTest {
         double[][] diag = {{0.01, 0}, {0, 0.04}};
         PortfolioOptimizer.Allocation erc =
                 RiskParityOptimizer.equalRiskContribution(new double[]{0.05, 0.05}, diag);
-        assertEquals(2.0 / 3, erc.weights()[0], 1e-6);
-        assertEquals(1.0 / 3, erc.weights()[1], 1e-6);
+        assertEquals(2.0 / 3, erc.weights(0), 1e-6);
+        assertEquals(1.0 / 3, erc.weights(1), 1e-6);
     }
 
     // ---- Black-Litterman ----------------------------------------------------
@@ -96,13 +96,13 @@ class PortfolioConstructionTest {
                 .withBounds(min, max)
                 .maxSharpe(0.02);
         double sum = 0;
-        for (double w : capped.weights()) {
+        for (double w : capped.weightsCopy()) {
             assertTrue(w <= 0.30 + 1e-9 && w >= -1e-9, "weight " + w);
             sum += w;
         }
         assertEquals(1.0, sum, 1e-6);
         // Cap must bind somewhere: 4 assets at <=30% forces near-full usage.
-        assertTrue(capped.weights()[2] > 0.05);
+        assertTrue(capped.weights(2) > 0.05);
     }
 
     @Test
@@ -115,8 +115,8 @@ class PortfolioConstructionTest {
                 .maxSharpe(0.02);
         double freeTurnover = 0, stickyTurnover = 0;
         for (int i = 0; i < 4; i++) {
-            freeTurnover += Math.abs(free.weights()[i] - current[i]);
-            stickyTurnover += Math.abs(sticky.weights()[i] - current[i]);
+            freeTurnover += Math.abs(free.weights(i) - current[i]);
+            stickyTurnover += Math.abs(sticky.weights(i) - current[i]);
         }
         assertTrue(stickyTurnover < 0.25 * freeTurnover,
                 "sticky " + stickyTurnover + " vs free " + freeTurnover);

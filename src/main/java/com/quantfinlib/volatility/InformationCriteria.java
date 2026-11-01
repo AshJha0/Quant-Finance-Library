@@ -1,7 +1,7 @@
 package com.quantfinlib.volatility;
 
 /**
- * AIC / BIC — the two numbers that keep model shopping honest. Every extra
+ * AIC and BIC information criteria for model selection. Every extra
  * parameter raises the maximized log-likelihood by construction; these
  * criteria charge admission for it:
  *
@@ -10,13 +10,13 @@ package com.quantfinlib.volatility;
  *   BIC = k ln n - 2 ln L      (Schwarz: consistency-oriented)
  * </pre>
  *
- * LOWER is better for both. BIC's penalty grows with the sample size, so
+ * Lower is better for both. BIC's penalty grows with the sample size, so
  * on large samples it picks smaller models than AIC — BIC will recover the
  * true model as n grows (consistency) while AIC minimizes out-of-sample
  * prediction error even when no candidate is "true". The rule of thumb:
  * AIC for forecasting, BIC for identifying structure.
  *
- * <p>Both criteria only rank models fitted to the SAME data with likelihoods
+ * <p>Both criteria only rank models fitted to the same data with likelihoods
  * on the same scale — comparing an AIC computed on returns against one
  * computed on squared returns is meaningless, and this class cannot detect
  * that for you. Made for the volatility-model zoo here ({@code Garch11} vs

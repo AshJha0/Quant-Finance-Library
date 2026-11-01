@@ -3,28 +3,28 @@ package com.quantfinlib.pricing;
 import com.quantfinlib.pricing.BlackScholes.OptionType;
 
 /**
- * STRUCTURED NOTES — the retail shelf, priced the only honest way: by
- * DECOMPOSITION into the vanilla pieces this library already prices.
+ * Structured notes — the retail shelf, priced by
+ * decomposition into the vanilla pieces this library already prices.
  * Every structured product is a bond plus options in a costume; the
  * costume is what the issuer charges for. Pricing by replication makes
- * the margin visible, and the tests ARE the decompositions (each note
+ * the margin visible, and the tests are the decompositions (each note
  * must equal its replicating portfolio to machine precision).
  *
  * <ul>
- *   <li><b>Reverse convertible</b> — par bond + fat coupon, but the
- *       investor has SOLD a put struck at K: if S_T &lt; K they receive
+ *   <li><b>Reverse convertible</b>: par bond + fat coupon, but the
+ *       investor has sold a put struck at K. If S_T &lt; K they receive
  *       shares worth {@code S_T/K} of par instead of par.
  *       {@code value = (par + coupon) * DF(T) - (par/K) * put(K)}. The
- *       "9% coupon" is put premium in disguise — the whole product in
- *       one sentence. (The knock-in variant needs a down-and-in put,
- *       which this library does not yet price closed-form — stated, not
- *       approximated.)</li>
- *   <li><b>Capital-protected note</b> — {@code protection * par} floor
+ *       "9% coupon" is put premium in disguise; that is the whole product
+ *       in one sentence. (The knock-in variant needs a down-and-in put,
+ *       which this library does not yet price closed-form, so it is not
+ *       approximated here.)</li>
+ *   <li><b>Capital-protected note</b>: {@code protection * par} floor
  *       plus {@code participation} of the upside:
  *       {@code value = protection * par * DF(T) +
  *       participation * (par/S0) * call(S0)}. The issuer's real product
- *       decision is the PARTICIPATION RATE the budget affords:
- *       {@link #participationFor} inverts the pricing for it — low
+ *       decision is the participation rate the budget affords:
+ *       {@link #participationFor} inverts the pricing for it. Low
  *       rates or high vol mean thin participation, which is why these
  *       notes flourish when rates are high and die when they are
  *       zero.</li>
@@ -50,7 +50,7 @@ public final class StructuredNotes {
     /**
      * Fair value of a vanilla reverse convertible of face {@code par}.
      *
-     * @param couponRate total coupon rate for the LIFE of the note
+     * @param couponRate total coupon rate for the life of the note
      *                   (0.09 = 9% paid at maturity with the redemption)
      * @param strike     the conversion strike K (shares delivered are
      *                   worth {@code S_T/K * par} when {@code S_T < K})
@@ -70,7 +70,7 @@ public final class StructuredNotes {
         return par * (1 + couponRate) * df - (par / strike) * put;
     }
 
-    /** Delta of the reverse convertible: short put makes the holder LONG the stock. */
+    /** Delta of the reverse convertible: short put makes the holder long the stock. */
     public static double reverseConvertibleDelta(double par, double spot, double strike,
                                                  double rate, double carry, double vol,
                                                  double timeYears) {
@@ -100,7 +100,7 @@ public final class StructuredNotes {
     }
 
     /**
-     * The participation rate a given ISSUE PRICE affords:
+     * The participation rate a given issue price affords:
      * {@code (issuePrice - protection * par * DF) / ((par/S0) * call)}.
      * This is the issuer's product-design equation solved for its one
      * free variable — and the reason zero-rate eras produce notes with

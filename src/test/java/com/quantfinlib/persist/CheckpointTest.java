@@ -45,7 +45,7 @@ class CheckpointTest {
         spread.onSpread(0, 0.02, 0);
         spread.onSpread(1, 0.01, 1);
         spread.rollDay();
-        // Leave intraday residue that must NOT survive the restore.
+        // Leave intraday residue that must not survive the restore.
         volume.onVolume(0, 999);
         spread.onSpread(0, 5.0, 2);            // huge live deviation
 
@@ -349,7 +349,7 @@ class CheckpointTest {
         Path file = dir.resolve("eod.qflc");
         for (int day = 0; day < 2; day++) {
             VolumeCurve curve = new VolumeCurve(2, 0.5);
-            curve.onVolume(0, 100 * (day + 1));
+            curve.onVolume(0, 100L * (day + 1));
             curve.rollDay();
             try (var w = Checkpoint.writer(file)) {
                 w.section("volume", curve::writeState);

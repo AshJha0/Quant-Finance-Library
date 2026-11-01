@@ -2,14 +2,14 @@ package com.quantfinlib.microstructure;
 
 /**
  * Queue positioning and priority analytics: how position in the price-time
- * queue — and small latency differences in reaching it — translate into fill
- * probability.
+ * queue (and small latency differences in reaching it) translates into
+ * fill probability.
  *
  * <p>Model: executed volume at a price level over a horizon is treated as
  * exponentially distributed with mean {@code expectedTradedQty}; an order
  * fills when cumulative executions reach the quantity ahead of it plus its
  * own size, giving {@code P(fill) = exp(-(qtyAhead + orderQty) / expectedTradedQty)}.
- * A deliberately simple, closed-form model — calibrate {@code expectedTradedQty}
+ * A simple closed-form model — calibrate {@code expectedTradedQty}
  * from observed level turnover.</p>
  */
 public final class QueueModel {

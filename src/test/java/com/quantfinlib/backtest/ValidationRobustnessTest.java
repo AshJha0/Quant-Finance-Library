@@ -32,12 +32,12 @@ class ValidationRobustnessTest {
         PurgedKFold.Split f1 = splits.get(1);
         assertEquals(5, f1.testFrom());
         assertEquals(10, f1.testTo());
-        assertArrayEquals(new int[]{0, 1, 2, 13, 14, 15, 16, 17, 18, 19}, f1.trainIndices());
+        assertArrayEquals(new int[]{0, 1, 2, 13, 14, 15, 16, 17, 18, 19}, f1.trainIndicesCopy());
 
         // Fold 0 has no head at all: train = [0+5+2+1, 20) = {8..19}.
         PurgedKFold.Split f0 = splits.get(0);
         assertArrayEquals(new int[]{8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19},
-                f0.trainIndices());
+                f0.trainIndicesCopy());
 
         // Test ranges partition [0, 20) with no gaps.
         int covered = 0;
@@ -51,8 +51,8 @@ class ValidationRobustnessTest {
     void zeroHorizonZeroEmbargoReducesToPlainKFold() {
         // With nothing to purge, train must be the exact complement of test.
         for (PurgedKFold.Split s : PurgedKFold.splits(12, 3, 0, 0)) {
-            assertEquals(12 - (s.testTo() - s.testFrom()), s.trainIndices().length);
-            for (int i : s.trainIndices()) {
+            assertEquals(12 - (s.testTo() - s.testFrom()), s.trainIndicesLength());
+            for (int i : s.trainIndicesCopy()) {
                 assertTrue(i < s.testFrom() || i >= s.testTo());
             }
         }
@@ -63,7 +63,7 @@ class ValidationRobustnessTest {
         assertThrows(IllegalArgumentException.class, () -> PurgedKFold.splits(20, 1, 0, 0));
         assertThrows(IllegalArgumentException.class, () -> PurgedKFold.splits(5, 3, 0, 0));
         assertThrows(IllegalArgumentException.class, () -> PurgedKFold.splits(20, 4, -1, 0));
-        // Horizon so wide the purge eats ALL training data must throw,
+        // Horizon so wide the purge eats all training data must throw,
         // not silently return an empty training set.
         assertThrows(IllegalArgumentException.class, () -> PurgedKFold.splits(8, 2, 10, 0));
     }
@@ -72,7 +72,7 @@ class ValidationRobustnessTest {
 
     @Test
     void genuineSkillScoresPboZero() {
-        // Variant 0 beats variant 1 in EVERY period: whatever half is
+        // Variant 0 beats variant 1 in every period: whatever half is
         // in-sample, the winner is 0 and it ranks 2 of 2 out of sample.
         // omega = 2/3 on every one of C(4,2)=6 splits -> lambda = ln 2 > 0.
         double[][] r = new double[16][2];
@@ -84,7 +84,7 @@ class ValidationRobustnessTest {
                 OverfitProbability.cscv(r, 4, com.quantfinlib.util.MathUtils::mean);
         assertEquals(6, res.combinations());
         assertEquals(0.0, res.pbo(), 0.0);
-        for (double lambda : res.logits()) {
+        for (double lambda : res.logitsCopy()) {
             assertEquals(Math.log(2), lambda, 1e-12);
         }
     }
@@ -94,7 +94,7 @@ class ValidationRobustnessTest {
         // Variant 0 wins the first half of time, variant 1 (its mirror)
         // wins the second half. Whatever blocks you train on, the winner
         // does no better than tie out of sample: every logit <= 0, PBO = 1.
-        // +/-1.0 (not 0.01) so mixed-block means cancel EXACTLY in floating
+        // +/-1.0 (not 0.01) so mixed-block means cancel exactly in floating
         // point and ties are true ties, not 1e-18 rank noise.
         double[][] r = new double[16][2];
         for (int t = 0; t < 16; t++) {
@@ -220,7 +220,7 @@ class ValidationRobustnessTest {
         DrawdownAnalytics.Drawdown second = r.episodes().get(1);
         assertEquals(5, second.peakIndex());
         assertEquals(7, second.troughIndex());
-        assertEquals(-1, second.recoveryIndex()); // honest: not recovered
+        assertEquals(-1, second.recoveryIndex()); // not recovered
         assertEquals(1 - 100.0 / 121.0, second.depth(), 1e-12);
         assertEquals(2, second.duration(equity.length));
 

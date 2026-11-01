@@ -79,7 +79,7 @@ class AlphaValidationTest {
     void blockedCrossValidationShowsRegimeConsistency() {
         AlphaValidation.CrossValidationResult r = AlphaValidation.crossValidate(
                 panel(), Factors.momentum(20, 0), 5, 30, 4);
-        assertEquals(4, r.blockIcs().length);
+        assertEquals(4, r.blockIcsLength());
         // A stationary signal is consistent in every block.
         assertEquals(1.0, r.signConsistency(), 1e-12);
         assertEquals(1.0, r.meanIc(), 1e-9);
@@ -89,10 +89,10 @@ class AlphaValidationTest {
     }
 
     /**
-     * Drifts flip sign halfway: the momentum ranking genuinely changes over
+     * Drifts flip sign halfway: the momentum ranking changes over
      * time (and keeps predicting), so the date-permutation has something to
-     * destroy. On a time-INVARIANT panel the test is deliberately
-     * conservative — one effective observation — which the luck case below
+     * destroy. On a time-invariant panel the test is conservative by
+     * design (one effective observation), which the luck case below
      * exercises.
      */
     private static AlphaContext regimePanel() {
@@ -121,9 +121,9 @@ class AlphaValidationTest {
         assertTrue(real.pValue() < 0.05, "real signal p=" + real.pValue());
         assertTrue(real.observedMeanIc() > 0.7, "IC=" + real.observedMeanIc());
 
-        // Static random scores: whatever IC they luck into is IDENTICAL at
-        // every date, so permuting dates changes nothing → p ≈ 1. The test
-        // correctly refuses to call time-invariant luck a signal.
+        // Static random scores under the DATE-permutation diagnostic: the
+        // ranking never changes, so permuting dates changes nothing and p = 1.
+        // That null measures time variation of the ranking, not skill.
         Random rng = new Random(7);
         double[] fixed = new double[ctx.symbolCount()];
         for (int i = 0; i < fixed.length; i++) {
@@ -131,7 +131,7 @@ class AlphaValidationTest {
         }
         AlphaFactor luck = (c, index) -> fixed.clone();
         AlphaValidation.RobustnessResult lucky = AlphaValidation.monteCarloRobustness(
-                ctx, luck, 5, 30, 200, 42);
+                ctx, luck, 5, 30, 200, 42, AlphaValidation.NullModel.DATE_PERMUTATION);
         assertEquals(1.0, lucky.pValue(), 1e-9);
         assertThrows(IllegalArgumentException.class,
                 () -> AlphaValidation.monteCarloRobustness(ctx, luck, 5, 30, 5, 42));
@@ -180,8 +180,8 @@ class AlphaValidationTest {
                 panel(), sweep, 5, 40);
         // On a stationary drift panel every lookback ranks identically:
         // the flattest possible plateau — the robust-signal signature.
-        assertEquals(4, r.meanIcs().length);
-        for (double ic : r.meanIcs()) {
+        assertEquals(4, r.meanIcsLength());
+        for (double ic : r.meanIcsCopy()) {
             assertEquals(1.0, ic, 1e-9);
         }
         assertEquals(0.0, r.worstNeighborDrop(), 1e-9);

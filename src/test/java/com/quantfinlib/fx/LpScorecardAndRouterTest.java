@@ -50,8 +50,8 @@ class LpScorecardAndRouterTest {
 
     @Test
     void rejectBurstsAreSampledNotOverwritten() {
-        // Bursts happen when the market runs — exactly when markouts are
-        // largest — so the pending ring must mature EVERY burst reject,
+        // Bursts happen when the market runs, exactly when markouts are
+        // largest, so the pending ring must mature every burst reject,
         // not just the last one.
         LpScorecard c = new LpScorecard(1, 1.0, 100 * MS);
         c.onReject(0, true, 1.08500, 0, MS);

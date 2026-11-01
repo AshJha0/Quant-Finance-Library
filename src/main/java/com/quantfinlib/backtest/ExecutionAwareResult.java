@@ -55,10 +55,10 @@ public final class ExecutionAwareResult {
         }
         double[] mids = new double[n];
         for (int i = 0; i < n; i++) {
-            mids[i] = series.close(parent.fillBarIndices()[i]);
+            mids[i] = series.close(parent.fillBarIndices(i));
         }
-        int first = parent.fillBarIndices()[0];
-        int last = parent.fillBarIndices()[n - 1];
+        int first = parent.fillBarIndices(0);
+        int last = parent.fillBarIndices(n - 1);
         double pv = 0, vol = 0;
         for (int i = first; i <= last; i++) {
             pv += series.close(i) * series.volume(i);

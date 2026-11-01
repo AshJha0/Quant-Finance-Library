@@ -14,10 +14,10 @@ package com.quantfinlib.execution;
  *  expected post cost = p·(a − h − r) + (1−p)·(h + d)
  *  POST iff that beats h</pre>
  *
- * <p>The inputs are the honest parts: {@code fillProbability} from
+ * <p>The inputs are measured, not assumed: {@code fillProbability} from
  * {@code microstructure.FillProbabilityModel} (or your own), the
  * adverse-selection cost {@code a} from post-fill markouts (a passive
- * fill happens exactly when the market comes THROUGH you — free money
+ * fill happens exactly when the market comes through you — free money
  * it is not), and the drift {@code d} from your alpha (positive =
  * expected to move against a waiting buyer). All in the same per-unit
  * currency. Static, deterministic, research/warm lane; per-share or
@@ -36,7 +36,7 @@ public final class OrderPlacementPolicy {
      * @param halfSpread          half the touch spread, &gt; 0
      * @param fillProbability     P(passive order fills within the
      *                            horizon), in [0, 1]
-     * @param adverseSelection    expected cost WHEN passively filled
+     * @param adverseSelection    expected cost when passively filled
      *                            (post-fill markout), ≥ 0
      * @param adverseDrift        expected move against the order while
      *                            waiting unfilled (signed: negative =
@@ -67,11 +67,11 @@ public final class OrderPlacementPolicy {
     }
 
     /**
-     * The fill-probability REGION where posting beats crossing. A single
+     * The fill-probability region where posting beats crossing. A single
      * breakeven scalar cannot carry the answer: {@code postCost(p) =
      * (h+d) − p·(2h+r+d−a)} is linear in p, and when adverse selection
      * exceeds {@code 2h+r+d} the slope flips — posting then pays only
-     * BELOW the threshold, not above. The region says it directly.
+     * below the threshold, not above. The region says it directly.
      * Empty ({@link #isEmpty()}) = never post under these conditions.
      * Boundaries are indifference points (measure zero; {@code decide}
      * crosses on a tie).
@@ -114,7 +114,7 @@ public final class OrderPlacementPolicy {
             return pStar >= 1 ? NEVER : new PostRegion(Math.max(0, pStar), 1);
         }
         if (coef < 0) {
-            // The slope flipped: posting pays only BELOW the threshold.
+            // The slope flipped: posting pays only below the threshold.
             double pStar = adverseDrift / coef;
             return pStar <= 0 ? NEVER : new PostRegion(0, Math.min(1, pStar));
         }

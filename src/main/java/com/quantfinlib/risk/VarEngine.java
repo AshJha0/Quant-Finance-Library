@@ -2,15 +2,15 @@ package com.quantfinlib.risk;
 
 import com.quantfinlib.util.MathUtils;
 
-import java.util.Random;
+import java.util.SplittableRandom;
 
 /**
  * Portfolio Value-at-Risk, all four classic flavors over one input
- * shape: factor EXPOSURES (currency P&amp;L per unit factor return — a
+ * shape: factor exposures (currency P&amp;L per unit factor return — a
  * delta vector) against a factor covariance matrix or a factor-return
  * history. {@code RiskMetrics} answers the single-series question; this
- * engine answers the PORTFOLIO one, where the methods genuinely
- * disagree and the disagreement is the point:
+ * engine answers the portfolio one, where the methods
+ * disagree and the disagreement is informative:
  *
  * <ul>
  *   <li><b>Delta-normal (variance-covariance)</b> — σ_P = √(δ'Σδ),
@@ -19,19 +19,23 @@ import java.util.Random;
  *       through the linear map; converges to delta-normal for a linear
  *       book (the tests pin that agreement), and exists so the same
  *       harness can price non-linear books by full revaluation;</li>
- *   <li><b>Delta-gamma (Cornish-Fisher)</b> — second-order P&amp;L
+ *   <li><b>Delta-gamma (Cornish-Fisher)</b>: second-order P&amp;L
  *       {@code δ'Δx + ½Δx'ΓΔx} whose skew tilts the quantile via the
- *       Cornish-Fisher expansion: a short-gamma book's VaR is WORSE
- *       than delta-normal says, a long-gamma book's better — the
+ *       Cornish-Fisher expansion. A short-gamma book's VaR is worse
+ *       than delta-normal says and a long-gamma book's better, the
  *       asymmetry delta-normal cannot see;</li>
  *   <li><b>Historical</b> — replay actual factor-return rows through
  *       the exposures; no distributional assumption, no correlation
  *       matrix, exactly as fat-tailed as the sample was.</li>
  * </ul>
  *
- * <p>Conventions: VaR and ES are returned as POSITIVE losses in
+ * <p>Conventions: VaR and ES are returned as positive losses in
  * currency units; confidence is the one-sided level (0.99 = 99%);
- * factor returns and Σ are per-horizon (scale √t outside). Expected
+ * factor returns and Σ are per-horizon (scale √t outside). Sample-based
+ * methods share the tail definitions of {@link TailRisk}. Monte Carlo
+ * factors the covariance with {@link PsdMatrices#choleskyPsd}, so a
+ * rank-deficient factor covariance is accepted and an indefinite one is
+ * rejected. Expected
  * shortfall accompanies each method — post-FRTB, ES is the primary
  * number and VaR the diagnostic. Research lane, deterministic (MC per
  * seed).</p>
@@ -85,8 +89,8 @@ public final class VarEngine {
         if (scenarios < 100) {
             throw new IllegalArgumentException("need >= 100 scenarios");
         }
-        double[][] chol = GaussianCopula.cholesky(covariance);
-        Random rnd = new Random(seed);
+        double[][] chol = PsdMatrices.choleskyPsd(covariance);
+        SplittableRandom rnd = new SplittableRandom(seed);
         double[] z = new double[n];
         double[] losses = new double[scenarios];
         for (int s = 0; s < scenarios; s++) {
@@ -115,7 +119,7 @@ public final class VarEngine {
      * delta-gamma P&amp;L. Moments of {@code δ'Δx + ½Δx'ΓΔx} under
      * Gaussian factors: mean {@code ½tr(ΓΣ)}, variance
      * {@code δ'Σδ + ½tr((ΓΣ)²)}, and the skew that moves the quantile.
-     * Accurate for MODERATE gamma — the expansion degrades when the
+     * Accurate for moderate gamma — the expansion degrades when the
      * quadratic term dominates (skew beyond ~1), which is when full
      * revaluation Monte Carlo earns its cost; that boundary is the
      * documented limit, not a hidden one.
@@ -127,7 +131,7 @@ public final class VarEngine {
             return 0;
         }
         double z = zOf(confidence);
-        // Cornish-Fisher: the LOSS quantile uses -z (left tail of P&L).
+        // Cornish-Fisher: the loss quantile uses -z (left tail of P&L).
         double zCf = -z + (z * z - 1) * c.skew() / 6;
         double pnlQuantile = c.mean() + zCf * Math.sqrt(c.variance());
         return Math.max(0, -pnlQuantile);
@@ -135,12 +139,12 @@ public final class VarEngine {
 
     /**
      * Second-order ES: the tail mean of the Cornish-Fisher loss
-     * quantile, integrated in CLOSED FORM. With loss quantile
+     * quantile, integrated in closed form. With loss quantile
      * {@code q(p) = −μ + σ·(z_p + (z_p²−1)·s/6)} (s = loss skew), the
      * identities {@code E[Z·1{Z>z}] = φ(z)} and
      * {@code E[(Z²−1)·1{Z>z}] = z·φ(z)} give
      * {@code ES = −μ + σ·φ(z)/(1−c)·(1 + z·s/6)} — no numerical
-     * integration, and it reduces EXACTLY to {@link #deltaNormalEs}
+     * integration, and it reduces exactly to {@link #deltaNormalEs}
      * when Γ = 0. Same moderate-gamma validity bound as
      * {@link #deltaGammaVar}.
      */
@@ -226,6 +230,73 @@ public final class VarEngine {
         return tail(losses, confidence);
     }
 
+    /**
+     * Filtered historical simulation (Hull and White 1998, J. Risk 1(1);
+     * Barone-Adesi, Giannopoulos and Vosper 1999): each factor's history is
+     * devolatilised by its own EWMA volatility and rescaled to today's,
+     * {@code r̃_t,i = r_t,i · σ_{T+1,i} / σ_t,i}, and the rescaled rows are
+     * replayed through the exposures. The scenarios keep the empirical
+     * shape and cross-dependence of the standardised shocks but carry the
+     * current volatility, which plain historical simulation ignores.
+     *
+     * <p>EWMA: {@code σ²_t = λσ²_{t−1} + (1−λ)r²_{t−1}}, causal and
+     * bias-corrected ({@code σ²_t = Σ_{k<t}(1−λ)λ^{t−1−k}r_k² / (1−λ^t)});
+     * the first {@code burnIn} rows are only used to warm the filter and are
+     * not replayed. σ_{T+1} is the forecast after the last row.</p>
+     *
+     * @param factorReturns rows of factor returns, oldest first
+     * @param lambda        EWMA decay in (0, 1), 0.94 for daily RiskMetrics
+     * @param burnIn        rows used only to start the filter, &ge; 1
+     */
+    public static VarResult filteredHistoricalVar(double[] exposures, double[][] factorReturns,
+                                                  double lambda, int burnIn, double confidence) {
+        int t = factorReturns.length;
+        int k = exposures.length;
+        if (!(lambda > 0 && lambda < 1) || burnIn < 1 || t - burnIn < 20) {
+            throw new IllegalArgumentException("need lambda in (0,1), burnIn >= 1 and >= 20 "
+                    + "scenarios after the burn-in");
+        }
+        double[] raw = new double[k];
+        double mass = 0;
+        double[][] sigma = new double[t + 1][k];     // sigma[s] = vol for row s, s = t is the forecast
+        for (int s = 0; s <= t; s++) {
+            if (s > 0) {
+                double[] prev = factorReturns[s - 1];
+                for (int i = 0; i < k; i++) {
+                    raw[i] = lambda * raw[i] + (1 - lambda) * prev[i] * prev[i];
+                }
+                mass = lambda * mass + (1 - lambda);
+                for (int i = 0; i < k; i++) {
+                    sigma[s][i] = Math.sqrt(raw[i] / mass);
+                }
+            }
+            if (s < t) {
+                if (factorReturns[s].length != k) {
+                    throw new IllegalArgumentException("scenario " + s + " width mismatch");
+                }
+                for (double v : factorReturns[s]) {
+                    if (!Double.isFinite(v)) {
+                        throw new IllegalArgumentException("non-finite factor return in row " + s);
+                    }
+                }
+            }
+        }
+        double[] losses = new double[t - burnIn];
+        for (int s = burnIn; s < t; s++) {
+            double pnl = 0;
+            for (int i = 0; i < k; i++) {
+                double vol = sigma[s][i];
+                if (!(vol > 0)) {
+                    throw new IllegalArgumentException("factor " + i + " has zero EWMA volatility "
+                            + "at row " + s + "; lengthen the burn-in");
+                }
+                pnl += exposures[i] * factorReturns[s][i] * sigma[t][i] / vol;
+            }
+            losses[s - burnIn] = -pnl;
+        }
+        return tail(losses, confidence);
+    }
+
     // ------------------------------------------------------------------
     // Full revaluation
     // ------------------------------------------------------------------
@@ -239,10 +310,10 @@ public final class VarEngine {
 
     /**
      * Full-revaluation VaR: every scenario repriced through the
-     * CALLER'S pricer — the method that sees what every sensitivity
+     * caller's pricer. This is the method that sees what every sensitivity
      * shortcut misses (a knocked-out barrier, a pinned short gamma, an
      * autocall triggered by the scenario itself). Scenarios are rows of
-     * factor moves — historical rows for historical full-reval,
+     * factor moves: historical rows for historical full-reval,
      * Cholesky-generated rows for Monte Carlo full-reval. A pricer
      * returning NaN/Infinity throws: a scenario your pricer cannot
      * price is a modelling problem, not a quantile.
@@ -270,23 +341,19 @@ public final class VarEngine {
     // Shared tail arithmetic
     // ------------------------------------------------------------------
 
-    /** VaR (quantile) and ES (tail mean) of a loss sample, positive = loss. */
+    /**
+     * VaR and ES of a loss sample, positive = loss, using the shared
+     * definitions of {@link TailRisk}: VaR is the lower empirical quantile
+     * {@code L(ceil(c·n))}, ES the Acerbi-Tasche tail mean over the worst
+     * {@code (1−c)·n} observations with a fractional boundary weight. Both
+     * are floored at zero (a tail made of gains reports no loss).
+     */
     static VarResult tail(double[] losses, double confidence) {
         if (!(confidence > 0.5 && confidence < 1)) {
             throw new IllegalArgumentException("confidence must be in (0.5, 1)");
         }
-        double[] sorted = losses.clone();
-        java.util.Arrays.sort(sorted);
-        int n = sorted.length;
-        int index = Math.min(n - 1, (int) Math.ceil(confidence * n) - 1);
-        double var = Math.max(0, sorted[index]);
-        double sum = 0;
-        int count = 0;
-        for (int i = index; i < n; i++) {
-            sum += sorted[i];
-            count++;
-        }
-        return new VarResult(var, Math.max(0, sum / count));
+        TailRisk.Tail t = TailRisk.of(losses, confidence);
+        return new VarResult(Math.max(0, t.var()), Math.max(0, t.expectedShortfall()));
     }
 
     private static double zOf(double confidence) {

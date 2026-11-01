@@ -65,10 +65,19 @@ public final class BookPrimitives {
         }
     }
 
-    /** Inserts into the open-addressing map (caller guarantees the key is absent). */
+    /**
+     * Inserts into the open-addressing map (caller guarantees the key is
+     * absent). Callers size the table at least twice the number of live
+     * keys; a full table would otherwise probe forever, so the probe is
+     * bounded and a full table throws {@link IllegalStateException}.
+     */
     public static void mapPut(long[] keys, int[] vals, int mask, long key, int value) {
         int slot = (int) mix(key) & mask;
+        int probes = 0;
         while (keys[slot] != 0) {
+            if (++probes > mask) {
+                throw new IllegalStateException("id map full: size it above the live key count");
+            }
             slot = (slot + 1) & mask;
         }
         keys[slot] = key;
@@ -78,7 +87,7 @@ public final class BookPrimitives {
     /** Slot of {@code key}, or -1. */
     public static int mapFind(long[] keys, int mask, long key) {
         int slot = (int) mix(key) & mask;
-        while (keys[slot] != 0) {
+        for (int probes = 0; probes <= mask && keys[slot] != 0; probes++) {
             if (keys[slot] == key) {
                 return slot;
             }

@@ -3,13 +3,21 @@ package com.quantfinlib.volatility;
 import com.quantfinlib.util.MathUtils;
 
 /**
- * GARCH(1,1) volatility model with Gaussian maximum-likelihood fitting:
- * {@code h_t = ω + α r_{t-1}² + β h_{t-1}}.
+ * GARCH(1,1) volatility model (Bollerslev 1986, J. Econometrics 31, 307-327):
+ * {@code h_t = ω + α r_{t-1}² + β h_{t-1}} on demeaned returns.
  *
- * <p>Estimation uses variance targeting ({@code ω = σ̄²(1-α-β)}, which pins
- * the unconditional variance to the sample variance) and a coarse-to-fine
- * grid search over (α, β) — derivative-free, deterministic, and robust for a
- * two-parameter surface.</p>
+ * <p>Estimation is full maximum likelihood over (ω, α, β) and, for
+ * {@link Innovation#STUDENT_T}, the degrees of freedom ν. The admissible
+ * region ω &gt; 0, α, β &ge; 0, α + β &lt; 1 is mapped onto R³ by
+ * {@code ω = e^{u₀}}, {@code α = p·s}, {@code β = p·(1−s)} with
+ * {@code p = logistic(u₁)}, {@code s = logistic(u₂)}, and the negative
+ * log-likelihood is minimised by Nelder-Mead from three starting points.
+ * The recursion starts at {@code h₀} = sample variance of the demeaned
+ * returns (the usual backcast). Standard errors come from the observed
+ * information (numerical Hessian); robust QMLE standard errors from the
+ * Bollerslev-Wooldridge (1992) sandwich, which stay valid when the
+ * innovation is not Gaussian. Both are NaN when the estimate sits on the
+ * boundary and the information matrix is singular.</p>
  */
 public final class Garch11 {
 
@@ -24,72 +32,207 @@ public final class Garch11 {
         }
     }
 
+    /**
+     * A fitted model with its uncertainty.
+     */
+    public static final class Fit {
+        private final Params params;
+        private final Innovation innovation;
+        private final double nu;
+        private final double[] standardErrors;
+        private final double[] robustStandardErrors;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         *
+         * @param params ω, α, β and the maximised log-likelihood
+         * @param innovation the innovation distribution used
+         * @param nu Student-t degrees of freedom, NaN for Gaussian
+         * @param standardErrors SEs of (ω, α, β[, ν]) from the observed information
+         * @param robustStandardErrors Bollerslev-Wooldridge QMLE SEs, same order
+         */
+        public Fit(Params params, Innovation innovation, double nu, double[] standardErrors,
+                double[] robustStandardErrors) {
+            this.params = params;
+            this.innovation = innovation;
+            this.nu = nu;
+            this.standardErrors = standardErrors == null ? null : standardErrors.clone();
+            this.robustStandardErrors = robustStandardErrors == null ? null : robustStandardErrors.clone();
+        }
+
+        /** {@code params} (ω, α, β and the maximised log-likelihood). */
+        public Params params() {
+            return params;
+        }
+
+        /** {@code innovation} (the innovation distribution used). */
+        public Innovation innovation() {
+            return innovation;
+        }
+
+        /** {@code nu} (Student-t degrees of freedom, NaN for Gaussian). */
+        public double nu() {
+            return nu;
+        }
+
+        /** Element {@code i} of {@code standardErrors} (SEs of (ω, α, β[, ν]) from the observed information). */
+        public double standardErrors(int i) {
+            return standardErrors[i];
+        }
+
+        /** Length of {@code standardErrors}. */
+        public int standardErrorsLength() {
+            return standardErrors.length;
+        }
+
+        /** A fresh copy of {@code standardErrors}. */
+        public double[] standardErrorsCopy() {
+            return standardErrors == null ? null : standardErrors.clone();
+        }
+
+        /** Element {@code i} of {@code robustStandardErrors} (Bollerslev-Wooldridge QMLE SEs, same order). */
+        public double robustStandardErrors(int i) {
+            return robustStandardErrors[i];
+        }
+
+        /** Length of {@code robustStandardErrors}. */
+        public int robustStandardErrorsLength() {
+            return robustStandardErrors.length;
+        }
+
+        /** A fresh copy of {@code robustStandardErrors}. */
+        public double[] robustStandardErrorsCopy() {
+            return robustStandardErrors == null ? null : robustStandardErrors.clone();
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Fit o)) {
+                return false;
+            }
+            return java.util.Objects.equals(params, o.params)
+                    && java.util.Objects.equals(innovation, o.innovation)
+                    && Double.compare(nu, o.nu) == 0
+                    && java.util.Arrays.equals(standardErrors, o.standardErrors)
+                    && java.util.Arrays.equals(robustStandardErrors, o.robustStandardErrors);
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + java.util.Objects.hashCode(params);
+            h = 31 * h + java.util.Objects.hashCode(innovation);
+            h = 31 * h + Double.hashCode(nu);
+            h = 31 * h + java.util.Arrays.hashCode(standardErrors);
+            h = 31 * h + java.util.Arrays.hashCode(robustStandardErrors);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "Fit[" + "params=" + params + ", " + "innovation=" + innovation + ", " + "nu=" + nu + ", " + "standardErrors=" + java.util.Arrays.toString(standardErrors) + ", " + "robustStandardErrors=" + java.util.Arrays.toString(robustStandardErrors) + "]";
+        }
+    }
+
     private Garch11() {
     }
 
-    /** Fits GARCH(1,1) to (demeaned) returns by MLE with variance targeting. */
+    /** Gaussian maximum-likelihood fit; see {@link #estimate}. */
     public static Params fit(double[] returns) {
-        if (returns.length < 100) {
-            throw new IllegalArgumentException("need at least 100 returns, got " + returns.length);
-        }
-        double mean = MathUtils.mean(returns);
-        double[] r = new double[returns.length];
-        for (int i = 0; i < r.length; i++) {
-            r[i] = returns[i] - mean;
-        }
-        double sampleVar = MathUtils.variance(r);
-
-        double bestAlpha = 0.05, bestBeta = 0.9;
-        double bestLl = Double.NEGATIVE_INFINITY;
-        // Full admissible box (the persistence check prunes invalid cells):
-        // a narrower start is a hard cap refinement can barely creep past,
-        // pinning low-persistence/high-ARCH series at the box edge.
-        double alphaLo = 0.005, alphaHi = 0.99, betaLo = 1e-6, betaHi = 0.999;
-
-        for (int pass = 0; pass < 3; pass++) {
-            int grid = 25;
-            for (int i = 0; i <= grid; i++) {
-                double alpha = alphaLo + (alphaHi - alphaLo) * i / grid;
-                for (int j = 0; j <= grid; j++) {
-                    double beta = betaLo + (betaHi - betaLo) * j / grid;
-                    if (alpha + beta >= 0.9995 || alpha <= 0 || beta <= 0) {
-                        continue;
-                    }
-                    double ll = logLikelihood(r, sampleVar, alpha, beta);
-                    if (ll > bestLl) {
-                        bestLl = ll;
-                        bestAlpha = alpha;
-                        bestBeta = beta;
-                    }
-                }
-            }
-            // Zoom into the best cell for the next pass.
-            double alphaStep = (alphaHi - alphaLo) / grid;
-            double betaStep = (betaHi - betaLo) / grid;
-            alphaLo = Math.max(1e-6, bestAlpha - 2 * alphaStep);
-            alphaHi = Math.min(0.99, bestAlpha + 2 * alphaStep);
-            betaLo = Math.max(1e-6, bestBeta - 2 * betaStep);
-            betaHi = Math.min(0.999, bestBeta + 2 * betaStep);
-        }
-        double omega = sampleVar * (1 - bestAlpha - bestBeta);
-        return new Params(omega, bestAlpha, bestBeta, bestLl);
+        return estimate(returns, Innovation.GAUSSIAN).params();
     }
 
-    private static double logLikelihood(double[] r, double sampleVar, double alpha, double beta) {
-        double omega = sampleVar * (1 - alpha - beta);
-        double h = sampleVar;
-        double ll = 0;
-        for (double x : r) {
-            if (h <= 0) {
+    /**
+     * Maximum-likelihood fit with standard errors.
+     *
+     * @param returns at least 100 finite returns; the sample mean is removed
+     */
+    public static Fit estimate(double[] returns, Innovation innovation) {
+        double[] r = GarchEstimation.demean(returns);
+        double var = MathUtils.variance(r);
+        boolean t = innovation == Innovation.STUDENT_T;
+        Model model = new Model(var, t);
+        double[][] starts = {
+                start(var, 0.05, 0.90, t), start(var, 0.10, 0.60, t), start(var, 0.03, 0.96, t)};
+        GarchEstimation.Estimate e = GarchEstimation.estimate(model, r, starts);
+        double[] th = e.theta();
+        return new Fit(new Params(th[0], th[1], th[2], e.logLikelihood()), innovation,
+                t ? th[3] : Double.NaN, e.se(), e.robustSe());
+    }
+
+    private static double[] start(double var, double a, double b, boolean t) {
+        double w = var * (1 - a - b);
+        return t ? new double[]{w, a, b, 8} : new double[]{w, a, b};
+    }
+
+    private record Model(double h0, boolean studentT) implements GarchEstimation.Model {
+        @Override
+        public int size() {
+            return studentT ? 4 : 3;
+        }
+
+        @Override
+        public double[] toTheta(double[] u) {
+            double p = GarchEstimation.logistic(u[1]);
+            double sh = GarchEstimation.logistic(u[2]);
+            double[] th = new double[size()];
+            th[0] = Math.exp(u[0]);
+            th[1] = p * sh;
+            th[2] = p * (1 - sh);
+            if (studentT) {
+                th[3] = GarchEstimation.nuFromU(u[3]);
+            }
+            return th;
+        }
+
+        @Override
+        public double[] toU(double[] th) {
+            double p = th[1] + th[2];
+            double[] u = new double[size()];
+            u[0] = Math.log(th[0]);
+            u[1] = GarchEstimation.logit(p);
+            u[2] = GarchEstimation.logit(th[1] / p);
+            if (studentT) {
+                u[3] = GarchEstimation.uFromNu(th[3]);
+            }
+            return u;
+        }
+
+        @Override
+        public double logLik(double[] th, double[] r, double[] perObs) {
+            double omega = th[0];
+            double alpha = th[1];
+            double beta = th[2];
+            double nu = studentT ? th[3] : Double.NaN;
+            if (!(omega > 0) || alpha < 0 || beta < 0 || (studentT && !(nu > 2))) {
                 return Double.NEGATIVE_INFINITY;
             }
-            ll += -0.5 * (Math.log(2 * Math.PI) + Math.log(h) + x * x / h);
-            h = omega + alpha * x * x + beta * h;
+            double c = GarchEstimation.tConst(nu);
+            double h = h0;
+            double ll = 0;
+            for (int i = 0; i < r.length; i++) {
+                double x = r[i];
+                double li = GarchEstimation.logDensity(x, h, nu, c);
+                if (perObs != null) {
+                    perObs[i] = li;
+                }
+                ll += li;
+                h = omega + alpha * x * x + beta * h;
+                if (!(h > 0) || h == Double.POSITIVE_INFINITY) {
+                    return Double.NEGATIVE_INFINITY;
+                }
+            }
+            return Double.isFinite(ll) ? ll : Double.NEGATIVE_INFINITY;
         }
-        return ll;
     }
 
-    /** Conditional variance series under the fitted parameters (seeded at sample variance). */
+    /**
+     * Conditional variance series under the fitted parameters, seeded at the
+     * sample variance of the demeaned returns (the same backcast the fit uses).
+     */
     public static double[] conditionalVariances(double[] returns, Params params) {
         double mean = MathUtils.mean(returns);
         double[] h = new double[returns.length];

@@ -20,7 +20,7 @@ class AsianStructuredEdgeTest {
     @Test
     void kemnaVorstAndTurnbullWakemanAgreeAtLowVolAndDivergeWithVol() {
         // With r = q the fixing forwards are all S, so the drift Jensen
-        // term vanishes and the two prices differ ONLY through the AM-GM
+        // term vanishes and the two prices differ only through the AM-GM
         // gap between the average's distributions — which scales with
         // vol^2: sub-penny at 1% vol, visibly larger at 40%. (With r != q
         // the gap has a vol-independent drift floor, ~0.007 here at

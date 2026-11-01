@@ -3,7 +3,7 @@ package com.quantfinlib.rates;
 import com.quantfinlib.util.MathUtils;
 
 /**
- * NELSON-SIEGEL yield-curve fit — the parametric answer to "what SHAPE is
+ * Nelson-Siegel yield-curve fit — the parametric answer to "what shape is
  * the curve", where {@link YieldCurve} is the exact-repricing answer to
  * "what IS the curve". Central banks (ECB, Fed) publish curves in exactly
  * this form because four numbers carry the whole story:
@@ -11,24 +11,24 @@ import com.quantfinlib.util.MathUtils;
  * <pre>  z(t) = b0 + b1 · (1−e^{−t/λ})/(t/λ) + b2 · [(1−e^{−t/λ})/(t/λ) − e^{−t/λ}]</pre>
  *
  * <ul>
- *   <li><b>b0</b> — the LEVEL: z(∞), where the long end settles;</li>
- *   <li><b>b1</b> — the SLOPE: z(0) = b0 + b1, so b1 &lt; 0 is an upward
- *       curve and b1 &gt; 0 is INVERSION — the recession-signal number;</li>
- *   <li><b>b2</b> — the CURVATURE: the mid-curve hump, peaking near
+ *   <li><b>b0</b> — the level: z(∞), where the long end settles;</li>
+ *   <li><b>b1</b>: the slope. z(0) = b0 + b1, so b1 &lt; 0 is an upward
+ *       curve and b1 &gt; 0 is inversion, the recession-signal number;</li>
+ *   <li><b>b2</b> — the curvature: the mid-curve hump, peaking near
  *       t ≈ λ;</li>
- *   <li><b>λ</b> — WHERE the hump sits (years).</li>
+ *   <li><b>λ</b> — where the hump sits (years).</li>
  * </ul>
  *
- * <p>Fitting exploits the model's one great convenience: for FIXED λ the
- * model is LINEAR in (b0, b1, b2) — an exact 3×3 least-squares solve. So
+ * <p>Fitting exploits the model's one great convenience: for fixed λ the
+ * model is linear in (b0, b1, b2) — an exact 3×3 least-squares solve. So
  * the fit is a log-spaced grid search over λ with an OLS solve at each
  * node, keeping the whole thing deterministic and free of local-minimum
  * roulette (the classic failure of fitting all four jointly). Betas are
- * NOT constrained to "sensible" signs: an inverted curve is data, not an
+ * not constrained to "sensible" signs: an inverted curve is data, not an
  * error.</p>
  *
  * <p>Use the parametric fit for smoothing noisy quotes, cross-country
- * comparison, and factor analysis (level/slope/curvature ARE the first
+ * comparison, and factor analysis (level/slope/curvature are the first
  * three PCA factors of yield curves, to good approximation); use the
  * bootstrap when you need every input repriced exactly. Research lane.</p>
  */

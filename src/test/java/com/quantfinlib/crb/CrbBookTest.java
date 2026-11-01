@@ -32,7 +32,7 @@ class CrbBookTest {
     }
 
     // ------------------------------------------------------------------
-    // Equity options — greeks decompose onto the SAME factors as cash
+    // Equity options — greeks decompose onto the same factors as cash
     // ------------------------------------------------------------------
 
     @Test
@@ -99,7 +99,7 @@ class CrbBookTest {
                 "the quote-currency cash-flow imbalance");
         assertEquals(-20_000_000, book.exposure("FXPOINTS:EURUSD"), 1e-9,
                 "a buy-sell LOSES when far-minus-near widens: sensitivity is -N");
-        // The swap's points risk does NOT touch the spot-delta factors a
+        // The swap's points risk does not touch the spot-delta factors a
         // spot trade would: hedging spot with swaps needs the loadings to
         // say so explicitly.
         book.bookFxSpot("spot-desk", "EURUSD", 1_000_000, 1.10);

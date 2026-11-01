@@ -98,7 +98,8 @@ class FixExecReportViewTest {
                 .registerSymbol(0, "EURUSD");
         enc.encodeLimit(1, 1, 0, com.quantfinlib.orderbook.Side.BUY, 1, 108505, 5,
                 1_800_000_000_000L);
-        assertFalse(view.wrap(enc.buffer(), enc.offset(), enc.length()));
+        byte[] msg = enc.toByteArray();
+        assertFalse(view.wrap(msg, 0, msg.length));
     }
 
     @Test

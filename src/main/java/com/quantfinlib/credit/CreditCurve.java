@@ -3,30 +3,30 @@ package com.quantfinlib.credit;
 import com.quantfinlib.rates.YieldCurve;
 
 /**
- * CREDIT CURVE — piecewise-constant hazard rates bootstrapped from CDS par
+ * Credit curve — piecewise-constant hazard rates bootstrapped from CDS par
  * spreads, the credit market's exact analogue of {@link YieldCurve}'s
  * bootstrap: walk the quotes from shortest to longest, at each pillar
  * solving for the one hazard rate that reprices that maturity's CDS to
  * zero upfront given everything already solved.
  *
- * <p>The objects: the HAZARD RATE h(t) is the instantaneous default
+ * <p>The objects: the hazard rate h(t) is the instantaneous default
  * intensity ("conditional on surviving to t, the annualized probability
- * of defaulting right now"); SURVIVAL is its exponential integral,
- * {@code Q(t) = exp(-integral of h)} — piecewise-constant h makes that a
- * product of exponentials, evaluated exactly. The rule-of-thumb every
- * desk carries — the CREDIT TRIANGLE {@code spread ~ h * (1 - R)} — falls
+ * of defaulting right now"); survival is its exponential integral,
+ * {@code Q(t) = exp(-integral of h)}. Piecewise-constant h makes that a
+ * product of exponentials, evaluated exactly. The rule of thumb every
+ * desk carries, the credit triangle {@code spread ~ h * (1 - R)}, falls
  * out of setting premium = protection on a flat curve, and the tests pin
  * this class against it.</p>
  *
- * <p>Leg discretization (stated): quarterly grid, premium leg
+ * <p>Leg discretization: quarterly grid, premium leg
  * {@code S * sum 0.25 * DF(t_i) * Q(t_i)} plus the standard
  * accrual-on-default half-period term, protection leg
  * {@code (1-R) * sum DF(t_i) * (Q(t_{i-1}) - Q(t_i))} with discounting at
- * period end — the textbook discrete form (O(dt) bias vs the integral,
- * ~0.1bp at these grids, stated not hidden). Recovery is a single number
+ * period end. This is the textbook discrete form (O(dt) bias vs the
+ * integral, about 0.1bp at these grids). Recovery is a single number
  * for the whole curve, the market's quoting convention (40% senior
  * unsecured). Solving is bisection per pillar on h in [1e-9, 10] with an
- * explicit bracket check — a quote no hazard can explain throws rather
+ * explicit bracket check: a quote no hazard can explain throws rather
  * than returning the bound. Research lane, deterministic.</p>
  */
 public final class CreditCurve {

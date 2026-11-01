@@ -19,8 +19,22 @@ import com.quantfinlib.pricing.BlackScholes.OptionType;
  *
  * <p>Borrow cost enters exactly like a continuous yield ({@code carry} in
  * {@link BlackScholes}) — hard-to-borrow names price calls down and puts up
- * the same way a dividend yield does. For American exercise, feed
- * {@link #adjustedSpot} into {@code pricing.BinomialTree} the same way.</p>
+ * the same way a dividend yield does.</p>
+ *
+ * <p>The escrowed model applies the volatility to S* for the whole life of
+ * the option, which understates the variance of a spot that only drops at
+ * the ex-date; the error grows with the dividend size, the time from the
+ * ex-date to expiry and the option's maturity (Haug, Haug and Lewis 2003,
+ * "Back to basics: a new approach to the discrete dividend problem",
+ * Wilmott). {@link #bosVandermarkPrice} splits each dividend between spot
+ * and strike by its timing (Bos and Vandermark 2002, "Finessing fixed
+ * dividends", Risk) and is markedly closer to the exact jump model for
+ * European options. Neither adjustment is right for American exercise just
+ * before an ex-date; that needs a tree or grid with the cash drop applied at
+ * the ex-date, which this library does not provide.</p>
+ *
+ * <p>A dividend with ex-time equal to the horizon is included (the holder at
+ * expiry does not receive it in the convention used here).</p>
  *
  * <p>Instances are immutable; all queries are allocation-free.</p>
  */
@@ -90,6 +104,33 @@ public final class DividendSchedule {
                                 double borrow, double vol, double timeYears) {
         return BlackScholes.price(type, adjustedSpot(spot, rate, timeYears), strike,
                 rate, borrow, vol, timeYears);
+    }
+
+    /**
+     * European price with the Bos-Vandermark (2002) split: for dividends
+     * dᵢ at tᵢ ≤ T,
+     *
+     * <pre>  S' = S − Σ ((T − tᵢ)/T)·dᵢ·e^{−r tᵢ},   K' = K + Σ (tᵢ/T)·dᵢ·e^{r(T − tᵢ)}</pre>
+     *
+     * <p>and Black-Scholes on (S', K') with borrow as the carry. Early
+     * dividends come mostly off spot, late ones mostly onto the strike.</p>
+     */
+    public double bosVandermarkPrice(OptionType type, double spot, double strike, double rate,
+                                     double borrow, double vol, double timeYears) {
+        if (!(timeYears > 0)) {
+            return BlackScholes.intrinsic(type, spot - presentValue(rate, 0), strike);
+        }
+        double near = 0, far = 0;
+        for (int i = 0; i < exTimes.length && exTimes[i] <= timeYears; i++) {
+            double t = exTimes[i];
+            near += (timeYears - t) / timeYears * amounts[i] * Math.exp(-rate * t);
+            far += t / timeYears * amounts[i] * Math.exp(rate * (timeYears - t));
+        }
+        double s = spot - near;
+        if (!(s > 0)) {
+            throw new IllegalArgumentException("dividend PV exceeds spot - check amounts/horizon");
+        }
+        return BlackScholes.price(type, s, strike + far, rate, borrow, vol, timeYears);
     }
 
     public int count() {

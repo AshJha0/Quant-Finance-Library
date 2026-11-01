@@ -1,5 +1,5 @@
 /**
- * Risk: measurement, decomposition, credit/limits, and model validation.
+ * Risk measurement, decomposition, limits and model validation.
  * Portfolio analytics ({@link com.quantfinlib.risk.RiskMetrics},
  * {@link com.quantfinlib.risk.PortfolioRiskAnalyzer},
  * {@link com.quantfinlib.risk.CorrelationMatrix},
@@ -9,16 +9,15 @@
  * {@link com.quantfinlib.risk.CounterpartyExposureTracker},
  * {@link com.quantfinlib.risk.SettlementRiskAnalyzer} for Herstatt windows,
  * {@link com.quantfinlib.risk.ConcentrationRisk}); and validation —
- * {@link com.quantfinlib.risk.VarBacktest} (Kupiec, Christoffersen,
- * conditional coverage) turns produced VaR numbers into validated ones.
+ * {@link com.quantfinlib.risk.VarBacktest} (Kupiec, Christoffersen and
+ * conditional coverage tests of a VaR series).
  *
  * <p>The market-risk workflow ({@code docs/MARKET_RISK.md}):
  * {@link com.quantfinlib.risk.Dependence} (Spearman, Kendall's τ, the
- * elliptical-copula bridge), {@link com.quantfinlib.risk.Pca} (Jacobi —
- * level/slope/curvature honesty about factor counts),
- * {@link com.quantfinlib.risk.GaussianCopula} (Gaussian + Student-t
- * samplers; the t has the tail dependence 2008 taught everyone the
- * Gaussian lacks), {@link com.quantfinlib.risk.VarEngine} (portfolio
+ * elliptical-copula bridge), {@link com.quantfinlib.risk.Pca} (Jacobi
+ * eigen-decomposition; level, slope and curvature factors),
+ * {@link com.quantfinlib.risk.GaussianCopula} (Gaussian and Student-t
+ * samplers; the t copula has tail dependence, the Gaussian has none), {@link com.quantfinlib.risk.VarEngine} (portfolio
  * delta-normal / Monte Carlo / delta-gamma Cornish-Fisher / historical,
  * each with expected shortfall),
  * {@link com.quantfinlib.risk.ExtremeValueTheory} (POT/GPD tail fits

@@ -1,5 +1,6 @@
 package com.quantfinlib.alpha;
 
+import com.quantfinlib.backtest.FillPolicy;
 import com.quantfinlib.backtest.PerformanceAnalytics;
 import com.quantfinlib.backtest.PerformanceMetrics;
 import com.quantfinlib.core.BarSeries;
@@ -9,36 +10,56 @@ import java.util.List;
 
 /**
  * Execution-aware factor backtest: runs a factor through a construction
- * pipeline into weights, holds them between rebalances, and charges the
- * four costs that separate paper alpha from real alpha:
+ * pipeline into target weights at each rebalance and simulates holding,
+ * trading and financing the book bar by bar.
  *
- * <ul>
- *   <li><b>Commission</b> — flat bps on traded notional;</li>
- *   <li><b>Bid-ask spread</b> — half-spread bps paid on every trade
- *       (crossing the spread once per side);</li>
- *   <li><b>Slippage</b> — additional fixed bps of implementation noise
- *       (latency, partial fills, venue fees);</li>
- *   <li><b>Market impact</b> — the size-dependent cost, via the
- *       square-root law in {@code microstructure.MarketImpactModel}, with
- *       per-symbol ADV and daily vol estimated from the trailing window.
- *       This is the term that grows with capital: the same signal that
- *       nets 8% on $10m can net zero on $1b.</li>
- * </ul>
+ * <p><b>Timing.</b> Scores and targets are computed from data up to
+ * {@code close(t)}. The trade fills according to {@link Config#fillPolicy()}:
+ * at {@code close(t)} ({@code CLOSE}, the zero-latency upper bound), at
+ * {@code open(t+1)} ({@code NEXT_OPEN}, the default) or at
+ * {@code close(t+1)} ({@code NEXT_CLOSE}). Each bar is split at the open
+ * into an overnight segment {@code close(t) → open(t+1)} and an intraday
+ * segment {@code open(t+1) → close(t+1)} so a next-open fill earns exactly
+ * what it should.</p>
  *
- * <p>The simulation is <em>weight-based</em> (fractional book, returns
- * compound multiplicatively from 1.0): simpler and adequate for factor
- * research. For share-level accounting with lifecycle events, feed the
- * constructed weights into {@code backtest.portfolio.PortfolioBacktester}'s
- * survivorship-aware overload with
- * {@code Config.withCostModel(TradeCostModel.institutional(...))} — since
- * both engines share the same impact estimator
- * ({@code MarketImpactModel.estimate}) and cost decomposition, a run over
- * there is execution-aware AND survivorship-aware at once; this engine's
- * added value is the per-component cost drag breakdown.</p>
+ * <p><b>Drift.</b> Weights are fractions of equity and drift with prices
+ * between trades: after a segment with name returns {@code r_i} and book
+ * return {@code r_p = Σ w_i r_i},
+ * {@code w_i ← w_i (1 + r_i)/(1 + r_p)}. Turnover at a rebalance is
+ * measured against the drifted book. (Holding the target weights fixed
+ * every bar would be a free daily rebalance, which manufactures return for
+ * reversal-heavy books and understates turnover.) Cash is
+ * {@code 1 − Σ w_i} and earns nothing inside a segment; financing is
+ * charged separately.</p>
  *
- * <p>Both gross and net curves are tracked, plus the cumulative drag of
- * each cost component — "which cost kills this signal" is the actionable
- * output of an execution-aware backtest.</p>
+ * <p><b>Costs</b> are charged on the traded fraction of equity: commission,
+ * half-spread and slippage in flat bps, and square-root market impact
+ * ({@link MarketImpactModel#estimate}, with ADV and volatility from the
+ * bars before the fill bar) on the traded shares
+ * {@code |Δw|·capital·equity/price}. Costs come out of equity and the
+ * executed weights are fractions of post-cost equity.</p>
+ *
+ * <p><b>Participation cap.</b> With {@code maxParticipation > 0} each name
+ * trades at most {@code maxParticipation × ADV} shares per bar; the
+ * unexecuted remainder carries over to the next bar's fill point until the
+ * target is reached or replaced by the next rebalance. The mean distance
+ * from the target is reported as {@link Result#meanTrackingGap()}.</p>
+ *
+ * <p><b>Financing</b> per bar, from the book held over the bar: a borrow
+ * fee on short notional, interest on positive cash ({@code 1 − Σw}, which
+ * includes short sale proceeds, so the short rebate is implicit), and a
+ * margin rate on negative cash (leverage). Rates are annual and accrue
+ * {@code 1/periodsPerYear} per bar.</p>
+ *
+ * <p><b>Terminal events.</b> Returns come from
+ * {@link AlphaContext#returnBetween}, so a held name that delists earns its
+ * delisting return; the position then becomes cash, or acquirer shares for
+ * a stock merger whose acquirer is in the panel. Names dead at a fill point
+ * cannot be traded.</p>
+ *
+ * <p>The gross curve applies the same book without trading costs or
+ * financing. For share-level accounting with dividends and index drops use
+ * {@code backtest.portfolio.PortfolioBacktester}.</p>
  */
 public final class AlphaBacktester {
 
@@ -49,46 +70,261 @@ public final class AlphaBacktester {
     }
 
     /**
-     * @param startIndex         first tradeable bar (must cover factor warm-up
-     *                           and the impact estimation window)
-     * @param rebalanceEveryBars holding period between weight refreshes
+     * @param startIndex         first decision bar (covers factor warm-up and,
+     *                           when capital &gt; 0, more than {@code impactWindow} bars)
+     * @param rebalanceEveryBars bars between decisions
      * @param commissionBps      commission per side on traded notional
      * @param halfSpreadBps      half the quoted spread, paid per trade
-     * @param slippageBps        fixed implementation noise per trade
-     * @param capital            book size in currency — impact needs real size
-     *                           (0 disables the impact model entirely)
+     * @param slippageBps        fixed implementation shortfall per trade
+     * @param capital            book size in currency at the start; impact and
+     *                           participation need real size (0 disables both)
      * @param impactWindow       trailing bars for ADV/vol estimation
-     * @param periodsPerYear     bar frequency for annualized metrics
+     * @param periodsPerYear     bars per year for annualised metrics and financing
+     * @param fillPolicy         when a decision fills (default {@code NEXT_OPEN})
+     * @param borrowBpsPerYear   annual borrow fee on short notional
+     * @param cashRatePerYear    annual rate earned on positive cash (fraction, 0.03 = 3%)
+     * @param marginRatePerYear  annual rate paid on negative cash
+     * @param maxParticipation   max fraction of ADV traded per name per bar (0 = no cap)
      */
     public record Config(int startIndex, int rebalanceEveryBars, double commissionBps,
                          double halfSpreadBps, double slippageBps, double capital,
-                         int impactWindow, int periodsPerYear) {
+                         int impactWindow, int periodsPerYear, FillPolicy fillPolicy,
+                         double borrowBpsPerYear, double cashRatePerYear,
+                         double marginRatePerYear, double maxParticipation) {
 
         public Config {
             if (startIndex < 0 || rebalanceEveryBars <= 0 || commissionBps < 0
                     || halfSpreadBps < 0 || slippageBps < 0 || capital < 0
-                    || impactWindow < 2 || periodsPerYear <= 0) {
+                    || impactWindow < 2 || periodsPerYear <= 0 || fillPolicy == null
+                    || borrowBpsPerYear < 0 || marginRatePerYear < 0
+                    || !Double.isFinite(cashRatePerYear) || maxParticipation < 0) {
                 throw new IllegalArgumentException("invalid backtest config");
+            }
+            if (maxParticipation > 0 && capital == 0) {
+                throw new IllegalArgumentException("a participation cap needs capital > 0");
             }
         }
 
-        /** Institutional-ish daily-bar defaults: 1bp commission, 2bp half-spread, 1bp slippage, $100m book. */
+        /** No financing, no participation cap, next-open fills. */
+        public Config(int startIndex, int rebalanceEveryBars, double commissionBps,
+                      double halfSpreadBps, double slippageBps, double capital,
+                      int impactWindow, int periodsPerYear) {
+            this(startIndex, rebalanceEveryBars, commissionBps, halfSpreadBps, slippageBps,
+                    capital, impactWindow, periodsPerYear, FillPolicy.NEXT_OPEN, 0, 0, 0, 0);
+        }
+
+        /**
+         * Daily-bar defaults: monthly (21-bar) rebalance, 1 bp commission,
+         * 2 bp half-spread, 1 bp slippage, $100m book, 20-bar impact window,
+         * next-open fills, no financing, no participation cap.
+         */
         public static Config defaults(int startIndex) {
             return new Config(startIndex, 21, 1.0, 2.0, 1.0, 100_000_000, 20, 252);
+        }
+
+        public Config withFillPolicy(FillPolicy policy) {
+            return new Config(startIndex, rebalanceEveryBars, commissionBps, halfSpreadBps,
+                    slippageBps, capital, impactWindow, periodsPerYear, policy,
+                    borrowBpsPerYear, cashRatePerYear, marginRatePerYear, maxParticipation);
+        }
+
+        /** Annual borrow fee (bps of short notional), cash rate and margin rate. */
+        public Config withFinancing(double borrowBps, double cashRate, double marginRate) {
+            return new Config(startIndex, rebalanceEveryBars, commissionBps, halfSpreadBps,
+                    slippageBps, capital, impactWindow, periodsPerYear, fillPolicy,
+                    borrowBps, cashRate, marginRate, maxParticipation);
+        }
+
+        public Config withMaxParticipation(double fractionOfAdv) {
+            return new Config(startIndex, rebalanceEveryBars, commissionBps, halfSpreadBps,
+                    slippageBps, capital, impactWindow, periodsPerYear, fillPolicy,
+                    borrowBpsPerYear, cashRatePerYear, marginRatePerYear, fractionOfAdv);
+        }
+
+        public Config withRebalanceEvery(int bars) {
+            return new Config(startIndex, bars, commissionBps, halfSpreadBps,
+                    slippageBps, capital, impactWindow, periodsPerYear, fillPolicy,
+                    borrowBpsPerYear, cashRatePerYear, marginRatePerYear, maxParticipation);
+        }
+
+        /** The same config with every cost, financing rate and the cap set to zero. */
+        public Config frictionless() {
+            return new Config(startIndex, rebalanceEveryBars, 0, 0, 0, 0, impactWindow,
+                    periodsPerYear, fillPolicy, 0, 0, 0, 0);
         }
     }
 
     /**
-     * Net/gross curves plus the cumulative fraction of equity each cost
-     * component consumed — the cost autopsy.
+     * Net and gross curves (one point per close from {@code startIndex}),
+     * the cumulative fraction of equity each cost consumed, and turnover.
      */
-    public record Result(double[] netEquity, double[] grossEquity, PerformanceMetrics netMetrics,
-                         PerformanceMetrics grossMetrics, double commissionDrag, double spreadDrag,
-                         double slippageDrag, double impactDrag, double meanTurnover) {
+    public static final class Result {
+        private final double[] netEquity;
+        private final double[] grossEquity;
+        private final PerformanceMetrics netMetrics;
+        private final PerformanceMetrics grossMetrics;
+        private final double commissionDrag;
+        private final double spreadDrag;
+        private final double slippageDrag;
+        private final double impactDrag;
+        private final double financingDrag;
+        private final double meanTurnover;
+        private final double meanTrackingGap;
+        private final FillPolicy fillPolicy;
 
-        /** Total cost drag: gross minus net, decomposed. */
+        /**
+         * Creates the value; array and collection arguments are copied.
+         *
+         * @param financingDrag cumulative net financing paid (negative when the book earned interest)
+         * @param meanTurnover mean one-way turnover per rebalance decision
+         * @param meanTrackingGap mean over bars of {@code ½‖target − w‖₁} while a target was still being worked (0 without a participation cap)
+         */
+        public Result(double[] netEquity, double[] grossEquity, PerformanceMetrics netMetrics,
+                PerformanceMetrics grossMetrics, double commissionDrag, double spreadDrag,
+                double slippageDrag, double impactDrag, double financingDrag, double meanTurnover,
+                double meanTrackingGap, FillPolicy fillPolicy) {
+            this.netEquity = netEquity == null ? null : netEquity.clone();
+            this.grossEquity = grossEquity == null ? null : grossEquity.clone();
+            this.netMetrics = netMetrics;
+            this.grossMetrics = grossMetrics;
+            this.commissionDrag = commissionDrag;
+            this.spreadDrag = spreadDrag;
+            this.slippageDrag = slippageDrag;
+            this.impactDrag = impactDrag;
+            this.financingDrag = financingDrag;
+            this.meanTurnover = meanTurnover;
+            this.meanTrackingGap = meanTrackingGap;
+            this.fillPolicy = fillPolicy;
+        }
+
+        /** Element {@code i} of {@code netEquity}. */
+        public double netEquity(int i) {
+            return netEquity[i];
+        }
+
+        /** Length of {@code netEquity}. */
+        public int netEquityLength() {
+            return netEquity.length;
+        }
+
+        /** A fresh copy of {@code netEquity}. */
+        public double[] netEquityCopy() {
+            return netEquity == null ? null : netEquity.clone();
+        }
+
+        /** Element {@code i} of {@code grossEquity}. */
+        public double grossEquity(int i) {
+            return grossEquity[i];
+        }
+
+        /** Length of {@code grossEquity}. */
+        public int grossEquityLength() {
+            return grossEquity.length;
+        }
+
+        /** A fresh copy of {@code grossEquity}. */
+        public double[] grossEquityCopy() {
+            return grossEquity == null ? null : grossEquity.clone();
+        }
+
+        /** {@code netMetrics}. */
+        public PerformanceMetrics netMetrics() {
+            return netMetrics;
+        }
+
+        /** {@code grossMetrics}. */
+        public PerformanceMetrics grossMetrics() {
+            return grossMetrics;
+        }
+
+        /** {@code commissionDrag}. */
+        public double commissionDrag() {
+            return commissionDrag;
+        }
+
+        /** {@code spreadDrag}. */
+        public double spreadDrag() {
+            return spreadDrag;
+        }
+
+        /** {@code slippageDrag}. */
+        public double slippageDrag() {
+            return slippageDrag;
+        }
+
+        /** {@code impactDrag}. */
+        public double impactDrag() {
+            return impactDrag;
+        }
+
+        /** {@code financingDrag} (cumulative net financing paid (negative when the book earned interest)). */
+        public double financingDrag() {
+            return financingDrag;
+        }
+
+        /** {@code meanTurnover} (mean one-way turnover per rebalance decision). */
+        public double meanTurnover() {
+            return meanTurnover;
+        }
+
+        /** {@code meanTrackingGap}. */
+        public double meanTrackingGap() {
+            return meanTrackingGap;
+        }
+
+        /** {@code fillPolicy}. */
+        public FillPolicy fillPolicy() {
+            return fillPolicy;
+        }
+
+        /** Total trading-cost drag (financing excluded). */
         public double totalCostDrag() {
             return commissionDrag + spreadDrag + slippageDrag + impactDrag;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Result o)) {
+                return false;
+            }
+            return java.util.Arrays.equals(netEquity, o.netEquity)
+                    && java.util.Arrays.equals(grossEquity, o.grossEquity)
+                    && java.util.Objects.equals(netMetrics, o.netMetrics)
+                    && java.util.Objects.equals(grossMetrics, o.grossMetrics)
+                    && Double.compare(commissionDrag, o.commissionDrag) == 0
+                    && Double.compare(spreadDrag, o.spreadDrag) == 0
+                    && Double.compare(slippageDrag, o.slippageDrag) == 0
+                    && Double.compare(impactDrag, o.impactDrag) == 0
+                    && Double.compare(financingDrag, o.financingDrag) == 0
+                    && Double.compare(meanTurnover, o.meanTurnover) == 0
+                    && Double.compare(meanTrackingGap, o.meanTrackingGap) == 0
+                    && java.util.Objects.equals(fillPolicy, o.fillPolicy);
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + java.util.Arrays.hashCode(netEquity);
+            h = 31 * h + java.util.Arrays.hashCode(grossEquity);
+            h = 31 * h + java.util.Objects.hashCode(netMetrics);
+            h = 31 * h + java.util.Objects.hashCode(grossMetrics);
+            h = 31 * h + Double.hashCode(commissionDrag);
+            h = 31 * h + Double.hashCode(spreadDrag);
+            h = 31 * h + Double.hashCode(slippageDrag);
+            h = 31 * h + Double.hashCode(impactDrag);
+            h = 31 * h + Double.hashCode(financingDrag);
+            h = 31 * h + Double.hashCode(meanTurnover);
+            h = 31 * h + Double.hashCode(meanTrackingGap);
+            h = 31 * h + java.util.Objects.hashCode(fillPolicy);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "Result[" + "netEquity=" + java.util.Arrays.toString(netEquity) + ", " + "grossEquity=" + java.util.Arrays.toString(grossEquity) + ", " + "netMetrics=" + netMetrics + ", " + "grossMetrics=" + grossMetrics + ", " + "commissionDrag=" + commissionDrag + ", " + "spreadDrag=" + spreadDrag + ", " + "slippageDrag=" + slippageDrag + ", " + "impactDrag=" + impactDrag + ", " + "financingDrag=" + financingDrag + ", " + "meanTurnover=" + meanTurnover + ", " + "meanTrackingGap=" + meanTrackingGap + ", " + "fillPolicy=" + fillPolicy + "]";
         }
     }
 
@@ -104,120 +340,235 @@ public final class AlphaBacktester {
     /** Runs with a caller-supplied construction pipeline. */
     public static Result run(AlphaContext ctx, AlphaFactor factor, Config config,
                              WeightBuilder builder) {
-        int n = ctx.bars();
-        int m = ctx.symbolCount();
-        if (config.startIndex() >= n - 1) {
-            throw new IllegalArgumentException("startIndex leaves no bars to trade");
-        }
-        if (config.capital() > 0 && config.startIndex() < config.impactWindow()) {
-            // The impact model reads impactWindow bars of ADV/vol history
-            // before the first rebalance; enforcing it here beats an
-            // uncontextualized ArrayIndexOutOfBounds deep in the loop.
-            throw new IllegalArgumentException(
-                    "startIndex " + config.startIndex() + " < impactWindow "
-                            + config.impactWindow() + " — impact estimation needs that history"
-                            + " (or set capital to 0 to disable impact)");
-        }
-        double[] weights = new double[m];       // current holdings (fractions of equity)
-        double[] netEquity = new double[n - config.startIndex()];
-        double[] grossEquity = new double[netEquity.length];
-        netEquity[0] = 1.0;
-        grossEquity[0] = 1.0;
-        double commissionDrag = 0;
-        double spreadDrag = 0;
-        double slippageDrag = 0;
-        double impactDrag = 0;
-        double turnoverSum = 0;
-        int rebalances = 0;
-
-        for (int t = config.startIndex(); t < n - 1; t++) {
-            int outIdx = t - config.startIndex();
-            double costFactor = 1.0;
-
-            // Rebalance at the bar close, before earning the next bar's return.
-            if (outIdx % config.rebalanceEveryBars() == 0) {
-                double[] target = builder.weights(ctx, factor.scores(ctx, t), t);
-                if (target.length != m) {
-                    throw new IllegalArgumentException("weight builder returned misaligned array");
-                }
-                double turnover = 0;
-                double commission = 0;
-                double spread = 0;
-                double slip = 0;
-                double impact = 0;
-                for (int i = 0; i < m; i++) {
-                    double traded = Math.abs(target[i] - weights[i]);
-                    if (traded == 0) {
-                        continue;
-                    }
-                    turnover += traded;
-                    // Flat per-trade costs scale with traded fraction of equity.
-                    commission += traded * config.commissionBps() / 1e4;
-                    spread += traded * config.halfSpreadBps() / 1e4;
-                    slip += traded * config.slippageBps() / 1e4;
-                    // Impact needs real size: traded fraction × capital → shares.
-                    if (config.capital() > 0) {
-                        impact += traded * impactBps(ctx, i, t, traded, config) / 1e4;
-                    }
-                }
-                double cost = commission + spread + slip + impact;
-                if (cost >= 1) {
-                    // The square-root law is unbounded: a book too big for
-                    // its liquidity can cost more than the equity. Negative
-                    // equity compounds into sign-inverted garbage, so fail
-                    // loudly — this IS the capacity answer.
-                    throw new IllegalArgumentException(String.format(java.util.Locale.ROOT,
-                            "execution cost %.1f%% of equity at bar %d (impact %.1f%%) — "
-                                    + "the book is too large for this universe's liquidity; "
-                                    + "reduce capital or the rebalance size",
-                            cost * 100, t, impact * 100));
-                }
-                costFactor = 1 - cost;
-                commissionDrag += commission;
-                spreadDrag += spread;
-                slippageDrag += slip;
-                impactDrag += impact;
-                turnoverSum += turnover / 2; // buys and sells counted once
-                rebalances++;
-                System.arraycopy(target, 0, weights, 0, m);
-            }
-
-            // Earn one bar of the held book: r_p = Σ wᵢ · rᵢ.
-            double portfolioReturn = 0;
-            for (int i = 0; i < m; i++) {
-                if (weights[i] != 0) {
-                    portfolioReturn += weights[i] * ctx.returnOver(i, t, t + 1);
-                }
-            }
-            // Cost folds into the compounding step: each equity slot is
-            // written exactly once and netEquity[0] stays 1.0 by contract.
-            netEquity[outIdx + 1] = netEquity[outIdx] * costFactor * (1 + portfolioReturn);
-            grossEquity[outIdx + 1] = grossEquity[outIdx] * (1 + portfolioReturn);
-        }
-
-        return new Result(netEquity, grossEquity,
-                PerformanceAnalytics.compute(netEquity, List.of(), config.periodsPerYear()),
-                PerformanceAnalytics.compute(grossEquity, List.of(), config.periodsPerYear()),
-                commissionDrag, spreadDrag, slippageDrag, impactDrag,
-                rebalances == 0 ? 0 : turnoverSum / rebalances);
+        return new Sim(ctx, factor, config, builder).run();
     }
 
-    /**
-     * Square-root-law impact for one name's trade, via the shared
-     * {@link MarketImpactModel#estimate} bridge (the same estimator
-     * {@code backtest.TradeCostModel.institutional} uses, so the alpha and
-     * portfolio engines can never disagree on impact). Names without volume
-     * data contribute zero impact — a data gap, not free liquidity; the
-     * flat costs still apply.
-     */
-    private static double impactBps(AlphaContext ctx, int symbol, int index, double tradedFraction,
-                                    Config config) {
-        BarSeries s = ctx.series(symbol);
-        MarketImpactModel impact = MarketImpactModel.estimate(s, index, config.impactWindow());
-        if (impact == null) {
-            return 0;
+    /** One simulation's mutable state. */
+    private static final class Sim {
+        final AlphaContext ctx;
+        final AlphaFactor factor;
+        final Config cfg;
+        final WeightBuilder builder;
+        final int m;
+        final double[] w;          // current weights, fractions of net equity
+        double[] target;           // pending target, null when none
+        double net = 1;
+        double gross = 1;
+        double commission;
+        double spread;
+        double slippage;
+        double impact;
+        double financing;
+        double turnover;
+        int decisions;
+        double gapSum;
+        int gapBars;
+
+        Sim(AlphaContext ctx, AlphaFactor factor, Config cfg, WeightBuilder builder) {
+            this.ctx = ctx;
+            this.factor = factor;
+            this.cfg = cfg;
+            this.builder = builder;
+            this.m = ctx.symbolCount();
+            this.w = new double[m];
         }
-        double shares = tradedFraction * config.capital() / s.close(index);
-        return impact.squareRootImpactBps(shares);
+
+        Result run() {
+            int n = ctx.bars();
+            if (cfg.startIndex() >= n - 1) {
+                throw new IllegalArgumentException("startIndex leaves no bars to trade");
+            }
+            if (cfg.capital() > 0 && cfg.startIndex() <= cfg.impactWindow()) {
+                throw new IllegalArgumentException(
+                        "startIndex " + cfg.startIndex() + " must exceed impactWindow "
+                                + cfg.impactWindow() + ": impact estimation reads that many bars"
+                                + " before the fill bar (or set capital to 0)");
+            }
+            double[] netEq = new double[n - cfg.startIndex()];
+            double[] grossEq = new double[netEq.length];
+            netEq[0] = 1;
+            grossEq[0] = 1;
+            FillPolicy fp = cfg.fillPolicy();
+            for (int t = cfg.startIndex(); t < n - 1; t++) {
+                int outIdx = t - cfg.startIndex();
+                if (outIdx % cfg.rebalanceEveryBars() == 0) {
+                    double[] tgt = builder.weights(ctx, factor.scores(ctx, t), t);
+                    if (tgt.length != m) {
+                        throw new IllegalArgumentException("weight builder returned misaligned array");
+                    }
+                    for (double x : tgt) {
+                        if (!Double.isFinite(x)) {
+                            throw new IllegalArgumentException("weight builder returned a non-finite weight");
+                        }
+                    }
+                    target = tgt.clone();
+                    decisions++;
+                }
+                if (fp == FillPolicy.CLOSE) {
+                    execute(t, false);
+                }
+                double[] held = w.clone(); // book over the bar, for financing
+                segment(t, false, t + 1, true);
+                if (fp == FillPolicy.NEXT_OPEN) {
+                    execute(t + 1, true);
+                }
+                segment(t + 1, true, t + 1, false);
+                finance(held);
+                if (fp == FillPolicy.NEXT_CLOSE) {
+                    execute(t + 1, false);
+                }
+                if (target != null) {
+                    double gap = 0;
+                    for (int i = 0; i < m; i++) {
+                        gap += Math.abs(target[i] - w[i]);
+                    }
+                    gapSum += gap / 2;
+                    gapBars++;
+                }
+                netEq[outIdx + 1] = net;
+                grossEq[outIdx + 1] = gross;
+            }
+            return new Result(netEq, grossEq,
+                    PerformanceAnalytics.compute(netEq, List.of(), cfg.periodsPerYear()),
+                    PerformanceAnalytics.compute(grossEq, List.of(), cfg.periodsPerYear()),
+                    commission, spread, slippage, impact, financing,
+                    decisions == 0 ? 0 : turnover / decisions,
+                    cfg.maxParticipation() > 0 && gapBars > 0 ? gapSum / gapBars : 0,
+                    cfg.fillPolicy());
+        }
+
+        /** Earn one price segment and drift the weights; converts terminated names. */
+        void segment(int fromBar, boolean fromOpen, int toBar, boolean toOpen) {
+            double rp = 0;
+            double[] r = new double[m];
+            for (int i = 0; i < m; i++) {
+                if (w[i] != 0) {
+                    r[i] = ctx.returnBetween(i, fromBar, fromOpen, toBar, toOpen);
+                    if (Double.isNaN(r[i])) {
+                        throw new IllegalStateException("held a dead name: " + ctx.symbols().get(i));
+                    }
+                    rp += w[i] * r[i];
+                }
+            }
+            if (rp <= -1) {
+                throw new IllegalStateException("book lost all equity at bar " + toBar);
+            }
+            for (int i = 0; i < m; i++) {
+                if (w[i] != 0) {
+                    w[i] = w[i] * (1 + r[i]) / (1 + rp);
+                }
+            }
+            net *= 1 + rp;
+            gross *= 1 + rp;
+            for (int i = 0; i < m; i++) {
+                int e = ctx.terminalIndex(i);
+                if (w[i] != 0 && e >= 0 && toBar >= e) {
+                    // The terminal value now sits in w[i]: move the stock
+                    // component to the acquirer, the rest becomes cash.
+                    int a = ctx.acquirerIndex(i);
+                    double frac = stockFraction(i, toBar, toOpen);
+                    if (a >= 0 && frac > 0) {
+                        w[a] += w[i] * frac;
+                    }
+                    w[i] = 0;
+                }
+            }
+        }
+
+        /** Fraction of the terminal value held as acquirer stock at a price point. */
+        double stockFraction(int i, int bar, boolean atOpen) {
+            int a = ctx.acquirerIndex(i);
+            double total = ctx.mark(i, bar, atOpen);
+            if (a < 0 || total <= 0) {
+                return 0;
+            }
+            BarSeries acq = ctx.series(a);
+            double stock = ctx.terminalAcquirerShares(i) * (atOpen ? acq.open(bar) : acq.close(bar));
+            return Math.max(0, Math.min(1, stock / total));
+        }
+
+        /** Trade toward the pending target at a fill point. */
+        void execute(int bar, boolean atOpen) {
+            if (target == null) {
+                return;
+            }
+            double cost;
+            double com = 0;
+            double spr = 0;
+            double slp = 0;
+            double imp = 0;
+            double traded = 0;
+            boolean done = true;
+            for (int i = 0; i < m; i++) {
+                int e = ctx.terminalIndex(i);
+                boolean dead = e >= 0 && bar >= e;
+                double tgt = dead ? 0 : target[i];
+                double delta = tgt - w[i];
+                if (delta == 0 || dead) {
+                    continue;
+                }
+                BarSeries s = ctx.series(i);
+                double price = atOpen ? s.open(bar) : s.close(bar);
+                MarketImpactModel model = cfg.capital() > 0
+                        ? MarketImpactModel.estimate(s, bar, cfg.impactWindow()) : null;
+                double size = Math.abs(delta);
+                if (cfg.maxParticipation() > 0 && model != null) {
+                    double maxShares = cfg.maxParticipation() * model.adv();
+                    double maxFraction = maxShares * price / (cfg.capital() * net);
+                    if (size > maxFraction) {
+                        size = maxFraction;
+                        done = false;
+                    }
+                }
+                double exec = Math.signum(delta) * size;
+                com += size * cfg.commissionBps() / 1e4;
+                spr += size * cfg.halfSpreadBps() / 1e4;
+                slp += size * cfg.slippageBps() / 1e4;
+                if (model != null) {
+                    double shares = size * cfg.capital() * net / price;
+                    imp += size * model.squareRootImpactBps(shares) / 1e4;
+                }
+                traded += size;
+                w[i] += exec;
+            }
+            cost = com + spr + slp + imp;
+            if (cost >= 1) {
+                throw new IllegalArgumentException(String.format(java.util.Locale.ROOT,
+                        "execution cost %.1f%% of equity at bar %d (impact %.1f%%): the book is "
+                                + "too large for this universe's liquidity; reduce capital, add a "
+                                + "participation cap, or trade less", cost * 100, bar, imp * 100));
+            }
+            net *= 1 - cost;
+            commission += com;
+            spread += spr;
+            slippage += slp;
+            impact += imp;
+            turnover += traded / 2;
+            if (done) {
+                target = null;
+            }
+        }
+
+        /** One bar of financing on the book held over it. */
+        void finance(double[] held) {
+            double borrow = cfg.borrowBpsPerYear() / 1e4 / cfg.periodsPerYear();
+            double cashRate = cfg.cashRatePerYear() / cfg.periodsPerYear();
+            double marginRate = cfg.marginRatePerYear() / cfg.periodsPerYear();
+            if (borrow == 0 && cashRate == 0 && marginRate == 0) {
+                return;
+            }
+            double sum = 0;
+            double shorts = 0;
+            for (double x : held) {
+                sum += x;
+                if (x < 0) {
+                    shorts -= x;
+                }
+            }
+            double cash = 1 - sum;
+            double pnl = -shorts * borrow + (cash >= 0 ? cash * cashRate : cash * marginRate);
+            net *= 1 + pnl;
+            financing -= pnl;
+        }
     }
 }

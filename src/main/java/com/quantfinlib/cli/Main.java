@@ -91,8 +91,8 @@ public final class Main {
         if (out != null) {
             new ReportGenerator("Backtest: " + strategy.name() + " on " + series.symbol())
                     .addStrategyPerformance(result)
-                    .addEquityCurveChart("Equity Curve", result.equityCurve())
-                    .addDrawdownChart("Drawdown", result.equityCurve())
+                    .addEquityCurveChart("Equity Curve", result.equityCurveCopy())
+                    .addDrawdownChart("Drawdown", result.equityCurveCopy())
                     .addTradeHistory(result.trades())
                     .addTechnicalSummary(series)
                     .toHtml(Path.of(out));
@@ -132,8 +132,8 @@ public final class Main {
         if (out != null) {
             new ReportGenerator("Walk-Forward: " + series.symbol())
                     .addPerformance("Out-of-Sample Performance", result.outOfSampleMetrics())
-                    .addEquityCurveChart("Out-of-Sample Equity (stitched)", result.outOfSampleEquity())
-                    .addDrawdownChart("Out-of-Sample Drawdown", result.outOfSampleEquity())
+                    .addEquityCurveChart("Out-of-Sample Equity (stitched)", result.outOfSampleEquityCopy())
+                    .addDrawdownChart("Out-of-Sample Drawdown", result.outOfSampleEquityCopy())
                     .toHtml(Path.of(out));
             System.out.println("Report written to " + out);
         }
@@ -145,8 +145,8 @@ public final class Main {
         String out = required(opts, "out");
         new ReportGenerator("Market Report: " + series.symbol())
                 .addTechnicalSummary(series)
-                .addEquityCurveChart("Close Price", series.closes())
-                .addDrawdownChart("Drawdown from Peak", series.closes())
+                .addEquityCurveChart("Close Price", series.closesCopy())
+                .addDrawdownChart("Drawdown from Peak", series.closesCopy())
                 .toHtml(Path.of(out));
         System.out.println("Report written to " + out);
         return 0;

@@ -66,7 +66,7 @@ class FixingRiskCrossRateTest {
             bus.start();
             int eurusd = bus.symbolId("EURUSD");
             int usdjpy = bus.symbolId("USDJPY");
-            // First leg alone must NOT emit (other leg has no print yet).
+            // First leg alone must not emit (other leg has no print yet).
             bus.publish(eurusd, 1.0850, 1_000_000, System.nanoTime());
             awaitProcessed(bus, 1);
             assertEquals(0, emissions.get());

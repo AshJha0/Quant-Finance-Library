@@ -8,32 +8,32 @@ import java.io.IOException;
 
 /**
  * Streaming per-venue execution quality — the equities counterpart of
- * {@code fx.LpScorecard}: displayed prices tell you where a venue CLAIMS
+ * {@code fx.LpScorecard}: displayed prices tell you where a venue claims
  * you'll trade; the scorecard tells you what actually happens when you send
  * there. Everything the {@link AdaptiveSor} needs beyond the quote:
  *
  * <ul>
- *   <li><b>Fill rate</b> — EWMA of {1 fill, 0 miss} per marketable child:
+ *   <li><b>Fill rate</b>: EWMA of {1 fill, 0 miss} per marketable child,
  *       the venue's reliability. Quotes fade, systems reject, sessions
- *       hiccup — a venue that fills 80% of what you send is worth less
+ *       hiccup; a venue that fills 80% of what you send is worth less
  *       than its displayed price says;</li>
- *   <li><b>Response latency</b> — EWMA of send→ack/fill time as YOU
+ *   <li><b>Response latency</b> — EWMA of send→ack/fill time as you
  *       measure it, which routinely disagrees with the venue's advertised
  *       number;</li>
  *   <li><b>Hidden liquidity</b> — for dark venues, an EWMA of the shares
- *       each probe actually found. "Unknown" hardens into an estimate the
- *       only honest way: by probing and remembering;</li>
- *   <li><b>Post-fill markout (adverse selection)</b> — what the mid does
- *       one horizon after your fill, signed in your trading direction:
- *       positive = the price kept going your way (a clean fill), negative
- *       = it reverted (you paid the spread to trade against informed or
- *       stale flow — the "fade" venues). Arm it via the extended
+ *       each probe actually found. "Unknown" becomes an estimate only
+ *       by probing and remembering;</li>
+ *   <li><b>Post-fill markout (adverse selection)</b>: what the mid does
+ *       one horizon after your fill, signed in your trading direction.
+ *       Positive means the price kept going your way (a clean fill);
+ *       negative means it reverted (you paid the spread to trade against
+ *       informed or stale flow, the "fade" venues). Arm it via the extended
  *       {@link #onFill(int, long, boolean, double, long)} and feed mids
- *       via {@link #onMid}; the equities counterpart of
- *       {@code fx.LpScorecard}'s post-REJECT markout. <b>The markout leg
+ *       via {@link #onMid}; it is the equities counterpart of
+ *       {@code fx.LpScorecard}'s post-reject markout. <b>The markout leg
  *       makes the card single-symbol</b>: {@link #onMid} matures every
  *       pending fill against the one mid it is given, and the markout is
- *       in absolute price units — one card per symbol once you use it
+ *       in absolute price units. Use one card per symbol once you use it
  *       (the fill-rate/latency stats alone were symbol-agnostic).</li>
  * </ul>
  *
@@ -126,7 +126,7 @@ public final class VenueScorecard {
     /** A marketable child filled (fully or partially counts as a fill). */
     public void onFill(int venue, long responseNanos) {
         // EWMAs seed from the prior / first observation — ramping from 0
-        // would record a venue's FIRST successful fill as fillRate 0.05 and
+        // would record a venue's first successful fill as fillRate 0.05 and
         // get it vetoed by the router: success must never score below
         // "never tried".
         seedOnFirstEvent(venue, responseNanos);
@@ -152,7 +152,7 @@ public final class VenueScorecard {
     }
 
     /**
-     * A fill WITH the context that arms its markout: direction, the mid at
+     * A fill with the context that arms its markout: direction, the mid at
      * fill time, and the fill timestamp. Feed mids via {@link #onMid} and
      * the move one horizon later is attributed to this venue. A NaN mid
      * still counts the fill but can never start a markout (maturing
@@ -175,7 +175,7 @@ public final class VenueScorecard {
     }
 
     /**
-     * Mid update FOR THE CARD'S ONE SYMBOL (see the class doc): matures
+     * Mid update for the card's one symbol (see the class doc): matures
      * every pending fill markout whose horizon has elapsed. Non-finite
      * mids are ignored — one Inf sentinel maturing a slot would seed the
      * EWMA at ±Inf and the next blend would NaN it forever, silently

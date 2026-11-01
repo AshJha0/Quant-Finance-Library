@@ -108,4 +108,21 @@ class SwapPointsCurveTest {
                 () -> SwapPointsCurve.builder(eurusd, trade, 1.08)
                         .add("1M", 1).add("1M", 2).build()); // duplicate pillar
     }
+
+    @Test
+    void preSpotDatesAndDayCountForCarry() {
+        CurrencyPair eurusd = CurrencyPair.of("EUR", "USD");
+        LocalDate trade = LocalDate.of(2026, 3, 2); // Monday, spot Wednesday
+        SwapPointsCurve c = SwapPointsCurve.builder(eurusd, trade, 1.0850)
+                .add("1M", 12.0)
+                .preSpot(trade.plusDays(1), 0.4)       // TN
+                .preSpot(trade, 0.4 + 0.45)           // ON + TN
+                .build();
+        assertEquals(1.0850 - 0.00004, c.outright(trade.plusDays(1)), 1e-15);
+        assertEquals(1.0850 - 0.000085, c.outright(trade), 1e-15);
+        LocalDate oneMonth = c.spotDate().plusMonths(1);
+        double act365 = c.impliedCarry(oneMonth);
+        double act360 = c.impliedCarry(oneMonth, com.quantfinlib.rates.DayCount.ACT_360);
+        assertEquals(act365 * 360 / 365, act360, 1e-15);
+    }
 }

@@ -12,29 +12,29 @@ package com.quantfinlib.microstructure;
  *       current displayed size;</li>
  *   <li><b>Executions at your level</b> — trades hit the front (price-time
  *       priority), so they reduce shares-ahead one-for-one;</li>
- *   <li><b>Cancels at your level</b> — the hard part: a decrease in level
+ *   <li><b>Cancels at your level</b>: the hard part. A decrease in level
  *       size that isn't a trade is a cancel, and it could be ahead of you
  *       or behind. The literature's workable assumption is <b>pro-rata</b>:
  *       a cancel removes shares-ahead in proportion to the fraction of the
  *       queue that is ahead of you. That gives an unbiased estimate without
- *       L3 — the {@code ahead} field is the expected value, and
+ *       L3. The {@code ahead} field is the expected value, and
  *       {@link #fillProbability} turns it into a fill likelihood via
  *       {@link QueueModel}.</li>
  * </ul>
  *
- * <p>One passive order per instance (cheap — make one per working child).
+ * <p>One passive order per instance (cheap; make one per working child).
  * Feed it the level's size changes split into the trade part and the total
  * part; it infers cancels as the residual. <b>Feed ordering contract</b>:
- * report each trade via {@link #onTrade} BEFORE the depth update that
+ * report each trade via {@link #onTrade} before the depth update that
  * reflects it, and give {@link #onLevelResize} sizes net of trades already
- * reported — otherwise the same execution is counted once as a trade and
+ * reported. Otherwise the same execution is counted once as a trade and
  * again as a cancel, and shares-ahead falls twice per fill. Zero
  * allocation, single writer.</p>
  *
- * <p><b>Cross-asset</b>: applies to any price-time-priority level — equity
+ * <p><b>Cross-asset</b>: applies to any price-time-priority level, equity
  * exchange books and FX ECN/matching books alike (sizes are just longs; an
- * FX "share" is a unit of base currency). It does NOT apply to FX LP quote
- * streams, which have no queues — that side is {@code fx.LpRouter}'s
+ * FX "share" is a unit of base currency). It does not apply to FX LP quote
+ * streams, which have no queues; that side is {@code fx.LpRouter}'s
  * last-look world.</p>
  */
 public final class QueuePositionEstimator {
@@ -70,7 +70,7 @@ public final class QueuePositionEstimator {
             return;
         }
         ahead = Math.max(0, ahead - tradedQty);
-        levelSize = Math.max(ownQty, levelSize - tradedQty);
+        levelSize = Math.max((double) ownQty, levelSize - tradedQty);
     }
 
     /**
@@ -85,7 +85,7 @@ public final class QueuePositionEstimator {
             return;
         }
         double removed = levelSize - ownQty - Math.max(0, newLevelSize - ownQty);
-        // Only cancels (size shrank among the OTHER orders) move our
+        // Only cancels (size shrank among the other orders) move our
         // estimate; adds land behind us and don't change shares-ahead.
         if (removed > 0) {
             double others = levelSize - ownQty;
@@ -112,7 +112,7 @@ public final class QueuePositionEstimator {
     /**
      * Queue progress since joining: 0 right after {@link #join}, 1 when the
      * whole queue that was ahead of us has drained. Measured against the
-     * shares-ahead AT JOIN — the only meaningful baseline.
+     * shares-ahead at join — the only meaningful baseline.
      */
     public double queueProgress() {
         return aheadAtJoin <= 0 ? 1.0 : Math.max(0, 1 - ahead / aheadAtJoin);

@@ -3,29 +3,29 @@ package com.quantfinlib.pricing;
 import com.quantfinlib.util.MathUtils;
 
 /**
- * ASIAN (average-price) options — the corporate hedger's option: paying off
- * on the AVERAGE of n fixings instead of one closing print kills both the
+ * Asian (average-price) options — the corporate hedger's option: paying off
+ * on the average of n fixings instead of one closing print kills both the
  * expiry-day manipulation incentive and most of the vol (an average is
  * smoother than its endpoints), which is why commodity and FX hedging
  * programs default to them. Two averages, two methods:
  *
  * <ul>
- *   <li><b>Geometric average — exact.</b> A product of lognormals is
+ *   <li><b>Geometric average: exact.</b> A product of lognormals is
  *       lognormal, so the geometric Asian has a Black-Scholes-style closed
  *       form (Kemna-Vorst 1990, discrete-fixing version). For n fixings
- *       equally spaced at {@code t_i = i T / n} (last fixing AT expiry):
+ *       equally spaced at {@code t_i = i T / n} (last fixing at expiry):
  *       <pre>
  *         E[ln G]   = ln S + (r - q - vol^2/2) * T (n+1)/(2n)
  *         Var[ln G] = vol^2 * T * (n+1)(2n+1)/(6 n^2)
  *       </pre>
  *       and the price is the Black-76 form on the lognormal G: discount
  *       {@code E[G] N(d1) - K N(d2)}. As n grows, Var goes to
- *       {@code vol^2 T / 3} — continuous averaging cuts the variance to a
- *       THIRD; at n = 1 both moments collapse to the terminal price and
- *       the formula IS vanilla Black-Scholes (tested exact).</li>
- *   <li><b>Arithmetic average — Turnbull-Wakeman (1991) moment matching.</b>
+ *       {@code vol^2 T / 3}: continuous averaging cuts the variance to a
+ *       third. At n = 1 both moments collapse to the terminal price and
+ *       the formula is vanilla Black-Scholes (tested exact).</li>
+ *   <li><b>Arithmetic average: Turnbull-Wakeman (1991) moment matching.</b>
  *       A sum of lognormals is not lognormal and has no closed form; TW
- *       computes the arithmetic average's first two moments EXACTLY under
+ *       computes the arithmetic average's first two moments exactly under
  *       GBM,
  *       <pre>
  *         M1 = (S/n) sum_i e^{g t_i}                          g = r - q
@@ -35,19 +35,17 @@ import com.quantfinlib.util.MathUtils;
  *       ({@code Var[ln A] = ln(M2/M1^2)}). The approximation error is the
  *       distance of the true density from lognormal — small at practical
  *       vols, growing with vol^2 T; the moments themselves are exact. The
- *       double sum is O(n^2): fine for real fixing schedules (n &le; a few
- *       hundred), not a Monte Carlo replacement for n in the tens of
- *       thousands.</li>
+ *       double sum is evaluated in O(n) with suffix sums.</li>
  * </ul>
  *
- * <p>AM-GM guarantees {@code A >= G} pathwise, so an arithmetic CALL is
- * always worth at least the geometric call (tested) — the geometric price
- * is the standard control variate for Monte Carlo on the arithmetic. Rates
- * and vol are annualized and continuously compounded; {@code carry} is the
- * dividend/foreign yield exactly as {@link BlackScholes}. Fixings strictly
- * after inception ({@code t_1 = T/n > 0}): a seasoned Asian with fixings
- * already struck is a payoff on the REMAINING average plus a known cash
- * amount — decompose it before calling. Research lane.</p>
+ * <p>AM-GM guarantees {@code A >= G} pathwise, so an arithmetic call is
+ * always worth at least the geometric call (tested), and the geometric
+ * price is the standard control variate for Monte Carlo on the arithmetic.
+ * Rates and vol are annualized and continuously compounded; {@code carry}
+ * is the dividend/foreign yield exactly as {@link BlackScholes}. Fixings
+ * strictly after inception ({@code t_1 = T/n > 0}): a seasoned Asian with
+ * fixings already struck is a payoff on the remaining average plus a
+ * known cash amount, so decompose it before calling. Research lane.</p>
  */
 public final class AsianOption {
 
@@ -74,7 +72,7 @@ public final class AsianOption {
 
     /**
      * Arithmetic-average Asian price via Turnbull-Wakeman two-moment
-     * lognormal matching (see class doc; O(n^2) in the fixing count).
+     * lognormal matching (see class doc; O(n) in the fixing count).
      */
     public static double arithmeticPrice(BlackScholes.OptionType type, double spot, double strike,
                                          double rate, double carry, double vol, double timeYears,
@@ -88,11 +86,16 @@ public final class AsianOption {
             m1 += Math.exp(g * i * h);
         }
         m1 *= spot / n;
+        // M2 n^2/S^2 = sum_i e^{(2g+v^2) t_i} + 2 sum_i e^{(g+v^2) t_i} sum_{j>i} e^{g t_j},
+        // splitting the double sum at min(t_i, t_j) = t_i; the inner sums are
+        // suffix sums, so the whole moment is O(n).
+        double v2 = vol * vol;
+        double suffix = 0; // sum_{j>i} e^{g t_j}
         double m2 = 0;
-        for (int i = 1; i <= n; i++) {
-            for (int j = 1; j <= n; j++) {
-                m2 += Math.exp(g * (i + j) * h + vol * vol * Math.min(i, j) * h);
-            }
+        for (int i = n; i >= 1; i--) {
+            double t = i * h;
+            m2 += Math.exp((2 * g + v2) * t) + 2 * Math.exp((g + v2) * t) * suffix;
+            suffix += Math.exp(g * t);
         }
         m2 *= spot * spot / ((double) n * n);
         // Matched log-variance; guard the deterministic edge (vol = 0 makes

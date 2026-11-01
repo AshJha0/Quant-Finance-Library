@@ -7,15 +7,21 @@ package com.quantfinlib.indicators;
  * implementations (same seeding and smoothing), so a strategy backtested on
  * batch arrays behaves the same when run live on the streaming versions.
  *
- * <p>Instances are single-threaded by design — one per strategy/consumer
- * thread — matching the single-consumer dispatch model of the HFT bus.</p>
+ * <p>Instances are single-threaded by design (one per strategy/consumer
+ * thread), matching the single-consumer dispatch model of the HFT bus.</p>
  */
 public final class StreamingIndicators {
 
     private StreamingIndicators() {
     }
 
-    /** Simple moving average over a fixed window; NaN until the window fills. */
+    /**
+     * Simple moving average over a fixed window; NaN until the window fills.
+     * The running sum is recomputed exactly from the window every
+     * {@code period} updates (amortised O(1)), so add/subtract rounding
+     * cannot drift over 10⁸ ticks; the schedule matches the batch
+     * {@link Indicators#sma} so the two stay bit-identical.
+     */
     public static final class Sma {
         private final double[] window;
         private final int period;
@@ -30,13 +36,22 @@ public final class StreamingIndicators {
         }
 
         public double update(double v) {
+            // Add then subtract, in the same order as the batch Indicators.sma.
+            sum += v;
             if (count >= period) {
                 sum -= window[idx];
             }
             window[idx] = v;
-            sum += v;
             idx = idx + 1 == period ? 0 : idx + 1;
             count++;
+            if (idx == 0) {
+                // Window holds the last `period` values oldest-first: resync.
+                double exact = 0;
+                for (int j = 0; j < period; j++) {
+                    exact += window[j];
+                }
+                sum = exact;
+            }
             value = count >= period ? sum / period : Double.NaN;
             return value;
         }

@@ -1,16 +1,27 @@
 package com.quantfinlib.core;
 
+import com.quantfinlib.util.Immutable;
+
 import java.util.Arrays;
 import java.util.List;
 
 /**
  * Immutable, cache-friendly OHLCV time series backed by primitive arrays
- * (structure-of-arrays layout, no boxing) for ultra-low-latency computation.
+ * (structure-of-arrays layout, no boxing) so indicators read primitive columns directly.
  *
- * <p>Array accessors ({@link #opens()}, {@link #closes()}, ...) return the
- * internal arrays without copying for zero-allocation hot paths. Callers must
- * treat them as read-only.</p>
+ * <p>The column arrays never leave the object. Indexed accessors such as
+ * {@link #close(int)} read one element without allocating; whole columns are
+ * available as copies ({@link #closesCopy()}, ...) or copied into a reusable
+ * caller buffer with {@link #copyClosesInto(double[], int, int)}.</p>
+ *
+ * <p>A bar can be flagged <em>synthetic</em>: a placeholder created by
+ * alignment (for example {@code data.SeriesAligner.unionForwardFill} carrying
+ * the last close across a halt or a listing gap) rather than a bar that
+ * traded. Estimators of volatility, average volume and impact should skip
+ * synthetic bars, since a flat zero-volume bar shrinks both. Series built
+ * without the flag report every bar as real.</p>
  */
+@Immutable
 public final class BarSeries {
 
     private final String symbol;
@@ -20,10 +31,11 @@ public final class BarSeries {
     private final double[] low;
     private final double[] close;
     private final double[] volume;
+    private final boolean[] synthetic; // null when no bar is synthetic
     private final int size;
 
     private BarSeries(String symbol, long[] timestamps, double[] open, double[] high,
-                      double[] low, double[] close, double[] volume, int size) {
+                      double[] low, double[] close, double[] volume, boolean[] synthetic, int size) {
         this.symbol = symbol;
         this.timestamps = timestamps;
         this.open = open;
@@ -31,6 +43,7 @@ public final class BarSeries {
         this.low = low;
         this.close = close;
         this.volume = volume;
+        this.synthetic = synthetic;
         this.size = size;
     }
 
@@ -66,13 +79,45 @@ public final class BarSeries {
     public double lastClose()         { return close[size - 1]; }
     public Bar bar(int i)             { return new Bar(timestamps[i], open[i], high[i], low[i], close[i], volume[i]); }
 
-    /** Zero-copy accessors: internal arrays, treat as read-only. */
-    public long[] timestamps()        { return timestamps; }
-    public double[] opens()           { return open; }
-    public double[] highs()           { return high; }
-    public double[] lows()            { return low; }
-    public double[] closes()          { return close; }
-    public double[] volumes()         { return volume; }
+    /** Whether bar {@code i} is an alignment placeholder rather than a traded bar. */
+    public boolean isSynthetic(int i) {
+        return synthetic != null && synthetic[i];
+    }
+
+    /** {@code false} guarantees that no bar is synthetic; {@code true} means some may be. */
+    public boolean hasSyntheticBars() {
+        return synthetic != null;
+    }
+
+    /*
+     * The column arrays never leave this object. Per-element reads use the
+     * indexed accessors above (no allocation); whole-column reads take a copy
+     * once, or copy a range into a caller-owned buffer that can be reused.
+     */
+
+    /** A fresh copy of the timestamp column. */
+    public long[] timestampsCopy()    { return Arrays.copyOf(timestamps, size); }
+    /** A fresh copy of the open column. */
+    public double[] opensCopy()       { return Arrays.copyOf(open, size); }
+    /** A fresh copy of the high column. */
+    public double[] highsCopy()       { return Arrays.copyOf(high, size); }
+    /** A fresh copy of the low column. */
+    public double[] lowsCopy()        { return Arrays.copyOf(low, size); }
+    /** A fresh copy of the close column. */
+    public double[] closesCopy()      { return Arrays.copyOf(close, size); }
+    /** A fresh copy of the volume column. */
+    public double[] volumesCopy()     { return Arrays.copyOf(volume, size); }
+
+    /**
+     * Copies closes {@code [from, from + len)} into {@code dst[0, len)} without allocating.
+     *
+     * @param dst  caller-owned destination, length at least {@code len}
+     * @param from first bar index
+     * @param len  number of bars
+     */
+    public void copyClosesInto(double[] dst, int from, int len) {
+        System.arraycopy(close, from, dst, 0, len);
+    }
 
     /** Copy of the bar range [from, toExclusive) as a new series (for train/test splits). */
     public BarSeries slice(int from, int toExclusive) {
@@ -81,7 +126,11 @@ public final class BarSeries {
         }
         Builder b = builder(symbol);
         for (int i = from; i < toExclusive; i++) {
-            b.add(timestamps[i], open[i], high[i], low[i], close[i], volume[i]);
+            if (isSynthetic(i)) {
+                b.addSynthetic(timestamps[i], open[i], high[i], low[i], close[i], volume[i]);
+            } else {
+                b.add(timestamps[i], open[i], high[i], low[i], close[i], volume[i]);
+            }
         }
         return b.build();
     }
@@ -112,6 +161,7 @@ public final class BarSeries {
         private double[] l = new double[256];
         private double[] c = new double[256];
         private double[] v = new double[256];
+        private boolean[] syn; // allocated on the first synthetic bar
         private int n;
 
         private Builder(String symbol) {
@@ -127,6 +177,17 @@ public final class BarSeries {
             return this;
         }
 
+        /** Adds an alignment placeholder bar (see the class doc). */
+        public Builder addSynthetic(long timestamp, double open, double high, double low,
+                                    double close, double volume) {
+            if (syn == null) {
+                syn = new boolean[ts.length];
+            }
+            add(timestamp, open, high, low, close, volume);
+            syn[n - 1] = true;
+            return this;
+        }
+
         public Builder add(Bar bar) {
             return add(bar.timestamp(), bar.open(), bar.high(), bar.low(), bar.close(), bar.volume());
         }
@@ -139,6 +200,9 @@ public final class BarSeries {
             l = Arrays.copyOf(l, cap);
             c = Arrays.copyOf(c, cap);
             v = Arrays.copyOf(v, cap);
+            if (syn != null) {
+                syn = Arrays.copyOf(syn, cap);
+            }
         }
 
         public BarSeries build() {
@@ -147,7 +211,8 @@ public final class BarSeries {
             }
             return new BarSeries(symbol,
                     Arrays.copyOf(ts, n), Arrays.copyOf(o, n), Arrays.copyOf(h, n),
-                    Arrays.copyOf(l, n), Arrays.copyOf(c, n), Arrays.copyOf(v, n), n);
+                    Arrays.copyOf(l, n), Arrays.copyOf(c, n), Arrays.copyOf(v, n),
+                    syn == null ? null : Arrays.copyOf(syn, n), n);
         }
     }
 }

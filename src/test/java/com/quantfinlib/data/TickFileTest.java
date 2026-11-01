@@ -1,6 +1,7 @@
 package com.quantfinlib.data;
 
 import com.quantfinlib.marketdata.HftMarketDataBus;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -100,6 +101,7 @@ class TickFileTest {
     }
 
     @Test
+    @Tag("timing")
     void pacedReplayDeliversEverythingScaled(@TempDir Path dir) throws Exception {
         Path file = dir.resolve("paced.qflt");
         try (TickFileWriter w = new TickFileWriter(file)) {

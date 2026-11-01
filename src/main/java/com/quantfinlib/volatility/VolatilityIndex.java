@@ -1,31 +1,31 @@
 package com.quantfinlib.volatility;
 
 /**
- * A VIX-style MARKET volatility index — the "fear gauge": the market's
+ * A VIX-style market volatility index — the "fear gauge": the market's
  * own 30-day volatility expectation, read model-free out of an option
  * chain. No pricing model is assumed; the index is the variance-swap
  * replication (Carr-Madan / CBOE methodology, single expiry):
  *
  * <pre>  σ² = (2/T)·Σᵢ (ΔKᵢ/Kᵢ²)·e^{rT}·Q(Kᵢ)  −  (1/T)·(F/K₀ − 1)²</pre>
  *
- * where Q(K) is the OUT-OF-THE-MONEY option mid at strike K (puts below
+ * where Q(K) is the out-of-the-money option mid at strike K (puts below
  * the forward, calls above, the put/call average at the pivot K₀ — the
  * highest strike at or below F), ΔK the half-distance between
  * neighboring strikes, and the last term corrects for K₀ ≠ F.
  *
  * <p>Why OTM options? Each strike's option contributes exactly the
  * 1/K² slice needed to build a constant-dollar-gamma payoff — a
- * position whose P&amp;L IS realized variance. The market prices that
+ * position whose P&amp;L is realized variance. The market prices that
  * portfolio, so the portfolio's price reveals the market's variance
- * expectation, whatever model anyone used. That is why a vol SMILE
+ * expectation, whatever model anyone used. That is why a vol smile
  * raises the index above ATM implied vol: the wings carry real premium
  * and the replication weights them in.
  *
- * <p><b>Honesty notes:</b> single-expiry (the CBOE interpolates two
+ * <p><b>Limitations:</b> single-expiry (the CBOE interpolates two
  * expiries to exactly 30 days — supply the chain nearest your target
  * tenor, or compute two indices and interpolate variance in time);
  * truncation bias: strikes should span several σ√T or the index reads
- * LOW (the tails you cannot see are variance you do not count).
+ * low (the tails you cannot see are variance you do not count).
  * Styled after the methodology, not certified. Research lane, static,
  * deterministic.</p>
  */
@@ -85,7 +85,7 @@ public final class VolatilityIndex {
                 pivot = i;
             }
         }
-        // e^{+rT}: FORWARD-values the option mids (the CBOE construction)
+        // e^{+rT}: forward-values the option mids (the CBOE construction)
         // — this is a growth factor, not a discount factor; "fixing" it
         // to e^{-rT} would introduce a 2rT relative error.
         double growth = Math.exp(rate * tYears);

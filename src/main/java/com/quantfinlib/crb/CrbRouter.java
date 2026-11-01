@@ -2,27 +2,27 @@ package com.quantfinlib.crb;
 
 /**
  * The central risk book's order router — internal cross first, dark
- * pools second, lit last, each leg priced honestly:
+ * pools second, lit last, each leg priced at its expected all-in cost:
  *
  * <ul>
  *   <li><b>Internal</b> — crossing against the book's own offsetting
- *       inventory costs ZERO bps and leaks nothing: the CRB itself is
+ *       inventory costs zero bps and leaks nothing: the CRB itself is
  *       the firm's first and best dark pool. Capped at the crossable
  *       inventory the caller reports;</li>
- *   <li><b>Dark pools</b> — midpoint fills pay no spread, but a venue
- *       whose fills systematically fade is not free: each venue carries
- *       an ADVERSE-SELECTION charge in bps (a post-fill markout
- *       estimate — {@code VenueScorecard} produces exactly this), and
+ *   <li><b>Dark pools</b>: midpoint fills pay no spread, but a venue
+ *       whose fills systematically fade is not free. Each venue carries
+ *       an adverse-selection charge in bps (a post-fill markout
+ *       estimate, which {@code VenueScorecard} produces), and
  *       expected liquidity is discounted by fill probability. A dark
  *       venue is only used while its charge undercuts the lit cost;</li>
- *   <li><b>Lit</b> — pays the half spread plus expected impact, but
- *       fills. Whatever the dark legs are not EXPECTED to fill routes
- *       lit as well — hedges that might fill are not hedges.</li>
+ *   <li><b>Lit</b>: pays the half spread plus expected impact, but
+ *       fills. Whatever the dark legs are not expected to fill routes
+ *       lit as well; hedges that might fill are not hedges.</li>
  * </ul>
  *
  * <p>Allocation is greedy by expected cost, deterministic, allocation
  * only at decision time (arrays sized to the venue count). Research/
- * warm lane; the caller owns venue statistics and their honesty.</p>
+ * warm lane; the caller owns the venue statistics and their accuracy.</p>
  */
 public final class CrbRouter {
 
@@ -51,8 +51,80 @@ public final class CrbRouter {
      * array passed in; {@code expectedCostBps} is the blended expected
      * cost of the whole allocation.
      */
-    public record Allocation(double internal, double[] dark, double lit,
-                             double expectedCostBps) {
+    public static final class Allocation {
+        private final double internal;
+        private final double[] dark;
+        private final double lit;
+        private final double expectedCostBps;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         */
+        public Allocation(double internal, double[] dark, double lit, double expectedCostBps) {
+            this.internal = internal;
+            this.dark = dark == null ? null : dark.clone();
+            this.lit = lit;
+            this.expectedCostBps = expectedCostBps;
+        }
+
+        /** {@code internal}. */
+        public double internal() {
+            return internal;
+        }
+
+        /** Element {@code i} of {@code dark}. */
+        public double dark(int i) {
+            return dark[i];
+        }
+
+        /** Length of {@code dark}. */
+        public int darkLength() {
+            return dark.length;
+        }
+
+        /** A fresh copy of {@code dark}. */
+        public double[] darkCopy() {
+            return dark == null ? null : dark.clone();
+        }
+
+        /** {@code lit}. */
+        public double lit() {
+            return lit;
+        }
+
+        /** {@code expectedCostBps}. */
+        public double expectedCostBps() {
+            return expectedCostBps;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Allocation o)) {
+                return false;
+            }
+            return Double.compare(internal, o.internal) == 0
+                    && java.util.Arrays.equals(dark, o.dark)
+                    && Double.compare(lit, o.lit) == 0
+                    && Double.compare(expectedCostBps, o.expectedCostBps) == 0;
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + Double.hashCode(internal);
+            h = 31 * h + java.util.Arrays.hashCode(dark);
+            h = 31 * h + Double.hashCode(lit);
+            h = 31 * h + Double.hashCode(expectedCostBps);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "Allocation[" + "internal=" + internal + ", " + "dark=" + java.util.Arrays.toString(dark) + ", " + "lit=" + lit + ", " + "expectedCostBps=" + expectedCostBps + "]";
+        }
     }
 
     private CrbRouter() {
@@ -64,7 +136,7 @@ public final class CrbRouter {
      * @param notional          amount to execute, &gt; 0
      * @param crossableInternal offsetting book inventory available to
      *                          cross against, ≥ 0
-     * @param venues            dark venues with honest statistics
+     * @param venues            dark venues with their measured statistics
      * @param halfSpreadBps     lit half spread, &gt; 0
      * @param impactBps         expected lit impact for this size, ≥ 0
      *                          (a {@code KylesLambda} estimate slots in)

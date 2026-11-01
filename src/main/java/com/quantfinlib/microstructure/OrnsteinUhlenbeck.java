@@ -11,18 +11,18 @@ package com.quantfinlib.microstructure;
  *   <li><b>half-life</b> {@code ln2/κ} — how long the spread takes to
  *       close half its gap: the holding-period estimate, and the first
  *       filter (a 200-day half-life is not a trade);</li>
- *   <li><b>z-score</b> {@code (x − θ)/σ_stat} with the STATIONARY
+ *   <li><b>z-score</b> {@code (x − θ)/σ_stat} with the stationary
  *       stdev {@code σ/√(2κ)} — entry/exit in units the strategy can
  *       threshold;</li>
  *   <li><b>the refusal</b>: a fitted {@code b ≥ 1} means the series
- *       shows NO mean reversion in-sample — the fit throws rather than
+ *       shows no mean reversion in-sample — the fit throws rather than
  *       reporting an infinite half-life as a tradable number, because
  *       fitting OU to a random walk is how pairs desks die.</li>
  * </ul>
  *
- * <p>Small-sample honesty: the OLS AR(1) slope is DOWNWARD-biased in
+ * <p>Small-sample bias: the OLS AR(1) slope is biased downward in
  * finite samples (Kendall: {@code E[b_hat - b] ~ -(1+3b)/n}), so near the
- * minimum n=30 the fitted κ runs high and the half-life SHORT — a
+ * minimum n=30 the fitted κ runs high and the half-life short — a
  * 20-day true half-life can fit as ~12. Treat short-sample half-lives as
  * optimistic lower bounds and prefer n in the hundreds before sizing a
  * holding period off them. Stated, not corrected: bias corrections trade
@@ -116,7 +116,7 @@ public final class OrnsteinUhlenbeck {
         return new Params(kappa, theta, sigma, Math.log(2) / kappa);
     }
 
-    /** Convenience: the fitted z-score of the LAST observation. */
+    /** Convenience: the fitted z-score of the last observation. */
     public static double lastZScore(double[] series, double dt) {
         Params p = fit(series, dt);
         return p.zScore(series[series.length - 1]);

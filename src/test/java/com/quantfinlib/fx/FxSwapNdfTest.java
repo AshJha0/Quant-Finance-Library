@@ -160,7 +160,6 @@ class FxSwapNdfTest {
     void rollCostAndValidation() {
         // Paying 0.15 pips tom-next on 10m base.
         assertEquals(10_000_000 * 0.15 * 0.0001, FxSwap.rollCost(eurusd, 10_000_000, 0.15), 1e-9);
-        SwapPointsCurve c = curve(1.0850, 12.6, 38.4);
         assertThrows(IllegalArgumentException.class,
                 () -> FxSwap.of(eurusd, 1_000_000, trade.plusDays(30), 1.09, trade.plusDays(10), 1.10));
         assertThrows(IllegalArgumentException.class,

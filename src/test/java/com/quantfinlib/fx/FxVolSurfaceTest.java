@@ -39,9 +39,9 @@ class FxVolSurfaceTest {
     void strikeForDeltaRoundTripsTheTargetDelta() {
         double k25c = FxVolSurface.strikeForDelta(F, ATM, T, 0.25, true, false);
         double k25p = FxVolSurface.strikeForDelta(F, ATM, T, -0.25, false, false);
-        // Tolerance bounded by MathUtils.normInv accuracy (~1e-9 in p-space).
-        assertEquals(0.25, forwardDelta(F, k25c, ATM, T, true), 1e-6);
-        assertEquals(-0.25, forwardDelta(F, k25p, ATM, T, false), 1e-6);
+        // normInv and normCdf are now at double precision.
+        assertEquals(0.25, forwardDelta(F, k25c, ATM, T, true), 1e-14);
+        assertEquals(-0.25, forwardDelta(F, k25p, ATM, T, false), 1e-14);
         // OTM strikes sit on the expected sides of the forward.
         assertTrue(k25c > F);
         assertTrue(k25p < F);
@@ -53,23 +53,27 @@ class FxVolSurfaceTest {
         assertEquals(F * Math.exp(0.5 * ATM * ATM * T), k, 1e-12);
         double dc = forwardDelta(F, k, ATM, T, true);
         double dp = forwardDelta(F, k, ATM, T, false);
-        assertEquals(0, dc + dp, 1e-7); // straddle delta cancels (normCdf precision)
+        assertEquals(0, dc + dp, 1e-15); // straddle delta cancels
     }
 
     @Test
     void surfaceReproducesBrokerQuoteIdentities() {
-        FxVolSurface s = surface();
+        // Quotes taken as smile-strangle butterflies: the RR/BF identities hold
+        // by definition. (The default, a broker strangle, is tested below.)
+        FxVolSurface s = FxVolSurface.builder()
+                .butterflyQuote(FxVolSurface.ButterflyQuote.SMILE_STRANGLE)
+                .add(T, F, ATM, RR25, BF25).build();
         FxVolSurface.SmilePillar p = s.pillar(0);
         // Three pillars at 3M (no 10Δ): 25P, ATM, 25C, strikes ascending.
-        assertEquals(3, p.strikes().length);
-        double v25p = p.vols()[0];
-        double vAtm = p.vols()[1];
-        double v25c = p.vols()[2];
+        assertEquals(3, p.strikesLength());
+        double v25p = p.vols(0);
+        double vAtm = p.vols(1);
+        double v25c = p.vols(2);
         assertEquals(RR25, v25c - v25p, 1e-12);              // risk reversal
         assertEquals(BF25, (v25c + v25p) / 2 - vAtm, 1e-12); // butterfly
         assertEquals(ATM, vAtm, 1e-12);
         // Surface lookup at a pillar strike returns the pillar vol.
-        assertEquals(v25c, s.vol(T, p.strikes()[2]), 1e-10);
+        assertEquals(v25c, s.vol(T, p.strikes(2)), 1e-10);
         // Negative RR: put wing above call wing (EURUSD skew).
         assertTrue(v25p > v25c);
     }
@@ -78,10 +82,10 @@ class FxVolSurfaceTest {
     void tenDeltaWingsExtendTheSmile() {
         FxVolSurface s = surface();
         FxVolSurface.SmilePillar p = s.pillar(1);
-        assertEquals(5, p.strikes().length);
+        assertEquals(5, p.strikesLength());
         // Wing vols beyond the wings are flat (no explosive extrapolation).
-        assertEquals(p.vols()[0], s.vol(1.0, p.strikes()[0] * 0.90), 1e-10);
-        assertEquals(p.vols()[4], s.vol(1.0, p.strikes()[4] * 1.10), 1e-10);
+        assertEquals(p.vols(0), s.vol(1.0, p.strikes(0) * 0.90), 1e-10);
+        assertEquals(p.vols(4), s.vol(1.0, p.strikes(4) * 1.10), 1e-10);
     }
 
     @Test
@@ -157,5 +161,89 @@ class FxVolSurfaceTest {
         double k = FxVolSurface.strikeForDelta(F, ATM, T, target, true, true);
         double d2 = Math.log(F / k) / sv - 0.5 * sv;
         assertEquals(target, (k / F) * MathUtils.normCdf(d2), 1e-6);
+    }
+
+    // ---------------------------------------------------- broker strangle (F45)
+
+    private static double black(double f, double k, double vol, double t, boolean call) {
+        double sv = vol * Math.sqrt(t);
+        double d1 = Math.log(f / k) / sv + 0.5 * sv;
+        double d2 = d1 - sv;
+        return call ? f * MathUtils.normCdf(d1) - k * MathUtils.normCdf(d2)
+                : k * MathUtils.normCdf(-d2) - f * MathUtils.normCdf(-d1);
+    }
+
+    @Test
+    void brokerStrangleIsRepricedOnTheSolvedSmile() {
+        // USDJPY-like skew, 1Y: RR large relative to BF, the case where the
+        // smile and broker butterflies differ most.
+        double f = 145.0, t = 1.0, atm = 0.105, rr = -0.025, bfBroker = 0.004;
+        FxVolSurface s = FxVolSurface.builder().add(t, f, atm, rr, bfBroker).build();
+        FxVolSurface.SmilePillar p = s.pillar(0);
+        // Smile RR identity holds on the solved pillars.
+        assertEquals(rr, p.vols(2) - p.vols(0), 1e-12);
+        double bfSmile = (p.vols(2) + p.vols(0)) / 2 - p.vols(1);
+        assertEquals(s.smileButterfly25(0), bfSmile, 1e-12);
+        // The market strangle: strikes at one vol atm + bf, priced at that vol...
+        double vMs = atm + bfBroker;
+        double kc = FxVolSurface.strikeForDelta(f, vMs, t, 0.25, true, false);
+        double kp = FxVolSurface.strikeForDelta(f, vMs, t, -0.25, false, false);
+        double target = black(f, kc, vMs, t, true) + black(f, kp, vMs, t, false);
+        // ...is worth the same priced on the smile.
+        double onSmile = black(f, kc, s.vol(t, kc), t, true) + black(f, kp, s.vol(t, kp), t, false);
+        assertEquals(target, onSmile, 1e-12 * target);
+        // With skew the smile butterfly is above the broker one, by a margin that
+        // matters against a typical bid/ask (several hundredths of a vol here).
+        assertTrue(bfSmile - bfBroker > 2e-4, "bfSmile=" + bfSmile);
+        // Treating the broker quote as a smile quote (the old behaviour) does
+        // not reprice the market strangle.
+        FxVolSurface naive = FxVolSurface.builder()
+                .butterflyQuote(FxVolSurface.ButterflyQuote.SMILE_STRANGLE)
+                .add(t, f, atm, rr, bfBroker).build();
+        double naiveValue = black(f, kc, naive.vol(t, kc), t, true)
+                + black(f, kp, naive.vol(t, kp), t, false);
+        assertTrue(Math.abs(naiveValue - target) > 1e-4 * target);
+    }
+
+    @Test
+    void withoutSkewBrokerAndSmileButterfliesCoincide() {
+        FxVolSurface s = FxVolSurface.builder().add(T, F, ATM, 0.0, BF25).build();
+        assertEquals(BF25, s.smileButterfly25(0), 1e-13);
+    }
+
+    @Test
+    void tenAndTwentyFiveDeltaBrokerStranglesAreBothRepriced() {
+        double t = 1.0, f = 1.0920, atm = 0.083;
+        FxVolSurface s = FxVolSurface.builder()
+                .add(t, f, atm, -0.012, 0.0030, -0.022, 0.0095).build();
+        for (double[] lvl : new double[][]{{0.25, 0.0030}, {0.10, 0.0095}}) {
+            double vMs = atm + lvl[1];
+            double kc = FxVolSurface.strikeForDelta(f, vMs, t, lvl[0], true, false);
+            double kp = FxVolSurface.strikeForDelta(f, vMs, t, -lvl[0], false, false);
+            double target = black(f, kc, vMs, t, true) + black(f, kp, vMs, t, false);
+            double onSmile = black(f, kc, s.vol(t, kc), t, true) + black(f, kp, s.vol(t, kp), t, false);
+            assertEquals(target, onSmile, 1e-10 * target, "delta " + lvl[0]);
+        }
+    }
+
+    @Test
+    void spotDeltaAndAtmForwardConventions() {
+        double dfF = Math.exp(-0.04 * T);
+        double k = FxVolSurface.strikeForDelta(F, ATM, T, 0.25, true,
+                FxVolSurface.DeltaConvention.SPOT, dfF);
+        // Spot delta = e^{-r_f T} N(d1).
+        assertEquals(0.25, dfF * forwardDelta(F, k, ATM, T, true), 1e-13);
+        double kpa = FxVolSurface.strikeForDelta(F, ATM, T, -0.25, false,
+                FxVolSurface.DeltaConvention.SPOT_PREMIUM_ADJUSTED, dfF);
+        double sv = ATM * Math.sqrt(T);
+        double d2 = Math.log(F / kpa) / sv - 0.5 * sv;
+        assertEquals(-0.25, -dfF * (kpa / F) * MathUtils.normCdf(-d2), 1e-12);
+
+        FxVolSurface s = FxVolSurface.builder()
+                .atmConvention(FxVolSurface.AtmConvention.FORWARD)
+                .deltaConvention(FxVolSurface.DeltaConvention.SPOT)
+                .add(T, F, dfF, ATM, RR25, BF25, Double.NaN, Double.NaN).build();
+        assertEquals(F, s.pillar(0).strikes(1), 1e-15);
+        assertEquals(FxVolSurface.DeltaConvention.SPOT, s.deltaConvention());
     }
 }

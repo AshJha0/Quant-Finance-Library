@@ -8,7 +8,7 @@ import com.quantfinlib.util.LatencyRecorder;
 import java.util.SplittableRandom;
 
 /**
- * Benchmarks the venue-grade matching engine ({@link HftOrderBook}),
+ * Benchmarks the matching engine ({@link HftOrderBook}),
  * completing the fast-lane benchmark family with the venue side:
  *
  * <ol>
@@ -16,8 +16,11 @@ import java.util.SplittableRandom;
  *       — the id-map + pool + bitmap machinery under load;</li>
  *   <li><b>Matching</b>: aggressive flow sweeping resting liquidity —
  *       fills/sec through the FIFO levels;</li>
- *   <li><b>Per-op latency</b>: submit-to-return percentiles for a realistic
- *       70/20/10 add/cancel/aggress mix.</li>
+ *   <li><b>Per-op cost</b>: a realistic 70/20/10 add/cancel/aggress mix
+ *       timed in batches of {@value #BATCH} operations, reported as the
+ *       batch time divided by the batch size. A single operation is shorter
+ *       than one tick of the Windows clock (100 ns), so timing each op on
+ *       its own would mostly measure clock quantisation.</li>
  * </ol>
  *
  * <p>Run: {@code java -Xms512m -Xmx512m -XX:+AlwaysPreTouch -cp target/classes
@@ -31,6 +34,7 @@ public final class HftBookBenchmark {
     private static final int MAX_TICK = 110_000;
     private static final int WARMUP = 2_000_000;
     private static final int MEASURED = 10_000_000;
+    private static final int BATCH = 128;
 
     public static void main(String[] args) throws Exception {
         try (HiccupMonitor hiccups = new HiccupMonitor().start()) {
@@ -41,7 +45,10 @@ public final class HftBookBenchmark {
         }
     }
 
-    /** Add/cancel churn against a book holding ~half a million resting orders. */
+    /**
+     * Add/cancel churn: up to 65,536 tracked resting orders (the cancel ring),
+     * so the book holds at most that many.
+     */
     private static void passiveChurn() {
         HftOrderBook book = new HftOrderBook(MIN_TICK, MAX_TICK, 1 << 20);
         SplittableRandom rnd = new SplittableRandom(42);
@@ -112,7 +119,7 @@ public final class HftBookBenchmark {
                 MEASURED / (elapsed / 1e9) / 1e6, trades[0] / (elapsed / 1e9) / 1e6, volume[0]);
     }
 
-    /** Latency percentiles for a realistic 70/20/10 add/cancel/aggress mix. */
+    /** Per-op cost percentiles for a 70/20/10 add/cancel/aggress mix, in batches. */
     private static void mixedLatency() {
         HftOrderBook book = new HftOrderBook(MIN_TICK, MAX_TICK, 1 << 20);
         book.tradeSink((m, t, tick, qty, ts) -> { /* blackhole */ });
@@ -121,12 +128,13 @@ public final class HftBookBenchmark {
         long[] ring = new long[1 << 16];
         int ringSize = 0;
 
+        long batchStart = System.nanoTime();
         for (int i = 0; i < WARMUP + MEASURED / 2; i++) {
             if (i == WARMUP) {
                 recorder.reset();
+                batchStart = System.nanoTime();
             }
             int kind = rnd.nextInt(10);
-            long start = System.nanoTime();
             if (kind < 7 || ringSize == 0) {
                 int tick = MIN_TICK + rnd.nextInt(MAX_TICK - MIN_TICK + 1);
                 long id = book.submitLimit(rnd.nextBoolean() ? Side.BUY : Side.SELL,
@@ -142,9 +150,14 @@ public final class HftBookBenchmark {
                 book.submitMarket(rnd.nextBoolean() ? Side.BUY : Side.SELL,
                         1 + rnd.nextInt(200), i);
             }
-            recorder.record(System.nanoTime() - start);
+            if ((i + 1) % BATCH == 0) {
+                long now = System.nanoTime();
+                recorder.record((now - batchStart) / BATCH);
+                batchStart = now;
+            }
         }
-        System.out.println("Per-op latency:  " + recorder.summary());
+        System.out.println("Per-op cost (mean of " + BATCH + "-op batches): "
+                + recorder.summary());
         System.out.printf("Totals: %d orders, %d cancels, %d trades, %d resting%n",
                 book.orderCount(), book.cancelCount(), book.tradeCount(), book.restingOrders());
     }
