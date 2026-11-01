@@ -103,6 +103,7 @@ public final class AdaptiveSor {
     private final VenueScorecard scorecard;
     private final Config config;
     private final Map<String, Integer> venueIds = new HashMap<>();
+    private double maxLatencyPenaltyBps = Double.POSITIVE_INFINITY;
 
     public AdaptiveSor(VenueScorecard scorecard, Config config) {
         this.scorecard = scorecard;
@@ -125,6 +126,20 @@ public final class AdaptiveSor {
         venueIds.put(venue, scorecardId);
     }
 
+    /**
+     * Caps the latency term of the expected cost at {@code bps} of price
+     * (default: no cap). Without a cap a venue with a pathological measured
+     * latency is pushed arbitrarily far down the ranking; with one it is
+     * charged at most this much and other terms still order it.
+     */
+    public AdaptiveSor maxLatencyPenaltyBps(double bps) {
+        if (!(bps >= 0)) {
+            throw new IllegalArgumentException("maxLatencyPenaltyBps must be >= 0");
+        }
+        this.maxLatencyPenaltyBps = bps;
+        return this;
+    }
+
     /** The scorecard this router learns from (feed fills/misses/probes to it). */
     public VenueScorecard scorecard() {
         return scorecard;
@@ -132,33 +147,36 @@ public final class AdaptiveSor {
 
     /**
      * Routes a marketable parent of {@code quantity}. Lit venues are ranked
-     * by expected cost per share:
+     * by expected cost per share, every term in price units:
      *
-     * <pre>  allIn × [1 + (1−fillRate)×missPenalty + latency×urgency
-     *          + adverseSelection]                                (buys;
-     *  the adjustments subtract for sells)</pre>
+     * <pre>  allIn + s × [px × ((1−fillRate)×missPenaltyBps + latencyBps) / 1e4
+     *              + adverseSelection]</pre>
      *
-     * where adverseSelection is the venue's negative post-fill markout as
-     * a fraction of price (a venue with favorable or unknown markout pays
-     * nothing extra).
-     *
-     * and swept best-first at displayed size. Every quoting dark venue gets
-     * a contingent probe leg at its midpoint, sized by learned hidden
-     * liquidity (or the configured default while unknown), capped at
-     * {@code maxDarkFraction × quantity}.
+     * with {@code s = +1} for buys and {@code -1} for sells (a sell ranks by
+     * the highest expected proceeds), {@code allIn = px (1 + s fee/1e4)},
+     * {@code latencyBps = min(latencyMs × urgencyBpsPerMs, maxLatencyPenaltyBps)}
+     * and adverseSelection the venue's negative post-fill markout in price
+     * units (a venue with favorable or unknown markout pays nothing extra).
+     * Venues are swept best-first at displayed size. Every quoting dark venue
+     * gets a contingent probe leg at its midpoint, sized by learned hidden
+     * liquidity (or the configured default while unknown); the probes of all
+     * dark venues together are capped at {@code maxDarkFraction × quantity},
+     * filled in quote order.
      */
     public RoutingDecision route(Side side, long quantity, List<VenueQuote> venues) {
         boolean buy = side == Side.BUY;
         List<RouteLeg> lit = new ArrayList<>();
         List<RouteLeg> probes = new ArrayList<>();
         List<Scored> candidates = new ArrayList<>(venues.size());
+        long darkBudget = Math.round(config.maxDarkFraction() * quantity);
 
         for (VenueQuote v : venues) {
             Integer id = venueIds.get(v.venue());
             if (v.dark()) {
-                long probe = darkProbeSize(id, quantity);
+                long probe = Math.min(darkProbeSize(id, quantity), darkBudget);
                 if (probe > 0 && !Double.isNaN(v.mid())) {
                     probes.add(new RouteLeg(v.venue(), v.mid(), probe, true));
+                    darkBudget -= probe;
                 }
                 continue;
             }
@@ -175,19 +193,21 @@ public final class AdaptiveSor {
             if (id != null && scorecard.measuredLatencyNanos(id) > 0) {
                 latencyNanos = scorecard.measuredLatencyNanos(id);
             }
-            double allIn = px * (1 + (buy ? 1 : -1) * v.feeBps() / 1e4);
-            double missAdj = (1 - fillRate) * config.missPenaltyBps() / 1e4;
-            double latAdj = latencyNanos / 1e6 * config.urgencyBpsPerMs() / 1e4;
-            // A venue whose fills revert charges that reversion per share;
-            // favorable/unknown markout adds nothing (no bonus for luck).
-            double adverseAdj = 0;
+            int s = buy ? 1 : -1;
+            double allIn = px * (1 + s * v.feeBps() / 1e4);
+            double missBps = (1 - fillRate) * config.missPenaltyBps();
+            double latBps = Math.min(latencyNanos / 1e6 * config.urgencyBpsPerMs(),
+                    maxLatencyPenaltyBps);
+            // A venue whose fills revert charges that reversion per share
+            // (price units); favorable/unknown markout adds nothing.
+            double adverse = 0;
             if (id != null) {
                 double markout = scorecard.postFillMarkout(id);
                 if (markout < 0) {
-                    adverseAdj = -markout / px;
+                    adverse = -markout;
                 }
             }
-            double expected = allIn * (1 + (buy ? 1 : -1) * (missAdj + latAdj + adverseAdj));
+            double expected = allIn + s * (px * (missBps + latBps) / 1e4 + adverse);
             candidates.add(new Scored(v.venue(), px, expected, size));
         }
 

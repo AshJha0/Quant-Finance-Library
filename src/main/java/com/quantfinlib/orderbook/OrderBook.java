@@ -7,7 +7,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.TreeMap;
-import java.util.ArrayDeque;
 
 /**
  * Price-time-priority limit order book with continuous matching. Models order
@@ -40,13 +39,48 @@ public final class OrderBook {
         void onTrade(long makerOrderId, long takerOrderId, double price, long quantity, long timestampNanos);
     }
 
+    /**
+     * FIFO of the orders at one price, linked through the orders themselves
+     * so that cancel unlinks in O(1) instead of scanning the queue.
+     */
     private static final class PriceLevel {
         final double price;
-        final ArrayDeque<LimitOrder> queue = new ArrayDeque<>();
+        LimitOrder head;
+        LimitOrder tail;
         long totalQty;
 
         PriceLevel(double price) {
             this.price = price;
+        }
+
+        boolean isEmpty() {
+            return head == null;
+        }
+
+        void addLast(LimitOrder o) {
+            o.prev = tail;
+            o.next = null;
+            if (tail == null) {
+                head = o;
+            } else {
+                tail.next = o;
+            }
+            tail = o;
+        }
+
+        void unlink(LimitOrder o) {
+            if (o.prev == null) {
+                head = o.next;
+            } else {
+                o.prev.next = o.next;
+            }
+            if (o.next == null) {
+                tail = o.prev;
+            } else {
+                o.next.prev = o.prev;
+            }
+            o.prev = null;
+            o.next = null;
         }
     }
 
@@ -88,7 +122,7 @@ public final class OrderBook {
         if (remaining > 0) {
             LimitOrder order = new LimitOrder(id, side, price, remaining, timestampNanos);
             PriceLevel level = book(side).computeIfAbsent(price, PriceLevel::new);
-            level.queue.addLast(order);
+            level.addLast(order);
             level.totalQty += remaining;
             orders.put(id, order);
         }
@@ -103,7 +137,10 @@ public final class OrderBook {
         return quantity - remaining;
     }
 
-    /** Cancels a resting order. Returns false if unknown or fully filled. */
+    /**
+     * Cancels a resting order: an O(1) unlink from its level plus the level
+     * lookup in the price map. Returns false if unknown or fully filled.
+     */
     public boolean cancel(long orderId) {
         LimitOrder order = orders.remove(orderId);
         if (order == null) {
@@ -112,9 +149,9 @@ public final class OrderBook {
         cancelCount++;
         PriceLevel level = book(order.side()).get(order.price());
         if (level != null) {
-            level.queue.remove(order);
+            level.unlink(order);
             level.totalQty -= order.quantity();
-            if (level.queue.isEmpty()) {
+            if (level.isEmpty()) {
                 book(order.side()).remove(order.price());
             }
         }
@@ -134,7 +171,7 @@ public final class OrderBook {
                     break;
                 }
             }
-            LimitOrder maker = best.queue.peekFirst();
+            LimitOrder maker = best.head;
             long fill = Math.min(qty, maker.quantity);
             maker.quantity -= fill;
             best.totalQty -= fill;
@@ -144,10 +181,10 @@ public final class OrderBook {
                 l.onTrade(maker.id(), takerId, best.price, fill, timestampNanos);
             }
             if (maker.quantity == 0) {
-                best.queue.pollFirst();
+                best.unlink(maker);
                 orders.remove(maker.id());
             }
-            if (best.queue.isEmpty()) {
+            if (best.isEmpty()) {
                 opposite.remove(best.price);
             }
         }
@@ -212,7 +249,7 @@ public final class OrderBook {
         }
         PriceLevel level = book(order.side()).get(order.price());
         long ahead = 0;
-        for (LimitOrder o : level.queue) {
+        for (LimitOrder o = level.head; o != null; o = o.next) {
             if (o.id() == orderId) {
                 return ahead;
             }
