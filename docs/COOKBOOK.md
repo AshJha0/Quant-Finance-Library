@@ -9996,19 +9996,20 @@ CreditCurve own = CreditCurve.bootstrap(new int[]{1, 3, 5},
     new double[]{0.006, 0.007, 0.008}, 0.4, curve);
 double independent = CvaApproximator.cva(bare, cpty, 0.6);
 double wrongWay = CvaApproximator.cvaWrongWay(bare, cpty, 0.6, 0.5,
-    ExposureProfile.Factor.RATES);                  // about 1.8x independent
+    ExposureProfile.Factor.RATES);                  // about 2.25x independent
 double dva = CvaApproximator.dva(bare, own, 0.6);
 ```
 
 Wrong-way risk links the counterparty's default to the driver that makes the
-trade valuable. A Gaussian copula with correlation 0.5 to the terminal rate
-factor reweights each default bucket. For the uncollateralised payer swap, high
-rates mean both large exposure and likely default, so `wrongWay` comes out near
-1.8 times `independent` with these inputs. Run the same call on the
-collateralised profile of recipe 305 and it falls below the independent figure:
-the residual exposure under a CSA comes from moves over the margin period, which
-the terminal driver hardly tracks. That is the limit of a single terminal
-driver. DVA is unilateral: it ignores who defaults first.
+trade valuable. `cvaWrongWay` uses a Gaussian copula per exposure bucket, with a
+driver taken from the same simulated path: the rate factor's level at the bucket
+date without a CSA, or its move over the margin period of risk with one (Hull
+and White 2012). For the uncollateralised payer swap, high rates mean both large
+exposure and likely default, so `wrongWay` comes out near 2.25 times
+`independent` with these inputs. On the collateralised profile of recipe 305 the
+ratio is about 1.9. A negative correlation gives right-way risk and lowers the
+charge, and zero reproduces the independent CVA. DVA is unilateral: it ignores
+who defaults first.
 
 ## 307. SA-CCR exposure at default for BCBS 279 Example 1
 

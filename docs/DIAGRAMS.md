@@ -4317,7 +4317,7 @@ flowchart LR
     TRADES_102["Swaps and FxForwards"]
     CSA_102["Csa<br/>threshold, MTA, margin period"]
     SIM_102["simulate<br/>revalue each trade on each path and date"]
-    PROF_102["ExposureProfile<br/>EE, ENE, PFE, EPE,<br/>terminal drivers per path"]
+    PROF_102["ExposureProfile<br/>EE, ENE, PFE, EPE,<br/>bucket drivers per path"]
     CPTY_102["counterparty CreditCurve"]
     OWN_102["own CreditCurve"]
     CVA_102["CvaApproximator.cva"]
@@ -4339,8 +4339,9 @@ flowchart LR
 
 The CSA enters inside the simulation, because collateral depends on the
 path; the credit curves enter only afterwards. Wrong-way risk reweights
-each path's default buckets by its terminal driver, so it needs no second
-simulation. See LEARN section 10f and recipes 305 and 306.
+each path's default buckets by a driver taken from the same path (the factor
+level at each bucket date, or its move over the margin period under a CSA), so
+it needs no second simulation. See LEARN section 10f and recipes 305 and 306.
 
 ---
 

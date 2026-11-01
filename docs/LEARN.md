@@ -1317,8 +1317,8 @@ margin period, EPE falls to about 0.23 and CVA to about 0.015.
 `credit/CvaApproximator.java` (`cva`, `dva`, `cvaWrongWay`). Not
 implemented: multi-curve swaps (exposure swaps are single-curve), more
 than one FX pair, stochastic foreign rates, bilateral DVA with
-first-to-default, and a path-wise driver for wrong-way risk (the driver
-is the terminal factor, which tracks a collateralised residual poorly).
+first-to-default, and a single joint default time across buckets for
+wrong-way risk (each bucket has its own path driver).
 Recipes 305 and 306.
 
 ### 10g. SA-CCR: the regulatory exposure
@@ -27285,29 +27285,44 @@ A payer swap is worth most when rates are high. If the counterparty is
 more likely to default when rates are high, for example a borrower with
 floating-rate debt, then default and exposure come together and the
 independent CVA understates the loss. The library links default to the
-terminal rate factor with a Gaussian copula: each bucket's default
-probability is conditioned on the driver `X`, so paths with large
+rate factor with a Gaussian copula per bucket: each bucket's default
+probability is conditioned on a driver `X_i` from the same path (the
+factor level at the bucket date, or its move over the margin period
+under a CSA), so paths with large
 exposure get more default weight while the marginal default curve stays
 the same. With `rho = 0.5` the uncollateralised example's CVA rises from
-about 0.083 to about 0.146.
+about 0.083 to about 0.187, and under the 10-day CSA from about 0.0145
+to about 0.0275.
 
 *In this library:* `CvaApproximator.cvaWrongWay(profile, cpty, lgd, rho,
 ExposureProfile.Factor.RATES)`; `rho = 0` gives back `cva`.
 
 ### 1010. "Your wrong-way CVA on a collateralised swap came out below the independent CVA. Bug?"
 
-Not a bug in the arithmetic, a limit of the model. The copula uses the
-terminal value of the rate factor as the driver. Uncollateralised, large
-exposure goes with high terminal rates, so the overlay adds charge. Under
-a CSA the residual exposure comes from moves over the 10-day margin
-period, which hardly correlate with the terminal level; conditioning on
-that level then shifts default weight to dates and paths where the
-residual is not large. Recognise when the driver does not track the
-exposure you are charging for. A path-wise driver would fix it and is not
-implemented.
+Yes, if the default driver is the terminal value of the market factor. That
+was the 2.1 development model, and it was fixed before release. Under a CSA
+the residual exposure comes from moves over the margin period of risk, which
+hardly correlate with the terminal level, so conditioning default on that
+level shifted default weight to dates where the residual was small. With
+correlation 0.5 the collateralised wrong-way CVA came out at about 0.75 times
+the independent figure, which no desk would accept.
 
-*In this library:* `credit/CvaApproximator.java` (the javadoc states the
-terminal-driver simplification); compare recipes 305 and 306.
+The fix makes the driver path-consistent (Hull and White 2012; Gregory 2015,
+ch. 17). Each exposure bucket i gets its own standard-normal driver from the
+same simulated path: the factor level W(t_i)/sqrt(t_i) without a CSA, or the
+move over the margin period (W(t_i) - W(t_i - MPR))/sqrt(MPR) with one. The
+bucket default probability keeps its closed form,
+P(bucket i | X_i) = Phi((k_i + rho X_i)/s) - Phi((k_{i-1} + rho X_i)/s), with
+k_i = Phi^{-1}(PD_i) and s = sqrt(1 - rho^2), so marginal default
+probabilities are unchanged and rho = 0 reproduces the independent CVA. On the
+recipe 305 swap with rho 0.5, wrong-way CVA is about 1.9 times independent
+under the CSA and about 2.25 times without it. Two limits remain: there is no
+single joint default time across buckets, and with a large threshold the
+margin-period driver misses the exposure's dependence on the factor level.
+
+*In this library:* `credit/CvaApproximator.java` (`cvaWrongWay`), with the
+monotonicity and sign tests in `credit/WrongWayCvaTest.java`; compare recipes
+305 and 306.
 
 ### 1011. "Walk me through SA-CCR for one netting set."
 
@@ -28650,8 +28665,9 @@ the code returns the deterministic limits rather than NaN.
 - `CVA = LGD sum_i E[D(0,t_i) E(t_i)] (PD(t_i) - PD(t_{i-1}))`;
   `DVA` the same with own default and negative exposure. Unilateral.
   `credit/CvaApproximator.java`; Gregory, *The xVA Challenge* (2015).
-- `P(bucket i | X) = Phi((Phi^-1(PD_i) + rho X)/sqrt(1-rho^2)) - Phi((Phi^-1(PD_{i-1}) + rho X)/sqrt(1-rho^2))`.
-  Wrong-way risk through a Gaussian copula on the terminal market driver;
+- `P(bucket i | X_i) = Phi((Phi^-1(PD_i) + rho X_i)/sqrt(1-rho^2)) - Phi((Phi^-1(PD_{i-1}) + rho X_i)/sqrt(1-rho^2))`,
+  `X_i = W(t_i)/sqrt(t_i)` without a CSA, `(W(t_i) - W(t_i - MPR))/sqrt(MPR)` with one.
+  Wrong-way risk through a per-bucket Gaussian copula on path drivers (Hull and White 2012);
   `rho = 0` gives back the independent CVA.
   `CvaApproximator.cvaWrongWay`; Gregory (2015), ch. 17.
 - `EAD = 1.4 (RC + multiplier x AddOn)`,
