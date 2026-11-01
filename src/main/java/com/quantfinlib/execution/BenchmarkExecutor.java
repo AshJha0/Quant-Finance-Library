@@ -333,7 +333,7 @@ public final class BenchmarkExecutor {
             if (Double.isNaN(targetFrac)) {
                 targetFrac = f;
             }
-            behind = (long) Math.round(targetFrac * parentQty) - executed - open;
+            behind = Math.round(targetFrac * parentQty) - executed - open;
         }
         if (behind <= 0) {
             return 0;

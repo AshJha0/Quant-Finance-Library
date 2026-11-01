@@ -10,8 +10,9 @@ public final class CsvReportExporter implements ReportExporter {
 
     @Override
     public void export(Report report, Path path) throws IOException {
-        if (path.getParent() != null) {
-            Files.createDirectories(path.getParent());
+        Path parent = path.getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
         }
         try (Writer w = Files.newBufferedWriter(path)) {
             w.write("# " + report.title() + "\n");

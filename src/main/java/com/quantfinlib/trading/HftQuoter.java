@@ -188,7 +188,7 @@ public final class HftQuoter implements TickListener, QuoteListener {
     /** Trade print: drives quoting only while the symbol has no two-sided BBO. */
     @Override
     public void onTick(int symbolId, double price, double size, long timestampNanos) {
-        if (bestBid[symbolId] == bestBid[symbolId] && bestAsk[symbolId] == bestAsk[symbolId]) {
+        if (!Double.isNaN(bestBid[symbolId]) && !Double.isNaN(bestAsk[symbolId])) {
             return;
         }
         requote(symbolId, price, timestampNanos);
@@ -220,7 +220,7 @@ public final class HftQuoter implements TickListener, QuoteListener {
             return;
         }
         double lastMid = lastQuoteMid[symbolId];
-        if (lastMid == lastMid
+        if (!Double.isNaN(lastMid)
                 && Math.abs(fair - lastMid) < minMove[symbolId]
                 && timestampNanos - lastQuoteNanos[symbolId] < minRequoteIntervalNanos[symbolId]) {
             counters.incrementOpaque(SUPPRESSED);
@@ -244,14 +244,14 @@ public final class HftQuoter implements TickListener, QuoteListener {
         long size = quoteSize[symbolId];
         double bb = bestBid[symbolId];
         double ba = bestAsk[symbolId];
-        if (ba == ba && bid >= ba) {
+        if (!Double.isNaN(ba) && bid >= ba) {
             counters.incrementOpaque(CROSSED_SIDES);
             workingBid[symbolId] = pull(workingBid[symbolId], timestampNanos);
         } else {
             workingBid[symbolId] = work(workingBid[symbolId], symbolId, Side.BUY, size, bid,
                     timestampNanos);
         }
-        if (bb == bb && ask <= bb) {
+        if (!Double.isNaN(bb) && ask <= bb) {
             counters.incrementOpaque(CROSSED_SIDES);
             workingAsk[symbolId] = pull(workingAsk[symbolId], timestampNanos);
         } else {

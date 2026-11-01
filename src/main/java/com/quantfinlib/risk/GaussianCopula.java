@@ -96,6 +96,7 @@ public final class GaussianCopula {
         }
     }
 
+    @SuppressWarnings("ReferenceEquality")   // identity is the property checked
     private void requireDistinct(double[] out, double[] scratch) {
         requireLength(out);
         requireLength(scratch);

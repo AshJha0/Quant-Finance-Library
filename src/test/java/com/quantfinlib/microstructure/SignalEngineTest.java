@@ -77,7 +77,7 @@ class SignalEngineTest {
     void volatilityIsZeroForAFrozenMid() {
         SignalEngine e = new SignalEngine(1, cfg());
         for (int i = 0; i <= 50; i++) {
-            e.onQuote(0, 99.99, 100, 100.01, 100, SEC + i * 100 * MS);
+            e.onQuote(0, 99.99, 100, 100.01, 100, SEC + 100L * i * MS);
         }
         assertEquals(0, e.volPerSqrtSecond(0), 1e-12);
     }
@@ -216,7 +216,7 @@ class SignalEngineTest {
         // not resume their pre-gap levels — just like momentum/spread/depth.
         SignalEngine e = new SignalEngine(1, cfg());
         for (int i = 0; i <= 30; i++) {
-            e.onQuote(0, 100 + i * 0.1, 100, 100.02 + i * 0.1, 100, SEC + i * 10 * MS);
+            e.onQuote(0, 100 + i * 0.1, 100, 100.02 + i * 0.1, 100, SEC + 10L * i * MS);
         }
         assertTrue(e.volPerSqrtSecond(0) > 0);
         assertTrue(e.quoteIntensityPerSecond(0) > 0);

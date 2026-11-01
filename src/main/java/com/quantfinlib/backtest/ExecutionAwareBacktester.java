@@ -107,7 +107,7 @@ public final class ExecutionAwareBacktester {
             // 2. Intrabar risk exits on the accumulated position.
             checkRiskExits(i);
             // 3. Strategy signal at the close.
-            onSignal(strategy.onBar(i, position), i);
+            onSignal(strategy.onBar(i, (double) position), i);
 
             equity[i] = cash + position * series.close(i);
         }

@@ -339,7 +339,7 @@ class L3BookBuilderTest {
     /** Encode + apply one add/execute/delete round on the wire path. */
     private static void wireCycle(L3BookBuilder b, byte[] add, byte[] exec, byte[] del,
                                   long stock, int i) {
-        long ref = i + 1;
+        long ref = i + 1L;
         int tick = MIN + (i % (MAX - MIN + 1));
         ItchCodec.encodeAdd(add, 0, LOCATE, i, ref,
                 (i & 1) == 0 ? ItchCodec.BUY : ItchCodec.SELL, 100, stock, tick);

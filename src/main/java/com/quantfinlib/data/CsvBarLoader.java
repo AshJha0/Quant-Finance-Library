@@ -109,8 +109,9 @@ public final class CsvBarLoader {
 
     /** Writes the series as {@code timestamp,open,high,low,close,volume} with epoch-millis timestamps. */
     public static void save(BarSeries series, Path path) throws IOException {
-        if (path.getParent() != null) {
-            Files.createDirectories(path.getParent());
+        Path parent = path.getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
         }
         try (Writer w = Files.newBufferedWriter(path)) {
             w.write("timestamp,open,high,low,close,volume\n");

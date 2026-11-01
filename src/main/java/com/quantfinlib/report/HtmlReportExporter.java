@@ -58,8 +58,10 @@ public final class HtmlReportExporter implements ReportExporter {
         }
         sb.append("</body>\n</html>\n");
 
-        if (path.getParent() != null) {
-            Files.createDirectories(path.getParent());
+        Path parent = path.getParent();
+
+        if (parent != null) {
+            Files.createDirectories(parent);
         }
         Files.writeString(path, sb.toString());
     }

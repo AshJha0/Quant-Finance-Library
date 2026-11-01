@@ -52,7 +52,7 @@ public final class Ucb1Selector {
         }
         int best = 0;
         double bestUcb = Double.NEGATIVE_INFINITY;
-        double logN = Math.log(totalPulls);
+        double logN = Math.log((double) totalPulls);
         for (int i = 0; i < pulls.length; i++) {
             double ucb = rewardSums[i] / pulls[i] + Math.sqrt(2 * logN / pulls[i]);
             if (ucb > bestUcb) {

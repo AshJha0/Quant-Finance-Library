@@ -81,8 +81,8 @@ public final class WebSocketFeed implements AutoCloseable {
     private final Object publishLock = new Object();
 
     private String subscribeMessage;
-    private int maxReconnectAttempts = 10;
-    private long initialBackoffMillis = 500;
+    private volatile int maxReconnectAttempts = 10;
+    private volatile long initialBackoffMillis = 500;
     private long publishRetryNanos = 1_000_000L;
     private boolean fixedSymbols;
     private volatile boolean userClosed;
@@ -224,6 +224,8 @@ public final class WebSocketFeed implements AutoCloseable {
 
     // ------------------------------------------------------------------
 
+    // Connect failures are handled in whenComplete below.
+    @SuppressWarnings("FutureReturnValueIgnored")
     private void connect(long connectEpoch) {
         closeAck = new CompletableFuture<>();
         httpClient.newWebSocketBuilder()
@@ -354,6 +356,8 @@ public final class WebSocketFeed implements AutoCloseable {
             return listenerEpoch != epoch.get();
         }
 
+        // The subscribe send is not awaited; a broken socket reaches onError or onClose, which reconnect.
+        @SuppressWarnings("FutureReturnValueIgnored")
         @Override
         public void onOpen(WebSocket ws) {
             if (stale() || userClosed) {

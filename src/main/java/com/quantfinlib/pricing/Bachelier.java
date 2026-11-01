@@ -117,7 +117,7 @@ public final class Bachelier {
             double slope = -MathUtils.normCdf(-u) / h - 1 / u;
             double next = u - f / slope;
             if (!(next > lo && next < hi)) {
-                next = hi == Double.POSITIVE_INFINITY ? 2 * u + 1 : 0.5 * (lo + hi);
+                next = Double.isInfinite(hi) ? 2 * u + 1 : 0.5 * (lo + hi);
             }
             if (Math.abs(next - u) <= 4 * Math.ulp(u)) {
                 u = next;

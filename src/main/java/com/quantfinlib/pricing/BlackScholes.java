@@ -94,7 +94,7 @@ public final class BlackScholes {
         if (vol <= 0) {
             // Limit as vol -> 0: zero unless the option is exactly at the forward.
             double fwd = spot * Math.exp((rate - carry) * timeYears);
-            return fwd == strike
+            return Double.compare(fwd, strike) == 0
                     ? spot * Math.exp(-carry * timeYears) * MathUtils.normPdf(0) * Math.sqrt(timeYears)
                     : 0;
         }
@@ -196,7 +196,7 @@ public final class BlackScholes {
     private static double zeroVolProb(int w, double spot, double strike, double rate,
                                       double carry, double timeYears) {
         double fwd = spot * Math.exp((rate - carry) * timeYears);
-        if (fwd == strike) {
+        if (Double.compare(fwd, strike) == 0) {
             return 0.5;
         }
         return w * (fwd - strike) > 0 ? 1 : 0;

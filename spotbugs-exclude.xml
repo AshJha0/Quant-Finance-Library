@@ -1,7 +1,62 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Demos and hand-rolled benchmarks are not library code. -->
 <FindBugsFilter>
+    <!-- Demos and hand-rolled benchmarks are not library code. -->
     <Match>
         <Package name="~com\.quantfinlib\.examples(\..*)?"/>
+    </Match>
+
+    <!-- Arrays and collaborators are passed by reference, not copied.
+         Result records (backtests, fits, reports) hand freshly allocated
+         arrays to the caller, who owns them; copying in every accessor would
+         make indexed loops such as result.equity()[i] quadratic. BarSeries
+         columns are read in tight loops by every indicator. Flyweights, buses,
+         gateways, calendars and scorecards are shared objects by design.
+         The convention is stated in the javadoc of the classes concerned:
+         callers must not mutate arrays they did not allocate. -->
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+    </Match>
+
+    <!-- Single-writer classes documented as not thread-safe. The AT_
+         detectors assume any field may be shared. -->
+    <Match>
+        <Class name="com.quantfinlib.util.LatencyRecorder"/>
+        <Bug pattern="AT_NONATOMIC_64BIT_PRIMITIVE,AT_NONATOMIC_OPERATIONS_ON_SHARED_VARIABLE"/>
+    </Match>
+    <!-- Used only from the gateway's venue thread (see class javadoc). -->
+    <Match>
+        <Class name="com.quantfinlib.sbe.BinaryOrderPublisher"/>
+        <Bug pattern="AT_NONATOMIC_64BIT_PRIMITIVE,AT_NONATOMIC_OPERATIONS_ON_SHARED_VARIABLE,AT_STALE_THREAD_WRITE_OF_PRIMITIVE"/>
+    </Match>
+    <!-- resendPending and resendTriggerSeq are touched only by the reader
+         thread (field comments say so). -->
+    <Match>
+        <Class name="com.quantfinlib.fix.FixSession"/>
+        <Or>
+            <Field name="resendPending"/>
+            <Field name="resendTriggerSeq"/>
+        </Or>
+        <Bug pattern="AT_NONATOMIC_64BIT_PRIMITIVE,AT_STALE_THREAD_WRITE_OF_PRIMITIVE"/>
+    </Match>
+    <!-- The unsynchronised accesses are in readSeqPage, writeSeqPage and
+         migrateLegacy, reached from the constructor or from synchronized
+         methods; the object is not shared before construction ends. -->
+    <Match>
+        <Class name="com.quantfinlib.fix.FileSessionStore"/>
+        <Bug pattern="IS2_INCONSISTENT_SYNC"/>
+    </Match>
+    <!-- routeIds is written in start() before the volatile write of
+         routeShards, and publish() reads routeShards first, so the volatile
+         pair publishes it safely without a lock on the hot path. -->
+    <Match>
+        <Class name="com.quantfinlib.trading.ShardedTradingEngine"/>
+        <Field name="routeIds"/>
+        <Bug pattern="IS2_INCONSISTENT_SYNC"/>
+    </Match>
+    <!-- PDF syntax requires a bare LF; %n would write CRLF on Windows and
+         break the byte offsets in the xref table. -->
+    <Match>
+        <Class name="com.quantfinlib.report.PdfReportExporter"/>
+        <Bug pattern="VA_FORMAT_STRING_USES_NEWLINE"/>
     </Match>
 </FindBugsFilter>
