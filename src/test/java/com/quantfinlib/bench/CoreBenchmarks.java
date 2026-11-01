@@ -28,13 +28,20 @@ import java.util.concurrent.TimeUnit;
  * <p>Run: {@code mvn test-compile exec:java
  * -Dexec.mainClass=com.quantfinlib.bench.BenchRunner -Dexec.classpathScope=test
  * -Dexec.args=CoreBenchmarks}</p>
+ *
+ * <p>Three forks so JIT and layout luck show up as between-fork variance
+ * instead of hiding in one run. {@code riskGateCheck} uses one symbol and
+ * a constant price (branch predictor and cache in the best case);
+ * {@code riskGateCheckRandomSymbols} draws the symbol, side and price from a
+ * pre-generated random table over 1,024 symbols, which is the more honest
+ * figure for a book of many instruments.</p>
  */
 @BenchmarkMode(Mode.AverageTime)
 @OutputTimeUnit(TimeUnit.NANOSECONDS)
 @State(Scope.Thread)
-@Fork(1)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
+@Fork(3)
+@Warmup(iterations = 5, time = 1)
+@Measurement(iterations = 10, time = 1)
 public class CoreBenchmarks {
 
     private static final TickListener SINK = (id, price, size, ts) -> {
@@ -45,6 +52,11 @@ public class CoreBenchmarks {
     private StreamingIndicators.Ema ema;
     private long tick;
     private double price;
+    private HftRiskGate wideGate;
+    private int[] randomSymbols;
+    private Side[] randomSides;
+    private double[] randomPrices;
+    private int cursor;
 
     @Setup
     public void setup() {
@@ -57,6 +69,30 @@ public class CoreBenchmarks {
         ring = new TickRingBuffer(1 << 12);
         ema = new StreamingIndicators.Ema(20);
         price = 1.0850;
+
+        wideGate = new HftRiskGate(1_024)
+                .maxOrderQuantity(1_000_000)
+                .maxOrderNotional(1e12)
+                .maxPositionQuantity(10_000_000)
+                .priceCollarPct(0.005);
+        java.util.SplittableRandom rnd = new java.util.SplittableRandom(11);
+        randomSymbols = new int[1 << 16];
+        randomSides = new Side[1 << 16];
+        randomPrices = new double[1 << 16];
+        for (int s = 0; s < 1_024; s++) {
+            wideGate.setReferencePrice(s, 1.0850);
+        }
+        for (int i = 0; i < randomSymbols.length; i++) {
+            randomSymbols[i] = rnd.nextInt(1_024);
+            randomSides[i] = rnd.nextBoolean() ? Side.BUY : Side.SELL;
+            randomPrices[i] = 1.0850 * (1 + (rnd.nextDouble() - 0.5) * 0.012);
+        }
+    }
+
+    @Benchmark
+    public int riskGateCheckRandomSymbols() {
+        int i = cursor++ & (randomSymbols.length - 1);
+        return wideGate.check(randomSymbols[i], randomSides[i], 1_000, randomPrices[i]);
     }
 
     @Benchmark

@@ -8,19 +8,31 @@ import com.quantfinlib.util.LatencyRecorder;
 import java.util.SplittableRandom;
 
 /**
- * Self-contained benchmark of the HFT hot path with a realistic tick-to-signal
- * workload on the consumer (streaming EMA crossover + RSI per tick).
+ * Benchmark of the market-data hot path with a tick-to-signal workload on
+ * the consumer (streaming EMA crossover and RSI per tick).
  *
  * <ol>
- *   <li><b>Throughput</b>: blast ticks through the bus with backpressure spin
- *       and measure sustained ticks/second.</li>
- *   <li><b>Hand-off latency</b>: paced one-in-flight ticks; records
- *       publish-to-strategy latency percentiles ({@code System.nanoTime()} at
- *       publish, measured inside the strategy callback).</li>
+ *   <li><b>Throughput</b>: blast ticks with backpressure spin; reports
+ *       ticks per second and the measured loss (published minus processed,
+ *       counted, not assumed).</li>
+ *   <li><b>Closed-loop hand-off</b>: one tick in flight at a time. This
+ *       understates tails: while the consumer stalls, no new tick is issued,
+ *       so the stall is charged to one sample instead of every tick that
+ *       would have arrived (coordinated omission).</li>
+ *   <li><b>Open-loop hand-off</b>: ticks scheduled at a fixed rate; each is
+ *       stamped with its intended send time {@code t0 + i * period} and the
+ *       consumer records {@code now - intended}. A stall delays every tick
+ *       scheduled behind it, and each of those delays is recorded, which is
+ *       the coordinated-omission correction described by Tene (2013,
+ *       "How NOT to measure latency").</li>
  * </ol>
  *
- * <p>Run with: {@code java -cp target/classes com.quantfinlib.examples.HftLatencyBenchmark}
- * (add {@code -XX:+UseZGC -Xms1g -Xmx1g -XX:+AlwaysPreTouch} for production-like jitter).</p>
+ * <p>Every summary prints the clock step: on Windows {@code nanoTime} moves
+ * in 100 ns steps, so sub-microsecond values there are a count of clock
+ * ticks, not a measurement to the nanosecond.</p>
+ *
+ * <p>Run: {@code java -cp target/classes com.quantfinlib.examples.HftLatencyBenchmark [ratePerSec]}
+ * (add {@code -XX:+UseZGC -Xms1g -Xmx1g -XX:+AlwaysPreTouch} to reduce jitter).</p>
  */
 public final class HftLatencyBenchmark {
 
@@ -29,18 +41,16 @@ public final class HftLatencyBenchmark {
     private static final int LATENCY_TICKS = 1_000_000;
 
     public static void main(String[] args) throws Exception {
-        // Platform stall monitor: correlate benchmark tail outliers with
-        // GC/safepoint/scheduler hiccups (see docs/ULTRA_LOW_LATENCY.md).
+        long ratePerSec = args.length > 0 ? Long.parseLong(args[0]) : 500_000;
         try (HiccupMonitor hiccups = new HiccupMonitor().start();
              HftMarketDataBus bus = new HftMarketDataBus(1 << 16, 16, true)) {
             int eurusd = bus.registerSymbol("EURUSD");
 
-            // Tick-to-signal strategy workload: EMA(12/26) cross + RSI(14).
             StreamingIndicators.Ema fast = new StreamingIndicators.Ema(12);
             StreamingIndicators.Ema slow = new StreamingIndicators.Ema(26);
             StreamingIndicators.Rsi rsi = new StreamingIndicators.Rsi(14);
             LatencyRecorder recorder = new LatencyRecorder();
-            long[] signals = new long[1];    // blackhole so the JIT can't elide the work
+            long[] signals = new long[1];    // blackhole so the JIT cannot drop the work
 
             bus.subscribe(eurusd, (id, price, size, ts) -> {
                 double f = fast.update(price);
@@ -55,38 +65,55 @@ public final class HftLatencyBenchmark {
 
             SplittableRandom rnd = new SplittableRandom(42);
             double price = 1.0850;
+            long published = 0;
 
-            // ---- Warmup (JIT compilation of the full path) ----
             price = blast(bus, eurusd, rnd, price, WARMUP_TICKS);
-            awaitProcessed(bus, WARMUP_TICKS);
-            recorder.reset();
+            published += WARMUP_TICKS;
+            awaitProcessed(bus, published);
 
-            // ---- 1. Throughput: saturating blast ----
+            // ---- 1. Throughput ----
             long t0 = System.nanoTime();
             price = blast(bus, eurusd, rnd, price, THROUGHPUT_TICKS);
-            awaitProcessed(bus, WARMUP_TICKS + THROUGHPUT_TICKS);
+            published += THROUGHPUT_TICKS;
+            awaitProcessed(bus, published);
             long elapsed = System.nanoTime() - t0;
-            double mticksPerSec = THROUGHPUT_TICKS / (elapsed / 1e9) / 1e6;
             System.out.printf("Throughput: %.1f million ticks/sec (%d ticks in %.2f s, "
-                            + "%d backpressure retries, 0 ticks lost)%n",
-                    mticksPerSec, THROUGHPUT_TICKS, elapsed / 1e9, bus.ringFullCount());
+                            + "%d backpressure retries, %d ticks lost)%n",
+                    THROUGHPUT_TICKS / (elapsed / 1e9) / 1e6, THROUGHPUT_TICKS, elapsed / 1e9,
+                    bus.ringFullCount(), published - bus.processedCount());
 
-            // ---- 2. Hand-off latency: one tick in flight at a time ----
+            // ---- 2. Closed loop ----
             recorder.reset();
-            long processedBase = bus.processedCount();
             for (int i = 0; i < LATENCY_TICKS; i++) {
                 price = nextPrice(rnd, price);
                 while (!bus.publish(eurusd, price, 1_000_000, System.nanoTime())) {
                     Thread.onSpinWait();
                 }
-                long need = processedBase + i + 1;
-                while (bus.processedCount() < need) {
+                published++;
+                awaitProcessed(bus, published);
+            }
+            System.out.println("Closed-loop publish-to-strategy: " + recorder.summary());
+
+            // ---- 3. Open loop at a fixed rate, intended-start timestamps ----
+            recorder.reset();
+            long period = 1_000_000_000L / ratePerSec;
+            long start = System.nanoTime() + 1_000_000;
+            for (int i = 0; i < LATENCY_TICKS; i++) {
+                long intended = start + i * period;
+                while (System.nanoTime() < intended) {
                     Thread.onSpinWait();
                 }
+                price = nextPrice(rnd, price);
+                while (!bus.publish(eurusd, price, 1_000_000, intended)) {
+                    Thread.onSpinWait();
+                }
+                published++;
             }
-            System.out.println("Publish-to-strategy latency: " + recorder.summary());
-            System.out.printf("Strategy signals evaluated: %d (last EURUSD price %.5f)%n",
-                    signals[0], bus.latestPrice(eurusd));
+            awaitProcessed(bus, published);
+            System.out.printf("Open-loop at %,d ticks/s (intended-start): %s%n",
+                    ratePerSec, recorder.summary());
+            System.out.printf("Signals evaluated: %d (last price %.5f), lost overall: %d%n",
+                    signals[0], bus.latestPrice(eurusd), published - bus.processedCount());
             System.out.println(hiccups.summary());
         }
     }
@@ -96,7 +123,7 @@ public final class HftLatencyBenchmark {
         for (int i = 0; i < ticks; i++) {
             price = nextPrice(rnd, price);
             while (!bus.publish(symbolId, price, 1_000_000, System.nanoTime())) {
-                Thread.onSpinWait();   // backpressure: never drop
+                Thread.onSpinWait();
             }
         }
         return price;
@@ -107,7 +134,8 @@ public final class HftLatencyBenchmark {
     }
 
     private static void awaitProcessed(HftMarketDataBus bus, long target) {
-        while (bus.processedCount() < target) {
+        long deadline = System.nanoTime() + 30_000_000_000L;
+        while (bus.processedCount() < target && System.nanoTime() < deadline) {
             Thread.onSpinWait();
         }
     }

@@ -137,13 +137,18 @@ class NbboTest {
         var mx = (com.sun.management.ThreadMXBean)
                 java.lang.management.ManagementFactory.getThreadMXBean();
         long tid = Thread.currentThread().threadId();
-        long before = mx.getThreadAllocatedBytes(tid);
-        for (int i = 0; i < 500_000; i++) {
-            n.onVenueQuote(i & 7, 1000 + (i % 9), 100 + (i % 5), 1002 + (i % 7),
-                    100 + (i % 3), i);
+        // Exactly zero after warm-up; a bounded retry absorbs a one-off
+        // JIT or class-loading allocation inside the first window.
+        long allocated = -1;
+        for (int attempt = 0; attempt < 5 && allocated != 0; attempt++) {
+            long before = mx.getThreadAllocatedBytes(tid);
+            for (int i = 0; i < 500_000; i++) {
+                n.onVenueQuote(i & 7, 1000 + (i % 9), 100 + (i % 5), 1002 + (i % 7),
+                        100 + (i % 3), i);
+            }
+            allocated = mx.getThreadAllocatedBytes(tid) - before;
         }
-        long allocated = mx.getThreadAllocatedBytes(tid) - before;
-        assertTrue(allocated < 100_000, "NBBO allocated " + allocated + " bytes");
+        assertTrue(allocated == 0, "NBBO allocated " + allocated + " bytes");
     }
 
     @Test
@@ -156,5 +161,20 @@ class NbboTest {
         // Zero-size sides are treated as absent regardless of price.
         n.onVenueQuote(0, 100, 0, 102, 0, 2);
         assertEquals(Nbbo.NO_BID, n.bidTick());
+    }
+
+    @Test
+    void staleVenueIsExpiredFromTheInside() {
+        Nbbo n = new Nbbo(2).maxQuoteAgeNanos(1_000);
+        n.onVenueQuote(0, 100, 10, 102, 10, 0);
+        n.onVenueQuote(1, 99, 10, 103, 10, 900);
+        assertEquals(100, n.bidTick());
+        assertFalse(n.expireStale(1_000), "venue 0 is exactly at the limit");
+        assertTrue(n.expireStale(1_001), "venue 0 is now stale");
+        assertEquals(99, n.bidTick());
+        assertEquals(103, n.askTick());
+        assertEquals(1, n.staleExpiryCount());
+        assertFalse(n.expireStale(1_500), "venue 1 still fresh, venue 0 already gone");
+        assertEquals(900, n.lastUpdateNanos(1));
     }
 }

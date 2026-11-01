@@ -109,7 +109,7 @@ class ShardedTradingTest {
         gate0.setReferencePrice(0, 100);
         gate1.setReferencePrice(0, 200);
         // Cap 100k gross; resume below 50k.
-        try (GlobalRiskAggregator aggregator = new GlobalRiskAggregator(
+        try (GlobalRiskAggregator aggregator = GlobalRiskAggregator.start(
                 java.util.List.of(gate0, gate1), 100_000, 0.5, 100_000)) {
 
             // 60k on shard 0 + 30k on shard 1 = 90k gross: under the cap.
@@ -135,7 +135,7 @@ class ShardedTradingTest {
             assertEquals(HftRiskGate.OK, gate0.check(0, Side.BUY, 1, 100));
             assertEquals(1, aggregator.tripCount());
         }
-        assertThrows(IllegalArgumentException.class, () -> new GlobalRiskAggregator(
+        assertThrows(IllegalArgumentException.class, () -> GlobalRiskAggregator.start(
                 java.util.List.of(), 100_000, 0.5, 100_000));
     }
 }

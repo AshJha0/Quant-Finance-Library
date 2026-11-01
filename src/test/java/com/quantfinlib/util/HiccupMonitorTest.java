@@ -42,4 +42,13 @@ class HiccupMonitorTest {
     void rejectsSpinNoiseResolutions() {
         assertThrows(IllegalArgumentException.class, () -> new HiccupMonitor(1_000));
     }
+
+    @Test
+    void spinModeSamplesWithoutTheTimer() throws Exception {
+        try (HiccupMonitor monitor = HiccupMonitor.spinning(1_000_000).start()) {
+            Thread.sleep(200);
+            assertTrue(monitor.samples() > 10, "samples=" + monitor.samples());
+            assertTrue(monitor.summary().contains("spin"));
+        }
+    }
 }

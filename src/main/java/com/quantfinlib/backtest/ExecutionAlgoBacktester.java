@@ -122,7 +122,12 @@ public final class ExecutionAlgoBacktester {
             double close = series.close(i);
             double volume = series.volume(i);
             cumVolume += volume;
-            exec.onMarketVolume((long) volume);
+            // Historical bar volume is the whole tape, which in live trading
+            // would include our own prints. POV targets a share p of total
+            // volume, so the volume of others alongside us is (1 - p) of the
+            // bar: target = p / (1 - p) * (1 - p) * V = p * V.
+            exec.onMarketVolume(benchmark == Benchmark.PARTICIPATION
+                    ? Math.round((1 - povRate) * volume) : (long) volume);
 
             double depth = config.participationCap() * volume;
             double volumeFrac = totalVolume > 0 ? cumVolume / totalVolume : Double.NaN;
