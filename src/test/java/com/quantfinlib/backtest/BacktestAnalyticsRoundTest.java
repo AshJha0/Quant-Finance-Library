@@ -88,7 +88,7 @@ class BacktestAnalyticsRoundTest {
         assertEquals(Math.pow(1.3 * 0.8, 10) - 1, r.medianTerminalPnl(), 1e-12,
                 "product is order-invariant");
         assertEquals(0.0, r.probLoss(), 0.0, "always net positive");
-        // Drawdown IS order-dependent, so the distribution has spread.
+        // Drawdown is order-dependent, so the distribution has spread.
         assertTrue(r.p95MaxDrawdown() >= r.medianMaxDrawdown());
         assertTrue(r.p99MaxDrawdown() >= r.p95MaxDrawdown());
         assertTrue(r.medianMaxDrawdown() > 0);

@@ -16,8 +16,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * The shared cost seam: flat model reproduces the legacy commission exactly,
  * the institutional model charges size-dependent impact from the shared
- * estimator, and — the point of the whole refactor — one PortfolioBacktester
- * run can now be survivorship-aware AND execution-aware simultaneously.
+ * estimator, and (the aim of the whole refactor) one PortfolioBacktester
+ * run can now be survivorship-aware and execution-aware simultaneously.
  */
 class TradeCostModelTest {
 
@@ -96,7 +96,7 @@ class TradeCostModelTest {
     @Test
     void oneRunIsSurvivorshipAwareAndExecutionAwareTogether() {
         // The combination the review flagged as impossible: lifecycle events
-        // (a delisting) AND institutional costs (impact on a thin name) in
+        // (a delisting) and institutional costs (impact on a thin name) in
         // the same PortfolioBacktester run.
         Map<String, BarSeries> data = Map.of(
                 "ALIVE", series("ALIVE", 0.001, 50_000),
@@ -122,7 +122,7 @@ class TradeCostModelTest {
         // (execution-aware): more than flat 4 bps on the traded notional.
         assertTrue(r.totalCosts() > 1_000_000 * 4.0 / 1e4 * 0.9,
                 "costs=" + r.totalCosts());
-        // Equity reflects BOTH: the DOOM wipeout and the cost drag.
+        // Equity reflects both: the DOOM wipeout and the cost drag.
         assertTrue(r.equityCurve()[BARS - 1] < 520_000, // ~half book gone + costs
                 "final=" + r.equityCurve()[BARS - 1]);
     }

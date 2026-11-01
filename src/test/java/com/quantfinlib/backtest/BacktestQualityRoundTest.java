@@ -73,7 +73,7 @@ class BacktestQualityRoundTest {
     @Test
     void zeroPnlTradeIsNeitherWinNorLoss() {
         // The break-even trade adds nothing to gross loss, so PF is infinite;
-        // but it is NOT counted as a win. One character (> vs >=) apart.
+        // but it is not counted as a win. One character (> vs >=) apart.
         PerformanceMetrics m = PerformanceAnalytics.compute(
                 new double[]{100, 110}, List.of(trade(0), trade(100)), 252);
         assertEquals(Double.POSITIVE_INFINITY, m.profitFactor());
@@ -202,7 +202,7 @@ class BacktestQualityRoundTest {
         assertEquals(12 - 5, r.equityCurve().length);
         assertTrue(r.trades().isEmpty(), "signal before tradeFrom must be ignored");
 
-        // Signal at bar 6 IS acted on: it fills at bar 7's open (next-open
+        // Signal at bar 6 is acted on: it fills at bar 7's open (next-open
         // default) and is force-closed at end of data.
         BacktestResult r2 = Backtester.run(new Script(6, -1), s,
                 BacktestConfig.defaults(), 5);
@@ -220,7 +220,7 @@ class BacktestQualityRoundTest {
     @Test
     void lastLookHoldsOnTheSignalBarAndFillsNextOpen() {
         // Flat market, zero spread: the signal fires at bar 3's close, so
-        // the FIRST possible fill is bar 4 — filling bar 3's open would be
+        // the first possible fill is bar 4 — filling bar 3's open would be
         // intrabar time travel. Exit signal at bar 7 fills at bar 8.
         BarSeries s = flatSeries(12, 100);
         LastLookExecution model = new LastLookExecution(0, 50);
@@ -238,7 +238,7 @@ class BacktestQualityRoundTest {
     void lastLookRejectsRunawayMarketAndNeverFills() {
         // Every bar rallies 150bps open-to-close; threshold 100bps: after
         // the signal-bar hold, every attempt is a reject — the parent
-        // chases and never gets filled. That is the point of the model.
+        // chases and never gets filled. That is what the model is for.
         BarSeries.Builder b = BarSeries.builder("RALLY");
         for (int i = 0; i < 10; i++) {
             double open = 100 * Math.pow(1.02, i);

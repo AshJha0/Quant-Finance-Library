@@ -12,11 +12,11 @@ import com.quantfinlib.microstructure.MarketImpactModel;
  *   <li>{@link #flat} — a fixed all-in bps (the classic commission
  *       assumption, and the exact equivalent of the legacy
  *       {@code commissionRate} configs);</li>
- *   <li>{@link #institutional} — commission + half-spread + slippage +
+ *   <li>{@link #institutional}: commission + half-spread + slippage +
  *       square-root market impact, with per-symbol ADV/vol estimated from
  *       the trailing bars via {@link MarketImpactModel#estimate}. This is
  *       the same four-component decomposition {@code alpha.AlphaBacktester}
- *       charges, expressed at the shared seam — the impact term is what
+ *       charges, expressed at the shared seam. The impact term is what
  *       makes cost grow with book size, i.e. what turns "capacity" into a
  *       number.</li>
  * </ul>
