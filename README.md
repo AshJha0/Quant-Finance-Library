@@ -53,6 +53,15 @@ Gradle: `implementation("com.github.AshJha0:Quant-Finance-Library:v2.1.0")` with
 The jars attached to each GitHub release can also be put on a classpath directly.
 Publishing to Maven Central is not set up yet; see [docs/PUBLISHING.md](docs/PUBLISHING.md).
 
+### Module path
+
+The jar is the named module `com.quantfinlib`. Add `requires com.quantfinlib;` to
+your `module-info.java`, or use the jar on the class path as before. Faults in
+external input throw types that implement `core.QuantFinException`
+(`WireProtocolException`, `MalformedDataException`, `ConfigurationException`); each
+extends the JDK exception the same code threw in 2.0. Descriptive statistics have one
+home, `stats.Stats`. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 ### Build from source
 
 ```bash

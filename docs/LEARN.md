@@ -2217,6 +2217,25 @@ Worth studying as a checklist for your own projects:
   promise zero drops. Tests encode what the platform can actually
   guarantee.
 
+### 20. Modules and exceptions
+
+A Java module is a jar that says what it offers and what it needs. This library's
+`module-info.java` names the module `com.quantfinlib`, exports its packages, and
+requires `java.net.http`, `jdk.httpserver` and, at compile time only,
+`org.jspecify`. Code on the module path writes `requires com.quantfinlib;`; code on
+the class path ignores the descriptor. The demos in `com.quantfinlib.examples` are
+not exported and live in a separate jar.
+
+Exceptions follow one rule: a fault in external input (a broken FIX or SBE frame, a
+malformed CSV file, a bad limits file) throws a library type, and that type extends
+whatever JDK exception the same code threw before. `WireProtocolException` is an
+`IllegalStateException`; `MalformedDataException` and `ConfigurationException` are
+`IllegalArgumentException`s. Because a class has only one superclass, the common
+type is an interface, `core.QuantFinException`, and
+`e instanceof QuantFinException` tells an input fault from a bug. A bad argument
+from the caller, such as a negative size, stays a plain `IllegalArgumentException`.
+See [ARCHITECTURE.md](ARCHITECTURE.md#exception-policy).
+
 ---
 
 ## Part III — Your learning path
@@ -28077,6 +28096,19 @@ throughout.
 - `f* = mu / sigma^2`. The continuous-time Kelly fraction; `halfKelly` is
   the usual practice, since the estimate of mu is noisy.
   `backtest/portfolio/PositionSizing.java`; Kelly (1956), Thorp (2006).
+
+**Statistics**
+
+- `h = (n - 1) p`, `Q(p) = x[floor h] + (h - floor h) (x[floor h + 1] - x[floor h])`
+  on the sorted sample, zero-based. The type 7 quantile: linear interpolation between
+  order statistics, the default in R and NumPy. `stats/Stats.java` (`quantile`,
+  `quantileSorted`; `median` is type 7 at p = 0.5); Hyndman and Fan (1996), The
+  American Statistician 50(4), 361-365, definition 7. For 1, 2, 3, 4 and p = 0.25,
+  h = 0.75 and Q = 1 + 0.75 (2 - 1) = 1.75.
+- `Q(p) = x[ceil(n p) - 1]` (zero-based). The type 1 quantile, the inverse of the
+  empirical CDF, with no interpolation. `stats/Stats.java`
+  (`quantileType1Sorted`); Hyndman and Fan (1996), definition 1. For 1, 2, 3, 4 and
+  p = 0.25 it is 1.
 
 **Performance and selection bias**
 

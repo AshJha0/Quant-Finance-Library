@@ -39,6 +39,20 @@ cd Quant-Finance-Library
 For a faster loop while editing, `./mvnw -DskipTests compile` builds `target/classes`
 only.
 
+The library jar is the named module `com.quantfinlib`. From your own modular code,
+add `requires com.quantfinlib;` to `module-info.java`; on the class path nothing is
+needed. The examples jar has no module descriptor, so run the demos on the class
+path, for example
+`java -cp quant-finance-library-2.1.0.jar:quant-finance-library-2.1.0-examples.jar com.quantfinlib.examples.QuickStartDemo`
+(use `;` as the separator on Windows).
+
+Two invalid-input behaviours changed in 2.1. `MathUtils.percentile` throws
+`IllegalArgumentException` for a probability outside [0, 1] or NaN, and the range
+means and standard deviations throw `IndexOutOfBoundsException` for a bad range. Bad
+input files and configuration throw `MalformedDataException` or
+`ConfigurationException`, both `IllegalArgumentException`s that implement
+`core.QuantFinException`.
+
 ## 3. First backtest from a CSV file
 
 The command line reads daily bars from a CSV file. The header must name the columns;
