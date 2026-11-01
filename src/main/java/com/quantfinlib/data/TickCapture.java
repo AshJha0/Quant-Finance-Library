@@ -4,26 +4,29 @@ import com.quantfinlib.marketdata.HftMarketDataBus;
 import com.quantfinlib.marketdata.TickListener;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.file.Path;
 
 /**
  * Records every tick flowing through an {@link HftMarketDataBus} into a QFLT
- * tick file: attach once, trade/observe as usual, close to flush — then
- * replay the session deterministically with {@link TickFileReader}.
+ * tick file: attach once, trade or observe as usual, close to flush, then
+ * replay the session with {@link TickFileReader}.
  *
- * <p>Writing happens on the bus consumer thread through a 1 MB buffer
- * (~28 bytes/tick), which is comfortably below the bus's throughput; a disk
- * error surfaces as {@link UncheckedIOException} on that thread.
- * <b>Latency note</b>: a page-cache writeback or disk hiccup therefore
- * stalls the consumer thread. Fine for capture-only or research sessions;
- * when the same bus is TRADING, use {@link AsyncTickCapture}, which moves
- * the file I/O to a dedicated writer thread behind a ring.</p>
+ * <p>Writing happens on the bus consumer thread through a 64 KiB block
+ * buffer, so a page-cache writeback or disk hiccup stalls that thread. Fine
+ * for capture-only or research sessions; when the same bus is trading, use
+ * {@link AsyncTickCapture}, which moves the file I/O to its own thread.</p>
+ *
+ * <p>A disk error never propagates into the bus consumer (where it would
+ * stop every other listener): the first failure is kept, {@link #isHealthy()}
+ * turns false, later ticks are counted in {@link #droppedTicks()}, and
+ * {@link #close()} rethrows it.</p>
  */
 public final class TickCapture implements TickListener, AutoCloseable {
 
     private final TickFileWriter writer;
     private final HftMarketDataBus bus;
+    private volatile IOException failure;
+    private long droppedTicks;
 
     private TickCapture(HftMarketDataBus bus, Path file, TickFileWriter.ClockDomain domain)
             throws IOException {
@@ -53,11 +56,16 @@ public final class TickCapture implements TickListener, AutoCloseable {
 
     @Override
     public void onTick(int symbolId, double price, double size, long timestampNanos) {
+        if (failure != null) {
+            droppedTicks++;
+            return;
+        }
         try {
             writer.defineSymbol(symbolId, bus.symbol(symbolId));
             writer.write(symbolId, price, size, timestampNanos);
         } catch (IOException e) {
-            throw new UncheckedIOException("tick capture failed", e);
+            failure = e;
+            droppedTicks++;
         }
     }
 
@@ -65,9 +73,33 @@ public final class TickCapture implements TickListener, AutoCloseable {
         return writer.tickCount();
     }
 
-    /** Writes the last block and forces the file to the device. */
+    /** Ticks not recorded because the writer had failed. */
+    public long droppedTicks() {
+        return droppedTicks;
+    }
+
+    /** False once a write has failed. */
+    public boolean isHealthy() {
+        return failure == null;
+    }
+
+    /** The first write failure, or null. */
+    public IOException failure() {
+        return failure;
+    }
+
+    /** Writes the last block, forces the file to the device, and rethrows any earlier failure. */
     @Override
     public void close() throws IOException {
-        writer.close();
+        try {
+            writer.close();
+        } catch (IOException e) {
+            if (failure == null) {
+                throw e;
+            }
+        }
+        if (failure != null) {
+            throw new IOException("tick capture failed", failure);
+        }
     }
 }
