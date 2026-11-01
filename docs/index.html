@@ -1,147 +1,169 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>quantfinlib — quantitative finance platform for the JVM</title>
+<title>quantfinlib</title>
+<meta name="description" content="quantfinlib: a pure-JDK Java library for quantitative finance research and risk, with a reference low-latency trading lane.">
 <style>
-:root{--teal:#16697a;--green:#16a085;--ink:#1a1a2e;--muted:#556}
-body{font-family:'Segoe UI',Arial,sans-serif;margin:0;color:var(--ink);background:#f7f8fa}
-header{background:var(--teal);color:#fff;padding:3rem 2rem}
-header h1{margin:0 0 .5rem;font-size:2.2rem}
-header p{margin:0;max-width:52rem;opacity:.92;line-height:1.5}
-.wrap{max-width:64rem;margin:0 auto;padding:0 2rem}
-nav{margin-top:1.2rem}
-nav a{display:inline-block;background:var(--green);color:#fff;text-decoration:none;
-  padding:.55rem 1.1rem;margin-right:.6rem;border-radius:4px;font-weight:600}
-nav a.secondary{background:rgba(255,255,255,.15)}
-h2{color:var(--teal);border-bottom:2px solid #e3e8ec;padding-bottom:.3rem;margin-top:2.5rem}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(17rem,1fr));gap:1rem;margin:1.2rem 0}
-.card{background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.12);padding:1rem 1.2rem;border-radius:4px}
-.card h3{margin:.1rem 0 .5rem;font-size:1.02rem;color:var(--teal)}
-.card p{margin:0;font-size:.9rem;color:var(--muted);line-height:1.45}
-pre{background:#10222a;color:#d7e3ea;padding:1rem 1.2rem;border-radius:4px;overflow-x:auto;
-  font-size:.85rem;line-height:1.5}
-.numbers{background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.12);border-radius:4px;
-  padding:1rem 1.4rem;font-family:Consolas,monospace;font-size:.88rem;line-height:1.7}
-footer{margin:3rem 0 2rem;color:var(--muted);font-size:.85rem;text-align:center}
+  :root {
+    --bg: #ffffff;
+    --surface: #f5f6f8;
+    --text: #1b1f24;
+    --muted: #57606a;
+    --border: #d8dee4;
+    --link: #0b5cad;
+    --code-bg: #eef1f4;
+    --accent: #0b5cad;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1216;
+      --surface: #171b21;
+      --text: #e6e8eb;
+      --muted: #9aa4af;
+      --border: #2c333b;
+      --link: #6cb6ff;
+      --code-bg: #1e242b;
+      --accent: #6cb6ff;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1216;
+    --surface: #171b21;
+    --text: #e6e8eb;
+    --muted: #9aa4af;
+    --border: #2c333b;
+    --link: #6cb6ff;
+    --code-bg: #1e242b;
+    --accent: #6cb6ff;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  main { max-width: 860px; margin: 0 auto; padding: 32px 16px 64px; }
+  header { border-bottom: 1px solid var(--border); padding-bottom: 20px; margin-bottom: 8px; }
+  h1 { font-size: 2rem; margin: 0 0 8px; letter-spacing: -0.01em; }
+  h2 { font-size: 1.25rem; margin: 36px 0 12px; }
+  p { margin: 0 0 12px; }
+  .lead { font-size: 1.1rem; color: var(--text); }
+  .meta { color: var(--muted); font-size: 0.95rem; }
+  a { color: var(--link); text-decoration: none; }
+  a:hover, a:focus { text-decoration: underline; }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.9em; }
+  code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+    overflow-x: auto;
+    line-height: 1.45;
+  }
+  pre code { background: none; padding: 0; }
+  ul { padding-left: 20px; margin: 0 0 12px; }
+  li { margin: 4px 0; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 12px;
+    padding: 0;
+    list-style: none;
+  }
+  .grid li {
+    margin: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+  }
+  .grid a { font-weight: 600; }
+  .grid span { display: block; color: var(--muted); font-size: 0.92rem; margin-top: 2px; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.95rem; }
+  th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; }
+  .table-wrap { overflow-x: auto; }
+  footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.9rem; }
 </style>
 </head>
 <body>
-<header>
-  <div class="wrap">
+<main>
+  <header>
     <h1>quantfinlib</h1>
-    <p>A zero-dependency quantitative finance platform for the JVM: research, validation,
-       execution, and connectivity — from walk-forward backtesting to a measured
-       sub-microsecond tick-to-order path, in one Java library.</p>
-    <nav>
-      <a href="api/index.html">API documentation</a>
-      <a class="secondary" href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/LEARN.md">Learn (beginner's guide)</a>
-      <a class="secondary" href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/COOKBOOK.md">Cookbook</a>
-      <a class="secondary" href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/MARKET_RISK.md">Market risk roadmap</a>
-      <a class="secondary" href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/DIAGRAMS.md">Architecture diagrams</a>
-      <a class="secondary" href="https://github.com/AshJha0/Quant-Finance-Library">GitHub</a>
-      <a class="secondary" href="https://github.com/AshJha0/Quant-Finance-Library/releases">Releases</a>
-    </nav>
-  </div>
-</header>
+    <p class="lead">A Java library for quantitative finance research and risk, using only the
+      JDK at runtime, with a reference low-latency trading lane.</p>
+    <p class="meta">Version 2.0.0 &middot; Java 25 &middot; MIT licence &middot;
+      <a href="https://github.com/AshJha0/Quant-Finance-Library">Source on GitHub</a></p>
+  </header>
 
-<div class="wrap">
-  <h2>Measured, not claimed</h2>
-  <div class="numbers">
-    Market data publish-to-strategy&nbsp;&nbsp; p50 = 204 ns&nbsp; p99 &lt; 1 µs (9–12M ticks/s)<br>
-    Pre-trade risk gate&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ≈ 3 ns per check, zero allocation, cross-thread safe (proven by test)<br>
-    Tick-to-order end-to-end&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; p50 = 504 ns&nbsp; p99 = 1.0 µs (15–21M orders/s across runs)<br>
-    Tick-to-two-sided-quote&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; p50 = 592 ns&nbsp; p99 &lt; 1 µs (market-making loop, both sides)<br>
-    Venue-grade matching engine&nbsp;&nbsp;&nbsp;&nbsp; ≈ 204 ns/op, 10M+ fills/s, zero allocation<br>
-    Test suite&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 1,090+ tests, JaCoCo-tracked coverage, CI on every push
+  <h2>What it covers</h2>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Area</th><th>Packages</th><th>Examples</th></tr></thead>
+    <tbody>
+      <tr><td>Pricing</td><td><code>pricing</code>, <code>fx</code></td><td>Black-Scholes-Merton, Black-76, Bachelier, implied volatility, Heston, SABR, barriers, Asian, quanto, FX volatility surface</td></tr>
+      <tr><td>Rates and credit</td><td><code>rates</code>, <code>credit</code></td><td>Single-curve yield curve, street-convention bonds, swaps, swaptions, caps, day counts, CDS curve bootstrap, Z-spread</td></tr>
+      <tr><td>Market risk</td><td><code>risk</code>, <code>volatility</code>, <code>crb</code></td><td>VaR and Acerbi-Tasche ES, filtered historical simulation, EVT, stress tests, VaR backtests, FRTB-style ES, GARCH by maximum likelihood, central risk book</td></tr>
+      <tr><td>Portfolio and research</td><td><code>optimization</code>, <code>alpha</code>, <code>backtest</code></td><td>Active-set QP optimiser, risk parity, Black-Litterman, factor IC with Newey-West errors, next-open backtests, walk-forward, deflated Sharpe</td></tr>
+      <tr><td>Execution</td><td><code>microstructure</code>, <code>execution</code></td><td>Almgren-Chriss, impact and queue models, VWAP/TWAP/POV/IS algorithms, smart order routing</td></tr>
+      <tr><td>Trading lane (reference)</td><td><code>marketdata</code>, <code>trading</code>, <code>orderbook</code>, <code>fix</code>, <code>sbe</code>, <code>feed</code></td><td>Ring buffers, risk gate with kill switch, order state machine with cancel/replace, matching engine, FIX 4.4 session with journal, SBE schema 2, ITCH 5.0</td></tr>
+    </tbody>
+  </table>
   </div>
 
-  <h2>What's inside</h2>
-  <div class="grid">
-    <div class="card"><h3>Research</h3>
-      <p>21 technical indicators (batch + O(1) streaming), strategy DSL, screener,
-         Monte Carlo, ML (GARCH, gradient boosting, 2-state regime HMM).</p></div>
-    <div class="card"><h3>Alpha pipeline</h3>
-      <p>Nine standard factors, rank IC/IR evaluation, walk-forward and permutation
-         validation, cost-aware factor backtests (spread, impact), sector/beta-neutral
-         construction, decay and attribution reports.</p></div>
-    <div class="card"><h3>FX instruments</h3>
-      <p>Pair conventions and dual-calendar dates, swap-points curves, FX swaps,
-         NDFs with local fixing calendars, delta-quoted vol surfaces, vanna-volga,
-         digitals/touches/barriers — Monte Carlo cross-checked.</p></div>
-    <div class="card"><h3>Honest validation</h3>
-      <p>Walk-forward analysis with stitched out-of-sample equity, deflated Sharpe,
-         VaR backtesting (Kupiec + Christoffersen), point-in-time universes with
-         delisting returns for survivorship-honest backtests.</p></div>
-    <div class="card"><h3>Execution</h3>
-      <p>Dynamic benchmark algos (VWAP/TWAP/Arrival/IS/Close/Open/POV that
-         re-decide on live spread, depth, vol, volume curve, impact and alpha),
-         portfolio-level basket scheduling (leg balance + capacity by marginal
-         basket risk from a streaming covariance matrix), smart order routing
-         (readable, zero-alloc, and full-checklist adaptive with lit + dark
-         venues and learned adverse selection), opportunistic liquidity seeking
-         with a completion floor, iceberg, dark pool, and a TCA-style backtest
-         that grades each benchmark algo over a session's bars.</p></div>
-    <div class="card"><h3>Signals &amp; quant models</h3>
-      <p>Unified streaming SignalEngine (imbalance, microprice, volatility,
-         liquidity, momentum, composite — equity + FX) plus the models feeding
-         execution: intraday volume/vol/spread seasonality (day-type aware),
-         L2 queue position, iceberg detection, Lee-Ready trade classification,
-         passive-fill probability, prequential-IC-gated online alpha learning,
-         cross-asset lead-lag, Kyle-lambda learned impact, jump-robust
-         (bipower) volatility, Avellaneda-Stoikov optimal quoting, closing
-         auction reserve — with learned state persisted across sessions and
-         the whole loop proven by a five-day overnight simulator.</p></div>
-    <div class="card"><h3>Equities market structure</h3>
-      <p>ITCH-style L3 feed decoding into a full-depth book with exact own-order
-         queue position, consolidated NBBO, order-flow imbalance signals, LULD +
-         market-wide circuit breakers, venue message-rate throttling.</p></div>
-    <div class="card"><h3>FX market structure</h3>
-      <p>Garbage-free FIX 35=W/X quote decoding, per-LP size-tier ladders with
-         sweep and full-amount pricing, last-look analytics (reject rate, hold,
-         post-reject markout) driving expected-all-in LP routing, symmetric
-         maker-side last look, WMR fixing schedules, direct-vs-synthetic crosses.</p></div>
-    <div class="card"><h3>Derivatives &amp; hedging</h3>
-      <p>Black-Scholes/Garman-Kohlhagen, Black-76, Heston stochastic vol
-         (semi-analytic + Monte Carlo cross-check), American trees, SABR,
-         vol surfaces, higher-order Greeks (vanna, volga, cross-gamma),
-         autocallables (memory coupons, knock-in) with RFQ dealer-panel
-         analytics, options-book Greeks and scenario grids, Monte Carlo
-         hedging error.</p></div>
-    <div class="card"><h3>Central risk book</h3>
-      <p>One netted view across desks and products: equities cash + options
-         and FX spot/swaps/NDFs/options decompose into a common factor
-         space (currency-level legs, so pairs net their shared USD);
-         inventory-skewed quoting, internalize-or-route economics with
-         client price improvement, cost-aware minimum-variance hedging of
-         the excess, and routing that starts with the firm's own
-         inventory before dark pools and lit — with the diversification
-         benefit priced in the report.</p></div>
-    <div class="card"><h3>Market risk</h3>
-      <p>The 14-step workflow: four portfolio VaR flavors with expected
-         shortfall (delta-normal, delta-gamma Cornish-Fisher, Monte Carlo,
-         historical), EVT tail fitting (peaks-over-threshold GPD), rank
-         correlations, PCA and Gaussian/Student-t copulas, stress testing
-         with closed-form reverse stress, FRTB liquidity-horizon ES,
-         Basel traffic light and P&amp;L attribution — mapped end-to-end
-         in MARKET_RISK.md.</p></div>
-    <div class="card"><h3>Rates &amp; portfolio</h3>
-      <p>Curve bootstrap, day counts and calendars, bond analytics; risk parity,
-         Black-Litterman, constrained optimization, position sizing.</p></div>
-    <div class="card"><h3>Connectivity</h3>
-      <p>Live WebSocket feeds, FIX 4.4 with resend recovery and persistent sessions,
-         tick capture &amp; deterministic replay, paper venue, live dashboard.</p></div>
-  </div>
+  <h2>Install</h2>
+  <p>From JitPack:</p>
+<pre><code>&lt;repository&gt;
+  &lt;id&gt;jitpack.io&lt;/id&gt;
+  &lt;url&gt;https://jitpack.io&lt;/url&gt;
+&lt;/repository&gt;
 
-  <h2>Quick start</h2>
-<pre>git clone https://github.com/AshJha0/Quant-Finance-Library && cd Quant-Finance-Library
-mvn package
-java -jar target/quant-finance-library-*.jar backtest \
-    --csv bars.csv --symbol EURUSD --strategy sma --fast 10 --slow 30 --out report.html</pre>
+&lt;dependency&gt;
+  &lt;groupId&gt;com.github.AshJha0&lt;/groupId&gt;
+  &lt;artifactId&gt;Quant-Finance-Library&lt;/artifactId&gt;
+  &lt;version&gt;v2.0.0&lt;/version&gt;
+&lt;/dependency&gt;</code></pre>
+  <p>Or build from source with a JDK 25:</p>
+<pre><code>git clone https://github.com/AshJha0/Quant-Finance-Library.git
+cd Quant-Finance-Library
+./mvnw verify</code></pre>
 
-  <footer>quantfinlib — built with zero runtime dependencies on the JDK.
-    Released under the <a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/LICENSE">MIT License</a>.</footer>
-</div>
+  <h2>Documentation</h2>
+  <ul class="grid">
+    <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/GETTING_STARTED.md">Getting started</a><span>Build, first backtest, paper trading, benchmarks</span></li>
+    <li><a href="api/">API reference</a><span>Javadoc for every package</span></li>
+    <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/ARCHITECTURE.md">Architecture</a><span>Package map, data flow, design rules</span></li>
+    <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/LEARN.md">Learn</a><span>Tutorial from first principles, with exercises</span></li>
+    <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/COOKBOOK.md">Cookbook</a><span>Runnable recipes</span></li>
+    <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/DIAGRAMS.md">Diagrams</a><span>Mermaid diagrams of the main flows</span></li>
+    <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/MARKET_RISK.md">Market risk</a><span>The risk workflow mapped to classes</span></li>
+    <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/CENTRAL_RISK_BOOK.md">Central risk book</a><span>Netting, internalisation, hedging</span></li>
+    <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/ULTRA_LOW_LATENCY.md">Trading lane</a><span>Order lifecycle, risk gate, protocols, tuning</span></li>
+    <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/BENCHMARKS.md">Benchmarks</a><span>Method and results</span></li>
+    <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/STABILITY.md">Stability</a><span>Stable APIs and versioning policy</span></li>
+    <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/MIGRATION_2.0.md">Migrating to 2.0</a><span>Breaking changes from 1.x</span></li>
+    <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/CHANGELOG.md">Changelog</a><span>Release history</span></li>
+  </ul>
+
+  <h2>Not implemented</h2>
+  <ul>
+    <li>Multi-curve (OIS and projection) bootstrapping</li>
+    <li>The ISDA CDS standard model</li>
+    <li>SA-CCR, SIMM and the FRTB standardised approach</li>
+    <li>SVI surfaces and local volatility</li>
+    <li>FIX session schedules and FIX versions other than 4.4</li>
+    <li>Live venue connectivity and certification</li>
+  </ul>
+
+  <footer>
+    quantfinlib is released under the MIT licence. The trading lane is a reference
+    implementation, not a certified trading system.
+  </footer>
+</main>
 </body>
 </html>
