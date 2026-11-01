@@ -230,6 +230,73 @@ public final class VarEngine {
         return tail(losses, confidence);
     }
 
+    /**
+     * Filtered historical simulation (Hull and White 1998, J. Risk 1(1);
+     * Barone-Adesi, Giannopoulos and Vosper 1999): each factor's history is
+     * devolatilised by its own EWMA volatility and rescaled to today's,
+     * {@code r̃_t,i = r_t,i · σ_{T+1,i} / σ_t,i}, and the rescaled rows are
+     * replayed through the exposures. The scenarios keep the empirical
+     * shape and cross-dependence of the standardised shocks but carry the
+     * current volatility, which plain historical simulation ignores.
+     *
+     * <p>EWMA: {@code σ²_t = λσ²_{t−1} + (1−λ)r²_{t−1}}, causal and
+     * bias-corrected ({@code σ²_t = Σ_{k<t}(1−λ)λ^{t−1−k}r_k² / (1−λ^t)});
+     * the first {@code burnIn} rows are only used to warm the filter and are
+     * not replayed. σ_{T+1} is the forecast after the last row.</p>
+     *
+     * @param factorReturns rows of factor returns, oldest first
+     * @param lambda        EWMA decay in (0, 1), 0.94 for daily RiskMetrics
+     * @param burnIn        rows used only to start the filter, &ge; 1
+     */
+    public static VarResult filteredHistoricalVar(double[] exposures, double[][] factorReturns,
+                                                  double lambda, int burnIn, double confidence) {
+        int t = factorReturns.length;
+        int k = exposures.length;
+        if (!(lambda > 0 && lambda < 1) || burnIn < 1 || t - burnIn < 20) {
+            throw new IllegalArgumentException("need lambda in (0,1), burnIn >= 1 and >= 20 "
+                    + "scenarios after the burn-in");
+        }
+        double[] raw = new double[k];
+        double mass = 0;
+        double[][] sigma = new double[t + 1][k];     // sigma[s] = vol for row s, s = t is the forecast
+        for (int s = 0; s <= t; s++) {
+            if (s > 0) {
+                double[] prev = factorReturns[s - 1];
+                for (int i = 0; i < k; i++) {
+                    raw[i] = lambda * raw[i] + (1 - lambda) * prev[i] * prev[i];
+                }
+                mass = lambda * mass + (1 - lambda);
+                for (int i = 0; i < k; i++) {
+                    sigma[s][i] = Math.sqrt(raw[i] / mass);
+                }
+            }
+            if (s < t) {
+                if (factorReturns[s].length != k) {
+                    throw new IllegalArgumentException("scenario " + s + " width mismatch");
+                }
+                for (double v : factorReturns[s]) {
+                    if (!Double.isFinite(v)) {
+                        throw new IllegalArgumentException("non-finite factor return in row " + s);
+                    }
+                }
+            }
+        }
+        double[] losses = new double[t - burnIn];
+        for (int s = burnIn; s < t; s++) {
+            double pnl = 0;
+            for (int i = 0; i < k; i++) {
+                double vol = sigma[s][i];
+                if (!(vol > 0)) {
+                    throw new IllegalArgumentException("factor " + i + " has zero EWMA volatility "
+                            + "at row " + s + "; lengthen the burn-in");
+                }
+                pnl += exposures[i] * factorReturns[s][i] * sigma[t][i] / vol;
+            }
+            losses[s - burnIn] = -pnl;
+        }
+        return tail(losses, confidence);
+    }
+
     // ------------------------------------------------------------------
     // Full revaluation
     // ------------------------------------------------------------------
