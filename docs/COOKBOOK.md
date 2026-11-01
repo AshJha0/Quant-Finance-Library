@@ -116,7 +116,7 @@ FxVolSurface.SmilePillar pillar = surface.pillar(0);
 
 double touch = TouchOption.oneTouch(1.0850, 1.12, 0.045, 0.030, 0.078, 0.25, 1e6);
 double barrier = BarrierOption.downAndOutCall(1.0850, 1.10, 1.05, 0.045, 0.030, 0.078, 0.25);
-double smileVol = new VannaVolga(pillar.strikes(), pillar.vols(), 0.045, 0.030, 0.25)
+double smileVol = new VannaVolga(pillar.strikesCopy(), pillar.volsCopy(), 0.045, 0.030, 0.25)
         .impliedVol(1.0850, 1.0950);
 ```
 
@@ -875,7 +875,7 @@ double[][] returns = /* the T x N daily return panel behind cov (rows = days) */
 var lw = CovarianceShrinkage.ledoitWolf(returns);    // intensity chosen from the data
 double[] mu = {0.08, 0.07, 0.05};
 var raw = new PortfolioOptimizer(mu, cov).maxSharpe(0.03);
-var shrunk = new PortfolioOptimizer(mu, lw.matrix()).maxSharpe(0.03);
+var shrunk = new PortfolioOptimizer(mu, lw.matrixCopy()).maxSharpe(0.03);
 System.out.printf("delta=%.2f  raw %s  shrunk %s%n", lw.intensity(),
         Arrays.toString(raw.weightsCopy()), Arrays.toString(shrunk.weightsCopy()));
 ```
@@ -1301,7 +1301,7 @@ System.out.printf("expected persistence: calm %.0f days, turbulent %.0f days%n",
         model.expectedDuration(0), model.expectedDuration(1));
 
 // Full-sample smoothed P(high vol at t): for charts and historical analysis.
-double[] pTurbulent = model.smoothedHighVolProbability();
+double[] pTurbulent = model.smoothedHighVolProbabilityCopy();
 ```
 
 Two kinds of probability in the result must not be swapped. `currentProbabilities` and the path `filteredHighVolProbability()` are filtered estimates that use data up to each date; these are the only ones a live decision or a backtest may use. `smoothedHighVolProbability` conditions on the entire sample, including the future, and is for ex-post labelling and plots only (a backtest that de-levers on the smoothed probability uses look-ahead). `expectedDuration(state)` is `1 / (1 - pStay)` from the fitted transition matrix, the answer to "if I cut risk now, for roughly how long". The filter works with emission densities in log space, so an extreme return cannot underflow it, and `fit(returns, iterations, starts, seed)` runs several EM starts (the two-argument form runs five).
@@ -3411,7 +3411,7 @@ double[] exposures = book.netExposures();       // e.g. from CentralRiskBook
 double[][] cov = /* factor covariance */;
 
 var reverse = StressTester.reverseStress(exposures, cov, 2_000_000);
-double[] breakingMove = reverse.shocks();       // most-probable move losing 2M
+double[] breakingMove = reverse.shocksCopy();       // most-probable move losing 2M
 double sigmas = reverse.mahalanobisSigmas();    // its joint implausibility
 
 System.out.printf("breaks at %.1f sigmas: %s%n", sigmas,
@@ -4063,7 +4063,7 @@ System.out.printf("today: regime %d, P(turbulent) %.2f%n",
 System.out.printf("persistence: calm %.0f days, turbulent %.0f days%n",
         model.expectedDuration(0), model.expectedDuration(1));
 
-double[] pTurbulent = model.smoothedHighVolProbability();   // charts/hindcast only
+double[] pTurbulent = model.smoothedHighVolProbabilityCopy();   // charts/hindcast only
 ```
 
 Two kinds of probability must never be swapped. `currentProbabilities` and the path `filteredHighVolProbability()` use data up to each date; these are the only ones a live decision or a backtest may read. `smoothedHighVolProbability` conditions on the entire sample including the future, so it belongs in plots and ex-post labelling (a backtest that de-levers on the smoothed series uses look-ahead). `expectedDuration(state)` is `1 / (1 - pStay)` from the fitted transition matrix, the answer to "if I cut risk now, for roughly how long". The fit runs several EM starts and keeps the best likelihood; `RegimeDetector.viterbi` gives the most likely state path.
@@ -6669,10 +6669,10 @@ double[][] cov = /* factor covariance */;
 
 var reverse = StressTester.reverseStress(exposures, cov, 2_000_000);
 System.out.printf("breaks at %.1f sigmas: %s%n",
-        reverse.mahalanobisSigmas(), Arrays.toString(reverse.shocks()));
+        reverse.mahalanobisSigmas(), Arrays.toString(reverse.shocksCopy()));
 
 // Verify the closed form: push the breaking move back through and it loses exactly the target.
-double check = StressTester.scenarioPnl(exposures, reverse.shocks());
+double check = StressTester.scenarioPnl(exposures, reverse.shocksCopy());
 System.out.printf("re-priced loss %.0f (target 2,000,000)%n", -check);
 
 // Named context: what would the historical templates do to this book?
@@ -6812,7 +6812,7 @@ double[][] returns = /* T x N: returns[t][j] = period-t return of asset j */;
 
 CovarianceShrinkage.Result s = CovarianceShrinkage.ledoitWolf(returns);
 System.out.printf("shrinkage intensity %.2f toward target %.4f%n", s.intensity(), s.target());
-double[][] cov = s.matrix();
+double[][] cov = s.matrixCopy();
 
 // Now optimize on the stable matrix, not the sample one:
 double[] mu = /* expected returns */;
@@ -7898,7 +7898,7 @@ CrbRouter.Allocation a = CrbRouter.route(
         venues, /*halfSpreadBps*/ 1.0, /*impactBps*/ 2.0);
 
 System.out.printf("internal %,.0f  dark %s  lit %,.0f  blended cost %.2f bps%n",
-        a.internal(), java.util.Arrays.toString(a.dark()), a.lit(), a.expectedCostBps());
+        a.internal(), java.util.Arrays.toString(a.darkCopy()), a.lit(), a.expectedCostBps());
 ```
 
 Internal crossing costs zero, so it fills first; dark venues are then used in
