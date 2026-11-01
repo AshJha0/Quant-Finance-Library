@@ -1689,7 +1689,7 @@ vanna and volga — exact *at* the pillars (pricing a pillar strike returns
 its own market vol), smooth between them. A negative RR means puts are
 bid over calls: the market pays up for downside protection in that pair.
 
-*In this library:* `fx/FxVolSurface.java` (quotes → pillar strikes/vols;
+*In this library:* `fx/FxVolSurface.java` (from quotes to pillar strikes and vols;
 `ButterflyQuote.BROKER_STRANGLE` is the default reading of the BF quote and
 `SMILE_STRANGLE` takes a smile butterfly as given; `smileButterfly25`
 reports the solved BF_s), `pricing/VannaVolga.java` (the log-strike
@@ -1773,7 +1773,7 @@ lets you track exactly.
 `optimalHalfSpread` — closed forms with the derivation in javadoc),
 `crb/SkewedQuoter.java` (the same intuition, linear and never
 self-crossing), `marketdata/L3BookBuilder.java` (`sharesAhead`) feeding
-`microstructure/QueueModel.java` (queue position → fill probability).
+`microstructure/QueueModel.java` (from queue position to fill probability).
 
 ### 17. "TWAP, VWAP, POV — when do you use which? And what's the classic POV bug?"
 
@@ -2107,7 +2107,7 @@ comparisons, no rebalancing, no node allocations. Sparsity is handled by
 bid" is a `Long.numberOfLeadingZeros` scan over a few machine words —
 hardware-speed, branch-predictable. Orders at a level form an intrusive
 FIFO linked list over preallocated arrays (price-time priority), and order
-ID → node lookup is the open-addressing map from the previous question. The
+The ID-to-node lookup is the open-addressing map from the previous question. The
 tradeoff to state upfront: you commit to a bounded price band at
 construction; a real engine sizes the band generously and treats a breach
 as a halt-worthy event anyway (that's what circuit breakers are for).
@@ -4816,7 +4816,7 @@ when the ring *appears* full) so the common-case enqueue touches no
 shared state at all -- single-digit nanoseconds per op versus tens to
 hundreds for contended MPMC. The architectural consequence is the real
 answer: low-latency systems are built as *pipelines of SPSC stages*
-(feed handler -> book builder -> strategy -> order gateway), one thread
+(feed handler, book builder, strategy, order gateway), one thread
 per stage, one queue per edge, giving MPMC-free wiring plus per-stage
 observability -- the Disruptor/LMAX pattern. Use MPMC only where fan-in
 is essential, and even then prefer one SPSC per producer with a
@@ -4983,15 +4983,15 @@ Start from the access pattern: the overwhelming majority of operations
 touch the best few price levels, adds and cancels dominate, and
 everything must be O(1)-ish with zero allocation. Structure: (1) Price
 levels -- not a balanced tree; prices are integers in ticks within a
-bounded band, so use a direct-indexed array of levels (price -> slot),
+bounded band, so use a direct-indexed array of levels (price to slot),
 giving O(1) level lookup and cache-friendly scans for the next
 populated level; keep best bid/ask cursors so the common case never
 scans. A tree's O(log n) is fine on paper and loses in silicon (Q125).
 (2) Within a level -- FIFO queue of orders implemented as an intrusive
 doubly-linked list over preallocated order slots (indices, not
 pointers): O(1) append for new orders, O(1) unlink for cancels, and
-price-time priority falls out of the list order. (3) Order id -> slot
--- a dense array or open-addressing long->int map, because cancels and
+price-time priority falls out of the list order. (3) Order id to slot
+-- a dense array or open-addressing long-to-int map, because cancels and
 replaces arrive by id and must find the order in O(1) without hashing
 garbage. (4) All storage preallocated: order slots from a free list,
 no node allocation per event (Q124). Matching is then: aggressor walks
@@ -8754,7 +8754,7 @@ limiter must be scoped to what the venue meters. One global throttle
 set to the sum of the limits is wrong in both directions: it lets a
 burst aimed at a single venue exceed that venue's limit while the
 others idle, and it starves a quiet venue because a busy one consumed
-the shared budget. So the gateway owns a map of venue -> throttle
+the shared budget. So the gateway owns a map from venue to throttle
 (each a few dozen bytes (two doubles, two longs, two counters) so
 per-session granularity is free), configured from each venue's
 published numbers, and the order path asks the destination's bucket.
@@ -8777,8 +8777,8 @@ by construction; deterministic caller-supplied clock),
 
 ### 276. "Tick to two-sided quote in a few hundred nanoseconds. Decompose the pipeline and tell me where the time goes."
 
-The loop is: market data in -> fair price -> inventory skew -> tick-grid
-snap -> order messages out through the risk gate and gateway, all
+The loop is: market data in, fair price, inventory skew, tick-grid
+snap, then order messages out through the risk gate and gateway, all
 primitive arithmetic, zero allocation per update. The time splits into
 the handoff over the SPSC ring from the feed thread, the quote math
 (trivial: skew = -position x skewPerUnit; bid = fair - halfSpread + skew
@@ -8895,8 +8895,8 @@ move the simulated market -- optimistic for size), and no adverse
 selection in the fill timing (the quotes that fill you are not
 reacting to you). Consequence: paper P&L is an upper bound for
 passive/impact-sensitive strategies, and paper's real product is not
-P&L at all -- it is proof the plumbing (signals -> orders -> risk ->
-fills -> positions -> dashboard) runs whole days without error.
+P&L at all -- it is proof the plumbing (signals, orders, risk,
+fills, positions, dashboard) runs whole days without error.
 
 *In this library:* `trading/PaperTradingGateway.java` (quote-driven
 fills limited by displayed size through `onQuote` with sizes, the
@@ -9205,7 +9205,7 @@ orchestration is a deployment concern.
 `trading/HftRiskGate.kill` (the fencing primitive),
 `docs/ULTRA_LOW_LATENCY.md` (warmup and the deployment/library boundary).
 
-### 290. "Prove the learn -> save -> restart -> keep-learning loop actually works. What does the test have to demand?"
+### 290. "Prove the learn, save, restart, keep-learning loop actually works. What does the test have to demand?"
 
 The failure modes of persistence are silent, so the test must demand
 convergence across restarts, not just save/load symmetry. This
@@ -9877,7 +9877,7 @@ lit last.
 
 *In this library:* `crb/InternalizationEngine.java` (the
 internalize-or-route economics, warehouse limit, `internalizationRate()`)
-and `crb/CrbRouter.java` (internal -> dark -> lit, each leg priced
+and `crb/CrbRouter.java` (internal, then dark, then lit, each leg priced
 at its expected cost).
 
 ### 317. "Your router learns from its own fills. Describe the feedback loop that can permanently blacklist a good venue, and the three defenses."
@@ -11319,7 +11319,7 @@ this class of bug lives.
 *In this library:* `microstructure/CircuitBreakers.java` --
 `luldBandPct`/`luldUpperBand`/`luldLowerBand` with the "dollars, not
 ticks" warning in the javadoc, the allocation-free `Luld` state machine
-(limit state -> 15s -> pause), and `MarketWide` with the
+(limit state, 15 seconds, then a pause), and `MarketWide` with the
 once-per-day / not-after-15:25 rules.
 
 ### 376. "How does a call auction pick its clearing price?"
@@ -11716,7 +11716,7 @@ owns the venue statistics and is responsible for their accuracy.
 
 *In this library:* `crb/CrbRouter.java` -- `DarkVenue(name,
 expectedLiquidity, fillProbability, adverseSelectionBps)`, the
-internal -> dark -> lit allocation with blended `expectedCostBps`;
+internal, then dark, then lit allocation with blended `expectedCostBps`;
 `docs/CENTRAL_RISK_BOOK.md` section 4 states the "first dark pool" and
 "hedges that might fill are not hedges" doctrine.
 
@@ -13191,7 +13191,7 @@ state. Everything above is Greek-agnostic -- run the same band logic on
 share inventory, delta, or DV01; only the position measure changes.
 
 *In this library:* `trading/AutoHedger.java` -- streaming position-band
-hedger on the fast lane: breach -> opposite-side order for the excess
+hedger on the fast lane: a breach sends an opposite-side order for the excess
 over the band via `HftOrderGateway`, explicit hedge-to-band-edge
 rationale in the javadoc, and a configurable cooldown; the band logic
 is documented as measure-agnostic.
@@ -14290,9 +14290,9 @@ from 1 on short windows under the null. Read it across several q
 (2, 5, 10, 20): a series can trend at daily horizons and revert at
 monthly, and the profile across q tells you which horizon your
 strategy should live at. Workflow in practice: VR significantly
-below 1 at your horizon -> proceed to the OU fit (Q483) for entry
-levels and half-life; VR indistinguishable from 1 -> no structure,
-decline to trade; VR above 1 -> momentum toolkit, not reversion. This
+below 1 at your horizon: proceed to the OU fit (Q483) for entry
+levels and half-life; VR indistinguishable from 1: no structure,
+decline to trade; VR above 1: momentum toolkit, not reversion. This
 one cheap test, run first, prevents the most expensive category
 error in systematic trading: running a reversion strategy on a
 trending series, which sells every breakout of a trend that keeps
@@ -14679,7 +14679,7 @@ inside one bar. `BacktestConfig.defaults()` charges 1 bp commission and
 For a return stream with mean mu and variance sigma^2 per period,
 the growth-optimal (Kelly) fraction is f* = mu / sigma^2 -- the
 leverage maximizing expected log wealth, i.e., long-run compound
-growth. Example: mu = 8% annually, sigma = 16% -> f* = 0.08/0.0256
+growth. Example: mu = 8% annually, sigma = 16% gives f* = 0.08/0.0256
 ~= 3.1x leverage. Nobody runs that, for three compounding reasons.
 Estimation error: f* is quadratically sensitive to mu, the
 parameter you know worst (Q461's lesson, squared) -- overestimate
