@@ -1438,30 +1438,29 @@ or a formula — it's a habit: **measure, don't assume; prove, don't claim;
 and when reality imposes a limit, document the limit instead of hiding
 it.** That habit transfers to every system you will ever build.
 
-## Part IV — The exercise room
+## Part IV — Knowledge checks
 
-1000 exercises — the questions quant, algo-trading and HFT desks actually ask —
-each answered the way a strong candidate answers it, then tied to the
-class in this library that implements the answer, so every answer is
-**runnable**: read the answer, then read the code, then re-derive one
-number yourself — that's the preparation that survives follow-up
-questions. Grouped by round, the way desks group them: the quant/math round,
-the derivatives round, the microstructure/execution round, the risk round,
-and the low-latency engineering round — first a core pass through each
-(Q1–35), then the deeper follow-on material (Q36–500): more quant
-and math, rates and curves, volatility and options theory, risk, the
-derivatives desk round, market structure and execution, the backtesting
-and research process, and low-latency systems design. The second five
-hundred (Q501–1000) change the camera angle from concept to workday:
-each one is a scenario a professional actually faces — a 7am data
-incident, a FIX session dispute, a desk decision, a post-trade meeting,
-a capstone that crosses three subsystems — worked end to end with this
-library's classes as the tools. All class paths are
-relative to `src/main/java/com/quantfinlib/`.
+Questions on quant finance, algorithmic trading and low-latency
+engineering, each answered as a direct explanation and tied to the
+class in this library that implements it. Read the answer, read the
+code, then re-derive one number yourself; that is the test of whether
+the idea has stuck.
+
+The first block (Q1-Q35) is a core pass through five topics: quant and
+math, derivatives and pricing, market microstructure and execution,
+risk, and low-latency engineering. Q36-Q500 go deeper into the same
+ground plus rates and curves, volatility, backtesting and research
+process, data, signals, ML, feeds and protocols, order books, matching,
+execution algorithms, FX and equities market structure, hedging, market
+risk and alpha research. From Q501 the questions change from concept to
+workday: each is a scenario such as a morning data incident, a FIX
+session dispute, a desk decision or a post-trade review, worked end to
+end with this library's classes. All class paths are relative to
+`src/main/java/com/quantfinlib/`.
 
 ---
 
-## Round 1 — Quant & math
+## Quant & math (Q1-Q7)
 
 ### 1. "Mean-variance optimization is elegant. Why does nobody run it raw?"
 
@@ -1558,8 +1557,7 @@ contribution**. A 60/40 portfolio is ~90% equity risk, because equities are
 several times more volatile than bonds — the capital split hides the risk
 split. Risk parity solves for weights where each asset's contribution
 `w_i · (Σw)_i / σ_p` is equal, which systematically levers up the
-low-volatility, low-correlation assets. The honest caveats a good candidate
-volunteers: it needs leverage to hit equity-like returns (so it embeds
+low-volatility, low-correlation assets. The caveats: it needs leverage to hit equity-like returns (so it embeds
 financing and rate risk), and it's still only as good as the covariance
 estimate — though notably it needs *no return forecasts at all*, which is
 exactly what makes it robust where max-Sharpe is fragile.
@@ -1586,7 +1584,7 @@ IC surviving (or not) out of sample.
 
 ---
 
-## Round 2 — Derivatives & pricing
+## Derivatives & pricing (Q8-Q15)
 
 ### 8. "When is it optimal to exercise an American option early?"
 
@@ -1732,7 +1730,7 @@ argument for degenerate-limit tests in one anecdote.
 
 ---
 
-## Round 3 — Market microstructure & execution
+## Market microstructure & execution (Q16-Q22)
 
 ### 16. "You're a market maker and you're long 800 lots you don't want. What do your quotes look like?"
 
@@ -1818,8 +1816,8 @@ Displayed price and fees/rebates are the entry ticket, not the answer. A
 production SOR also weighs: **fill probability** (a venue that fades on
 arrival has a worse *expected* price than its quote), **latency** (a stale
 quote is a worse quote), **hidden liquidity** (venues that historically
-fill more than displayed), and — the one that separates candidates —
-**adverse selection**: measure post-fill markouts per venue, because a
+fill more than displayed), and, most often missed, adverse
+selection: measure post-fill markouts per venue, because a
 venue where the price systematically moves against you right after filling
 is *selling you toxic fills* at an invisible cost that can exceed the whole
 spread. Two more marks of a real answer: check the NBBO state first (a
@@ -1863,18 +1861,17 @@ statistic, not an estimate. Purge and embargo the CV splits (with
 overlapping labels, adjacent folds share information), compute the
 probability of backtest overfitting (does the in-sample winner rank well
 out-of-sample?), and deflate the Sharpe against the best-of-N expectation.
-A candidate who volunteers "the strategy also needs to survive costs and
-its own impact" is having a very good round.
+Finally, the strategy has to survive its costs and its own market impact.
 
 *In this library:* `backtest/Backtester.java` (the `tradeFrom` contract is
 documented at the method), `backtest/validation/PurgedKFold.java`,
 `backtest/validation/OverfitProbability.java` (PBO),
 `backtest/validation/GridSearchOptimizer.java`
-(`deflatedSharpeOfWinner` — the whole grid search is scored honestly).
+(`deflatedSharpeOfWinner` — the whole grid search is scored).
 
 ---
 
-## Round 4 — Risk
+## Risk (Q23-Q29)
 
 ### 23. "You computed VaR four ways and got four numbers. Which is right?"
 
@@ -1886,8 +1883,8 @@ Carlo** on Gaussian factors agrees with delta-normal on linear books (a
 useful sanity check) and only earns its cost when you revalue non-linear
 positions inside it. **Delta-gamma (Cornish-Fisher)** adds the second-order
 term: a short-gamma book's VaR gets *worse* than delta-normal claims, and
-that divergence appearing exactly where gamma says it must is the point.
-Follow-up you must be ready for: "how do you know your VaR is calibrated?"
+and the divergence appears exactly where gamma says it must.
+The natural follow-up: "how do you know your VaR is calibrated?"
 — Kupiec's test (do exceptions happen at the promised 1% rate?) and
 Christoffersen's (do they *cluster*? — a model right on average but wrong
 in crises fails independence).
@@ -1940,7 +1937,7 @@ two instruments with linearly independent (gamma, vega) profiles give a
 option trades introduced with the underlying, which disturbs nothing else.
 That triangular structure is why desks re-hedge delta continuously but
 gamma/vega only periodically: the cheap instrument fixes the fast-moving
-Greek. Caveats a strong candidate adds: the neutralization holds locally
+Greek. Two caveats: the neutralization holds locally
 (Greeks drift as spot and vol move), and hedging vega with one expiry
 against another leaves you exposed to the vol *surface* twisting rather
 than shifting.
@@ -1966,13 +1963,13 @@ of the book's own structure, not the risk manager's creativity.
 shock vector and `mahalanobisSigmas`; also has the forward historical
 scenarios to contrast against).
 
-### 28. "Why is 99.9% VaR from two years of daily data basically fiction — and what's the honest alternative?"
+### 28. "Why is 99.9% VaR from two years of daily data basically fiction — and what's the alternative?"
 
 Two years is ~500 observations; the 99.9% quantile is the worst *half* an
 observation — you're reading a number the sample doesn't contain.
 And scaling a Normal fit out there is worse: financial returns are
 fat-tailed, so the Gaussian assigns astronomically too little probability
-to exactly the moves you're asking about. The honest tool is **extreme
+to exactly the moves you're asking about. The tool is **extreme
 value theory**: the Pickands-Balkema-de Haan theorem says exceedances over
 a high threshold converge to a Generalized Pareto Distribution for
 essentially any underlying distribution — so fit the GPD to the tail you
@@ -1996,7 +1993,7 @@ Ratio** asks: given track length, skew and kurtosis, what's the probability
 the true Sharpe exceeds a benchmark? The **Deflated Sharpe Ratio** sets
 that benchmark to the best-of-N expectation. A DSR near 0.5 means "exactly
 what luck predicts." The practical discipline: the grid search itself
-should compute this — count trials honestly (correlated variants count
+should compute this — count trials (correlated variants count
 less), report the winner's deflated number, not its raw one.
 
 *In this library:* `backtest/validation/SharpeValidation.java` (PSR and
@@ -2007,7 +2004,7 @@ belongs).
 
 ---
 
-## Round 5 — Low-latency engineering
+## Low-latency engineering (Q30-Q35)
 
 ### 30. "Your hot path allocates nothing. Prove it."
 
@@ -2167,7 +2164,7 @@ usual variance formula for beta-hat is simply the wrong formula, and in
 the classic case it *understates* the error, inflating t-stats. Serial
 correlation in residuals compounds it: 1,000 autocorrelated observations
 might carry the information of 300 independent ones, but OLS divides by
-root-1000. The honest fixes are White or Newey-West standard errors
+root-1000. The fixes are White or Newey-West standard errors
 (estimate the error covariance rather than assume it), or the
 Fama-MacBeth device: run the regression cross-sectionally each period and
 take the time series of the estimated premia -- the period-to-period
@@ -2448,15 +2445,13 @@ time. The textbook CI for a Sharpe ratio assumes i.i.d. normal returns;
 real P&L has fat tails, skew (option-selling strategies especially),
 and autocorrelation, all of which the formula silently ignores. There
 are analytic corrections (Lo's adjustment, the Mertens variance with
-skew and kurtosis terms), and a strong candidate mentions them -- but
-the bootstrap handles all of it at once by resampling the data you
-actually have. The crucial detail for time series: an i.i.d. bootstrap
+skew and kurtosis terms), but the bootstrap handles all of it at once
+by resampling the data you actually have. The key detail for time series: an i.i.d. bootstrap
 scrambles away the autocorrelation, so you must resample in blocks --
 the stationary block bootstrap draws blocks of random (geometric)
 length, preserving local dependence while still mixing the sample.
 Concrete use: a strategy with Sharpe 1.2 over 3 years; the block
-bootstrap gives you the full sampling distribution, and the honest
-question becomes "is the 5th percentile of that distribution still
+bootstrap gives you the full sampling distribution, and the question becomes "is the 5th percentile of that distribution still
 positive?" rather than "is 1.2 a big number?" Caveats to volunteer: the
 bootstrap cannot manufacture tail events absent from the sample, and it
 assumes stationarity across the window -- it fixes the formula's lies,
@@ -2562,7 +2557,7 @@ a year your 5y is a 4y, and on an upward-sloping static curve the 4y
 point yields less -- say 3.85% -- so the bond reprices *up* as it rolls
 down the curve: roughly 15bp of yield times the then-4-year duration
 (~3.7), another ~55bp. Total ~1.55% for a scenario in which the curve
-does not move at all. The crucial catch: "the curve stays where it is"
+does not move at all. The catch: "the curve stays where it is"
 is a *bet*, not a neutral assumption -- the forwards already price the
 5y rate drifting up along the curve, and if forwards realize instead,
 carry-and-roll nets to approximately the repo rate and the trade earned
@@ -2570,9 +2565,8 @@ nothing extra. So carry-and-rolldown analysis is really the statement
 "I am betting realized rates come in below the forwards," which has
 been a historically profitable bet (term premium) but is exactly what
 loses in a fast hiking cycle -- 2022 being the canonical recent example,
-when rolldown P&L was swamped by the curve repricing. A good candidate
-computes both numbers off the curve object and *names* the implicit
-bet.
+when rolldown P&L was swamped by the curve repricing. Compute both
+numbers off the curve object and name the implicit bet.
 
 *In this library:* `rates/YieldCurve.java` -- `zeroRate` at shifting
 tenors gives the rolldown, `forwardRate` gives the break-even path that
@@ -2690,7 +2684,7 @@ collapsed onto compounded SOFR/ESTR, but the discounting lesson --
 collateral rate, not index rate -- is permanent.
 
 *In this library:* `rates/YieldCurve.java` -- the single-curve bootstrap
-(`bootstrapAnnualParSwaps`), which is deliberately the textbook
+(`bootstrapAnnualParSwaps`), which is the textbook
 pre-2008 setup; rebuilding it as two curves (OIS discounting, separate
 projection) is the natural exercise on top, and the javadoc's
 discount-factor framing is the piece that carries over unchanged.
@@ -2724,7 +2718,7 @@ Hull-White as the model desks actually use to compute it;
 `rates/YieldCurve.java` `forwardRate` for the forward being adjusted
 toward.
 
-### 58. "The 2s10s curve just inverted. Your economist says recession. What is the mechanism, and how would you state the risk honestly?"
+### 58. "The 2s10s curve just inverted. Your economist says recession. What is the mechanism, and how would you state the risk?"
 
 The mechanism: the 10-year rate is approximately the average of
 expected future short rates plus a term premium. Inversion means the
@@ -2737,7 +2731,7 @@ indicator: US 2s10s (or the 3m10y variant the Fed studies) inverted
 ahead of essentially every US recession since the late 1960s, with
 lead times of roughly 6 to 24 months -- 2006 before 2008 being the
 canonical case, and 2019 before the 2020 downturn a debatable one.
-Stating it honestly requires the caveats: the term premium is not
+Stating it requires the caveats: the term premium is not
 constant (QE-era distortions can invert measured spreads without the
 same expectations signal, the standard critique of the 2022-23
 inversion); the lead time is too variable to trade on timing; and with
@@ -2828,7 +2822,7 @@ years of steady income, then losses arriving in days. February 2018
 product, had compounded gains for years and lost ~95% in one session
 when VIX spiked; short-vol funds in early 2020 repeated the lesson.
 The premium is real *and* the strategy has crash-shaped risk, so
-honest evaluation demands: sizing for the spike (vega that scales with
+evaluation demands: sizing for the spike (vega that scales with
 vol, not constant), measuring performance over windows that include a
 disaster, and skepticism of any Sharpe computed between disasters --
 which is the LLN-versus-fat-tails point wearing option clothes. The
@@ -2976,7 +2970,7 @@ moved ~1.26%, earning (1.26^2 - 1.00^2)/1.00^2 ~ 59% more gamma P&L
 than rent each day. Worked number: on a book with dollar gamma
 Gamma S^2 = $200m ($2m of delta per 1% move), a 1.26% day earns
 (1/2)(200m)(0.0159%) ~ $15.9k gamma vs ~$10k theta -- roughly $6k/day
-of scalping profit. The two honest caveats that separate real
+of scalping profit. The two caveats that separate real
 answers: (1) the P&L is weighted by
 *where* gamma was when moves happened -- dollar gamma rides with spot,
 so realizing 20 vol far from your strike pays little (the
@@ -3026,7 +3020,7 @@ gap.
 ### 68. "Quick -- ATM straddle on a $100 stock, 25% vol, 3 months. No calculator."
 
 The approximation to own: an ATM(-forward) straddle is worth about
-0.8 x S x sigma x sqrt(T). Derivation in one line: each ATM leg under
+0.8 x S x sigma x sqrt(T). Derivation: each ATM leg under
 Black-Scholes is approximately S x sigma x sqrt(T/(2*pi)) ~ 0.4 x S x
 sigma x sqrt(T) (expand N(d1) - N(d2) around d = 0), and the straddle
 is two legs. Here: 0.8 x 100 x 0.25 x 0.5 = $10. The reverse reading
@@ -3168,17 +3162,16 @@ you see on screen for short-dated options already breathes with that
 calendar: Friday-afternoon implieds on weekly options dip
 mechanically ("weekend effect in vol") because the same option price
 divided by more calendar-time-vol means a lower quoted sigma, then
-recover Monday. For a candidate, the general principle is the
-valuable part: sigma and t only ever appear as total variance
+recover Monday. The general principle: sigma and t only ever appear as total variance
 sigma^2 t, so *any* deterministic reweighting of time is equivalent
 to a vol adjustment -- event calendars, weekends and holidays are
-all the same trick. And honesty requires the caveat: the weekend
+all the same trick. The caveat: the weekend
 discount assumes no news; the gap risk of Q71 is exactly the
 scenario where the 0.3-weight weekend delivers 3 days of variance.
 
 *In this library:* `alpha/CalendarAnomalies.java` (`dayOfWeek` --
 day-of-week return/variance profiles with the t-statistics that keep
-the claims honest; its javadoc's whole point is that most published
+the claims in check; its javadoc notes that most published
 calendar effects barely survive them), `pricing/VolSurface.java`
 (total-variance time interpolation -- the object an event-weighted
 calendar would plug into).
@@ -3206,8 +3199,7 @@ sees the whole tail rather than one point on it, and cannot be gamed
 by pushing losses just past the confidence level. That is precisely
 why FRTB replaced 99% VaR with 97.5% ES as the market-risk capital
 standard: the two calibrations match for normal distributions, but ES
-keeps paying attention when the tail gets fat. The honest caveat a
-strong candidate adds: ES is harder to backtest (it is not
+keeps paying attention when the tail gets fat. The caveat: ES is harder to backtest (it is not
 elicitable), so the regime is ES for capital, VaR exceptions for
 validation.
 
@@ -3250,7 +3242,7 @@ failure in real time), `risk/FrtbEs.java` (`stressCalibratedEs`,
 
 ### 75. "Your worst observed daily loss in 10 years is 6%. The board asks for the 1-in-1000-day loss. What is defensible and what is astrology?"
 
-The honest boundary runs through extreme value theory. Astrology: (a)
+The boundary runs through extreme value theory. Astrology: (a)
 reading the 99.9% quantile off the empirical distribution -- 10 years
 is ~2,500 observations, so the 1-in-1000 point is supported by two or
 three data points and the 1-in-10,000 by none; (b) fitting a Gaussian
@@ -3267,8 +3259,8 @@ rather than along Gaussian fantasy. The shape parameter xi is the
 verdict on the question itself: xi = 0 gives thin exponential tails;
 equity-return fits typically give xi in the 0.2-0.4 range --
 power-law tails where the 1-in-1000 loss is perhaps 1.5-2x the
-1-in-20-year observed worst, not marginally above it. And EVT is
-honest about its own limits: the confidence interval on the 99.9%
+1-in-20-year observed worst, not marginally above it. EVT also states
+its own limits: the confidence interval on the 99.9%
 estimate is wide and should be reported with it, and a fitted xi >= 1
 says the tail mean does not exist -- at which point the defensible
 answer to the board is that number's refusal, not a number.
@@ -3281,7 +3273,7 @@ implemented behavior.
 
 ### 76. "Design my stress-testing program. Historical, hypothetical, reverse -- what does each catch that the others miss?"
 
-Three legs, deliberately non-overlapping. **Historical scenarios**
+Three legs, non-overlapping. **Historical scenarios**
 replay actual factor moves -- October 1987, Lehman September 2008,
 COVID March 2020 -- through today's book. Strengths: internally
 consistent by construction (these co-movements *happened*, no one can
@@ -3325,7 +3317,7 @@ position may be many days of market volume, so exiting moves the
 price against you, and fast exits cost more than slow ones while slow
 exits carry more market risk (the Almgren-Chriss trade-off, now
 inside the risk measure). Liquidity-adjusted VaR in its simplest form
-adds half the stressed spread times position size; the honest version
+adds half the stressed spread times position size; the version
 scales the risk horizon per asset class instead: the loss that
 matters is over the time it *actually takes to exit*, so illiquid
 factors get 60-120 day horizons rather than 10. That is exactly the
@@ -3372,8 +3364,7 @@ each is designed to miss the other.
 *In this library:* `risk/ConcentrationRisk.java` (`herfindahlIndex`,
 `effectivePositions`, `topNShare`, `limitBreaches` -- the
 non-covariance view), `risk/CorrelationMatrix.java` and
-`risk/Dependence.java` (the covariance view it deliberately
-complements), `risk/ComponentVar.java` to see how much of the VaR a
+`risk/Dependence.java` (the covariance view it complements), `risk/ComponentVar.java` to see how much of the VaR a
 single name secretly carries.
 
 ### 79. "You face a counterparty on a 5-year swap, currently worth zero to you. Is your credit exposure zero? Draw me the profile."
@@ -3428,7 +3419,7 @@ insurers whose own solvency was wired to the same housing factor;
 when the hedges finally paid, the sellers could not, and the "hedged"
 banks took CVA losses in the tens of billions (a large share of
 2008 credit losses were CVA markdowns, not defaults -- the hedge's
-*value* collapsed with the seller's credit). Handling it honestly:
+*value* collapsed with the seller's credit). Handling it:
 CVA with correlated exposure and default (a copula or joint
 simulation, not independent modules), higher margins or outright
 refusal for specific wrong-way trades (post-crisis rules effectively
@@ -3578,8 +3569,8 @@ the LR independence test even when the count passes, and the
 combined (conditional-coverage) test requires both. Clustering is
 the signature of a VaR that adapts too slowly (long unweighted
 windows), and it is the practically dangerous failure: the days VaR
-is wrong are consecutive, at the worst time, compounding. Complete
-honesty in VaR backtesting also means: test at multiple confidence
+is wrong are consecutive, at the worst time, compounding. A complete
+VaR backtest also means: test at multiple confidence
 levels (a model can pass at 99% and fail at 95%), keep the
 evaluation strictly out-of-sample, and remember you cannot
 meaningfully backtest what you have not lived through -- 250 clean
@@ -3594,7 +3585,7 @@ zone mapping.
 
 ### 85. "Your model says the desk is over its limit. The head trader -- who makes $50m a year for the firm -- says the model is wrong. Walk me through what you actually do."
 
-The honest answer has a process, because both sides are sometimes
+The answer has a process, because both sides are sometimes
 right and the failure modes are asymmetric. First: **the limit binds
 now**. Escalation happens with the exposure controlled, not while
 debating -- a limit that can be argued into abeyance is not a limit,
@@ -3636,7 +3627,7 @@ the validation-to-production governance chain.
 
 ---
 
-## Derivatives desk round (Q86-Q98)
+## Derivatives on the desk (Q86-Q98)
 
 ### 86. "Walk me up the Greeks -- what does each one mean to a trader, not a textbook?"
 
@@ -3655,7 +3646,7 @@ dated vol trades are gamma trades. A desk example that makes it click:
 the day before an earnings print, a 1-week ATM straddle is almost pure
 gamma/theta (huge daily rent, huge convexity), while the 1-year straddle
 on the same stock barely notices the event and just marks off the vol
-surface. Strong candidates volunteer the follow-up: delta is NOT the
+surface. A related point: delta is not the
 probability of exercise -- N(d1) > N(d2) always, and for long-dated or
 high-vol options the gap is large.
 
@@ -3777,7 +3768,7 @@ famous macro incident: January 15, 2015, the SNB abandoned the EUR/CHF
 1.20 floor; the pair fell ~30% in minutes, tearing through years of
 accumulated barrier and stop-loss levels with no liquidity, and several
 FX brokers (Alpari UK) and dealers took losses far beyond any model's
-"hedged" P&L. Standard mitigations a candidate should name: barrier
+"hedged" P&L. The standard mitigations are barrier
 shifting (price and hedge to a barrier slightly beyond the contractual
 one) and static replication with vanillas, both of which trade a known
 cost for the unhedgeable cliff.
@@ -4193,7 +4184,7 @@ band limit for 15 seconds the stock halts for 5 minutes. Market-wide
 breakers (7%, 13%, 20% on the S&P) halt everything -- and the 7% level
 actually fired four times in March 2020, working as designed. Stub
 quotes were banned; market-maker quotes must now be within a band of
-the NBBO. The lesson candidates should state: the crash was a
+the NBBO. The crash was a
 liquidity-withdrawal spiral, and the fix was mechanical speed bumps
 that force time for liquidity to return, not a ban on any strategy.
 
@@ -4258,7 +4249,7 @@ exactly this measurement).
 ### 109. "What are the standard TCA benchmarks, and how does each get gamed?"
 
 Arrival price (implementation shortfall): fill price versus the mid at
-decision time -- the honest one, because it charges you for delay,
+decision time -- the one, because it charges you for delay,
 impact, and opportunity cost. VWAP: fill price versus the market's
 volume-weighted average over the interval -- popular because it is easy
 to beat *by construction*: trade proportionally to the volume curve and
@@ -4442,7 +4433,7 @@ testing, and finance is unusually exposed because the same few decades
 of returns get mined by everyone (Harvey, Liu and Zhu catalogued 300+
 published "significant" factors and argued the t-stat hurdle should be
 3+, not 2, once you account for the profession's collective search).
-The honest tools: record every variant you tried (the denominator is
+The tools: record every variant you tried (the denominator is
 the whole grid, not the survivors you remember); use White's reality
 check / Hansen's SPA-style logic to test the best-of-family against the
 family size; and compute the probability of backtest overfitting via
@@ -4456,7 +4447,7 @@ strategy.
 *In this library:*
 `backtest/validation/OverfitProbability.java` (CSCV / PBO, per Bailey,
 Borwein, Lopez de Prado and Zhu),
-`backtest/validation/GridSearchOptimizer.java` (the honest grid --
+`backtest/validation/GridSearchOptimizer.java` (the grid --
 every trial recorded so the denominator is real).
 
 ### 116. "What is the deflated Sharpe ratio, and when has it changed a real decision?"
@@ -4468,7 +4459,7 @@ what is the probability that the observed Sharpe exceeds the best
 Sharpe you would expect from pure noise? Mechanically it deflates twice:
 first it raises the benchmark from zero to the expected maximum of N
 trials (the sqrt(2 ln N)-type term from Q115), then it widens the
-Sharpe's own standard error for fat tails and negative skew -- crucial,
+Sharpe's own standard error for fat tails and negative skew. That matters
 because strategy styles with the prettiest Sharpes (short vol, carry,
 liquidity provision) have exactly the negative skew that makes their
 Sharpe estimates least reliable; a Sharpe of 1.5 from a
@@ -4493,8 +4484,7 @@ trains on data from *after* the test fold, which is fine for i.i.d.
 samples and cheating for markets (autocorrelated features, regimes,
 overlapping labels). Walk-forward respects the arrow of time: fit on an
 expanding or rolling window, trade the next out-of-sample block, roll
-forward, and concatenate the out-of-sample blocks into one honest
-equity curve -- it is a simulation of how the strategy would actually
+forward, and concatenate the out-of-sample blocks into one equity curve -- it is a simulation of how the strategy would actually
 have been researched and deployed, which is why practitioners default
 to it. Its weaknesses: it uses data inefficiently (early data is only
 ever training, late data only ever testing), a single path means the
@@ -4555,8 +4545,7 @@ carry trades earned steadily until 2008 unwound them in weeks. The
 research process answer: test across regimes explicitly -- split
 performance by identified vol/rate/trend states rather than by
 calendar; if returns come from one state, you own a regime bet and
-should size and market it as one. Detect regimes with something honest
-(rolling vol buckets, HMM-style classifiers), stress the strategy on
+should size and market it as one. Detect regimes with something (rolling vol buckets, HMM-style classifiers), stress the strategy on
 the historical windows that look least like the fit sample (1994, 2000,
 2008, 2013 taper, 2020, 2022 -- the rates regime change that broke a
 decade of bond-equity correlation assumptions), and prefer parameters
@@ -4568,9 +4557,9 @@ condition performance on), `backtest/validation/BlockBootstrap.java`
 (resampled paths that preserve regime clustering instead of shuffling
 it away).
 
-### 120. "Your backtest ignores costs. Add them honestly -- and then tell me the strategy's capacity."
+### 120. "Your backtest ignores costs. Add them -- and then tell me the strategy's capacity."
 
-Honest costs have three layers. Spread: every taker execution pays the
+Costs have three layers. Spread: every taker execution pays the
 half-spread; at 5bps a side, a strategy turning over 100% weekly pays
 roughly 5% a year before impact -- this single line item kills most
 high-turnover retail backtests. Impact: the standard square-root law,
@@ -4645,7 +4634,7 @@ reproduce the equity curve from raw data? Sign errors and timezone bugs
 have produced more Sharpe-4 backtests than genuine edges. Meta-point
 worth saying out loud: a true Sharpe 4 at scale would
 compound absurdly -- extraordinary claims get the checklist in full,
-and the honest prior is that beautiful backtests are bugs until proven
+and the prior is that beautiful backtests are bugs until proven
 otherwise.
 
 *In this library:* the `backtest/validation` package is this checklist
@@ -4677,8 +4666,7 @@ value types are the long-promised fix), and deterministic sub-10us
 tick-to-trade with kernel-bypass NICs is a fight against the platform
 rather than with it -- shops that need single-digit microseconds
 consistently write that tier in C++ or increasingly FPGA, and keep Java
-for strategy, risk, and everything that changes weekly. The honest
-summary: Java buys you the fastest *team*; C++/hardware buys the
+for strategy, risk, and everything that changes weekly. The summary: Java buys you the fastest *team*; C++/hardware buys the
 fastest *packet* -- most firms need both, at different layers.
 
 *In this library:* `docs/ULTRA_LOW_LATENCY.md` (the tiered argument,
@@ -4820,9 +4808,8 @@ the same logic. When you do not: if your strategy's alpha horizon is
 minutes or your decision loop includes a model that takes 100us anyway,
 bypass optimizes the doorstep of a slow house -- an execution desk
 slicing a parent order over hours gains nothing that matters. The
-honest engineering order: measure first (Q129); kernel-vs-bypass only
-matters after allocation, cache misses, and coordinated-omission-honest
-tails are already clean.
+engineering order: measure first (Q129); kernel-vs-bypass only
+matters after allocation, cache misses, and coordinated-omission-tails are already clean.
 
 *In this library:* `docs/ULTRA_LOW_LATENCY.md` -- Tier 4 ("Kernel
 bypass & hardware") places it explicitly *beyond* what the pure-JVM
@@ -4838,14 +4825,13 @@ politely stops measuring, so one horrible experience is recorded as
 one bad sample instead of the ten thousand requests that *would* have
 arrived and queued during it. The percentiles then describe a fantasy
 client that never shows up during trouble -- exactly inverted from
-markets, where message bursts and system stress coincide. Honest
-measurement: fix the intended arrival schedule in advance and measure
+markets, where message bursts and system stress coincide. Measurement: fix the intended arrival schedule in advance and measure
 each operation from its *intended* start time, so queueing delay
 during stalls is charged to every operation it delays; or at minimum
 run a hiccup monitor -- a thread that sleeps 1ms and measures how much
 longer the sleep actually took -- which catches whole-platform stalls
 (GC, safepoints, page faults, CPU throttling) that per-op timing hides.
-Related honesty rules: never average latencies (report the full
+Related rules: never average latencies (report the full
 percentile spectrum to max), warm up before recording, and correlate
 spikes with the hiccup log -- if the benchmark's p99.9 spikes and the
 hiccup monitor shows a matching stall, the platform, not the
@@ -4879,7 +4865,7 @@ reproduction hunt -- ship the input log to a developer, replay to
 sequence N, attach a debugger, single-step the exact event that
 corrupted the book. Firms build "time-travel" tooling on this: bisect
 the log for the first divergent state, diff replicas event by event.
-The design costs candidates should volunteer: everything must flow
+The design costs: everything must flow
 through the sequencer (hidden inputs like wall-clock reads or iteration
 order over hash maps silently break determinism), and the log is the
 system of record so its persistence and shipping become the hard
@@ -4910,7 +4896,7 @@ finish, and never lose work in flight. Fill reports must be processed
 even during overload, or risk state is wrong. Self-imposed throttles
 are the third layer: exchanges enforce message-rate limits and punish
 breaches with disconnects, so the gateway meters itself with a token
-bucket and the strategy sees "throttled" as a first-class signal. The
+bucket and the strategy sees "throttled" as an explicit signal. The
 cautionary tale is any exchange outage where participants' unbounded
 retry queues turned a 1-second blip into a 10-minute storm -- policy
 decided under load is policy decided wrong.
@@ -5053,7 +5039,7 @@ persistent sequence/message store recovery depends on),
 
 ## Data pipeline & time series (Q136-Q150)
 
-### 136. "An OHLCV bar looks like four honest prices and a volume. What is it hiding?"
+### 136. "An OHLCV bar looks like four prices and a volume. What is it hiding?"
 
 Almost everything that happened inside it. A daily bar collapses 6.5 hours
 of trading into four points and tells you nothing about the path: a bar
@@ -5177,7 +5163,7 @@ last observation forward: no data loss, but a stale price is now
 pretending to be fresh -- correlations against the ffilled series are
 biased toward zero, the small-cap looks artificially smooth, and a
 "portfolio return" on a day the small-cap did not trade is partly
-fiction. The honest workflow: intersect for anything estimating
+fiction. The workflow: intersect for anything estimating
 covariance or running pairs logic; union+ffill for portfolio accounting
 where you need a mark every day and accept it is a stale mark. Either
 way, log how much was dropped or filled -- an alignment step that
@@ -5224,7 +5210,7 @@ over-the-counter prints showed such shares actually fetched. Mergers are
 the other terminal event and need per-share deal terms -- cash, acquirer
 shares, or both -- so the position converts rather than vanishes. A
 desk use case: a small-cap value strategy whose backtest Sharpe dropped
-by a third when delisting returns were applied honestly -- that third
+by a third when delisting returns were applied -- that third
 was never real, and a fund that raised money on the unadjusted number
 would have discovered it live.
 
@@ -5245,7 +5231,7 @@ are recording. The correct structure is a private ring buffer between
 the consumer thread (which only publishes a tick into the ring -- a few
 nanoseconds) and a dedicated writer thread that drains the ring to disk
 at its leisure. Then you must choose a backpressure policy, and for a
-recorder on a trading path the honest one is DROP: if the writer stalls
+recorder on a trading path the one is DROP: if the writer stalls
 longer than the ring absorbs, ticks fall out of the CAPTURE (counted,
 alarmed) but the trading loop never waits. A gap in a recording is an
 incident report; a stalled trading loop is a P&L event. Keep the
@@ -5309,7 +5295,7 @@ First, diagnose before treating: missing because the exchange was closed
 (not missing at all -- align calendars), missing because the stock was
 halted (informative missingness -- the gap IS the event), or missing
 because the vendor dropped it (fixable upstream)? Then the options.
-Dropping the rows is honest for single-name statistics but poisons
+Dropping the rows is acceptable for single-name statistics but poisons
 multi-asset alignment. Forward-fill is the pragmatic default for marks
 -- yesterday's price is a defensible stale mark -- but it manufactures
 zero returns, deflating volatility and correlation exactly where you can
@@ -5365,7 +5351,7 @@ notice, so parse defensively and alarm on shape changes. And silent
 revisions: the same URL can return different history tomorrow (splits
 applied, errors fixed) -- if you need reproducibility, snapshot what
 you fetched, timestamped, and backtest from the snapshot. The
-architectural point: keep the transport thin and reuse the battle-
+architectural point: keep the transport thin and reuse the
 tested CSV parser underneath, so the hazards concentrate in one place.
 
 *In this library:* `data/HttpBarFetcher.java` -- pure JDK
@@ -5568,7 +5554,7 @@ Sma, Ema, Rsi, Macd, Vwap), with the parity test in
 ### 158. "Why do your indicator arrays start with NaNs instead of zeros or partial averages?"
 
 Because an indicator that has not seen enough data has no value, and
-NaN is the only honest way to say so in a double array. A 20-bar SMA
+NaN is the only way to say so in a double array. A 20-bar SMA
 needs 20 bars; emitting a partial average over the first five bars
 produces a number that looks like an SMA but has four times the
 variance, and emitting zero is worse -- zero is a VALUE, and a rule
@@ -5605,7 +5591,7 @@ using data from after the turn). The professional conclusions: momentum
 strategies EMBRACE lag -- late in and late out by design, paid by the
 middle of the trend; mean-reversion wants raw or lightly filtered
 prices; and any indicator pitched as predictive should be restated
-honestly as descriptive of the recent past, useful only if the recent
+as descriptive of the recent past, useful only if the recent
 past persists. The question to ask of every signal: what does its lag
 cost at the turn, and what does its smoothing save during the chop?
 
@@ -5707,7 +5693,7 @@ and weak learners, while a deep net's capacity is hard to even measure.
 Data is small: a few thousand independent-ish observations after
 accounting for overlap, where nets are data-hungry. And interpretability
 is not optional: a risk committee will ask WHY the model is long, and
-tree feature-importances survive that meeting. The honest flip side:
+tree feature-importances survive that meeting. The flip side:
 trees cannot extrapolate outside the training feature range -- they
 predict a constant out there -- which matters exactly in crises, when
 features leave their historical box.
@@ -5754,7 +5740,7 @@ tree-based forecaster can eat multi-horizon realized vols, momentum,
 shock magnitudes -- and learn nonlinear maps (vol responds differently
 to a shock in a calm regime than a stressed one, the leverage
 asymmetry, threshold effects) that GARCH needs bespoke extensions to
-express. The honest empirical read: ML wins modestly when features add
+express. The empirical read: ML wins modestly when features add
 information beyond the return series, and loses embarrassingly when it
 overfits its flexibility to noise -- so the target must be defined with
 care (FORWARD realized vol over the horizon, which makes labels overlap
@@ -5836,7 +5822,7 @@ trusting downstream signals." The alert-fatigue discipline is the real
 design problem: z-scores against ROLLING baselines (absolute thresholds
 rot as activity grows), a severity score on every alert so ops can
 triage, both conditions ANDed rather than ORed, and a weekly review of
-the false-positive rate as a first-class metric -- an alerting system
+the false-positive rate as a primary metric -- an alerting system
 that cries wolf trains humans to ignore the wolf. Regulators fine firms
 for missing surveillance; desks lose money ignoring their own alarms.
 
@@ -5950,7 +5936,7 @@ build on message-rate and volume-clock features respectively.
 
 ### 173. "Forecast intraday liquidity for an execution schedule. Do you need ML for this?"
 
-Mostly no -- and knowing that is the point. Intraday volume has a
+Mostly no. Intraday volume has a
 strongly stable seasonal shape: the U-curve in equities (heavy open,
 quiet lunch, heavy close), the London open and London/New York overlap
 in FX. The workhorse forecaster is embarrassingly simple: bucket each
@@ -6123,14 +6109,14 @@ than for a 1-day trading VaR. Third: independence -- vol clustering
 (and mild return autocorrelation) means multi-day losses chain more
 than independent draws admit. Fourth: continuity -- gaps and jumps
 break any strategy logic involving stops, which fill at the gap, not
-the stop. The honest usage: GBM for long-horizon planning fans and as
+the stop. The usage: GBM for long-horizon planning fans and as
 a variance-reduction baseline; historical or filtered bootstrap when
 the tail is the deliverable.
 
 *In this library:* `simulation/MonteCarloSimulator.java` -- daily-step
 GBM with the parameters (annual drift, annual vol) explicit, so each
 assumption is a visible input; the fat-tail and clustering correctives
-live in `volatility/Garch11.java` and the risk round of
+live in `volatility/Garch11.java` and the risk questions of
 `docs/LEARN.md` (Q73-Q85).
 
 ### 180. "Compliance wants every month-end risk report reproducible and readable in ten years. What does that rule out?"
@@ -6196,7 +6182,7 @@ filesystem, or the rename stops being atomic), fsync, then rename over
 the old checkpoint. The filesystem guarantees a reader sees either the
 old complete file or the new complete file, never a hybrid; a crash
 mid-save costs you one checkpoint's freshness, not your state. Name
-the degradation honestly: some network mounts do not support atomic
+the degradation: some network mounts do not support atomic
 rename, and the fallback is a plain replace -- a documented weaker
 guarantee, not a silent one. Stale formats die by versioning at two
 levels: a format version for the container (magic number so you never
@@ -6283,7 +6269,7 @@ and data paths as explicit arguments, so a run can be reproduced from
 its command line alone), self-contained outputs (reports that can be
 emailed, per Q180), and a text interface that composes with the rest
 of the ops toolchain -- schedulers, log collectors, alerting. There is
-also an honesty benefit: if a workflow cannot be expressed as a CLI
+also a reproducibility benefit: if a workflow cannot be expressed as a CLI
 invocation, it is not reproducible, and finding that out at
 library-design time is cheaper than at audit time.
 
@@ -6295,7 +6281,7 @@ backtests, walk-forward validation, and HTML report generation, gluing
 
 ### 186. "You are paper-trading a strategy for a month before going live. What must be observable, live, without stopping anything?"
 
-The whole loop, at a glance, from a browser -- because the point of the
+The whole loop, at a glance, from a browser -- because the purpose of the
 paper month is to catch the discrepancies between backtest and reality,
 and discrepancies announce themselves at random times. The minimum
 surface: account state (cash, equity, realized P&L) and open positions,
@@ -6343,7 +6329,7 @@ decision path with no hidden inputs -- which is why replay is an
 architecture, not a feature you add later.
 
 *In this library:* the full chain -- `data/TickCapture.java` /
-`data/AsyncTickCapture.java` (lossless capture, with an honest drop
+`data/AsyncTickCapture.java` (lossless capture, with a drop
 counter), `data/TickFileWriter.java` / `data/TickFileReader.java`
 (bit-exact QFLT round-trip), and the determinism argument for the
 engine in `docs/LEARN.md` Q130.
@@ -6497,7 +6483,7 @@ missed range -- right for small gaps, but the reply arrives late, so you
 buffer live messages and replay in order; (2) **snapshot re-sync** --
 rejoin via the venue's snapshot channel and replay buffered incrementals
 past the snapshot sequence (Q196); (3) **failover to the redundant feed**
-(Q195) which usually has the missing packet; (4) the honest last resort:
+(Q195) which usually has the missing packet; (4) the last resort:
 **declare the book untrusted and go flat** -- pull quotes, stop routing
 on that symbol -- until re-synced. A production handler wires the gap
 signal to the trading layer, because the worst response is trading
@@ -6739,7 +6725,7 @@ storage is involved, scaled integers are the professional answer. The
 follow-up trap: "just use BigDecimal" fails the latency test -- it
 allocates per operation.
 
-*In this library:* both choices, each deliberate: `fix/FixOrderEncoder.java`
+*In this library:* both choices: `fix/FixOrderEncoder.java`
 takes prices as mantissa x 10^-decimals ("doubles never touch the
 encoder"), `fix/FixMarketDataView.java` exposes MDEntryPx the same way so
 feed-to-order never converts through a double, and `marketdata/ItchCodec.java`
@@ -6820,7 +6806,7 @@ can refuse or adapt before parsing a single record.
 
 ### 208. "TCP gives you a byte stream, not messages. How do you frame?"
 
-Two honest options. **Length-prefix**: every message starts with its
+Two options. **Length-prefix**: every message starts with its
 length (or has a type byte implying a fixed length); the reader
 accumulates bytes until it has a full frame, slices it, repeats. O(1) per
 message, unknown types are skippable by length, binary-safe -- the
@@ -7050,7 +7036,7 @@ from a `FixSessionStore` so both survive reconnects;
 The peer sent 35 messages you never got. You send **ResendRequest (35=2)**
 with BeginSeqNo=52, and you drop further out-of-order messages until the
 hole is filled -- processing message 88 before 52-87 would corrupt order
-state. The peer now replays from its message store with two crucial
+state. The peer now replays from its message store with two
 transformations. Application messages (orders, executions) are re-sent
 with **PossDupFlag(43)=Y** and **OrigSendingTime(122)** set to the
 original send time -- the flag warns you this may be a duplicate of
@@ -7082,7 +7068,7 @@ dangerous: the peer that lost state does not know which of your orders
 it acknowledged; processing its messages as fresh could double-execute
 business you already booked. There is no protocol move that repairs it,
 because the disagreement is about the PAST, not about missing messages.
-So the spec's answer is the honest one: disconnect, and force human or
+So the spec's answer is the one: disconnect, and force human or
 explicit operational intervention -- typically an agreed sequence reset
 or store reconciliation -- before trading resumes. The exception that
 proves the rule: too-low WITH PossDupFlag=Y is just a resend duplicate,
@@ -7146,7 +7132,7 @@ default makes non-durability an explicit choice.
 
 ### 221. "Anatomy of a NewOrderSingle: which fields, and which mistakes hurt?"
 
-The load-bearing fields of 35=D: **ClOrdID (11)** -- YOUR unique id for
+The essential fields of 35=D: **ClOrdID (11)** -- YOUR unique id for
 this order, the key every later message chains back to (Q223);
 **Symbol (55)**; **Side (54)** ('1' buy, '2' sell); **OrderQty (38)**;
 **OrdType (40)** -- '1' market, '2' limit; **Price (44)** -- required
@@ -7374,7 +7360,7 @@ consumer hurts only itself. The lost guarantees are then rebuilt one
 layer up, cheaply: sequence numbers detect loss (Q198), A/B feeds make
 it rare (Q195), and retransmission/snapshot channels repair it (Q194).
 That layering -- unreliable transport plus sequence-numbered recovery --
-is deliberately cheaper than making the transport reliable for
+is cheaper than making the transport reliable for
 everyone.
 
 *In this library:* the participant edge mirrors the split:
@@ -7507,7 +7493,7 @@ storytelling with error bars you have not earned.
 *In this library:* `docs/ULTRA_LOW_LATENCY.md` Tier 4 names this
 explicitly -- "Hardware timestamps & PTP ... measurement at wire
 precision instead of System.nanoTime at syscall precision. Prerequisite
-for honest wire-to-wire numbers"; feed code keeps exchange event time
+for wire-to-wire numbers"; feed code keeps exchange event time
 and local time as separate, never-conflated notions
 (`feed/WebSocketFeed.java` publishes exchange event time).
 
@@ -7543,14 +7529,14 @@ what makes replaying a sequenced stream reproduce identical state.
 
 The recorder loses data and the trading loop never notices -- and that
 must be a DESIGN decision, not an accident. When a consumer cannot keep
-up, there are exactly three honest policies. **Block**: propagate
+up, there are exactly three policies. **Block**: propagate
 backpressure upstream -- correct for order flow (never drop an order),
 catastrophic on a trading tick path, where the recorder's disk stall
 would become the strategy's latency spike. **Conflate**: keep latest per
 key -- right for quote-consuming dashboards (Q196), wrong for a
 recorder whose purpose is completeness. **Drop and count**: shed the
 overflow, increment a visible counter, keep the hot path unconditional
--- the honest choice for a recorder riding a trading bus, captured in
+-- the choice for a recorder riding a trading bus, captured in
 one sentence: a recording gap you can SEE beats latency you cannot
 explain. Implementation shape: the bus consumer does one ring publish
 (never blocks); a dedicated writer thread drains ring-to-disk and
@@ -7637,8 +7623,7 @@ faithfully. What it structurally CANNOT tell you: **queue position**
 moves the quote), adverse selection on your passive fills, real venue
 latency and race outcomes, and venue-specific rejects. Paper profits on
 a maker strategy are therefore systematically optimistic -- fills it
-grants free are exactly the ones the queue would deny you. Honest
-usage: paper-trade to certify the machinery, then measure the
+grants free are exactly the ones the queue would deny you. Usage: paper-trade to certify the machinery, then measure the
 microstructure effects with small REAL orders, because those effects
 are properties of the market, not of your code.
 
@@ -7664,7 +7649,7 @@ at 50.00 at 09:30:02, C posts 100 at 50.01 at 09:30:03. A market sell of
 150 fills C's 100 first (better price), then 50 of A (same level, earlier
 time). B still waits with 100; A waits with 50 but keeps its place at the
 front. The time leg matters because it is the incentive to quote early and
-honestly: if fills were pro-rata or random, nobody would race to post the
+tight: if fills were pro-rata or random, nobody would race to post the
 first, tightest quote, and displayed liquidity would rot. Price-time is
 the property every matching invariant in this codebase is checked against
 -- executions always consume the queue head, which is also what makes
@@ -7751,7 +7736,7 @@ the FULL quantity within the limit or do nothing at all -- no partial, no
 resting, no trades on a kill. Post-only: the inverse personality -- rest or
 die; if the order would trade on arrival it is rejected outright, because
 its owner is a maker who wants the rebate/spread and refuses to pay the
-taker fee. The venue's answers in this library are honest return codes:
+taker fee. The venue's answers in this library are return codes:
 IOC and FOK return the filled quantity (0 = nothing crossed / killed);
 post-only returns `REJECT_WOULD_CROSS` (-4) when it would take, alongside
 the general codes `REJECT_POOL_FULL`, `REJECT_OUT_OF_BAND` and
@@ -7822,7 +7807,7 @@ behind your original size, not your new one. A size *decrease* usually
 keeps priority -- shrinking helps everyone behind you, so venues let you
 keep your spot. That asymmetry is why desks treat modify as
 cancel-and-replace in their models: this library's books implement modify
-exactly that way (cancel, then submit), which is honest about the venue
+exactly that way (cancel, then submit), which matches the venue
 economics -- your amended order re-queues. The practical consequence is
 large: at a busy level, queue position IS the asset (front of queue fills
 first and captures spread with less adverse selection), so a market maker
@@ -7831,8 +7816,7 @@ strategies weigh "better price, worse position" explicitly using
 fill-probability-vs-position models.
 
 *In this library:* `orderbook/OrderBook.java` / `orderbook/HftOrderBook.java`
-(`cancel` + resubmit is the modify path -- re-queueing is implicit and
-honest), `marketdata/L3BookBuilder.java` (replace events end position
+(`cancel` + resubmit is the modify path -- re-queueing is implicit), `marketdata/L3BookBuilder.java` (replace events end position
 tracking -- same rule from the participant side),
 `microstructure/QueuePositionEstimator.java` +
 `microstructure/QueueModel.java` (what that position is worth).
@@ -7846,14 +7830,13 @@ move that does not produce a fill produces a re-quote, which is a cancel
 plus a new order. Add fleeting cross-venue arbitrage (quote here against
 liquidity there; when the far side fades, pull), pegged and layered
 execution algos re-slicing, and you get message-to-trade ratios of 10:1 as
-routine and far higher for pure makers. Is it a problem? Two honest
-answers. Economically, mostly no -- fast cancellation is the price of
+routine and far higher for pure makers. Is it a problem? Two answers. Economically, mostly no -- fast cancellation is the price of
 tight spreads, since makers quote tighter when they can exit stale quotes
 quickly. Operationally, yes enough that venues meter it: order-to-trade
 ratio is the metric venues fine you on when your algo sprays cancels, and
 message-rate limits (see the throttle question later) exist because the
 venue's own infrastructure pays for your churn. That is why both books
-here count orders, cancels and trades natively -- OTR is a first-class
+here count orders, cancels and trades natively -- OTR is a primary
 surveillance number, not an afterthought.
 
 *In this library:* `orderbook/OrderBook.java` (`orderCount`/`cancelCount`/
@@ -7889,8 +7872,7 @@ as input to flow alpha).
 
 At the venue an iceberg (reserve) order has a total size and a display
 size: the book shows only the tip (say 100 of 5,000), and each time the
-tip fully executes, the venue reloads a fresh tip from reserve -- crucially
-at the BACK of the price level's queue, with a new timestamp (some venues
+tip fully executes, the venue reloads a fresh tip from reserve, at the BACK of the price level's queue, with a new timestamp (some venues
 also randomize the reload size to blunt detection). Hidden reserve
 typically has lower priority than any displayed size at the same price.
 Detection from the lit tape uses the one signature that cannot lie: a
@@ -8022,7 +8004,7 @@ occupied level is a word scan with `Long.numberOfTrailingZeros`, checking
 64 levels per instruction. Against that, a TreeMap gives O(log n) pointer
 chasing through scattered heap nodes, allocates on insert, and boxes
 Double keys -- fine for research (this library's readable book uses
-exactly that, deliberately), fatal at venue speed. The measured gap is
+exactly that), fatal at venue speed. The measured gap is
 the argument: this design runs ~204 ns median per operation and 10M+
 fills/sec across a 20,001-level band. The tradeoff you must volunteer:
 the band is fixed at construction -- prices outside it are rejected
@@ -8101,7 +8083,7 @@ pure resting order that traded nothing, and a crossing order through a
 completely full pool works fine -- the fill frees the maker's slot and
 the remainder rests in it. This library's test suite states that
 invariant in a comment that begins "the invariant this test originally
-got wrong," which is the honest way to document a bug that taught you
+got wrong," which is the way to document a bug that taught you
 something: the test asserts zero trades accompany every `REJECT_POOL_FULL`.
 
 *In this library:* `orderbook/HftOrderBook.java` (`submitLimit` -- the
@@ -8189,8 +8171,7 @@ which converts "the fuzzer failed once" from a nightmare into a unit test.
 
 ### 262. "You measured ~10M fills per second. Do the arithmetic that makes that credible -- or incredible."
 
-Sanity-check it against the nanosecond budget, which is the only honest
-way to hear a throughput claim. 10M fills/sec means 100 ns per fill.
+Sanity-check it against the nanosecond budget, which is the only way to hear a throughput claim. 10M fills/sec means 100 ns per fill.
 What must happen in a fill: bitmap scan to the best level (a couple of
 instructions when the touch is cached in `bestBidIdx`/`bestAskIdx`),
 read the queue head node (one indexed load into parallel arrays), compare
@@ -8198,7 +8179,7 @@ quantities, decrement, maybe unlink (two index writes), maybe free the
 pool slot and fix the id map, emit one callback with five primitive
 arguments. On a ~4-5 GHz core that is a few dozen instructions with
 near-perfect cache locality -- 100 ns (400-500 cycles) is comfortable,
-NOT miraculous, and that is the point: the number is credible precisely
+not miraculous. The number is credible precisely
 because the design removed everything that costs unpredictable time
 (allocation, pointer chasing, tree rebalancing, virtual dispatch through
 listener lists). The companion measurements triangulate it: ~204 ns
@@ -8413,7 +8394,7 @@ unchecked -- Knight Capital is the canonical story of what unchecked
 fast paths cost. What it took: all state in primitive arrays indexed by
 dense symbol id (no hashing, no boxing, no string formatting on the hot
 path -- reason names are looked up only when someone asks); an int
-return code instead of exceptions; and the honest part -- when
+return code instead of exceptions; and the part -- when
 cross-thread correctness demanded VarHandle acquire/release element
 access (next question), the gate got slower than its naive version, and
 the library took the 3 ns and documented why: correct-but-3ns beats
@@ -8489,7 +8470,7 @@ done -- and computes gross notional = sum of |position| x referencePrice
 across all gates and symbols. On breach it calls kill() on EVERY gate:
 one released boolean per gate, which each shard's check reads as a
 single acquire load, first thing. Detection latency is the poll
-interval (default 1 ms) -- a deliberate trade, stated in the javadoc:
+interval (default 1 ms) -- a trade-off stated in the javadoc:
 the firm-wide cap is a circuit breaker, not a per-order gate, so the
 hot paths never pay for it. The hysteresis: trading resumes only when
 gross drops below cap x resumeFraction (say 0.9), not the cap itself.
@@ -8497,7 +8478,7 @@ Without the band, a book sitting AT the limit flaps -- kill, one fill
 rolls off, resume, one tick of mark-to-market, kill again -- and a
 flapping kill switch trains operators to ignore it, which is worse than
 no switch. Hysteresis converts the boundary into two: trip high, reset
-meaningfully lower, resume deliberately.
+meaningfully lower, resume gradually.
 
 *In this library:* `trading/GlobalRiskAggregator.java` (poll -> gross ->
 kill-all -> hysteretic resume; the javadoc explains each choice),
@@ -8513,13 +8494,13 @@ at b), then spend one if available, else refuse and count. The bucket
 starts FULL so a session's opening burst is allowed, and a quiet spell
 banks at most one burst of headroom -- that shape (sustained rate plus
 bounded burst) is exactly how venues themselves meter, so the limiter
-mirrors the contract. Three honesty details separate a real
+mirrors the contract. Three details separate a real
 implementation from a whiteboard one. First, no internal clock reads:
 the caller passes nanoTime, so tests are deterministic and the hot path
 controls its own syscalls. Second, floating-point drift: refilling in
 two steps can sum a hair under one step, so acquisition allows a 1e-9
 slack -- granting at most sub-nanosecond-early permits, never extra
-ones (the comment quantifies the bound, which is what makes it honest).
+ones (the comment quantifies the bound).
 Third, the backward clock: `if (dt > 0)` -- a time step backward or
 zero neither mints tokens nor destroys them, and does not update the
 timestamp, so the limiter cannot be tricked into over-granting by clock
@@ -8592,8 +8573,8 @@ p50 592 ns, p99 912 ns).
 |position| <= band, do nothing (inventory inside the band is the
 raw material of market making -- you cannot earn the spread without
 warehousing some); on breach, submit an opposite-side order for the
-EXCESS over the band. Hedging to the band edge rather than flat is
-deliberate, for three reasons the javadoc spells out: it removes the
+EXCESS over the band. The hedger trades to the band edge rather than flat for
+three reasons the javadoc spells out: it removes the
 limit breach with the smallest order (least market impact, least
 spread paid -- a hedge is a taker, it COSTS the spread your quotes
 earn); it avoids ping-ponging around zero (hedge to flat, get filled
@@ -8640,7 +8621,7 @@ the model decides, the quoter executes.
 units contract as an explicit javadoc section, FX-horizon guidance for
 tau), feeding `trading/HftQuoter.java` (the heuristic skew it replaces).
 
-### 279. "Paper trading: what must be faithful for the exercise to mean anything, and what is honestly unfaithful?"
+### 279. "Paper trading: what must be faithful for the exercise to mean anything, and what is unfaithful?"
 
 The rule: run the REAL code against simulated fills, and be precise
 about which side of that line each behavior sits on. Faithful here, by
@@ -8653,7 +8634,7 @@ market orders fill at the touch, resting limits fill when the market
 CROSSES them; and accounting is complete -- signed positions with
 average cost, cash, realized/unrealized P&L, commission, mark-to-market
 equity, readable as an internally consistent snapshot from another
-thread. Honestly unfaithful, and you must say so: no queue position
+thread. Unfaithful, and you must say so: no queue position
 (a real passive order waits behind others at its price; here crossing
 fills it -- optimistic for makers), no market impact (your fills don't
 move the simulated market -- optimistic for size), and no adverse
@@ -8714,12 +8695,12 @@ costs one extra ring publish (~40 ns) per tick to duplicate the leg's
 feed: paying a copy to preserve isolation is the shared-nothing move
 in miniature. The measured result on a 12-logical-core desktop, 300
 symbols quoted two-sided: 1 shard = 4.3M ticks/s, 2 shards = 6.2M
-(+46%), 4 shards plateau at 6.7M -- and the honest reading of each
+(+46%), 4 shards plateau at 6.7M -- and the reading of each
 number matters: +46% not +100% because the box has finite cores and
 one producer; the plateau is core oversubscription (8 spinning threads
 plus the producer), NOT contention -- cross-shard drops stayed near
 zero. On pinned dedicated cores, scaling approaches k-times. What
-sharding deliberately does not solve -- firm-wide risk -- is the next
+sharding does not solve -- firm-wide risk -- is the next
 question.
 
 *In this library:* `trading/ShardedTradingEngine.java` (the facade,
@@ -8806,7 +8787,7 @@ resumes the session with sequence continuation and a serviceable
 resend history. One state, one write-pattern, one mechanism each.
 
 *In this library:* `persist/Checkpoint.java` (sections, version bytes,
-atomic rename -- and the honest caveat about filesystems without atomic
+atomic rename -- and the caveat about filesystems without atomic
 rename), `fix/FileSessionStore.java` (seqnums.dat + messages.dat),
 proven end-to-end by `integration/OvernightLearningLoopTest` and
 `fix/FixPersistenceTest`.
@@ -8826,7 +8807,7 @@ market that no longer exists. The checkpoint contract makes this
 structural rather than disciplinary: each model persists its LEARNED
 (cross-day) state only, and intraday state resets on read -- you
 restore at session start, not mid-stream. Positions are the trick
-case: the honest answer is that your local position variable is a
+case: the answer is that your local position variable is a
 CACHE -- the venue/prime broker's record is the truth, so restart
 recovery reconciles from their drop-copy or start-of-day files rather
 than trusting your own last write. Restoring too much fails
@@ -8834,11 +8815,11 @@ differently than too little: too little costs you a slow morning;
 too much injects stale beliefs that look like fresh data -- a
 yesterday's-spike spread forecast quoting today, a stale position
 skewing quotes wrong-way -- which is worse because nothing looks
-broken. The restore must be "honest about time."
+broken. The restore must be "about time."
 
 *In this library:* `persist/Checkpoint.java` (the contract paragraph:
 learned state only, intraday resets, config mismatch throws),
-`docs/LEARN.md` section 18 ("the restore is honest about time"),
+`docs/LEARN.md` section 18 (restoring state across a time gap),
 `fix/FileSessionStore.java` (the must-survive protocol case).
 
 ### 286. "Your load test asserts zero dropped messages under saturation. Why is that assertion a lie on CI -- and what do you assert instead?"
@@ -8851,7 +8832,7 @@ and while it is off-core, producers fill the ring and publishes fail.
 That is physics, not a bug: zero-drop under saturation is what Tier-3
 core pinning buys in deployment, not something an unpinned box can
 promise, and a test asserting it will flake forever (or worse, pass
-by never actually saturating). The honest replacement is a drop
+by never actually saturating). The replacement is a drop
 BUDGET calibrated to the platform: this library's quoting-under-load
 test budgets 0.5% of quote sides on desktop and 8% on CI (2.5-4.3%
 was actually measured on shared runners), with the number documented
@@ -8869,7 +8850,7 @@ an order of magnitude -- fails the build.
 `src/test/java/com/quantfinlib/trading/LoadAndSoakTest.java` (the
 budget, the CI-vs-desktop split, and the comment citing what Tier-3
 pinning buys), `docs/ULTRA_LOW_LATENCY.md` (the pinning tiers),
-`docs/LEARN.md` section 19 ("honest limits as tests").
+`docs/LEARN.md` section 19 ("limits as tests").
 
 ### 287. "The system passes every unit test, then dies at 2 pm on day three. What class of bug is that, and what test catches it before production does?"
 
@@ -8909,7 +8890,7 @@ producer is usually the market-data or venue thread, and stalling IT
 turns local overload into global deafness (you stop hearing the
 market precisely when it is moving fastest); backpressure is correct
 for batch pipelines, deadly for real-time ones. Throwing is
-structurally dishonest: a full ring is not an exceptional state, it
+structurally wrong: a full ring is not an exceptional state, it
 is the DESIGNED state under burst -- that is what the bound is for --
 and exceptions on the hot path unwind matching loops, allocate, and
 convert a capacity event into a control-flow event. The shipped
@@ -8917,8 +8898,7 @@ contract is degrade-and-count: publish returns false, submits return
 0, a counter ticks, the caller applies ITS policy (drop the tick --
 market data is self-healing since the next tick supersedes it;
 retry-spin for an order that must not vanish), and the system
-recovers FULLY once the burst passes -- the overload test deliberately
-undersizes rings, slams them, and asserts exactly that: never throw,
+recovers FULLY once the burst passes -- the overload test undersizes rings, slams them, and asserts exactly that: never throw,
 count everything, full recovery after. The quiet prerequisite is that
 degradation must be OBSERVABLE: a return code plus a counter turns
 overload into a dashboard number an operator sees rising, whereas a
@@ -8957,7 +8937,7 @@ so exactly one instance trades -- kill-switch semantics repurposed:
 the standby comes up with its gate killed and only un-kills on an
 explicit, human-or-consensus takeover signal, because two live
 traders is worse than zero. The library ships the state pieces;
-orchestration is deliberately a deployment concern.
+orchestration is a deployment concern.
 
 *In this library:* `persist/Checkpoint.java` +
 `fix/FileSessionStore.java` (the two state carriers a standby reads),
@@ -8970,7 +8950,7 @@ The failure modes of persistence are silent, so the test must demand
 CONVERGENCE ACROSS restarts, not just save/load symmetry. This
 library's integration test simulates five trading days: synthetic
 quotes with planted structure (a U-shaped volume curve, a real alpha
-signal, one deliberately toxic venue) flow through the full stack --
+signal, one toxic venue) flow through the full stack --
 models, executor, router, scorecards -- and every "night" the learned
 state crosses the overnight through a checkpoint into FRESH instances;
 state must arrive via the file, because the old objects are gone.
@@ -8997,7 +8977,7 @@ above), over `persist/Checkpoint.java` and the learning models'
 ### 291. "The desk wants to quote 1,200 symbols next quarter. Size the system -- from measured numbers, not vendor claims."
 
 Capacity planning is arithmetic over measured per-unit costs plus
-honest headroom -- never extrapolation from marketing. Start from
+headroom -- never extrapolation from marketing. Start from
 this library's committed measurements: one shard sustains 4.3M
 ticks/s quoting 300 symbols two-sided on a 12-core desktop; 2 shards
 = 6.2M; 4 plateau at 6.7M because 8 spinning threads oversubscribe
@@ -9039,7 +9019,7 @@ tape in a handful of observations, and once a predator has the clock it can
 lean on every remaining child -- fade the quote just before each firing,
 reload just after. The standard counter-measure is controlled randomization:
 jitter the slice sizes (and, separately, the firing times) so the pattern
-dissolves while the schedule stays honest -- the parent must still complete
+dissolves while the schedule stays intact -- the parent must still complete
 exactly, so size perturbations have to be redistributed to preserve the
 total. A subtle correctness point that trips people up in practice: naive
 `parent/N` integer division leaves a remainder, so a correct scheduler
@@ -9064,12 +9044,12 @@ remainder of today's curve by the realized-vs-expected ratio, shrunk toward
 1)` with `w` = fraction of the expected day elapsed). And when the curve
 input is simply unavailable (NaN), the failure must degrade, not stall: a
 naive `(long)` cast of NaN is 0, which reads as "nothing due" forever --
-the honest fallback is the elapsed time fraction, i.e. VWAP degrades to
+the fallback is the elapsed time fraction, i.e. VWAP degrades to
 TWAP until the curve returns.
 
 *In this library:* `execution/VwapScheduler.java` (profile-proportional
 slices), `microstructure/VolumeCurve.java` (learned profile + intraday
-rescale; "VWAP degrades to TWAP, the honest default"), and
+rescale; "VWAP degrades to TWAP, the default"), and
 `execution/BenchmarkExecutor.java` (the explicit NaN-curve fallback to the
 time fraction).
 
@@ -9124,7 +9104,7 @@ and the sinh overflow guard are both in the source, with comments) built on
 
 Arrival price is fixed the moment the decision is made -- nothing you do
 afterwards moves it, so the benchmark itself is ungameable; all you can do
-is execute well against it (the cost of that honesty is front-loaded,
+is execute well against it (the cost is front-loaded,
 impact-heavy execution). A closing or fixing benchmark is the opposite: it
 is computed from trading inside a future window, so anyone with flow to do
 can move the benchmark itself -- trade ahead of the window and you shift
@@ -9189,7 +9169,7 @@ completes. Unknown inputs should cost you opportunity, never completion.
 
 *In this library:* `execution/LiquiditySeekingAlgo.java` (score-the-moment
 gate, `maxDepthFraction x displayedDepth` clips, `forceCompleteFrom`
-floor, honest NaN degradation), fed by
+floor, NaN degradation), fed by
 `microstructure/SpreadForecaster.java` for the time-of-day baseline.
 
 ### 299. "How does an iceberg order work, and what does randomizing the display size buy?"
@@ -9294,7 +9274,7 @@ not an anti-gaming success. Time jitter moves each firing time by up to a
 fraction of its own interval, with two invariants: monotonicity (children
 never reorder) and the end time is never exceeded (the horizon is a
 promise to the client). The determinism requirement is the
-production-grade part: jitter is generated from a seed, so the same seed
+part that matters in production: jitter is generated from a seed, so the same seed
 reproduces the same perturbed plan. That makes it replayable in backtests
 (you can grade the jittered algo, not just the ideal one) and auditable in
 production -- compliance can reconstruct exactly why each child fired when
@@ -9350,7 +9330,7 @@ cut the two legs asymmetrically, so the capacity pass can push net
 exposure back over the band the first pass enforced -- the band must be
 RE-APPLIED after capacity, and because the band only ever reduces dues, it
 cannot re-violate the budget, so the sequence terminates by construction.
-Both overlays only reduce; a binding cap can leave an honest residual.
+Both overlays only reduce; a binding cap can leave a residual.
 
 *In this library:* `execution/PortfolioExecutor.java` (the re-applied
 `applyLegBand` after the capacity cut is commented in `decide`), with
@@ -9395,7 +9375,7 @@ probability, more posting. But when adverse selection is large enough
 (`a > 2h + r + d`), the slope flips: each marginal fill now LOSES money
 (`a - h - r > h + d`), so posting pays only BELOW the threshold -- a high
 fill probability means you will almost surely receive one of these toxic
-fills, and you are better off crossing. The inputs are the honest part:
+fills, and you are better off crossing. The inputs are the part:
 `p` from a fill-probability model, `a` from post-fill markouts, `d` from
 your alpha, all in the same per-unit currency.
 
@@ -9467,7 +9447,7 @@ and CONTINGENT -- sent alongside the lit legs, not instead of them, and on
 dark fills the executor cancels lit remainder; the router plans, the
 executor manages overfill. Probe sizing is a learning problem: an EWMA of
 the shares each probe actually found hardens "unknown" into an estimate
-the only honest way -- by probing and remembering -- with a configurable
+the only way -- by probing and remembering -- with a configurable
 default seeding a pool that has never been tried. Why bother at all:
 midpoint fills pay no spread, so every dark share is half a spread saved;
 the cost side is adverse selection (see the markout question), which is
@@ -9540,7 +9520,7 @@ and leave the ones that weren't. So the router prices it as `latency x
 urgency`: when urgency is low (patient parent, calm market) the latency
 term vanishes and pure price wins; when urgency is high the nearer venue
 wins ties and sometimes beats a slightly better displayed price. Two
-disciplines make the input honest. First, use MEASURED latency -- your own
+disciplines make the input trustworthy. First, use MEASURED latency -- your own
 send-to-ack EWMA -- which routinely disagrees with the venue's advertised
 figure, and let the measurement override the advertisement once observed.
 Second, remember the classic worked example: two venues at the same price,
@@ -9577,7 +9557,7 @@ fee-adjusted split), `execution/AdaptiveSor.java` (the discounted ranking
 and the worked A/B/dark plan), `execution/HftSor.java` (the
 zero-allocation sweep).
 
-### 315. "Dark-first or lit-first? Argue both sides, then give the honest rule."
+### 315. "Dark-first or lit-first? Argue both sides, then give the rule."
 
 Lit-first is the pure-price argument: every venue competes on all-in
 price; a dark midpoint is just another price level, and if a lit quote
@@ -9585,7 +9565,7 @@ beats it, take the lit quote -- no special cases. Dark-first is the
 information argument: lit child orders are visible and move the market
 against your remainder, while dark fills leak nothing pre-trade, so sweep
 the dark venues first regardless of ranking and only show the street what
-the dark pools couldn't absorb. The honest rule prices the choice instead
+the dark pools couldn't absorb. The rule prices the choice instead
 of hard-coding it. A dark midpoint fill saves the half spread but carries
 that venue's measured adverse-selection charge and an expected-fill
 discount (dark liquidity is a probability, not a promise); the lit quote
@@ -9624,7 +9604,7 @@ lit last.
 *In this library:* `crb/InternalizationEngine.java` (the
 internalize-or-route economics, warehouse limit, `internalizationRate()`)
 and `crb/CrbRouter.java` (internal -> dark -> lit, each leg priced
-honestly).
+at its expected cost).
 
 ### 317. "Your router learns from its own fills. Describe the feedback loop that can permanently blacklist a good venue, and the three defenses."
 
@@ -9634,7 +9614,7 @@ means fewer new observations, which means the bad score never updates --
 the router has abandoned a venue based on a sample it then refuses to
 refresh. Carried across the overnight, a stale blacklist can persist for
 weeks. Three defenses, all principled rather than ad hoc. (1) Optimistic
-priors and honest seeding: before any data the fill rate returns an
+priors and seeding: before any data the fill rate returns an
 optimistic prior (a new venue deserves flow until it proves otherwise),
 and each EWMA seeds from its first observation so a single early miss
 cannot score a venue below "never tried." (2) Explicit exploration: when
@@ -9667,7 +9647,7 @@ and dark fills cancel lit remainder -- never double-committed); respect
 minimum-execution-quantity so size-discovery pings are unprofitable
 against you; learn probe sizes per venue instead of broadcasting a
 uniform footprint; and jitter the child plan so the multi-venue pattern
-doesn't repeat on a clock. And sometimes the honest answer is not to
+doesn't repeat on a clock. And sometimes the answer is not to
 route at all: for a small child inside the displayed size at one venue,
 a single-venue order leaks strictly less than any split.
 
@@ -9759,8 +9739,7 @@ reflection-principle barrier-touch probability `2*Phi(-d/(sigma*sqrt(T)))`
 -- twice the terminal probability, because paths that touch and come back
 count too; it is 1 when you are already at or through the level. Second,
 the queue at the level must CLEAR to you: the exponential queue model,
-`P = exp(-(qtyAhead + qty)/expectedTraded)`. Multiply them. The honest
-footnote is the independence approximation: touch and queue-clearing are
+`P = exp(-(qtyAhead + qty)/expectedTraded)`. Multiply them. The footnote is the independence approximation: touch and queue-clearing are
 POSITIVELY correlated -- the flow that moves the price toward your level
 is the same flow eating the queue at it -- so the product is a mild
 UNDERestimate; treat it as a conservative placement score, not a
@@ -9815,7 +9794,7 @@ forecasts the near term better than either alone. The payoff is
 anticipation rather than reaction: an executor consuming the FORECAST
 damps aggression BEFORE a known-wide window like the close, instead of
 paying the first wide spread and adapting after. Before the first session
-roll there is no baseline at all, so the forecast degrades honestly to
+roll there is no baseline at all, so the forecast degrades to
 the last observed spread -- a known-imperfect answer beats a fabricated
 one.
 
@@ -9882,7 +9861,7 @@ absolute buy/sell imbalance; VPIN is the average over the last `window`
 buckets: `VPIN = (1/n) * sum |buyVol - sellVol| / bucketVolume`. Balanced
 two-way flow reads near 0; one-sided flow reads toward 1 -- famously
 elevated in the hour before the 2010 flash crash, which is the paper's
-headline exhibit. Volume time is the point of the design: informed traders
+headline exhibit. Volume time is the reason for the design: informed traders
 compress CLOCK time (they trade fast, before their information decays)
 but they cannot compress VOLUME time -- their urgency shows up as
 one-sided volume regardless of how many milliseconds it took -- so
@@ -9958,13 +9937,13 @@ score current volatility against the baseline for THIS bucket, mapped to
 roughly 0 (calm for this hour) through 1 (extreme). Now "the open is
 always wild" reads as neutral, but a genuinely wild lunchtime reads as
 the signal it is; before any baseline is learned the regime is 0 -- the
-honest neutral default. The expiry-day question is the second layer: not
+neutral default. The expiry-day question is the second layer: not
 every day has the same shape. Options-expiry days trade 2-3x normal
 volume with a violent close, half days compress the whole U-curve into a
 morning, FX fixing days concentrate flow around the fix -- a single
 averaged profile is wrong on exactly the days that matter most. So keep
 one independently learned curve per day type and select today's profile
-at session start, accepting the honest trade-off: rare types (12 expiries
+at session start, accepting the trade-off: rare types (12 expiries
 a year) converge slowly.
 
 *In this library:* `microstructure/VolatilityCurve.java` (`regime` -- the
@@ -10116,9 +10095,9 @@ adverse move), by size, by regime. The blended-number alternative hides
 exactly this structure: a strategy whose entries cost 5bps and whose
 stops cost 40bps has a risk-management problem, not an execution problem,
 and one averaged slippage figure will never say so. Semantics that keep
-it honest: stops evaluate intrabar against the volume-weighted average
+it realistic: stops evaluate intrabar against the volume-weighted average
 ENTRY price, and triggered exits are worked through the model too -- a
-patient model exits slowly, and that realism is the point.
+patient model exits slowly, as it would live.
 
 *In this library:* `backtest/ParentOrder.java` (signal, arrival price,
 child fills, reason) and `backtest/ExecutionAwareBacktester.java` (the
@@ -10130,7 +10109,7 @@ Grading algos over bars means replaying the session, letting the executor
 re-decide each bar exactly as it would live, filling against the bar with
 a cost model, and scoring like a TCA desk: shortfall vs arrival, slippage
 vs session VWAP -- one parent, N bars, a number per benchmark. Three
-honest simplifications flatter the results and must be stated, not
+simplifications flatter the results and must be stated, not
 hidden. (1) The VWAP volume curve uses the session's REALIZED cumulative
 volume -- an oracle: live, you would forecast the curve and forecast
 error costs money, so the backtest VWAP number is an upper bound. (2)
@@ -10146,7 +10125,7 @@ its internal depth fraction at 1, making the harness cap the ONLY cap.
 Two knobs that own the same constraint must be collapsed to one.
 
 *In this library:* `backtest/ExecutionAlgoBacktester.java` -- all four
-points are documented as "honest simplifications" in the javadoc;
+points are documented as "simplifications" in the javadoc;
 executors from `execution/BenchmarkExecutor.java`.
 
 ### 338. "Build me the quarterly venue table: what columns, and from what data?"
@@ -10192,10 +10171,10 @@ was about to be profitable, so unconditional fills are fiction. The
 time-travel bug: the parent is created at the signal bar's CLOSE, so
 filling at that same bar's OPEN credits a price from before the signal
 existed -- the model must HOLD on the signal bar (no fill, no reject
-counted) and first attempt at the NEXT bar's open. Two more honesty
+counted) and first attempt at the NEXT bar's open. Two more
 rules: position sizing divides cash by `price * (1 +
 worstCaseCostFraction)` so a worst-case fill can never overdraw cash, and
-the model's asymmetric rejection is deliberately a taker's worst case --
+the model's asymmetric rejection is a taker's worst case --
 the Code-compliant symmetric maker mechanism is a different class.
 
 *In this library:* `backtest/InstantExecution.java`,
@@ -10293,8 +10272,7 @@ double-counts. Debits: hedge executions cost their all-in bps, and
 router allocations cost their blended expected bps. The close-of-day
 question is then one subtraction: did the spread captured by
 internalizing pay for the hedging the residual risk required? The
-exclusion is the discipline: inventory MARK-TO-MARKET P&L is deliberately
-out of scope -- that belongs to the risk report -- because mixing
+exclusion is the discipline: inventory MARK-TO-MARKET P&L is out of scope -- that belongs to the risk report -- because mixing
 realized spread economics with unrealized inventory marks is how desks
 fool themselves: a warehouse position that drifted favorably can mask a
 quarter of value-destroying internalization, and the flattering blend
@@ -10433,7 +10411,7 @@ numerator is the quote-currency difference, and the division by the fixing
 converts it into the DELIVERABLE currency, since that is the only currency
 that can actually pay. Marking is ordinary forward machinery -- the
 settlement formula evaluated at the curve's forward to the FIXING date --
-with one honest edge case: an NDF already inside its fixing window has no
+with one edge case: an NDF already inside its fixing window has no
 forward to read (the curve starts at spot), so the mark degrades to the
 spot outright rather than throwing mid-lifecycle. Once the official print
 exists, use it; a curve cannot know it.
@@ -10536,7 +10514,7 @@ selecting `(K/F)N(d2)` and the OTM root, as the javadoc documents), and
 feeds strike-based pricers like `pricing/BlackScholes.java` and
 `pricing/VannaVolga.java`.
 
-### 354. "Only EURUSD and USDJPY are liquid right now. How do you make an EURJPY price, and what keeps the triangle honest?"
+### 354. "Only EURUSD and USDJPY are liquid right now. How do you make an EURJPY price, and what keeps the triangle consistent?"
 
 Compose the legs. Two operations cover every triangulation: MULTIPLY when
 the legs share the middle currency on opposite sides (EURUSD x USDJPY =
@@ -10545,7 +10523,7 @@ EURJPY -- the USD cancels) and DIVIDE when they share the quote currency
 cross live from leg ticks -- each EURUSD or USDJPY update recomputes
 EURJPY with zero allocation per tick -- so downstream logic (indicators, a
 quoter) chains off the cross exactly as off a native symbol. What keeps
-the triangle honest is arbitrage: if the direct EURJPY market deviates
+the triangle consistent is arbitrage: if the direct EURJPY market deviates
 from the leg product by more than the combined spreads, buying the cheap
 route and selling the rich one is riskless profit, and arbitrageurs
 compress the gap within milliseconds. So triangular consistency is not an
@@ -10619,8 +10597,7 @@ The carry trade is the monetization of that failure: borrow the low
 yielder, hold the high yielder unhedged, collect the differential (the
 carry the swap points quote you every day), and accept the tail -- carry
 profits accrue steadily and evaporate violently in risk-off episodes,
-because everyone unwinds the same crowded position at once. The honest
-framing: CIP is an accounting identity up to basis; UIP is a risk premium
+because everyone unwinds the same crowded position at once. The framing: CIP is an accounting identity up to basis; UIP is a risk premium
 in disguise, and the swap points tell you exactly what you are being paid
 to hold it.
 
@@ -10742,8 +10719,7 @@ cannot afford allocation.
 
 *In this library:* `fx/FxTierBook.java` -- `sweepBuyCost` /
 `sweepSellProceeds` (frontier walk with caller-owned scratch),
-`bestFullAmountAsk` / `bestFullAmountBid`, `sweepPlan` for the deliberate
-multi-LP route; the javadoc contrasts the equities single-book structure
+`bestFullAmountAsk` / `bestFullAmountBid`, `sweepPlan` for the multi-LP route; the javadoc contrasts the equities single-book structure
 directly.
 
 ### 363. "Why does FX convention favor full-amount trading when sweeping several LPs is arithmetically cheaper?"
@@ -10760,8 +10736,8 @@ fill obligation on the whole amount, no partial-reject games, and TCA
 that is trivially attributable. This is the opposite of the equities
 instinct (slice small, hide everywhere), and it is rational because the
 FX leak channel is not a public tape -- it is the counterparty itself.
-The honest statement of the trade-off: sweeps are cheaper on screen and
-dearer after markout; deliberate sweeps remain available when you accept
+The statement of the trade-off: sweeps are cheaper on screen and
+dearer after markout; sweeps remain available when you accept
 the signaling.
 
 *In this library:* `fx/LpRouter.java` is full-amount only, one LP per
@@ -10781,7 +10757,7 @@ Two refinements: LPs above a reject-rate cap are VETOED outright whatever
 their price (a router that will still deal with a 60% rejecter is not
 enforcing anything), and hold time can be charged like latency -- bps per
 millisecond held -- since the market drifts against you while the LP
-deliberates. The silent failure mode is a wiring bug: the markout penalty
+decides. The silent failure mode is a wiring bug: the markout penalty
 only exists if the scorecard is fed composite mids on the same clock as
 the rejects; without the mid feed, markouts never mature, the penalty is
 silently zero, and routing degrades to displayed-price-plus-veto.
@@ -10800,14 +10776,14 @@ venue attribution -- your private best-of-market. Engineering follows the
 venue count: with 5-30 venues, a linear rescan over primitive arrays
 beats a heap, makes venue removal (a NaN quote) trivially correct, and
 keeps the whole thing zero-allocation single-writer. Two realities the
-structure must report honestly: CROSSED composites (best bid >= best ask
+structure must report: CROSSED composites (best bid >= best ask
 across venues) are real in e-FX -- feed latency, not arbitrage -- and
 should be flagged, not silently "fixed". And PHANTOM LIQUIDITY: the same
 underlying LP often quotes through several ECNs at once, so summing
 displayed size across venues counts one dealer's risk appetite three
 times; hit all three and you get one fill and two rejects, because the LP
 pulls the duplicates the moment one is dealt on. Aggregate DEPTH is
-therefore an upper bound, and honest sizing dedupes by underlying LP or
+therefore an upper bound, and sizing dedupes by underlying LP or
 routes full-amount to one of them.
 
 *In this library:* `fx/AggregatedBook.java` -- composite BBO with venue
@@ -10883,21 +10859,21 @@ refuse.
 *In this library:* `execution/WmrFixingScheduler.java` --
 `WINDOW_MILLIS = 5 minutes`, even slicing delegated to the TWAP scheduler
 so "TWAP-in-window is neutral" holds by construction; the javadoc lists
-pre-window execution and in-window skew as deliberately excluded, with
+pre-window execution and in-window skew as excluded, with
 `ImplementationShortfallScheduler` named for those who want the bet
 explicitly.
 
-### 369. "Your FX backtest fills every order at the touch. What is wrong, and how do you model it honestly?"
+### 369. "Your FX backtest fills every order at the touch. What is wrong, and how do you model it?"
 
 It ignores last look, and last look's rejects are not random -- they
 cluster on exactly the fills that would have been profitable, so the
-backtest overstates the strategy by construction. Honest bar-level model:
+backtest overstates the strategy by construction. Bar-level model:
 the order arrives at the bar open; the LP watches the intra-bar move
 during its hold; a move in the TAKER's favor beyond a threshold (price
 rising on your buy -- adverse to the LP who would sell) triggers a
 reject, and the quantity carries to the next bar exactly like real
 requote-and-chase; otherwise you fill at the open plus the half-spread.
-Two deliberate modeling choices to state out loud: the asymmetry is a
+Two modeling choices to state out loud: the asymmetry is a
 taker's WORST-CASE -- it simulates the adverse behavior the Global Code
 prohibits but a taker must still budget for, so when calibrating the
 threshold from an LP's published symmetric disclosures, remember those
@@ -10928,14 +10904,14 @@ the offsetting inventory and can even hand the client back price
 improvement -- the book was going to pay to shed that risk anyway;
 risk-ADDING flow is warehoused only while post-trade inventory stays
 inside the warehouse limit, and routes out beyond it. The ratio is the
-headline stat, but the honest companion metric is what warehousing cost
+headline stat, but the companion metric is what warehousing cost
 in hedges -- a ratio bought with unhedged inventory is not skill.
 
 *In this library:* `crb/InternalizationEngine.java` -- the
 internalize-or-route decision with `improvementShare` on risk-reducing
 flow and the warehouse limit on risk-adding flow;
 `internalizationRate()` is the reported ratio; `crb/CrbPnlLedger.java`
-keeps the companion economics honest.
+records the companion economics.
 
 ### 371. "What actually happened in the 2013-14 FX scandal, and what changed because of it?"
 
@@ -10957,7 +10933,7 @@ commit the violation, whatever the operator's incentives that day.
 
 *In this library:* the responses, encoded: `trading/LastLookGate.java`
 (symmetric per Principle 17), `execution/WmrFixingScheduler.java`
-(pre-window execution deliberately excluded, javadoc citing the 2013-15
+(pre-window execution excluded, javadoc citing the 2013-15
 conduct), `regulatory/FixAnalyzer.java` (the banging-the-close detector),
 `fx/LpScorecard.java` (the taker-side audit of LP behavior).
 
@@ -11024,7 +11000,7 @@ above $1). A quoter must (a) look up the tick for the CURRENT price band
 -- a binary search cheap enough to run per quote update -- and (b) round
 directionally TOWARD PASSIVITY: buys down, sells up, because rounding a
 buy upward can cross the market or price an order the venue rejects.
-Honest caveat this library states: its generated ESMA-style table is
+Caveat this library states: its generated ESMA-style table is
 faithful in structure (1-2-5 per decade, shifted by liquidity band) but
 is not a certified copy of the RTS 11 annex -- compliance work loads the
 venue's published table.
@@ -11096,8 +11072,7 @@ way is TODAY's auction leaning -- from the venue's imbalance
 dissemination in the final minutes (Nasdaq NOII, NYSE imbalance): an
 imbalance OPPOSITE your side means the auction is looking for exactly
 your shares -- reserve more; an imbalance ON your side means you would
-join a crowd -- reserve less and work the continuous market. The honest
-engineering caveat: this library ships no venue imbalance feed, so its
+join a crowd -- reserve less and work the continuous market. The engineering caveat: this library ships no venue imbalance feed, so its
 model is a documented-contract structure -- the learning and reserve
 logic are tested on synthetic inputs, and the mapping from your venue's
 message format must be validated against real dissemination data before
@@ -11195,7 +11170,7 @@ lots, invisible to the headline NBBO. Consequences: the displayed spread
 on high-priced names OVERSTATES true cost for small orders, odd-lot
 prints must be handled in TCA even where quote rules ignore them, and
 regulation has been catching up (round-lot-size reform, odd-lot quote
-dissemination). Honest scope note: this library has no odd-lot or
+dissemination). Scope note: this library has no odd-lot or
 round-lot class -- quantity granularity is not modeled; the analogous
 PRICE-granularity machinery (increments, banding, directional rounding)
 is what it does implement.
@@ -11217,9 +11192,9 @@ lender (you pay them, since the real holder still expects them). CARRY:
 the fee accrues daily and can reprice violently when crowding rises.
 RECALL: the lender can demand shares back; if no other borrow exists you
 are bought in at the market's price, not yours -- shorts can be forced
-out of correct positions. Honest scope note: this library ships no
+out of correct positions. Scope note: this library ships no
 locate/borrow machinery, and its single-instrument backtester is
-documented long-only -- an honest boundary rather than a fake fill; where
+documented long-only -- a boundary rather than a fake fill; where
 shorting economics DO enter is pricing, since borrow cost flows through
 the forward exactly like a dividend yield, pricing calls down and puts
 up on hard-to-borrow names.
@@ -11272,7 +11247,7 @@ buy-sell loses -- it sold the far leg it must now buy back richer; the
 base legs of the swap cancel exactly, leaving only the quote-currency
 cash-flow imbalance. And the boundary is explicit: this is a RISK
 ledger, not a cash ledger -- premium and settlement cash legs are
-deliberately untracked, and lifecycle events re-book as offsetting
+untracked, and lifecycle events re-book as offsetting
 flows.
 
 *In this library:* `crb/CentralRiskBook.java` -- `bookCashEquity`,
@@ -11425,11 +11400,11 @@ and cooldown intervals.
 
 ### 391. "You have a hedge to execute: 50M of index futures equivalent. Route it."
 
-In honest cost order: internal, dark, lit. INTERNAL first -- crossing
+In cost order: internal, dark, lit. INTERNAL first -- crossing
 against the book's own offsetting inventory costs ZERO bps and leaks
 nothing; the CRB is the firm's first and best dark pool, capped at
 whatever crossable inventory actually exists. DARK second -- midpoint
-fills pay no spread, but each venue is priced honestly: an
+fills pay no spread, but each venue is priced: an
 ADVERSE-SELECTION charge in bps (post-fill markout -- fills that
 systematically fade are not free liquidity, and a venue-scorecard
 estimate slots in directly) and expected liquidity DISCOUNTED by fill
@@ -11440,7 +11415,7 @@ legs are not EXPECTED to fill routes lit as well -- a hedge that might
 fill is not a hedge, and sizing the lit leg to the optimistic dark
 scenario leaves the book carrying the breach the hedge existed to fix.
 Allocation is greedy by expected cost and deterministic; the caller
-owns the venue statistics and their honesty.
+owns the venue statistics and is responsible for their accuracy.
 
 *In this library:* `crb/CrbRouter.java` -- `DarkVenue(name,
 expectedLiquidity, fillProbability, adverseSelectionBps)`, the
@@ -11448,7 +11423,7 @@ internal -> dark -> lit allocation with blended `expectedCostBps`;
 `docs/CENTRAL_RISK_BOOK.md` section 4 states the "first dark pool" and
 "hedges that might fill are not hedges" doctrine.
 
-### 392. "At the close, the desk head asks: did the CRB make money today? What do you show, and what do you deliberately leave out?"
+### 392. "At the close, the desk head asks: did the CRB make money today? What do you show, and what do you leave out?"
 
 Realized flow economics, and ONLY realized flow economics. The ledger:
 internalized client flow captures the street half spread minus whatever
@@ -11458,7 +11433,7 @@ executions cost their all-in bps; router allocations cost their blended
 expected bps. Net economics answers the only question that matters at
 the close: did the spread we captured by internalizing pay for the
 hedging we did? A CRB that nets beautifully but hedges expensively is a
-cost center with good graphics. What is deliberately EXCLUDED: inventory
+cost center with good graphics. What is EXCLUDED: inventory
 mark-to-market. Unrealized marks belong to the risk report -- blending
 realized spread economics with unrealized inventory P&L is how desks
 fool themselves, because a good marks day hides an uneconomic flow
@@ -11667,7 +11642,7 @@ calendar position.
 sqrt(T) factor in vega), `pricing/VolSurface.java` (per-expiry smiles:
 the object a bucketed vega report is written against),
 `hedging/OptionsBook.java` (`scenarioGrid` reprices the book across vol
-shifts -- the honest version of a vega number).
+shifts -- the version of a vega number).
 
 ### 401. "Does anyone care about rho? When do rates actually matter for options?"
 
@@ -11683,7 +11658,7 @@ desks that had never hedged rho discovered they owned a rates position.
 Third, the carry channel: rates enter twice -- discounting (rho proper)
 and the forward `F = S e^{(r-q)T}`, and the forward effect usually
 dominates: higher r lifts call values through the forward before
-discounting claws part back. The honest summary: rho is a second-tier
+discounting claws part back. The summary: rho is a second-tier
 Greek on a 1-month book and a first-tier one on a structured-products
 shelf, and the difference is just T.
 
@@ -11729,7 +11704,7 @@ quotes stable: as spot ticks around, fair option prices change every
 second but the implied vol barely moves, so market makers can hold a vol
 quote and let the machine translate to price at trade time -- this is
 literally how vol markets, variance swaps and the VIX are built.
-Important honesty: implied vol is *not* a forecast that the model
+Note that implied vol is *not* a forecast that the model
 believes; it is the market-clearing price wearing vol units, smile and
 all. The smile across strikes is then readable as the market's pricing
 of non-lognormality -- information you could never see in a price grid.
@@ -11931,7 +11906,7 @@ one-touches *as* the probability (a "35 percent one-touch"), which is
 why exposing P itself matters. The edge case the code must pin: **spot
 already at or through the barrier**. The formulas assume h has a
 definite sign; at S = H the log is zero and naive evaluation returns
-formula noise instead of certainty. The honest guard returns P = 1
+formula noise instead of certainty. The guard returns P = 1
 exactly -- already touching -- making the one-touch worth its
 discounted payout and the no-touch worth zero, with no branch cuts to
 stumble over. (Pay-at-hit variants discount to the hitting time, not
@@ -11960,7 +11935,7 @@ barrier, delta flips sign, and gamma explodes near H. The flat-vol
 closed form still produces *a* number there, but it is the wrong number
 in exactly the region that matters -- reverse barriers are acutely
 smile-sensitive, and desks price them on local/stochastic vol with
-barrier shifts. So the honest engineering choice is refusal: reject
+barrier shifts. So the engineering choice is refusal: reject
 reverse configurations with a clear exception rather than return a
 plausible-looking price that mis-hedges.
 
@@ -12074,7 +12049,7 @@ volatile assets never cross, so the exchange option is worth precisely
 its intrinsic value, `max(S1 - S2, 0)` (spot-measure discounted). That
 limit is the fastest sanity test of an implementation and the cleanest
 intuition for why exchange options are really **correlation
-instruments**: vega in rho is first-class, and a dealer selling
+instruments**: vega in rho is the main exposure, and a dealer selling
 stock-vs-index switch options is short the pair de-correlating.
 Real uses: stock-for-stock merger arbitrage optionality, outperformance
 notes, and switching options between two commodity grades.
@@ -12134,7 +12109,7 @@ your code does anything to sigma, it is wrong.
 
 *In this library:* `pricing/QuantoOption.java` -- the javadoc derives
 the `- rho sigma_S sigma_FX` correction, walks the sign intuition
-explicitly, and the implementation is deliberately "honest about being
+explicitly, and the implementation is "about being
 a change of drift": adjust the carry, delegate the pricing.
 
 ### 419. "How do you price American options on a tree, and what low-vol edge case must the implementation catch?"
@@ -12153,10 +12128,9 @@ lie in (0, 1) to be a probability. When volatility is very low relative
 to carry, `e^{b dt}` can escape the [d, u] interval -- the drift
 outruns the lattice spacing -- and p goes negative or above 1. The tree
 is then **degenerate**: it will still produce a number, computed with
-negative "probabilities," which is arbitrage-in-the-code. The honest
-implementation checks p and throws with the diagnosis (increase steps
+negative "probabilities," which is arbitrage-in-the-code. The implementation checks p and throws with the diagnosis (increase steps
 so sqrt(dt) shrinks relative to b dt, or question the inputs) rather
-than returning nonsense. Same family of honesty as the zero-vol
+than returning nonsense. Same family of guard as the zero-vol
 Black-Scholes guard: lattice methods have validity conditions, and
 production code states them.
 
@@ -12209,7 +12183,7 @@ method interpolates the smile through the quotes rather than merely
 near them, and pricing a quoted instrument reproduces its quote --
 the minimal consistency a desk demands. Read the smile out by
 converting adjusted prices back through Black-Scholes and you get a
-full strike-continuous smile from three quotes. Limits, honestly: it is
+full strike-continuous smile from three quotes. Limits,: it is
 an interpolation dressed as a model -- extrapolation into far wings is
 unreliable, there is no guarantee of no-arbitrage (butterflies can go
 negative outside the pillar span), no dynamics (so it prices
@@ -12234,8 +12208,7 @@ The "little Heston trap" (Albrecher et al.) is the fix: an
 algebraically equivalent form of the CF whose log argument -- the ratio
 g2 = (b - i rho sigma u - d)/(b - i rho sigma u + d) -- stays away from
 the negative real axis, so the principal branch is valid for all u and
-the integrand is smooth. No approximation, just the numerically honest
-branch. How you know the integral is right: **cross-check against a
+the integrand is smooth. No approximation, just the numerically stable branch. How you know the integral is right: **cross-check against a
 method with independent failure modes.** A full-truncation Euler Monte
 Carlo shares no code path, no branch choices and no quadrature with the
 CF integral; when a semi-analytic price and an MC price with its
@@ -12348,7 +12321,7 @@ E[h]` -- exponentiating the iterated log-forecast yields the **median**
 of the variance distribution, not its mean, and the gap grows with
 horizon and with vol-of-vol. Quietly returning that number as "the
 forecast" is a systematic *downward-biased* risk forecast wearing an
-authoritative method name. The honest library choices are: refuse --
+authoritative method name. The library choices are: refuse --
 offer one-step (where the recursion is exact) and direct multi-step
 users to GARCH/GJR, whose linear-in-variance recursions forecast the
 mean exactly; or implement the correct simulation/moment-correction
@@ -12358,7 +12331,7 @@ cannot cheaply give it, instead of shipping an understated VaR.
 
 *In this library:* `volatility/Egarch11.java` -- log-variance
 recursion, gamma-as-sign leverage, and multi-step forecasts
-deliberately NOT offered, the javadoc naming the median-vs-mean Jensen
+NOT offered, the javadoc naming the median-vs-mean Jensen
 problem and pointing multi-step users to `Garch11`/`GjrGarch11`.
 
 ### 427. "Explain HAR-RV. Why does a three-term linear regression beat GARCH on realized-vol data?"
@@ -12402,7 +12375,7 @@ of index options holds crash insurance, and insurance carries premium
 above actuarial cost. Selling it means collecting a steady spread and
 occasionally handing back years of income in one event -- the P&L is
 short a deep tail, with brutal skew (see any short-vol product in Feb
-2018 or Mar 2020). How to measure it honestly: compare a *tradable*
+2018 or Mar 2020). How to measure it: compare a *tradable*
 implied level -- the variance-swap strike or a VIX-style model-free
 index, not a single ATM vol -- against realized variance over the same
 window with matching sampling conventions; the variance-swap
@@ -12555,7 +12528,7 @@ returns, so the sizing signal is doubly aligned); switching strategy
 parameters (wider stops, wider market-making spreads, slower execution
 in turbulence); and gating other signals -- many alphas earn in one
 regime and pay in the other, and conditioning on the regime is the
-cheapest ensemble there is. Honesty items: two states is a modeling
+cheapest ensemble there is. Caveats: two states is a modeling
 choice, EM finds local optima (seed it sensibly), and the filtered
 probability lags a true regime break by construction -- it is a
 smoother of evidence, not a crystal ball.
@@ -12617,7 +12590,7 @@ realized** -- variance-swap strike or a model-free index against
 forecast realized -- because that is the pair the P&L actually settles
 on. The anti-pattern is one blessed "volatility" number flowing to
 every consumer: the pricing desk, the risk system and the signal stack
-are asking three different questions, and the honest answer differs.
+are asking three different questions, and the answer differs.
 
 *In this library:* `pricing/VolSurface.java` (pricing),
 `volatility/EwmaVolatility.java` / `Garch11.java` / `GjrGarch11.java`
@@ -12644,7 +12617,7 @@ rebalances). Add transaction costs and the trade-off closes in from
 the other side: each rebalance pays spread proportional to the delta
 traded, so total cost *grows* with n while error shrinks -- there is an
 interior optimum, and "hedge every tick" is bankruptcy by a thousand
-spreads. The honest way to see all this is simulation, not formulas:
+spreads. The way to see all this is simulation, not formulas:
 run the hedger over thousands of GBM paths, collect final P&L per
 path, and look at the whole distribution -- mean (cost drag), standard
 deviation (replication risk), skew (the gap-risk signature), and how
@@ -12738,13 +12711,13 @@ Concrete example: hedging a jet-fuel exposure with heating-oil futures
 h* comes from the regression (not 1.0 -- the naive one-to-one hedge
 over- or under-hedges by the beta), and effectiveness ~0.81 says a
 fifth of the variance stays as basis risk you must still carry limits
-for. Honesty items: h* is sample-dependent (estimate on returns, not
+for. Caveats: h* is sample-dependent (estimate on returns, not
 prices; watch the window), and correlation is regime-dependent --
 effectiveness measured in calm markets overstates crisis performance.
 
 *In this library:* `hedging/MinimumVarianceHedge.java` -- `h* =
 cov/var` and hedge effectiveness (= rho^2, javadoc citing the 80
-percent test) as the two first-class outputs.
+percent test) as the two primary outputs.
 
 ### 440. "Your book holds assets in five currencies. How do you hedge the FX, and what does the hedge cost?"
 
@@ -12818,12 +12791,12 @@ the second pays a convergence trade. The Engle-Granger two-step test:
 hedge ratio; (2) test the residual (the spread) for a unit root with an
 ADF regression -- change in spread on lagged spread level. Under the
 null the spread is a random walk (no cointegration); more negative ADF
-t-statistics reject it. Crucial subtlety: because the spread was
+t-statistics reject it. A subtlety: because the spread was
 *estimated* to look as stationary as possible, ordinary ADF critical
 values are too lenient -- you must use the Engle-Granger two-variable
 asymptotics (about -3.34 at 5 percent, versus -2.86 for a plain ADF).
 Skip that correction and you certify spurious pairs at scale. Remaining
-honesty: cointegration is a sample property that breaks (index
+caveat: cointegration is a sample property that breaks (index
 deletions, mergers, business-model drift) -- retest on a rolling
 window, and treat a failing retest as a structural exit signal, not
 noise.
@@ -12845,7 +12818,7 @@ edge), influence decays smoothly, and the **process noise sets the
 adaptation speed** explicitly -- large Q tracks fast and noisily,
 Q -> 0 recovers static OLS; that dial is a modeling statement about
 how fast you believe the relationship truly drifts. Two outputs matter
-beyond beta itself. The filter's own **beta variance** is an honesty
+beyond beta itself. The filter's own **beta variance** is a confidence
 meter: when it balloons, the filter is telling you it no longer knows
 the hedge ratio -- widen bands or step aside, which no rolling OLS
 will ever volunteer. And the innovation sequence (prediction errors)
@@ -12867,7 +12840,7 @@ static OLS; seed initialBeta from an OLS fit).
 The core loop is a position band: while |position| stays inside the
 band, do nothing; the moment it breaches, submit an opposite-side order
 for **the excess over the band** -- hedging back TO the band edge, not
-to flat. Edge-hedging is deliberate and mirrors the delta-band logic:
+to flat. Edge-hedging mirrors the delta-band logic:
 flattening entirely maximizes the trade size (paying maximal spread and
 impact), destroys the inventory a dealer needs to internalize the next
 client flow against, and immediately restarts the random walk from
@@ -12913,7 +12886,7 @@ halve the rebalancing burden of the whole book -- the mixed policy
 usually dominates either extreme. And magnitude: a large short-gamma
 book near expiry pins you into hedging into every move -- buying back
 convexity converts an unbounded quadratic exposure into a fixed,
-known rent. Run the comparison honestly: simulate the P&L distribution
+known rent. Run the comparison: simulate the P&L distribution
 each way and look at the left tail, not the mean -- the mean barely
 moves; the tail is the whole argument.
 
@@ -12929,7 +12902,7 @@ Write it as one objective and let a solver draw the curve: minimize
 `portfolio variance after hedging + lambda x sum of c_i |x_i|` over
 hedge notionals x, where c_i is each instrument's all-in cost per unit
 notional (spread, fees, impact) and lambda is the risk/cost trade-off
-dial. The L1 (absolute-value) cost term is the load-bearing choice:
+dial. The L1 (absolute-value) cost term is the key choice:
 because its penalty is non-differentiable at zero, instruments whose
 marginal variance reduction is worth less than their marginal cost get
 weight **exactly zero** -- not a dusty 0.3 percent position that pays
@@ -12975,7 +12948,7 @@ a risk you are structurally paid to hold (and can afford to hold)
 converts expected return into insurance-company profit. Case four:
 **the band's interior** -- the Whalley-Wilmott and inventory-band
 results formalize that small deviations are optimally left alone; a
-hedger with no dead zone is a cost machine. The honest test is always
+hedger with no dead zone is a cost machine. The test is always
 the same pair of numbers side by side: variance removed (times your
 risk price) versus all-in cost including carry -- an L1-penalized
 optimizer setting a hedge to exactly zero is that comparison, decided
@@ -13015,14 +12988,14 @@ backtested is an opinion, not a measurement.
 roadmap, one section per step, each pointing at the classes that implement
 it, ending with a reading order for the risk-curious.
 
-### 449. "Your book has options. Delta-normal VaR says risk is X. Why is it wrong, and what is the cheapest honest fix?"
+### 449. "Your book has options. Delta-normal VaR says risk is X. Why is it wrong, and what is the cheapest fix?"
 
 Delta-normal assumes P&L is linear in factor moves: `dP = delta' * dr`, so
 portfolio P&L is normal with variance `delta' * Sigma * delta` and VaR is a
 z-score times sigma. Options break the linearity: a short-gamma book loses
 MORE than delta predicts on both large up and large down moves, so the true
 loss distribution is left-skewed and delta-normal understates the tail --
-systematically, not randomly. The cheapest honest fix is delta-gamma with a
+systematically, not randomly. The cheapest fix is delta-gamma with a
 Cornish-Fisher correction: keep the quadratic term
 `dP = delta'dr + 0.5 dr'Gamma dr`, compute the first three cumulants of
 that quadratic form in closed form (the third cumulant is
@@ -13030,7 +13003,7 @@ that quadratic form in closed form (the third cumulant is
 normal quantile for the resulting skewness. Concrete case: a book short
 1,000 ATM straddles shows near-zero delta -- delta-normal calls it riskless;
 delta-gamma sees the negative gamma and reports the real tail. The sanity
-check that keeps the implementation honest: with Gamma = 0 the formula must
+check on the implementation: with Gamma = 0 the formula must
 reduce EXACTLY to the delta-normal answer.
 
 *In this library:* `risk/VarEngine.java` -- `deltaNormalVar`/`deltaNormalEs`
@@ -13051,7 +13024,7 @@ roll out of the window, VaR drops sharply overnight with no change in the
 book and no change in current market conditions -- the ghost of the crisis
 leaves, and risk appears to fall. Desks handle this with overlapping
 windows, exponential weighting, or (under FRTB) a stressed period that
-never rolls off. The honest statement of the method's limit: it produces
+never rolls off. The statement of the method's limit: it produces
 no more tail than the window actually contained -- if the worst day in your
 window is -3%, your 99% VaR cannot warn you about -10%.
 
@@ -13104,8 +13077,7 @@ cheap method has started lying. The same scenario matrix serves both --
 historical rows for historical full-reval, simulated rows for Monte Carlo.
 
 *In this library:* `risk/VarEngine.java` -- `fullRevaluationVar` takes the
-scenario matrix and a `ScenarioReval` pricer callback, deliberately
-agnostic about where scenarios came from.
+scenario matrix and a `ScenarioReval` pricer callback, agnostic about where scenarios came from.
 
 ### 453. "Estimate the 99.9% loss when your window barely contains a 99% event. And when should the method itself refuse to answer?"
 
@@ -13163,7 +13135,7 @@ tails. Kendall's tau counts concordant versus discordant pairs -- even more
 robust, with a clean probabilistic reading (probability a random pair
 agrees in direction, minus disagrees). The bridge back matters for copula
 calibration: for elliptical distributions, `rho_pearson = 2 sin(pi/6 *
-rho_spearman)` and `rho_pearson = sin(pi/2 * tau)`. So the honest workflow
+rho_spearman)` and `rho_pearson = sin(pi/2 * tau)`. So the workflow
 is: estimate Kendall's tau from dirty real data (robust), convert through
 the sine bridge to a Pearson parameter, and feed THAT into your Gaussian
 or t-copula -- you get the copula's correlation input without ever exposing
@@ -13213,7 +13185,7 @@ horizon >= LH_j shocked, and the aggregate is
 `ES = sqrt( sum_j [ ES_j * sqrt((LH_j - LH_{j-1})/10) ]^2 )`. The square
 root scaling stretches each layer to its incremental horizon; the
 sum-of-squares aggregation assumes independence across layers. The
-economic effect is the point: a book of illiquid credit exotics carries
+economic effect: a book of illiquid credit exotics carries
 materially more capital than an equally volatile book of liquid futures,
 because its factors sit deep in the cascade -- capital finally prices the
 time it takes to get out, not just the volatility while you are in.
@@ -13408,7 +13380,7 @@ the version committees actually understand: "you hold 200 names but
 your HHI says you effectively hold 14" ends the diversification
 argument. Top-N share (what fraction of gross sits in the biggest 5 or
 10) catches the case HHI can soften, and single-name limit breaches are
-the hard gate. The crucial discipline is running the same measures
+the hard gate. The discipline is running the same measures
 across MULTIPLE groupings -- issuer, sector, currency, country -- because
 books diversify beautifully on one axis while concentrating fatally on
 another: fifty different names that are all US regional banks is one
@@ -13461,7 +13433,7 @@ window (Q450). Greek limits (delta, vega, gamma per bucket) catch what
 BOTH miss: a delta-neutral, VaR-modest options book can carry enormous
 short gamma that only manifests on a large move -- a gamma limit is the
 only one of the three that sees it before the move happens. The layered
-design is deliberate redundancy: any single limit type has a known
+design is redundancy by intent: any single limit type has a known
 blind spot, and the book that hurts you is the one engineered
 (intentionally or not) into exactly that blind spot. Cheap, dumb,
 model-free limits are the last line when the sophisticated ones are
@@ -13543,7 +13515,7 @@ time-to-recover asymmetry (fast crash + slow climb is the equity
 signature; slow bleed is worse news about the alpha itself). Two
 control rules follow: a duration-based de-risking trigger (e.g., cut
 gross after N months underwater regardless of depth -- it caps the
-behavioral spiral), and honest handling of the OPEN episode: a
+behavioral spiral), and handling of the OPEN episode: a
 drawdown still running at the end of the series has no recovery date,
 and reporting its duration as if it had closed understates the current
 pain -- the statistic must mark it open-ended.
@@ -13650,7 +13622,7 @@ ANY of it; the slow signal with the same gross edge and 4x turnover
 survives 75bps. So the fast signal is only "better" for someone with
 an execution machine -- internalized flow, maker rebates, sub-bp
 impact; for everyone else it is a backtest artifact that costs money
-in production. The decay curve also dictates evaluation honesty:
+in production. The decay curve also dictates how to evaluate:
 measure IC at the horizon you can actually trade, not the horizon
 that flatters the signal. Turnover is measured as half the L1 change
 in normalized weights between consecutive rebalances -- report it next
@@ -13689,7 +13661,7 @@ sizes drift with each step in the pipeline.
 symbols get singleton sectors), `betaNeutralize`, demeaning for
 dollar neutrality, and the documented re-normalize-after rule.
 
-### 476. "Estimate the premium on your factor with an honest standard error. Why is pooled OLS wrong, and what data reality must the estimator survive?"
+### 476. "Estimate the premium on your factor with a standard error. Why is pooled OLS wrong, and what data reality must the estimator survive?"
 
 Pooled OLS on a stacked panel is wrong because residuals are
 cross-sectionally correlated -- every stock's return on a given day
@@ -13710,7 +13682,7 @@ be skipped -- silence would hide a broken feed; periods with fewer
 assets than factors + 2 are skipped entirely (the regression is
 underdetermined); and a period whose design matrix is singular
 (perfectly collinear exposures) is caught and skipped with a count,
-so the reported number of contributing periods is honest.
+so the reported number of contributing periods is accurate.
 
 *In this library:* `alpha/FamaMacBeth.java` -- per-period
 cross-sectional regressions with the NaN-skip / infinity-throw
@@ -13757,8 +13729,7 @@ information) blocks; the dispersion across folds tells you whether the
 "signal" is one lucky regime. Permutation test: re-pair score dates
 with return dates at random many times, build the null distribution of
 mean IC, and report where the observed value falls -- a p-value with no
-normality assumption. The permutation test has a deliberately
-conservative property worth understanding: a signal whose
+normality assumption. The permutation test has a conservative property worth understanding: a signal whose
 cross-section barely changes over time (a static ranking) is
 INVARIANT under date permutation, so it earns p ~= 1 regardless of
 its in-sample IC -- correctly so, because a time-invariant
@@ -13789,7 +13760,7 @@ but impact grows with sqrt(size), so net alpha crosses zero at some
 AUM -- THAT crossing is the strategy's capacity, and it is a number,
 not a vibe. A signal rebalancing daily across small-caps might net
 12% at $10m and zero at $300m; the same pipeline at monthly
-rebalancing might carry $2bn. The honest engine surfaces this rather
+rebalancing might carry $2bn. The engine surfaces this rather
 than hiding it: when positions are large relative to ADV, the impact
 term should dominate the report loudly -- that IS the capacity answer,
 not an error to suppress. Sharing one impact estimator between the
@@ -13821,17 +13792,17 @@ renormalization, total exposure shrinks as aggregate conviction
 shrinks: five strong signals trade big, one weak signal trades tiny,
 zero working signals trade nothing. That conviction-scaled exposure
 is the feature, not a bug to "fix" -- and while a track record is
-still building, the honest emitted weight is zero, not equal-weight
+still building, the emitted weight is zero, not equal-weight
 hope. The general lesson: any normalization step in a pipeline is a
 claim that scale is meaningless; in signal combination, scale IS the
 conviction.
 
 *In this library:* `microstructure/AlphaEnsemble.java` -- IC-weighted
-combination with the deliberate no-renormalize rule (the javadoc
+combination with the no-renormalize rule (the javadoc
 explains the IC-0.01 full-size failure it prevents) and zero weight
 until the track record exists.
 
-### 481. "You want to fit alpha weights online, on live data. What is the honesty mechanism, and what off-by-one destroys it?"
+### 481. "You want to fit alpha weights online, on live data. What keeps it out of sample, and what off-by-one destroys it?"
 
 Prequential evaluation: predict THEN train, in that order, every
 interval. The model must emit its prediction for interval t using only
@@ -13976,11 +13947,11 @@ the survivorship-aware overload consuming `PointInTimeUniverse`
 events; the code comments spell out the mergers-first-then-delistings
 ordering and the index-drop-is-not-a-delisting distinction.
 
-### 486. "Your backtest charges 5bps per trade, flat. What is that assumption actually claiming, and what does the honest model look like?"
+### 486. "Your backtest charges 5bps per trade, flat. What is that assumption actually claiming, and what does the model look like?"
 
 Flat bps claims that cost is independent of size, symbol, and market
 state -- true only for a small retail account in liquid names. The
-honest institutional model decomposes cost into four parts:
+institutional model decomposes cost into four parts:
 commission (genuinely flat, and the smallest); half-spread (you cross
 it on every aggressive fill -- symbol-dependent: 1bp in mega-caps,
 30bp in small-caps); slippage/timing noise; and market impact, which
@@ -14004,7 +13975,7 @@ four-component model with per-symbol ADV/vol from trailing bars via
 `microstructure/MarketImpactModel.estimate`, the shared seam named in
 the javadoc.
 
-### 487. "Bar-close fills say your strategy works. What does an execution-aware backtest change, and what accounting rule keeps it honest?"
+### 487. "Bar-close fills say your strategy works. What does an execution-aware backtest change, and what accounting rule keeps it correct?"
 
 It inserts the layer real trading has and naive backtests skip: the
 strategy's signal creates a PARENT order (the intent: "get long
@@ -14038,7 +14009,7 @@ fraction, "unconditional" per the javadoc.
 
 Walk-forward splits history into rolling train/test windows,
 optimizes on train, evaluates on test, and concatenates the test
-segments into one honest out-of-sample record. The cold-start bug:
+segments into one out-of-sample record. The cold-start bug:
 if each test window's backtest starts from bar zero OF THE TEST
 WINDOW, every indicator (a 200-bar moving average, a GARCH state)
 begins empty and the first weeks of every test segment trade on
@@ -14053,7 +14024,7 @@ in-sample -- is the overfitting gauge (near 1: robust; near 0:
 curve-fit). But it is a RATIO, and when the in-sample objective
 itself is negative (the optimizer failed to find anything that even
 backtests well), a ratio of two losses can print "0.5" and read as
-robust. The honest output there is NaN: the question "how much of
+robust. The output there is NaN: the question "how much of
 the in-sample edge survived" has no meaning when there was no
 in-sample edge to survive.
 
@@ -14111,7 +14082,7 @@ the training set excludes (purges) every sample whose label window
 [t0 - h, t1) are gone -- and additionally embargoes a further
 `embargo` samples after the fold: training resumes only at
 t1 + h + embargo. What remains is [0, t0 - h) on the left and
-[t1 + h + embargo, n) on the right. The cost is deliberate: purging
+[t1 + h + embargo, n) on the right. The cost is accepted: purging
 and embargoing SHRINK the training set, and if your result only
 holds without them, the result was the leak.
 
@@ -14135,8 +14106,8 @@ fraction of splits with negative logit: the probability that your
 selection process picks something that underperforms the median of
 its own rivals out-of-sample. PBO near 0: selection finds something
 real; PBO >= 0.5: pure noise-mining -- selecting the winner is no
-better than picking randomly. The two calibration cases that keep
-an implementation honest: feed it configurations where one has
+better than picking randomly. The two calibration cases that check
+an implementation: feed it configurations where one has
 genuine skill (a persistent mean shift) -- PBO must come out near 0;
 feed it pure iid noise configurations -- PBO must come out near 0.5
 (NOT 1.0: noise means the winner is random out-of-sample, i.e.,
@@ -14161,13 +14132,12 @@ and short-horizon momentum/reversal; shuffling returns into iid
 soup produces resamples that are smoother than reality, so the
 Sharpe sampling distribution comes out too tight, and the interval
 is falsely confident -- the classic way to report "1.4 +/- 0.2" when
-the honest answer is "1.4 +/- 0.6". The stationary block bootstrap
+the answer is "1.4 +/- 0.6". The stationary block bootstrap
 (Politis-Romano) fixes it: resample contiguous BLOCKS of returns,
 preserving local dependence inside each block, with block lengths
 drawn geometrically (mean length L) and wrap-around at the series
 end -- the geometric lengths keep the resampled series stationary,
-avoiding the seam artifacts of fixed-length blocks. The honest
-question the interval answers is not "was my Sharpe 1.4" (it was)
+avoiding the seam artifacts of fixed-length blocks. The question the interval answers is not "was my Sharpe 1.4" (it was)
 but "how different could it have been" -- and for strategy decisions
 the actionable output is the LOWER percentile: a 1.4 Sharpe whose
 5th percentile is 0.1 is a coin you have flipped once. Compare the
@@ -14261,7 +14231,7 @@ configured `defaultQueueAhead` of simulated resting quantity that
 prints at that price consume first -- your fill arrives only after
 the queue ahead has traded. This one-parameter queue model is
 still optimistic (no cancels ahead of you modeled), which is the
-honest direction to state: if the strategy dies under it, it
+right direction to err in: if the strategy dies under it, it
 certainly dies live; surviving it earns a live pilot, not a
 launch.
 
@@ -14348,7 +14318,7 @@ it is, which is worse than losing. The tooling is everything from
 this section pointed at slices: per-regime benchmark comparison
 (Q494), drawdown episodes mapped onto regime boundaries (Q470),
 block-bootstrap intervals per slice (Q492) since each slice is
-short. The honest conclusion format: "earns in A and B, bleeds
+short. The conclusion format: "earns in A and B, bleeds
 controlled amounts in C, has never seen D" -- with position sizing
 (Q497) set by the bleed, and D acknowledged as an open risk rather
 than assumed away.
@@ -14356,7 +14326,7 @@ than assumed away.
 *In this library:* the slicing toolkit --
 `backtest/BenchmarkComparison.java` per regime window,
 `backtest/DrawdownAnalytics.java` for episode-to-regime mapping,
-`backtest/validation/BlockBootstrap.java` for honest per-slice
+`backtest/validation/BlockBootstrap.java` for per-slice
 intervals over short samples.
 
 ### 499. "The validated backtest says Sharpe 1.2. What should you EXPECT live, and where does the gap come from?"
@@ -14393,7 +14363,7 @@ discipline on live fills), `backtest/validation/BlockBootstrap.java`
 ### 500. "You are the final gate before a strategy goes live. Write the checklist."
 
 Ten gates, each earlier in this section, now in firing order.
-(1) Data honesty: point-in-time universe, corporate events
+(1) Data integrity: point-in-time universe, corporate events
 processed in the right order, no survivor-only feeds (Q471, Q485).
 (2) Leak-free validation: purged K-fold with embargo, warm
 walk-forward with the NaN-efficiency rule respected (Q490, Q488).
@@ -14406,7 +14376,7 @@ that goes in the memo (Q492). (5) Costs at intended size:
 institutional cost model, capacity stated as the AUM where net
 alpha crosses zero (Q486, Q479). (6) Execution realism: parent-
 order or queue-aware backtest appropriate to the strategy's
-frequency (Q487, Q495, Q496). (7) Benchmark honesty: alpha after
+frequency (Q487, Q495, Q496). (7) Benchmark: alpha after
 beta, IR, capture asymmetry (Q494). (8) Regime map: where it
 earns, where it bleeds, what it has never seen (Q498). (9) Risk
 plumbing BEFORE the first order: pre-trade limits with the
