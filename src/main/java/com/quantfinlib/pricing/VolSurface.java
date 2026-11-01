@@ -29,8 +29,9 @@ import java.util.TreeMap;
  * butterfly condition ∂²C/∂K² &gt;= 0 on one smile). Linear interpolation
  * with flat wings puts a concave kink at the outermost pillar of any skewed
  * smile, and the density check reports it there; a smooth parametric smile
- * (SABR, {@link SabrModel}) avoids that. SVI/SSVI fitting and Dupire local
- * vol are not implemented.</p>
+ * (SABR, {@link SabrModel}) avoids that. For an arbitrage-free parametric
+ * surface use {@link SsviSurface} or {@link SviSurface}; Dupire local vol
+ * is {@link DupireLocalVol}.</p>
  *
  * Immutable and thread-safe once built.
  */

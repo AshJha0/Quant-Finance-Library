@@ -145,6 +145,101 @@ public final class VannaVolga {
         return BlackScholes.impliedVol(otm, p, spot, k, rate, carry, timeYears);
     }
 
+    /**
+     * Exact vanna-volga hedge weights for a vanilla at {@code strike}: the
+     * solution x of the 3x3 system
+     *
+     * <pre>
+     *   Σᵢ xᵢ · vega(Kᵢ)  = vega(K)
+     *   Σᵢ xᵢ · vanna(Kᵢ) = vanna(K)
+     *   Σᵢ xᵢ · volga(Kᵢ) = volga(K)
+     * </pre>
+     *
+     * <p>with all Greeks at the ATM vol (Castagna and Mercurio 2007, "The
+     * vanna-volga method for implied volatilities", Risk, January,
+     * equation 3). Castagna and Mercurio show that for Black-Scholes vanillas
+     * this system has the closed-form solution used by {@link #price}, so
+     * the two agree up to rounding; the linear solve is the version that
+     * generalises to non-vanilla targets (see {@link #weightsFor}).</p>
+     */
+    public double[] exactWeights(double spot, double strike) {
+        if (!(spot > 0) || !(strike > 0)) {
+            throw new IllegalArgumentException("spot and strike must be > 0");
+        }
+        double atm = vols[1];
+        return weightsFor(spot,
+                BlackScholes.vega(spot, strike, rate, carry, atm, timeYears),
+                HigherOrderGreeks.vanna(spot, strike, rate, carry, atm, timeYears),
+                HigherOrderGreeks.volga(spot, strike, rate, carry, atm, timeYears));
+    }
+
+    /**
+     * Pillar weights that replicate a target's vega, vanna and volga (all at
+     * the ATM vol): the general form of the vanna-volga system, used for
+     * exotics such as one-touches.
+     */
+    public double[] weightsFor(double spot, double targetVega, double targetVanna, double targetVolga) {
+        if (!(spot > 0) || !Double.isFinite(targetVega) || !Double.isFinite(targetVanna)
+                || !Double.isFinite(targetVolga)) {
+            throw new IllegalArgumentException("spot must be > 0 and target Greeks finite");
+        }
+        double atm = vols[1];
+        double[][] a = new double[3][3];
+        for (int i = 0; i < 3; i++) {
+            a[0][i] = BlackScholes.vega(spot, strikes[i], rate, carry, atm, timeYears);
+            a[1][i] = HigherOrderGreeks.vanna(spot, strikes[i], rate, carry, atm, timeYears);
+            a[2][i] = HigherOrderGreeks.volga(spot, strikes[i], rate, carry, atm, timeYears);
+        }
+        return LeastSquares.solve(a, new double[]{targetVega, targetVanna, targetVolga});
+    }
+
+    /**
+     * Market cost of the smile on each pillar: BS(Kᵢ; σᵢ) − BS(Kᵢ; σ_atm),
+     * calls (put-call parity makes the put value identical).
+     */
+    public double pillarSmileCost(double spot, int i) {
+        if (!(spot > 0) || i < 0 || i > 2) {
+            throw new IllegalArgumentException("spot must be > 0 and i in 0..2");
+        }
+        return BlackScholes.price(OptionType.CALL, spot, strikes[i], rate, carry, vols[i], timeYears)
+                - BlackScholes.price(OptionType.CALL, spot, strikes[i], rate, carry, vols[1], timeYears);
+    }
+
+    /**
+     * Vanilla price with weights from the exact 3x3 solve
+     * ({@link #exactWeights}): BS(K; σ_atm) + Σ xᵢ · pillar smile cost.
+     */
+    public double priceExact(OptionType type, double spot, double strike) {
+        double[] x = exactWeights(spot, strike);
+        double p = BlackScholes.price(type, spot, strike, rate, carry, vols[1], timeYears);
+        for (int i = 0; i < 3; i++) {
+            p += x[i] * pillarSmileCost(spot, i);
+        }
+        return p;
+    }
+
+    /** Pillar strike {@code i} (0 put wing, 1 ATM, 2 call wing). */
+    public double strike(int i) {
+        return strikes[i];
+    }
+
+    /** Market vol at pillar {@code i}. */
+    public double vol(int i) {
+        return vols[i];
+    }
+
+    public double rate() {
+        return rate;
+    }
+
+    public double carry() {
+        return carry;
+    }
+
+    public double timeYears() {
+        return timeYears;
+    }
+
     /** Forward delta of the strikes beyond which {@link #impliedVol} stops using the raw formula. */
     public static final double WING_DELTA = 0.10;
 
