@@ -12,7 +12,7 @@ import java.io.IOException;
  * A desk rarely trades one alpha; it blends several ({@code
  * SignalEngine.alpha}, {@code OnlineAlphaLearner.normalizedPrediction},
  * a lead-lag echo, a bespoke signal), and the blending question is the
- * same honesty problem the learner solves for its weights: <b>how much
+ * same trust problem the learner solves for its weights: <b>how much
  * should each component be trusted, on evidence it could not have
  * memorized?</b>
  *
@@ -96,7 +96,7 @@ public final class AlphaEnsemble {
     /**
      * One interval: the current component values and the return realized
      * since the previous call. Scores the PREVIOUS snapshot against the
-     * return (honest alignment), then snapshots {@code values}. The first
+     * return (no look-ahead), then snapshots {@code values}. The first
      * call only snapshots. Non-finite handling is per-component: a NaN
      * component skips ITS scoring (each component's moments stay
      * conditioned on exactly the returns its covariance saw) while finite

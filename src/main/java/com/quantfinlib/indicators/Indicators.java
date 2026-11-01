@@ -6,7 +6,7 @@ import com.quantfinlib.util.MathUtils;
 import java.util.Arrays;
 
 /**
- * Technical Indicator Engine: production-ready implementations of the standard
+ * Technical Indicator Engine: implementations of the standard
  * technical analysis toolkit. All indicators operate on primitive arrays and
  * return primitive arrays (or small records of arrays) aligned with the input:
  * index i of the output corresponds to bar i, with {@code NaN} for warm-up bars.

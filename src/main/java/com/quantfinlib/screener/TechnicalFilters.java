@@ -12,7 +12,7 @@ import com.quantfinlib.util.MathUtils;
  * like X TODAY", so every filter reads only the LAST valid indicator value
  * — never a history of signals (that is a backtest's job, over in
  * {@code backtest}). "Too short = false" rather than "too short = throw"
- * is deliberate: a screen runs across an entire universe, and one
+ * is intended: a screen runs across an entire universe, and one
  * recently-listed ticker with 30 bars must silently drop out of an
  * SMA(200) screen, not kill the run for the other 2,999 names. The cost
  * of that choice is that {@code rsiBelow(14, 70)} and "not enough data"
@@ -67,8 +67,38 @@ public final class TechnicalFilters {
         };
     }
 
+    /** {@link #priceAboveVwap(int)} over the last 20 bars. */
     public static ScreenFilter priceAboveVwap() {
-        return s -> s.lastClose() > lastValid(Indicators.vwap(s.series()));
+        return priceAboveVwap(20);
+    }
+
+    /**
+     * Last close above the volume-weighted average typical price
+     * {@code (H+L+C)/3} of the last {@code window} bars. A VWAP anchored at
+     * the first bar of a multi-year series is a meaningless level; a rolling
+     * window keeps it comparable with the current price. Falls back to the
+     * equal-weighted mean when the window has no volume.
+     */
+    public static ScreenFilter priceAboveVwap(int window) {
+        if (window < 1) {
+            throw new IllegalArgumentException("window must be >= 1");
+        }
+        return s -> {
+            com.quantfinlib.core.BarSeries b = s.series();
+            int n = b.size();
+            int from = Math.max(0, n - window);
+            double pv = 0;
+            double v = 0;
+            double plain = 0;
+            for (int i = from; i < n; i++) {
+                double typical = (b.high(i) + b.low(i) + b.close(i)) / 3;
+                pv += typical * b.volume(i);
+                v += b.volume(i);
+                plain += typical;
+            }
+            double vwap = v > 0 ? pv / v : plain / (n - from);
+            return s.lastClose() > vwap;
+        };
     }
 
     public static ScreenFilter superTrendBullish(int period, double multiplier) {

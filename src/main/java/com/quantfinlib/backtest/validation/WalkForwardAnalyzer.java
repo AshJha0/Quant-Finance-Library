@@ -35,7 +35,7 @@ import java.util.function.ToDoubleFunction;
  * winner's in-sample per-bar returns. A ratio of whole-curve objectives,
  * rather than a sum of per-fold objectives (which for a Sharpe is not a
  * Sharpe, and is dominated by short noisy windows). NaN when the IS
- * objective is not positive: a ratio of two failures is not "robust".
+ * objective is not positive: a ratio of two failures is not a pass.
  * The IS runs are cold (they start on the train window's first bar) while
  * OOS runs are warm; IS and OOS trade counts are reported so the asymmetry
  * is visible.</p>
