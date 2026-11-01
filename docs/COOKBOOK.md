@@ -10438,3 +10438,42 @@ most executable volume, then the smallest imbalance, then the price nearest the
 reference. At 9 the buyers want 300 and the sellers offer 250, so 250 trades with
 50 left on the buy side. `transferResidual` moves what is left into an
 `HftOrderBook` for continuous trading.
+
+## 331. Quantiles and ranks with Stats
+
+```java
+double[] v = {1, 2, 3, 4};
+double q7 = Stats.quantile(v, 0.25);             // 1.75 (Hyndman-Fan type 7)
+double q1 = Stats.quantileType1Sorted(v, 0.25);  // 1 (type 1, input must be sorted)
+double med = Stats.median(v);                    // 2.5
+double s2 = Stats.sampleVariance(v);             // 5/3, divides by n - 1
+double[] r = Stats.ranks(new double[] {10, 20, 20, 5});   // 2, 3.5, 3.5, 1
+```
+
+Type 7 interpolates between order statistics; type 1 returns an observed value.
+`ranks` are 1-based and ties share the average rank. A probability outside [0, 1] or
+NaN throws `IllegalArgumentException`, and empty input gives NaN.
+
+## 332. Catching library input faults
+
+```java
+try {
+    LimitsConfig cfg = LimitsConfig.parse(text);
+} catch (ConfigurationException e) {
+    System.err.println("bad limits file: " + e.getMessage());
+}
+
+try {
+    BarSeries bars = CsvBarLoader.parse(lines, "SPY");
+} catch (RuntimeException e) {
+    if (e instanceof QuantFinException) {
+        System.err.println("input fault: " + e.getMessage());
+    } else {
+        throw e;
+    }
+}
+```
+
+`ConfigurationException` and `MalformedDataException` are `IllegalArgumentException`s
+and `WireProtocolException` is an `IllegalStateException`, so a 2.0 catch block still
+catches them. `QuantFinException` is the marker interface they share.

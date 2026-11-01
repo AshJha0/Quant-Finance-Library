@@ -11,7 +11,7 @@ documented error.
 
 | Area | Packages (under `com.quantfinlib`) |
 |---|---|
-| Data and series | `core`, `data` (CSV loading, alignment, corporate actions, point-in-time universes), `util.MathUtils` |
+| Data and series | `core` (including the exception types), `data` (CSV loading, alignment, corporate actions, point-in-time universes), `stats`, `util.MathUtils` |
 | Pricing and instruments | `pricing`, `rates`, `credit`, `fx` (conventions, curves, instruments, volatility surface), `commodities`, `markets` |
 | Risk | `risk`, `crb`, `volatility`, `hedging` |
 | Portfolio and research | `optimization`, `alpha`, `backtest` and its subpackages, `indicators`, `simulation`, `ml`, `screener`, `dsl` |
@@ -27,7 +27,15 @@ and `ExposureProfile`; in `risk`, `SaCcr`, `SaCcrTrade` and `FactorRiskModel`; i
 `DupireLocalVol`, `LocalVolMonteCarlo`, `LocalVolPde`, `HestonCos`,
 `HestonCalibrator` and `DividendTree`; `fx.VannaVolgaTouch`; in `alpha`,
 `AlphaRiskModels`, `AlphaCombiner`, `BacktestAttribution` and `CapacityCurve`; and
-`backtest.StrategyRunner`.
+`backtest.StrategyRunner`; the `stats` package (`Stats`); and in `core` the exception
+types `QuantFinException`, `WireProtocolException`, `MalformedDataException` and
+`ConfigurationException`. Which exception type a site throws is part of its documented
+behaviour; the message text is not.
+
+The jar is the named module `com.quantfinlib`, and it exports the reference packages
+as well as the stable ones. The module descriptor does not change the tiers on this
+page. Adding a package to the exports is a minor change; removing one is a major
+change.
 
 Within these packages, stability covers method signatures, record components and
 documented behaviour (conventions, units, default parameters). It does not cover

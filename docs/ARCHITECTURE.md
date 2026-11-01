@@ -51,6 +51,7 @@ drive the order state machine and release the risk gate's reservations.
 | Package | Purpose | Main classes |
 |---|---|---|
 | `core` | OHLCV series on primitive arrays | `Bar`, `BarSeries` |
+| `stats` | Descriptive statistics, one definition each | `Stats` (mean, sample and population variance, covariance, Pearson, Hyndman-Fan type 7 and type 1 quantiles, median, midranks) |
 | `util` | Numerics and measurement | `MathUtils` (normal CDF by Cody's erfc algorithm), `LatencyRecorder`, `HiccupMonitor` |
 | `data` | Data in and out | `CsvBarLoader`, `HttpBarFetcher`, `SeriesAligner`, `CorporateActions`, `PointInTimeUniverse`, `UniverseCsvLoader`, `TickFileWriter`/`TickFileReader` (QFLT v2), `TickCapture`, `AsyncTickCapture` |
 | `feed` | Live and multicast feeds | `WebSocketFeed`, `BinanceTradeParser`, `MoldUdp64Receiver` |
@@ -110,6 +111,79 @@ drive the order state machine and release the risk gate's reservations.
    after a crash, tick sessions can be replayed, walk-forward analysis carries the
    position across folds, and `persist.Checkpoint` writes learned model state
    atomically (forced to disk before the rename) so it survives a restart.
+
+## Module descriptor
+
+The library jar is the named module `com.quantfinlib`
+(`src/main/java/module-info.java`). It exports every package that was public in 2.0,
+the reference packages (`fix`, `sbe`, `feed`, `marketdata`, `orderbook`, `trading`,
+`util`) and the new `stats` package included. Exporting a package does not make it
+stable; the tiers are those of [STABILITY.md](STABILITY.md).
+
+| Directive | Why |
+|---|---|
+| `requires java.net.http` | `data.HttpBarFetcher` and `feed.WebSocketFeed` |
+| `requires jdk.httpserver` | `trading.TradingDashboard` |
+| `requires static org.jspecify` | `@NullMarked` and `@Nullable` annotations; compile time only, nothing at run time |
+
+`com.quantfinlib.examples` is compiled with the library but is not in the library jar
+and is not exported. It ships as the `examples` classifier jar, which has no
+descriptor, so the demos run on the class path. A consumer either adds
+`requires com.quantfinlib;` to its own `module-info.java` or keeps using the class
+path. `ModuleDescriptorTest` fails if a package is added without an `exports` line.
+
+## Statistics in one place
+
+`stats.Stats` holds the library's descriptive statistics, each with its convention
+written in the Javadoc: sample variance divides by n - 1 and population variance by
+n; `quantile` and `quantileSorted` are Hyndman and Fan (1996) type 7;
+`quantileType1Sorted` is type 1; `median` is type 7 at 0.5; `ranks` are 1-based
+midranks with ties averaged. Empty input gives NaN, the sample variance of fewer than
+two values is NaN, and a probability outside [0, 1] or NaN throws
+`IllegalArgumentException`.
+
+The older helpers delegate to it: `MathUtils.mean`, `variance`, `stdDev`, `stdDevP`,
+`stdDevSample`, `percentile`, `percentileSorted` and `covariance`, and
+`risk.Dependence.ranks`. Results on valid input are unchanged bit for bit.
+`MathUtils.correlation` keeps its convention of 0 for zero dispersion, where
+`Stats.pearson` returns NaN.
+
+Four similar computations stay separate because their conventions differ:
+`alpha.AlphaCombiner.pearson` (pairwise-complete, NaN below three pairs),
+`risk.TailRisk.varSorted` (type 1 with confidence snapping for the Basel
+convention), `util.LatencyRecorder.percentile` (histogram buckets) and the lagged,
+mean-supplied autocovariances in `alpha.NeweyWest`.
+
+## Exception policy
+
+A library exception marks a fault in external input: a byte stream, a file or a
+configuration. Each one extends the JDK type the same site threw in 2.0, so a catch
+block written for 2.0 still catches it. A Java class has one superclass, so no common
+base class could extend both `IllegalArgumentException` and
+`IllegalStateException`; the common type is the marker interface
+`core.QuantFinException`. Test `e instanceof QuantFinException` to tell a library
+input fault from any other failure.
+
+| Type (in `core` unless named) | Extends | Thrown by |
+|---|---|---|
+| `WireProtocolException` | `IllegalStateException` | A stream that breaks its framing: FIX BodyLength in `fix.FixDecoder`, the SBE schema and template header in `sbe.SbeFrames`. Drop the connection and recover by sequence number. |
+| `MalformedDataException` | `IllegalArgumentException` | A file or record that does not follow its format: `data.CsvBarLoader.parse`, `data.UniverseCsvLoader.parse` |
+| `ConfigurationException` | `IllegalArgumentException` | An invalid configuration or limit: `trading.LimitsConfig` |
+| `fix.FixParseException` | `IllegalArgumentException` | A malformed FIX message; predates the scheme and implements the marker |
+| `data.TickFileReader.TruncatedTickFileException` | `IOException` | A tick file cut short; predates the scheme and implements the marker |
+
+Plain argument validation (a negative size, a null factory, a probability out of
+range) stays `IllegalArgumentException`. That is a programming error at the call
+site, not an input fault.
+
+Not converted in 2.1:
+
+- the `IOException` header checks in `data.TickFileReader` and the format checks in
+  `persist.Checkpoint`;
+- the `UncheckedIOException` persistence failures in `fix.FileSessionStore`.
+
+A library type there would have to be an `IOException` subtype; that is left for a
+later release.
 
 ## Further reading
 

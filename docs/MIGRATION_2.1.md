@@ -2,9 +2,10 @@
 
 Version 2.1 adds classes, methods and overloads. It removes nothing and changes no
 public signature, so code written against 2.0 compiles unchanged, and the API
-compatibility gate (below) checks this for the stable packages. Two results change
-because a fix landed or a behaviour was tightened; they are listed under "Behaviour
-notes". [CHANGELOG.md](../CHANGELOG.md) has the full list.
+compatibility gate (below) checks this for the stable packages. Some results change
+because a fix landed or a behaviour was tightened, and invalid input to some
+`MathUtils` methods now fails with a different exception; all are listed under
+"Behaviour notes". [CHANGELOG.md](../CHANGELOG.md) has the full list.
 
 ## New APIs
 
@@ -15,6 +16,8 @@ notes". [CHANGELOG.md](../CHANGELOG.md) has the full list.
 | Counterparty capital | `risk.SaCcr`, `SaCcrTrade` (BCBS 279) |
 | Smile and exotics | `pricing.SviSlice`, `SsviSurface`, `SviSurface`, `TotalVarianceSurface`, `DupireLocalVol`, `LocalVolMonteCarlo`, `LocalVolPde`, `HestonCos`, `HestonCalibrator`, `DividendTree`; `VannaVolga.exactWeights`, `weightsFor`, `priceExact`; `TouchOption.oneTouchPayAtHit`, `doubleNoTouch`, `doubleOneTouch`; `AsianOption.turnbullWakemanSeasoned`, `curranPrice`, `levyPrice`; `fx.VannaVolgaTouch` |
 | Factor risk and research | `risk.FactorRiskModel`; `alpha.AlphaRiskModels`, `AlphaCombiner`, `BacktestAttribution`, `CapacityCurve`; `AlphaBacktester.RiskOptions` and `runTraced`; `PortfolioBacktester.Participation`; `backtest.StrategyRunner` |
+| Statistics | `stats.Stats` (moments, covariance, Pearson, Hyndman-Fan type 7 and type 1 quantiles, median, midranks) |
+| Exceptions | `core.QuantFinException` (marker interface), `WireProtocolException`, `MalformedDataException`, `ConfigurationException` |
 | Trading lane | `fix.FixSessionSchedule`, `FixSessionOptions` and `FixSession` overloads that take them; `trading.PositionLedger`, `DropCopyReconciler`, `LimitsConfig`, `LimitsManager`, `HftRiskGate.limits(LimitsConfig)`; `orderbook.AuctionBook`; `AdaptiveSor.maxLatencyPenaltyBps` |
 
 ## Behaviour notes
@@ -31,9 +34,27 @@ notes". [CHANGELOG.md](../CHANGELOG.md) has the full list.
 - `OrderBook.cancel` is O(1) in the price level. Results are unchanged.
 - `AlphaBacktester.run` without `RiskOptions` keeps the z-score construction and
   gives the same results as 2.0.
+- `MathUtils.mean`, `variance`, `stdDev`, `stdDevP`, `stdDevSample`, `percentile`,
+  `percentileSorted` and `covariance`, and `risk.Dependence.ranks`, now delegate to
+  `stats.Stats`. Results on valid input are unchanged bit for bit.
+- `MathUtils.percentile` and `percentileSorted` throw `IllegalArgumentException` for a
+  probability outside [0, 1] or NaN. In 2.0 such a value threw
+  `ArrayIndexOutOfBoundsException` or returned the minimum.
+- `MathUtils.mean(v, from, to)` and the range standard deviations throw
+  `IndexOutOfBoundsException` for a range outside the array or with `from > to`.
+- FIX BodyLength and SBE header framing faults throw `WireProtocolException`, CSV bar
+  and universe format faults throw `MalformedDataException`, and `LimitsConfig`
+  faults throw `ConfigurationException`. Each extends the type thrown in 2.0, so
+  existing catch blocks still work. All implement `core.QuantFinException`, as do
+  `fix.FixParseException` and `data.TickFileReader.TruncatedTickFileException`.
 
 ## Build and test tooling
 
+- The library jar is the named module `com.quantfinlib`. On the module path, add
+  `requires com.quantfinlib;` to your `module-info.java`; on the class path nothing
+  changes. The `examples` jar has no descriptor and runs on the class path.
+  `java -p quant-finance-library-2.1.0.jar -m com.quantfinlib` starts the command
+  line, as `java -jar` does.
 - `scripts/fetch-api-baseline.sh && ./mvnw -Papi-compat -DskipTests verify` compares
   the build with the released 2.0.0 jar. See [STABILITY.md](STABILITY.md).
 - The stable packages are annotated `@NullMarked` (JSpecify). JSpecify is a
