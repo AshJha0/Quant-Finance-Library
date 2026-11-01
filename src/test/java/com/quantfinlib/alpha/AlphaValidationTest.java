@@ -121,9 +121,9 @@ class AlphaValidationTest {
         assertTrue(real.pValue() < 0.05, "real signal p=" + real.pValue());
         assertTrue(real.observedMeanIc() > 0.7, "IC=" + real.observedMeanIc());
 
-        // Static random scores: whatever IC they luck into is IDENTICAL at
-        // every date, so permuting dates changes nothing → p ≈ 1. The test
-        // correctly refuses to call time-invariant luck a signal.
+        // Static random scores under the DATE-permutation diagnostic: the
+        // ranking never changes, so permuting dates changes nothing and p = 1.
+        // That null measures time variation of the ranking, not skill.
         Random rng = new Random(7);
         double[] fixed = new double[ctx.symbolCount()];
         for (int i = 0; i < fixed.length; i++) {
@@ -131,7 +131,7 @@ class AlphaValidationTest {
         }
         AlphaFactor luck = (c, index) -> fixed.clone();
         AlphaValidation.RobustnessResult lucky = AlphaValidation.monteCarloRobustness(
-                ctx, luck, 5, 30, 200, 42);
+                ctx, luck, 5, 30, 200, 42, AlphaValidation.NullModel.DATE_PERMUTATION);
         assertEquals(1.0, lucky.pValue(), 1e-9);
         assertThrows(IllegalArgumentException.class,
                 () -> AlphaValidation.monteCarloRobustness(ctx, luck, 5, 30, 5, 42));

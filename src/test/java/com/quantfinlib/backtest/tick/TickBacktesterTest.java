@@ -211,7 +211,40 @@ class TickBacktesterTest {
             }
         }), file, TickBacktester.Config.defaults()
                 .withDefaultQueueAhead(500).withCommissionBps(0));
-        assertEquals(400, noGrid.fills().getFirst().quantity());   // full fill on "through"
+        // A through print fills at most its own size: the 300-lot print, not all 400.
+        assertEquals(300, noGrid.fills().getFirst().quantity());
+    }
+
+    @Test
+    void throughPrintsFillNoMoreThanTheirOwnSize(@TempDir Path dir) throws Exception {
+        // A 100,000-lot bid at 100; three 100-lot prints at 99.9 trade through it.
+        Path file = writeTicks(dir, new double[]{100.5, 99.9, 99.9, 99.9},
+                new double[]{100, 100, 100, 100});
+        var result = TickBacktester.run(onTick((ctx, i, sym, px) -> {
+            if (i == 0) {
+                ctx.submitLimit(sym, Side.BUY, 100.00, 100_000);
+            }
+        }), file, TickBacktester.Config.defaults().withCommissionBps(0));
+        long filled = 0;
+        for (var f : result.fills()) {
+            filled += f.quantity();
+            assertEquals(100.00, f.price(), 1e-12);
+        }
+        assertEquals(300, filled);
+    }
+
+    @Test
+    void marketOrderSizeTermIsSquareRootInAveragePrints(@TempDir Path dir) throws Exception {
+        // Average print 100; a 400-lot market buy pays half-spread 1 bp plus
+        // 10 bp * sqrt(400/100) = 20 bp.
+        Path file = writeTicks(dir, new double[]{100, 100, 100}, new double[]{100, 100, 100});
+        var result = TickBacktester.run(onTick((ctx, i, sym, px) -> {
+            if (i == 1) {
+                ctx.submitMarket(sym, Side.BUY, 400);
+            }
+        }), file, TickBacktester.Config.defaults().withCommissionBps(0)
+                .withImpactCoefficientBps(10));
+        assertEquals(100 * (1 + 21e-4), result.fills().getFirst().price(), 1e-9);
     }
 
     @Test

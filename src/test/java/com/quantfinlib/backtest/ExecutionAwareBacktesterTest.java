@@ -57,7 +57,10 @@ class ExecutionAwareBacktesterTest {
         BarSeries s = BarSeries.of("CYCLE", TestData.sineTrend(500, 100, 0.02, 10, 60));
         BacktestConfig cfg = BacktestConfig.defaults();
 
-        BacktestResult classic = Backtester.run(new SmaCrossStrategy(5, 20), s, cfg);
+        // InstantExecution fills on the signal bar's close, so the classic
+        // engine is compared in its CLOSE mode.
+        BacktestResult classic = Backtester.run(new SmaCrossStrategy(5, 20), s,
+                cfg.withFillPolicy(com.quantfinlib.backtest.FillPolicy.CLOSE));
         ExecutionAwareResult aware = ExecutionAwareBacktester.run(
                 new SmaCrossStrategy(5, 20), s, cfg, InstantExecution.from(cfg));
 

@@ -14,26 +14,31 @@ import java.util.Map;
 import java.util.function.ToDoubleFunction;
 
 /**
- * Walk-forward analysis — the standard defense against overfit backtests.
- * The series is split into rolling train/test windows; on each fold the
- * parameter grid is optimized <i>only on the train window</i> and the winner
- * is evaluated on the unseen test window. Out-of-sample test segments are
- * stitched into one continuous equity curve (capital carries across folds),
- * giving honest out-of-sample metrics and the walk-forward efficiency ratio
- * (OOS / IS objective — near 1 is robust, near 0 is curve-fitting).
+ * Walk-forward analysis. The series is split into rolling train/test
+ * windows; on each fold the parameter grid is optimised on the train window
+ * only and the winner trades the following test window. Test segments are
+ * stitched into one continuous out-of-sample equity curve.
  *
- * <p>Each test window is evaluated WARM: the backtest sees the preceding
- * train bars for indicator warm-up but only trades from the test boundary
- * ({@link Backtester#run(com.quantfinlib.backtest.TradingStrategy, BarSeries,
- * BacktestConfig, int)}). Evaluating a bare test slice would re-compute
- * every indicator cold and force HOLD through each fold's first lookback
- * bars — systematically understating out-of-sample activity.</p>
+ * <p><b>Continuity across folds.</b> The book is carried from one test
+ * window into the next ({@link Backtester#runSegment}): a position open at a
+ * fold boundary stays open and is managed by the next fold's strategy, as it
+ * would be live. Only the last fold liquidates at the end of the data. Trade
+ * indices are absolute indices into {@code series}.</p>
  *
- * <p>The efficiency ratio is only meaningful when the in-sample objective
- * sum is positive; when it is zero or negative (the optimizer could not
- * find anything that even backtests well in-sample) efficiency is
- * {@code NaN} — a ratio of two losses saying "0.5" would read as robust
- * when both sides are failing.</p>
+ * <p><b>Warm indicators.</b> Each test window is run on the slice
+ * {@code [trainFrom, testTo)} with trading starting at the test boundary, so
+ * indicators enter the test window warm and nothing after {@code testTo} is
+ * visible to the strategy's {@code init}.</p>
+ *
+ * <p><b>Efficiency</b> is {@code objective(stitched OOS curve) /
+ * objective(stitched IS curve)}, where the IS curve chains each fold
+ * winner's in-sample per-bar returns. A ratio of whole-curve objectives,
+ * rather than a sum of per-fold objectives (which for a Sharpe is not a
+ * Sharpe, and is dominated by short noisy windows). NaN when the IS
+ * objective is not positive: a ratio of two failures is not a pass.
+ * The IS runs are cold (they start on the train window's first bar) while
+ * OOS runs are warm; IS and OOS trade counts are reported so the asymmetry
+ * is visible.</p>
  */
 public final class WalkForwardAnalyzer {
 
@@ -42,16 +47,23 @@ public final class WalkForwardAnalyzer {
                        double inSampleObjective, double outOfSampleObjective) {
     }
 
+    /**
+     * @param inSampleEquity      chained in-sample equity of the fold winners
+     * @param inSampleTradeCount  trades the winners made in sample
+     * @param efficiency          OOS objective over IS objective on the stitched curves
+     */
     public record WalkForwardResult(List<Fold> folds, double[] outOfSampleEquity,
                                     PerformanceMetrics outOfSampleMetrics,
-                                    List<Trade> outOfSampleTrades, double efficiency) {
+                                    List<Trade> outOfSampleTrades, double efficiency,
+                                    double[] inSampleEquity, PerformanceMetrics inSampleMetrics,
+                                    int inSampleTradeCount) {
     }
 
     private WalkForwardAnalyzer() {
     }
 
     /**
-     * @param trainBars bars in each optimization window
+     * @param trainBars bars in each optimisation window
      * @param testBars  bars in each out-of-sample window; the window rolls
      *                  forward by this amount per fold
      */
@@ -66,44 +78,65 @@ public final class WalkForwardAnalyzer {
         }
         List<Fold> folds = new ArrayList<>();
         List<Double> oosEquity = new ArrayList<>();
+        List<Double> isEquity = new ArrayList<>();
+        isEquity.add(config.initialCapital());
         List<Trade> oosTrades = new ArrayList<>();
-        double carryCapital = config.initialCapital();
-        double isSum = 0, oosSum = 0;
-
+        int isTrades = 0;
+        Backtester.State state = Backtester.State.flat(config.initialCapital());
+        List<Integer> starts = new ArrayList<>();
         for (int start = 0; start + trainBars + testBars <= n; start += testBars) {
+            starts.add(start);
+        }
+        if (starts.isEmpty()) {
+            throw new IllegalArgumentException("series too short for even one fold");
+        }
+        for (int f = 0; f < starts.size(); f++) {
+            int start = starts.get(f);
             int trainTo = start + trainBars;
             int testTo = trainTo + testBars;
+            boolean last = f == starts.size() - 1;
 
             BarSeries train = series.slice(start, trainTo);
             GridSearchOptimizer.Candidate best =
                     GridSearchOptimizer.best(grid, factory, train, config, objective);
+            BacktestResult is = Backtester.run(factory.create(best.params()), train, config);
+            isTrades += is.trades().size();
+            double[] isCurve = is.equityCurve();
+            for (int k = 1; k < isCurve.length; k++) {
+                double prev = isEquity.getLast();
+                isEquity.add(prev * (isCurve[k] / isCurve[k - 1]));
+            }
 
-            // Warm-up = the train window; trading starts at the test boundary.
             BarSeries warmPlusTest = series.slice(start, testTo);
-            BacktestResult oos = Backtester.run(factory.create(best.params()), warmPlusTest,
-                    config.withInitialCapital(carryCapital), trainBars);
-            double oosScore = objective.applyAsDouble(oos.metrics());
-
+            Backtester.Segment seg = Backtester.runSegment(factory.create(best.params()),
+                    warmPlusTest, config, trainBars, state, start, last);
+            state = seg.endState();
+            double oosScore = objective.applyAsDouble(seg.result().metrics());
             folds.add(new Fold(start, trainTo, trainTo, testTo,
                     best.params(), best.objective(), oosScore));
-            for (double e : oos.equityCurve()) {
+            for (double e : seg.result().equityCurve()) {
                 oosEquity.add(e);
             }
-            oosTrades.addAll(oos.trades());
-            carryCapital = oos.metrics().finalEquity();
-            isSum += best.objective();
-            oosSum += oosScore;
+            oosTrades.addAll(seg.result().trades());
         }
-        if (folds.isEmpty()) {
-            throw new IllegalArgumentException("series too short for even one fold");
-        }
-        double[] equity = new double[oosEquity.size()];
-        for (int i = 0; i < equity.length; i++) {
-            equity[i] = oosEquity.get(i);
-        }
+        double[] equity = toArray(oosEquity);
+        double[] isEq = toArray(isEquity);
         PerformanceMetrics metrics = PerformanceAnalytics.compute(
                 equity, oosTrades, config.periodsPerYear());
-        double efficiency = isSum > 0 ? oosSum / isSum : Double.NaN;
-        return new WalkForwardResult(folds, equity, metrics, oosTrades, efficiency);
+        PerformanceMetrics isMetrics = PerformanceAnalytics.compute(
+                isEq, List.of(), config.periodsPerYear());
+        double isObj = objective.applyAsDouble(isMetrics);
+        double oosObj = objective.applyAsDouble(metrics);
+        double efficiency = isObj > 0 ? oosObj / isObj : Double.NaN;
+        return new WalkForwardResult(folds, equity, metrics, oosTrades, efficiency,
+                isEq, isMetrics, isTrades);
+    }
+
+    private static double[] toArray(List<Double> list) {
+        double[] a = new double[list.size()];
+        for (int i = 0; i < a.length; i++) {
+            a[i] = list.get(i);
+        }
+        return a;
     }
 }

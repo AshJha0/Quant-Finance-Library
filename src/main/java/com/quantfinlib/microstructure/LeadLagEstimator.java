@@ -24,11 +24,9 @@ import java.util.Arrays;
  * O(maxLag) work per sample, zero allocation, single writer.</p>
  *
  * <p>Reading the output: {@link #bestLag} is the {@code k > 0} with the
- * largest |correlation| — a genuine lead, because the leader's return was
- * observable before the follower's. Compare it against
- * {@link #correlationAtLag correlationAtLag(0)}: if the contemporaneous
- * correlation dominates every lagged one, the pair co-moves but neither
- * side is tradeably ahead. {@link #expectedFollowerReturn} turns the best
+ * largest |correlation|, reported only when it clears a multiple-testing
+ * corrected significance band and exceeds the contemporaneous correlation (otherwise 0: the pair
+ * co-moves or the lead is noise). {@link #expectedFollowerReturn} turns the best
  * lag into a prediction via the regression beta at that lag. Like every
  * streaming estimate here, treat a lead that appears and disappears with
  * the decay window as noise; only a persistent best lag with stable sign
@@ -38,6 +36,7 @@ public final class LeadLagEstimator {
 
     private final int maxLag;
     private final double alpha;
+    private final double criticalZ;  // Šidák, 5% family-wise over maxLag lags
 
     // Ring of the leader's most recent maxLag+1 returns; head = newest slot.
     private final double[] leaderRing;
@@ -63,6 +62,8 @@ public final class LeadLagEstimator {
         }
         this.maxLag = maxLag;
         this.alpha = alpha;
+        double perTest = 1 - Math.pow(0.95, 1.0 / maxLag);
+        this.criticalZ = com.quantfinlib.util.MathUtils.normInv(1 - perTest / 2);
         this.leaderRing = new double[maxLag + 1];
         int n = maxLag + 1;
         this.meanLead = new double[n];
@@ -127,9 +128,22 @@ public final class LeadLagEstimator {
     }
 
     /**
-     * The lag {@code k >= 1} with the largest |correlation| — the
-     * estimated lead time in sampling intervals. 0 when no lagged
-     * correlation has been measured yet (fewer than 2 samples).
+     * The lag {@code k >= 1} with the largest |correlation|, the estimated
+     * lead time in sampling intervals, provided it is significant and
+     * beats the contemporaneous correlation. Returns 0 (no tradeable lead)
+     * when
+     * <ul>
+     *   <li>fewer than 2 samples exist;</li>
+     *   <li>the best |ρ_k| is within {@code z/√n_eff} of zero, with
+     *       {@code n_eff} the Kish effective sample size of the EWMA
+     *       ({@link IcSignificance#effectiveSamples}) and {@code z} the
+     *       Šidák critical value for {@code maxLag} two-sided tests at a 5%
+     *       family-wise level ({@code z ≈ 2.80} for 10 lags). An argmax over
+     *       {@code maxLag} noise correlations always finds some lag; with a
+     *       per-lag 2-SE band a 10-lag noise pair would still report a lead
+     *       about 40% of the time;</li>
+     *   <li>{@code |ρ_0| >= |ρ_k|}: the pair co-moves, neither side leads.</li>
+     * </ul>
      */
     public int bestLag() {
         int best = 0;
@@ -141,6 +155,13 @@ public final class LeadLagEstimator {
                 bestAbs = c;
                 best = k;
             }
+        }
+        if (best == 0) {
+            return 0;
+        }
+        double se = IcSignificance.standardError(alpha, samples - best);
+        if (bestAbs <= criticalZ * se || Math.abs(correlationAtLag(0)) >= bestAbs) {
+            return 0;
         }
         return best;
     }

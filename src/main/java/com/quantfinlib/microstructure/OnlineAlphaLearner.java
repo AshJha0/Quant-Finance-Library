@@ -14,7 +14,7 @@ import java.io.IOException;
  * dimensionless signal ingredients (queue imbalance, trade imbalance,
  * normalized OFI, momentum-Z) to the next-interval return.
  *
- * <h2>The honesty mechanism: prequential out-of-sample IC</h2>
+ * <h2>The safeguard: prequential out-of-sample IC</h2>
  * The trap with any self-updating alpha is grading its own homework. This
  * learner can't: {@link #train} records the prediction made with the
  * CURRENT weights <em>before</em> the realized return updates them
@@ -110,7 +110,7 @@ public final class OnlineAlphaLearner {
     /**
      * One learning step: the prediction made with the current weights is
      * scored against {@code realizedReturn} (this is what makes
-     * {@link #outOfSampleIC} honest), THEN the weights update by ridge-SGD.
+     * {@link #outOfSampleIC} out of sample), then the weights update by ridge-SGD.
      * Non-finite inputs are skipped entirely — a NaN must neither poison
      * the weights nor sneak into the IC.
      *
@@ -191,14 +191,18 @@ public final class OnlineAlphaLearner {
     /**
      * The prediction scaled by its own typical magnitude and clamped to
      * [-1, 1] — the {@code BenchmarkExecutor.MarketState.alpha}-ready form.
-     * Returns 0 while the out-of-sample IC is not positive OR the track
-     * record is shorter than one IC memory (~1/icAlpha samples): a learner
-     * that hasn't demonstrated live predictive power over a meaningful
-     * window emits no signal — a lucky first hour is not evidence.
+     * Returns 0 while the out-of-sample IC is not significant, that is
+     * {@code IC ≤ 2·SE} with SE the null standard error of the EWMA
+     * correlation ({@link IcSignificance}; about 0.07 at {@code icAlpha =
+     * 0.01}), or while the track record is shorter than one IC memory
+     * (~1/icAlpha samples). A true-zero learner would pass an {@code IC > 0}
+     * gate half the time; this gate passes it about 2.3% of the time.
      */
     public double normalizedPrediction(double queueImbalance, double tradeImbalance,
                                        double normalizedOfi, double momentumZ) {
-        if (samples * icAlpha < 1 || outOfSampleIC() <= 0 || absPredEwma <= 0) {
+        if (samples * icAlpha < 1 || absPredEwma <= 0
+                || outOfSampleIC() <= IcSignificance.DEFAULT_Z
+                        * IcSignificance.standardError(icAlpha, samples)) {
             return 0;
         }
         double pred = predict(queueImbalance, tradeImbalance, normalizedOfi, momentumZ);

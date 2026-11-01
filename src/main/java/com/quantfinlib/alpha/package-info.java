@@ -1,53 +1,58 @@
 /**
- * The alpha research pipeline — signal to evaluated, validated, cost-aware,
- * constructed, reported strategy, with each stage a separate, composable
- * step:
+ * The alpha research pipeline: signal to evaluated, validated, cost-aware,
+ * constructed and reported strategy, each stage a separate step.
  *
  * <ol>
- *   <li><b>Signal generation</b> — {@link com.quantfinlib.alpha.Factors}:
- *       nine standard factors (MA crossover, contrarian RSI, MACD,
- *       Bollinger reversion, mean reversion, 12-1 momentum, value, quality,
- *       low volatility) producing raw cross-sectional scores over an
- *       {@link com.quantfinlib.alpha.AlphaContext} panel;</li>
- *   <li><b>Evaluation</b> — {@link com.quantfinlib.alpha.SignalEvaluator}:
- *       rank IC, IR, t-stat, hit rate, turnover, cross-factor exposure —
- *       the cheap filter before any backtest;</li>
- *   <li><b>Validation</b> — {@link com.quantfinlib.alpha.AlphaValidation}:
- *       walk-forward selection with OOS efficiency, blocked k-fold
- *       consistency, Monte Carlo permutation p-values, parameter
- *       sensitivity — the overfitting defense;</li>
- *   <li><b>Execution-aware backtest</b> —
- *       {@link com.quantfinlib.alpha.AlphaBacktester}: commission, bid-ask
- *       spread, slippage and square-root market impact
- *       ({@code microstructure.MarketImpactModel}), with gross-vs-net cost
- *       decomposition;</li>
- *   <li><b>Portfolio construction</b> —
- *       {@link com.quantfinlib.alpha.PortfolioConstruction}: z-score
- *       sizing with caps, inverse-vol risk budgeting, sector and beta
- *       neutralization, mean-variance tilt;</li>
- *   <li><b>Reporting</b> — {@link com.quantfinlib.alpha.AlphaReport}:
- *       alpha decay with half-life, OLS factor attribution, drawdown
- *       curves, rolling Sharpe, and the shared ratio set from
- *       {@code backtest.PerformanceAnalytics}.</li>
+ *   <li><b>Signal generation</b>: {@link com.quantfinlib.alpha.Factors}
+ *       (MA crossover, contrarian RSI, MACD, Bollinger reversion, mean
+ *       reversion, 12-1 momentum, value, quality, low volatility) over an
+ *       {@link com.quantfinlib.alpha.AlphaContext} panel, with per-date
+ *       winsorise, z-score and sector-neutralise decorators. Value and
+ *       quality need point-in-time fundamentals
+ *       ({@link com.quantfinlib.alpha.FundamentalsHistory}); a static
+ *       snapshot is refused for historical bars.</li>
+ *   <li><b>Evaluation</b>: {@link com.quantfinlib.alpha.SignalEvaluator}:
+ *       rank IC at every bar with Newey-West t-stats and IC
+ *       autocorrelation, demeaned hit rate, turnover, quantile spreads,
+ *       cross-factor exposure.</li>
+ *   <li><b>Validation</b>: {@link com.quantfinlib.alpha.AlphaValidation}:
+ *       walk-forward selection with observation-weighted folds and a
+ *       best-of-N haircut, blocked k-fold consistency, permutation nulls
+ *       (cross-sectional label permutation by default; circular shift and
+ *       date permutation as diagnostics), parameter sensitivity.</li>
+ *   <li><b>Execution-aware backtest</b>:
+ *       {@link com.quantfinlib.alpha.AlphaBacktester}: next-open fills by
+ *       default, weights that drift between trades, commission, spread,
+ *       slippage and square-root impact, participation caps with carry-over,
+ *       financing, and terminal events for held names.</li>
+ *   <li><b>Portfolio construction</b>:
+ *       {@link com.quantfinlib.alpha.PortfolioConstruction} (dollar-neutral
+ *       z-score books with water-filling caps, inverse-vol budgeting, joint
+ *       sector/beta/dollar neutralisation, mean-variance tilt) and
+ *       {@link com.quantfinlib.alpha.TurnoverAwareOptimizer} (alpha, risk,
+ *       L1 turnover penalty, boxes, trade limits and neutrality equalities,
+ *       solved by ADMM).</li>
+ *   <li><b>Reporting</b>: {@link com.quantfinlib.alpha.AlphaReport}: alpha
+ *       decay on lagged one-bar returns with an exponential fit,
+ *       holding-period IC, OLS attribution with Newey-West errors on
+ *       {@link com.quantfinlib.alpha.FactorReturns} streams, drawdown curves,
+ *       rolling Sharpe.</li>
  * </ol>
  *
- * <p>All scores/weights flow as {@code double[]} aligned with the frozen
- * {@code AlphaContext.symbols()} order; NaN marks "no data" at every
- * stage. Factors must never read past their evaluation index — the
- * no-look-ahead contract on {@link com.quantfinlib.alpha.AlphaFactor}.
- * Attach a {@code data.PointInTimeUniverse} via
- * {@link com.quantfinlib.alpha.AlphaContext#withUniverse} to make the whole
- * pipeline survivorship-honest: dead and non-member names score NaN per bar
- * and never enter ICs, validation, or constructed weights.</p>
+ * <p>All scores and weights flow as {@code double[]} aligned with the
+ * sorted {@code AlphaContext.symbols()}; NaN marks "no data" at every
+ * stage. Factors must never read past their evaluation index. Attach a
+ * {@code data.PointInTimeUniverse} via
+ * {@link com.quantfinlib.alpha.AlphaContext#withUniverse}: non-members score
+ * NaN, and forward returns and held positions earn delisting and merger
+ * proceeds instead of forward-filled ghost bars.</p>
  *
  * <p>Pricing and seasonality: {@link com.quantfinlib.alpha.FamaMacBeth}
- * (the cross-sectional premium estimator — what an exposure is WORTH
- * per period, with time-series t-stats that absorb the cross-sectional
- * correlation a pooled regression trips over; a significant intercept
- * means returns your factors do not explain) and
+ * (cross-sectional premia with Newey-West errors on the premium series,
+ * optional per-period standardisation, QR solves) and
  * {@link com.quantfinlib.alpha.CalendarAnomalies} (day-of-week and
- * turn-of-month profiles WITH significance — most published calendar
- * anomalies died after publication, and the t-stat is what separates a
- * tradable seasonal from a data-mined ghost).</p>
+ * turn-of-month profiles with HAC t-stats and Holm-corrected flags).
+ * Shared statistics: {@link com.quantfinlib.alpha.NeweyWest},
+ * {@link com.quantfinlib.alpha.Ols}.</p>
  */
 package com.quantfinlib.alpha;

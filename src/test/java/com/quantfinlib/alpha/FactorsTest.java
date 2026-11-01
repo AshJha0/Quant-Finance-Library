@@ -130,9 +130,13 @@ class FactorsTest {
         funda.put("CHEAP", new Fundamentals(1e9, 8, 0.9, 5, 0.22, 0.03, 0.3));
         funda.put("DEAR", new Fundamentals(1e9, 40, 6.0, 5, 0.08, 0.00, 2.5));
         AlphaContext ctx = AlphaContext.of(data, funda);
+        int last = ctx.bars() - 1;
+        // A static snapshot is only valid at the last bar; scoring history
+        // with it is look-ahead and is refused.
+        assertThrows(IllegalStateException.class, () -> Factors.value().scores(ctx, 50));
 
-        double[] value = Factors.value().scores(ctx, 50);
-        double[] quality = Factors.quality().scores(ctx, 50);
+        double[] value = Factors.value().scores(ctx, last);
+        double[] quality = Factors.quality().scores(ctx, last);
         int cheap = ctx.symbols().indexOf("CHEAP");
         int dear = ctx.symbols().indexOf("DEAR");
         int nodata = ctx.symbols().indexOf("NODATA");
