@@ -12,6 +12,10 @@ import java.util.StringJoiner;
  * result.
  */
 public final class BinanceTradeParser implements FeedParser {
+    /** Creates an instance; the explicit form of the default constructor. */
+    public BinanceTradeParser() {
+    }
+
 
     /** Public Binance combined-stream endpoint for the given symbols' trades. */
     public static URI streamUri(String... symbols) {

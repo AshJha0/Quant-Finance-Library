@@ -16,6 +16,10 @@ import java.time.format.DateTimeFormatter;
  * named {@code <script>} must render as text, not execute (tested).
  */
 public final class HtmlReportExporter implements ReportExporter {
+    /** Creates an instance; the explicit form of the default constructor. */
+    public HtmlReportExporter() {
+    }
+
 
     @Override
     public void export(Report report, Path path) throws IOException {

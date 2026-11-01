@@ -22,6 +22,10 @@ package com.quantfinlib.crb;
  * deterministic, single-threaded, research/warm lane.</p>
  */
 public final class CrbPnlLedger {
+    /** Creates an instance; the explicit form of the default constructor. */
+    public CrbPnlLedger() {
+    }
+
 
     private double spreadCaptured;
     private double improvementPaid;

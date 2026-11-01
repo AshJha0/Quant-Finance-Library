@@ -14,6 +14,10 @@ import java.util.List;
  * is only observable through fills.
  */
 public final class DarkPoolSimulator {
+    /** Creates an instance; the explicit form of the default constructor. */
+    public DarkPoolSimulator() {
+    }
+
 
     public record Fill(long buyOrderId, long sellOrderId, double price, long quantity) {
     }

@@ -20,6 +20,10 @@ import java.util.Map;
  * execution was worse than the benchmark for the order's side.</p>
  */
 public final class BestExecutionAnalyzer {
+    /** Creates an instance; the explicit form of the default constructor. */
+    public BestExecutionAnalyzer() {
+    }
+
 
     /** One parent order outcome. Unfilled orders: {@code filled=false}, price/latency ignored. */
     public record OrderOutcome(String orderId, String venue, Side side, long quantity,

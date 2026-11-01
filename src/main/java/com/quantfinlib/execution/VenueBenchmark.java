@@ -14,6 +14,10 @@ import java.util.Map;
  * venue, ranked by execution quality.
  */
 public final class VenueBenchmark {
+    /** Creates an instance; the explicit form of the default constructor. */
+    public VenueBenchmark() {
+    }
+
 
     /**
      * One routing outcome. For unfilled attempts set {@code filled=false};

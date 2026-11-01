@@ -193,6 +193,10 @@ public final class CircuitBreakers {
      * and not-after-15:25 rules for Levels 1 and 2. Reset it each session.
      */
     public static final class MarketWide {
+        /** Creates an instance; the explicit form of the default constructor. */
+        public MarketWide() {
+        }
+
 
         public static final double LEVEL_1 = 0.07;
         public static final double LEVEL_2 = 0.13;

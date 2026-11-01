@@ -24,6 +24,10 @@ import java.nio.ByteBuffer;
  * {@code fx.AggregatedBook} consumes.
  */
 public final class QuoteFlyweight {
+    /** Creates an instance; the explicit form of the default constructor. */
+    public QuoteFlyweight() {
+    }
+
 
     /** SBE templateId. */
     public static final int TEMPLATE_ID = 3;

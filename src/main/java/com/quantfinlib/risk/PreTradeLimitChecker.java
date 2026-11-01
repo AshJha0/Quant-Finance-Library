@@ -16,6 +16,10 @@ import java.util.Set;
  * headroom. Designed to be evaluated synchronously on the order path.
  */
 public final class PreTradeLimitChecker {
+    /** Creates an instance; the explicit form of the default constructor. */
+    public PreTradeLimitChecker() {
+    }
+
 
     public record OrderRequest(String symbol, Side side, long quantity, double price,
                                String counterparty) {

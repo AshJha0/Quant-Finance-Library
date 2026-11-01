@@ -73,6 +73,10 @@ public final class TickSizeSchedule {
 
     /** Accumulates (floor price, tick) bands; floors may arrive in any order. */
     public static final class Builder {
+        /** Creates an instance; the explicit form of the default constructor. */
+        public Builder() {
+        }
+
         private final List<double[]> bands = new ArrayList<>();
 
         /** The tick that applies from {@code floorPrice} up to the next band's floor. */

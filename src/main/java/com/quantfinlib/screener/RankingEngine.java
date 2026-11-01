@@ -24,6 +24,10 @@ import java.util.function.ToDoubleFunction;
  * ranks higher) without a separate "ascending" flag.</p>
  */
 public final class RankingEngine {
+    /** Creates an instance; the explicit form of the default constructor. */
+    public RankingEngine() {
+    }
+
 
     public record ScoredStock(StockSnapshot stock, double score) {
     }

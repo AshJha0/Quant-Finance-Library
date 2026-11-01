@@ -7,6 +7,10 @@ import java.nio.file.Path;
 
 /** CSV export: sections separated by "## title" marker lines. */
 public final class CsvReportExporter implements ReportExporter {
+    /** Creates an instance; the explicit form of the default constructor. */
+    public CsvReportExporter() {
+    }
+
 
     @Override
     public void export(Report report, Path path) throws IOException {

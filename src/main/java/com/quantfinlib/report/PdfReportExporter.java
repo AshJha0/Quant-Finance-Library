@@ -14,6 +14,10 @@ import java.util.List;
  * Renders each report section as a monospaced table.
  */
 public final class PdfReportExporter implements ReportExporter {
+    /** Creates an instance; the explicit form of the default constructor. */
+    public PdfReportExporter() {
+    }
+
 
     private static final int LINES_PER_PAGE = 56;
     private static final int PAGE_WIDTH = 612;

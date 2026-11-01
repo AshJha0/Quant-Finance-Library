@@ -24,6 +24,10 @@ import com.quantfinlib.pricing.BlackScholes.OptionType;
  * the <em>anchor</em> operation. {@link #onTick} never allocates.</p>
  */
 public final class IncrementalGreeks {
+    /** Creates an instance; the explicit form of the default constructor. */
+    public IncrementalGreeks() {
+    }
+
 
     // Anchor state from the last full reprice.
     private double baseSpot = Double.NaN;

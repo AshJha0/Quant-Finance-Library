@@ -53,6 +53,10 @@ import java.util.TreeSet;
  * {@link CrbAutoHedger} for the hedging loop.</p>
  */
 public final class CentralRiskBook {
+    /** Creates an instance; the explicit form of the default constructor. */
+    public CentralRiskBook() {
+    }
+
 
     private final FactorRegistry registry = new FactorRegistry();
     private double[] net = new double[16];

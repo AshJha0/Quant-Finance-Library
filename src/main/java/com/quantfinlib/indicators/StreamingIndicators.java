@@ -179,6 +179,10 @@ public final class StreamingIndicators {
 
     /** Cumulative volume-weighted average price. */
     public static final class Vwap {
+        /** Creates an instance; the explicit form of the default constructor. */
+        public Vwap() {
+        }
+
         private double cumPv;
         private double cumVol;
         private double value = Double.NaN;
