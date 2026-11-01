@@ -24526,18 +24526,22 @@ percentage vol is undefined as the rate approaches and crosses zero. The
 market's two fixes are NORMAL (Bachelier) vol, which quotes volatility in
 absolute rate terms (basis points of rate, not percent) and stays finite at
 zero and below, and SHIFTED-lognormal, which adds a displacement so
-`forward + shift` is positive and Black math applies again. On the modeling
-side, Vasicek is the honest short-rate choice when rates can go sub-zero --
-it is Gaussian and admits negative rates by construction, a feature rather
-than a bug post-2015. The honest gap: the library's rates-option pricing
-uses lognormal vol and does NOT implement Bachelier or shifted-lognormal
-quoting -- so at negative rates you would price and quote in normal vol
-outside it, and I flag that rather than paper over it.
+`forward + shift` is positive and Black math applies again. The two quotes are
+not interchangeable: a normal vol of 60bp and a shifted-lognormal vol at
+a 2% shift describe different smiles, so a desk must state the model
+with every vol it publishes and convert through prices, never by
+scaling. On the modeling side, Vasicek is a natural short-rate choice
+when rates can go sub-zero -- it is Gaussian and admits negative rates
+by construction, a feature rather than a bug post-2015.
 
-*In this library:* `rates/ShortRateModels.java` -- `vasicekBond`/
-`vasicekStep` admit negative rates; the Bachelier/shifted-vol option
-convention is an honest gap in the lognormal `rates/RatesOptions`, not a
-hidden one.
+*In this library:* `rates/RatesOptions.java` -- `RatesOptions.VolModel`
+(`lognormal()`, `shiftedLognormal(shift)`, `normal()`); swaptions and
+caps/floors take a `VolModel`, accept negative rates and strikes under
+the normal and shifted models, and `swaptionImpliedVol` inverts a price
+to the vol in the chosen model's units. `pricing/Bachelier.java` is the
+normal model (price, delta, vega, implied normal vol).
+`rates/ShortRateModels.java` -- `vasicekBond`/`vasicekStep` admit
+negative rates.
 
 ### 938. "Nothing moves and you still make (or lose) money holding a bond. Attribute it."
 
@@ -24673,7 +24677,7 @@ it from the constituents: compute cap weights before and after the
 membership change, size the required trade with the one-way turnover, and
 use the divisor adjustment to keep the index level honest through the swap.
 Buy the additions ahead of the tracker demand, sell the deletions. The
-honest limits a good candidate volunteers: the reconstitution schedule is
+limits to state up front: the reconstitution schedule is
 public, so the trade is crowded and much of the pop is already front-run;
 and the flow estimate depends on tracked assets-under-management that you do
 not directly observe, so the sizing is an estimate, not a measurement.
