@@ -7,7 +7,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 /**
- * Kyle's lambda — market impact LEARNED from the tape instead of assumed
+ * Kyle's lambda — market impact learned from the tape instead of assumed
  * from a formula. Kyle (1985): price change is linear in signed order
  * flow, {@code Δp = λ·q + noise}, and λ (price per unit of signed volume)
  * is the market's depth read off its own behavior. Where
@@ -26,7 +26,7 @@ import java.io.IOException;
  * closing the last MarketState input that lacked a live producer. A noisy
  * negative λ estimate is clamped to zero impact there: "the market pays
  * you to trade" is an estimation artifact, and feeding it to the executor
- * would ACCELERATE the schedule on garbage. {@link #lambda} stays raw for
+ * would accelerate the schedule on garbage. {@link #lambda} stays raw for
  * diagnostics.</p>
  *
  * <p>Gap discipline: non-finite inputs are skipped whole; the moments seed

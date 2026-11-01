@@ -15,7 +15,7 @@ import java.util.List;
  *       distribution.</li>
  * </ul>
  *
- * <p>Scores are ROBUST z-scores — (x − median) / (1.4826 · MAD) — not
+ * <p>Scores are robust z-scores — (x − median) / (1.4826 · MAD) — not
  * mean/stdev: an anomaly detector whose baseline includes the anomalies
  * inflates its own scale and misses exactly the events it hunts (a storm
  * of stuffing intervals raises the stdev until nothing clears the
@@ -38,7 +38,7 @@ public final class AnomalyDetector {
 
     /**
      * Flags intervals where the message count is a {@code zThreshold}-sigma
-     * outlier AND the order-to-trade ratio exceeds {@code minOrderToTradeRatio}.
+     * outlier and the order-to-trade ratio exceeds {@code minOrderToTradeRatio}.
      *
      * @param messagesPerInterval order/cancel/replace message counts per interval
      * @param tradesPerInterval   trade counts per interval (aligned)

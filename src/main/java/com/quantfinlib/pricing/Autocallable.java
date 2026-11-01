@@ -6,7 +6,7 @@ import java.util.SplittableRandom;
  * Autocallable note pricer, the most common equity structured product: a
  * note that pays a fat coupon and redeems early ("autocalls") the first
  * observation date the underlier closes at or above the autocall
- * barrier. If it survives to maturity, the principal is protected UNLESS
+ * barrier. If it survives to maturity, the principal is protected unless
  * the underlier has fallen through the knock-in barrier, in which case
  * the holder takes the equity loss — the note is, economically, a bond
  * plus sold down-and-in put, funded by the coupons.
@@ -25,7 +25,7 @@ import java.util.SplittableRandom;
  * </ul>
  *
  * <p><b>Model limits.</b> Monte Carlo under Black-Scholes GBM with flat
- * volatility and rates — the standard first pricer, NOT a desk-grade
+ * volatility and rates — the standard first pricer, not a desk-grade
  * one: real autocall books are priced on local/stochastic vol because
  * the knock-in put is deeply smile-sensitive (feed a vol appropriate to
  * the downside strike region, e.g. from {@code VolSurface}, as a
@@ -67,9 +67,9 @@ public final class Autocallable {
                         double couponBarrier, double knockInBarrier, double couponPerPeriod,
                         boolean memoryCoupons) {
         // !(x > 0) rejects NaN as well as non-positives: a NaN term must
-        // fail HERE, not surface as a NaN price later. The knock-in must
+        // fail here, not surface as a NaN price later. The knock-in must
         // sit at or below the autocall (protection above the early-redemption
-        // trigger is unreachable); its relation to the COUPON barrier is
+        // trigger is unreachable); its relation to the coupon barrier is
         // left free — structures place it on either side.
         if (!(notional > 0) || notional == Double.POSITIVE_INFINITY
                 || observationYears.length == 0

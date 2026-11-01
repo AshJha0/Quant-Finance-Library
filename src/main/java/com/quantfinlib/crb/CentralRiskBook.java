@@ -10,7 +10,7 @@ import java.util.TreeMap;
 /**
  * The central risk book — one netted view of the firm's market risk
  * across desks and products. Every instrument is decomposed into a
- * COMMON risk-factor space at booking time, and that is the entire
+ * common risk-factor space at booking time, and that is the entire
  * point: an FX-option delta nets against a spot position, an
  * equity-option delta nets against cash shares, and two desks' opposite
  * flows cancel before anyone pays a spread to the street.
@@ -22,23 +22,23 @@ import java.util.TreeMap;
  *       Δ·spot·contracts·multiplier);</li>
  *   <li>{@code EQGAMMA:<sym>} / {@code EQVEGA:<sym>} — dollar gamma per
  *       1% move (Γ·S²/100 per contract-adjusted unit) and vega per vol
- *       POINT;</li>
- *   <li>{@code CCY:<ccy>} — currency exposure in NATIVE units of that
+ *       point;</li>
+ *   <li>{@code CCY:<ccy>} — currency exposure in native units of that
  *       currency (an EURUSD buy of 10M books CCY:EUR +10M euros and
  *       CCY:USD −10M·rate dollars) — this is what lets spot, swaps,
- *       NDFs and option deltas net at the CURRENCY level;</li>
+ *       NDFs and option deltas net at the currency level;</li>
  *   <li>{@code FXPOINTS:<pair>} — forward-points risk of swaps: P&amp;L
  *       in quote units per 1.0 move in the far−near differential;</li>
  *   <li>{@code FXGAMMA:<pair>} / {@code FXVEGA:<pair>} — dollar gamma
  *       per 1% and vega per vol point, in quote-currency units.</li>
  * </ul>
  *
- * <p>Sign convention: positive quantity/notional = the BOOK is long.
+ * <p>Sign convention: positive quantity/notional = the book is long.
  * Book what the book absorbs (a client sell hits the book as a buy).
  * NDFs carry currency delta until fixing; the pending non-deliverable
  * notional is tracked per pair in {@link #pendingFixing(String)} and
  * released via {@link #settleFixing} once fixings occur. This is a
- * RISK ledger, not a cash ledger: premium and settlement cash legs are
+ * risk ledger, not a cash ledger: premium and settlement cash legs are
  * not tracked (the same delta-only stance for cash equities
  * — no settlement cash — and options — no premium), and lifecycle
  * events (expiry, exercise, settlement) re-book as offsetting flows.
@@ -92,7 +92,7 @@ public final class CentralRiskBook {
         double delta = BlackScholes.delta(type, spot, strike, rate, carry, vol, timeYears);
         double gamma = BlackScholes.gamma(spot, strike, rate, carry, vol, timeYears);
         double vega = BlackScholes.vega(spot, strike, rate, carry, vol, timeYears);
-        // Compute-validate-COMMIT: every leg must be finite before any
+        // Compute-validate-commit: every leg must be finite before any
         // add(), or an overflow on the second leg would leave a
         // half-booked flow in the netted arrays.
         double deltaLeg = units * delta * spot;
@@ -114,7 +114,7 @@ public final class CentralRiskBook {
     /**
      * FX spot on {@code pair} ("EURUSD"): buy {@code baseNotional} of the
      * base currency (signed) at {@code rate}. Decomposes into the two
-     * CURRENCY legs so it nets against every other product's FX delta.
+     * currency legs so it nets against every other product's FX delta.
      */
     public void bookFxSpot(String desk, String pair, double baseNotional, double rate) {
         requireDesk(desk);
@@ -131,12 +131,12 @@ public final class CentralRiskBook {
     /**
      * FX swap (buy-sell base for positive notional): near leg at
      * {@code nearRate}, far leg back at {@code farRate}. The base-currency
-     * legs cancel EXACTLY (that is what a swap is); what remains is the
-     * quote-currency cash-flow imbalance and the forward-POINTS risk.
-     * The FXPOINTS factor is the SENSITIVITY: a buy-sell locked in at
+     * legs cancel exactly (that is what a swap is); what remains is the
+     * quote-currency cash-flow imbalance and the forward-points risk.
+     * The FXPOINTS factor is the sensitivity: a buy-sell locked in at
      * today's (far − near) must close out at tomorrow's, so its P&amp;L
      * per +1.0 move in the market's far−near differential is
-     * {@code −baseNotional} — points widening HURTS the buy-sell.
+     * {@code −baseNotional} — points widening hurts the buy-sell.
      *
      * <p>The quote-leg imbalance {@code B·(far − near)} is booked at face,
      * undiscounted and without its value date; the risk report therefore
@@ -162,7 +162,7 @@ public final class CentralRiskBook {
      * Economically a forward until the fixing — full currency delta on
      * both legs — with the non-deliverable notional tracked per pair
      * (settlement is cash in the deliverable currency; what fixes at the
-     * fixing is the RATE, and until then the book is exposed).
+     * fixing is the rate, and until then the book is exposed).
      * Both legs are booked at face (undiscounted, date-blind); see
      * {@link #bookFxSwap} for what that means for the report.
      */
@@ -203,7 +203,7 @@ public final class CentralRiskBook {
                 foreignRate, vol, timeYears);
         double vega = BlackScholes.vega(spotRate, strike, domesticRate,
                 foreignRate, vol, timeYears);
-        // Compute-validate-COMMIT (see bookEquityOption).
+        // Compute-validate-commit (see bookEquityOption).
         double deltaBase = baseNotional * delta;
         double quoteLeg = -deltaBase * spotRate;
         double gammaLeg = baseNotional * gamma * spotRate * spotRate / 100;
@@ -226,7 +226,7 @@ public final class CentralRiskBook {
     /** Net exposure on a factor (0 for a factor never booked). */
     public double exposure(String factor) {
         int id = registry.idIfPresent(factor);
-        // A factor can be REGISTERED but never booked (a hedge universe
+        // A factor can be registered but never booked (a hedge universe
         // registers hedge-only factors): its exposure is simply 0.
         return id < 0 || id >= net.length ? 0 : net[id];
     }
@@ -321,11 +321,11 @@ public final class CentralRiskBook {
 
     /**
      * The book-level risk report. {@code covariance} is over the factor
-     * space in REGISTRY ORDER ({@code factors().name(i)}) with entries in
+     * space in registry order ({@code factors().name(i)}) with entries in
      * (factor-return)² units matching each factor's exposure units — the
      * same contract as {@link VarEngine}. The headline number is the
      * diversification benefit: standalone desk VaRs minus the netted
-     * book's VaR, i.e. what running the risk CENTRALLY is worth.
+     * book's VaR, i.e. what running the risk centrally is worth.
      *
      * <p>VaR and ES are second order ({@link VarEngine#deltaGammaVar},
      * {@link VarEngine#deltaGammaEs}, Cornish-Fisher). Dollar gamma is not
@@ -438,7 +438,7 @@ public final class CentralRiskBook {
     /**
      * Serializes the whole netted book — factor names, net/gross, per-desk
      * attribution, pending fixings, flow count — for a
-     * {@code persist.Checkpoint} section. Restore into a FRESH instance
+     * {@code persist.Checkpoint} section. Restore into a fresh instance
      * via {@link #readState}: a book that relearns its positions every
      * morning is not a book.
      */
@@ -469,7 +469,7 @@ public final class CentralRiskBook {
         out.writeLong(flowsBooked);
     }
 
-    /** Restores state written by {@link #writeState} into THIS (fresh) book. */
+    /** Restores state written by {@link #writeState} into this (fresh) book. */
     public void readState(java.io.DataInput in) throws java.io.IOException {
         com.quantfinlib.persist.Checkpoint.requireVersion(in, 1, "CentralRiskBook");
         if (registry.size() != 0 || flowsBooked != 0) {

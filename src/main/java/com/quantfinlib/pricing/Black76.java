@@ -4,7 +4,7 @@ import com.quantfinlib.pricing.BlackScholes.OptionType;
 import com.quantfinlib.util.MathUtils;
 
 /**
- * Black-76 — the Black-Scholes sibling for options on FORWARDS and
+ * Black-76 — the Black-Scholes sibling for options on forwards and
  * futures: rates caps/floors and swaptions, commodity futures options,
  * bond futures options. The whole trick is that a forward has no carry
  * (it costs nothing to hold), so the underlying drift drops out and the
@@ -42,7 +42,7 @@ public final class Black76 {
         return df * (strike * MathUtils.normCdf(-d2) - forward * MathUtils.normCdf(-d1));
     }
 
-    /** Sensitivity to the FORWARD (not spot): df·Φ(d₁) for calls. */
+    /** Sensitivity to the forward (not spot): df·Φ(d₁) for calls. */
     public static double delta(OptionType type, double forward, double strike,
                                double rate, double vol, double timeYears) {
         if (timeYears <= 0 || vol <= 0) {

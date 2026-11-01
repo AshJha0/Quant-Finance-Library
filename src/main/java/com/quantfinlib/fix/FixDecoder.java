@@ -48,7 +48,7 @@ final class FixDecoder {
         for (int i = firstSoh + 3; i < lenEnd; i++) {
             int digit = buffer[i] - '0';
             // A single corrupted byte here would silently inflate the
-            // expected frame length and the framer would wait FOREVER for
+            // expected frame length and the framer would wait forever for
             // bytes that never come — a zombie session swallowing every
             // later valid message. Corruption must fail loudly so the
             // session layer disconnects.
@@ -57,7 +57,7 @@ final class FixDecoder {
                         + Integer.toHexString(buffer[i] & 0xFF));
             }
             bodyLen = bodyLen * 10 + digit;
-            // Checked INSIDE the loop: ten corrupt-but-numeric digits
+            // Checked inside the loop: ten corrupt-but-numeric digits
             // would wrap the int and could sneak under a post-loop cap.
             if (bodyLen > 1 << 20) {
                 throw new IllegalStateException(

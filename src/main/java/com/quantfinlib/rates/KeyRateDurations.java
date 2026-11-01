@@ -1,10 +1,10 @@
 package com.quantfinlib.rates;
 
 /**
- * Key-rate durations — WHERE on the curve a bond's rate risk lives.
+ * Key-rate durations — where on the curve a bond's rate risk lives.
  * {@code BondPricer.dv01} answers "what does one parallel basis point
  * cost?"; a curve rarely moves in parallel, so risk desks slice that
- * DV01 across the curve's tenors: bump ONE node, hold the rest, reprice.
+ * DV01 across the curve's tenors: bump one node, hold the rest, reprice.
  * The vector of per-node sensitivities is the hedging recipe (each KRD
  * is offset with the instrument that drives that node), and its sum
  * recovers the parallel duration — a consistency check the tests pin.
@@ -26,7 +26,7 @@ public final class KeyRateDurations {
     /**
      * Per-node price sensitivities of a fixed-coupon bond to a 1bp bump
      * of each curve tenor, in price units per 100 face (positive = the
-     * bond LOSES that much when the node rises 1bp — DV01 sign
+     * bond loses that much when the node rises 1bp — DV01 sign
      * convention). Index i corresponds to {@code tenors()[i]} ascending.
      */
     public static double[] keyRateDv01s(double face, double couponRate, int frequency,

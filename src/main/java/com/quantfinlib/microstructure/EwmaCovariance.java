@@ -21,18 +21,17 @@ import java.io.IOException;
  * of multi-asset Almgren-Chriss; {@link #marginalContribution} is the
  * missing off-diagonal piece — feed the matrix via
  * {@code PortfolioExecutor.useRiskModel} and scarce liquidity flows to the
- * symbols whose remaining position contributes most to BASKET risk, not
+ * symbols whose remaining position contributes most to basket risk, not
  * just to their own. {@link #minVarianceHedgeRatio} is the live hedge
  * beta (cov/var) for cross hedging.</p>
  *
  * <p><b>Discipline.</b> The matrix stays positive-semidefinite because
  * every update is a full-vector rank-1 outer product: a sample containing
- * ANY non-finite return is dropped whole (updating only the clean pairs
+ * any non-finite return is dropped whole (updating only the clean pairs
  * would break PSD and silently skew correlations). Each pair seeds from
  * its first observation rather than ramping from 0. The lower triangle
- * lives in one flat array — zero allocation per sample, O(n²) work, which
- * at basket sizes (tens of symbols) on an interval cadence is
- * microseconds. Single writer.</p>
+ * lives in one flat array — zero allocation per sample, O(n²) work per
+ * update. Single writer.</p>
  */
 public final class EwmaCovariance {
 

@@ -9,7 +9,7 @@ import java.util.List;
  * most error-prone step in the whole hedging workflow (one transposed
  * index and the optimizer confidently hedges the wrong thing).
  *
- * <p>Each instrument declares what ONE UNIT of its notional does to the
+ * <p>Each instrument declares what one unit of its notional does to the
  * factor space, in the same conventions {@link CentralRiskBook} books
  * with:
  * <ul>
@@ -28,10 +28,10 @@ import java.util.List;
  *       loadings side by side.</li>
  * </ul>
  *
- * <p>Factors named here are REGISTERED on the shared registry if new
+ * <p>Factors named here are registered on the shared registry if new
  * (a hedge-only factor simply has zero book exposure), and
  * {@link #loadings()} materializes the matrix at the registry's
- * CURRENT size — build it after all booking and adding is done, and
+ * current size — build it after all booking and adding is done, and
  * feed it straight to {@link HedgeOptimizer}/{@link CrbAutoHedger}
  * with {@link #costs()}. Research lane, single-threaded.</p>
  */
@@ -96,7 +96,7 @@ public final class CrbHedgeUniverse {
     }
 
     /**
-     * The loadings matrix [factor][instrument] at the registry's CURRENT
+     * The loadings matrix [factor][instrument] at the registry's current
      * size — call after all booking/adding, alongside {@link #costs()}.
      */
     public double[][] loadings() {

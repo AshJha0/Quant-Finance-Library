@@ -1,5 +1,6 @@
 /**
- * Statistical learning for markets, all pure Java:
+ * Statistical learning models for market data, in plain Java. The main
+ * classes:
  * {@link com.quantfinlib.ml.GradientBoostedRegressor} (stump boosting),
  * {@link com.quantfinlib.ml.VolatilityForecaster} (forward realized vol +
  * 0-100 risk score), {@link com.quantfinlib.ml.RegimeDetector} (2-state

@@ -2,27 +2,27 @@ package com.quantfinlib.crb;
 
 /**
  * The central risk book's order router — internal cross first, dark
- * pools second, lit last, each leg priced honestly:
+ * pools second, lit last, each leg priced at its expected all-in cost:
  *
  * <ul>
  *   <li><b>Internal</b> — crossing against the book's own offsetting
- *       inventory costs ZERO bps and leaks nothing: the CRB itself is
+ *       inventory costs zero bps and leaks nothing: the CRB itself is
  *       the firm's first and best dark pool. Capped at the crossable
  *       inventory the caller reports;</li>
  *   <li><b>Dark pools</b> — midpoint fills pay no spread, but a venue
  *       whose fills systematically fade is not free: each venue carries
- *       an ADVERSE-SELECTION charge in bps (a post-fill markout
+ *       an adverse-selection charge in bps (a post-fill markout
  *       estimate — {@code VenueScorecard} produces exactly this), and
  *       expected liquidity is discounted by fill probability. A dark
  *       venue is only used while its charge undercuts the lit cost;</li>
  *   <li><b>Lit</b> — pays the half spread plus expected impact, but
- *       fills. Whatever the dark legs are not EXPECTED to fill routes
+ *       fills. Whatever the dark legs are not expected to fill routes
  *       lit as well — hedges that might fill are not hedges.</li>
  * </ul>
  *
  * <p>Allocation is greedy by expected cost, deterministic, allocation
  * only at decision time (arrays sized to the venue count). Research/
- * warm lane; the caller owns venue statistics and their honesty.</p>
+ * warm lane; the caller owns the venue statistics and their accuracy.</p>
  */
 public final class CrbRouter {
 
@@ -64,7 +64,7 @@ public final class CrbRouter {
      * @param notional          amount to execute, &gt; 0
      * @param crossableInternal offsetting book inventory available to
      *                          cross against, ≥ 0
-     * @param venues            dark venues with honest statistics
+     * @param venues            dark venues with their measured statistics
      * @param halfSpreadBps     lit half spread, &gt; 0
      * @param impactBps         expected lit impact for this size, ≥ 0
      *                          (a {@code KylesLambda} estimate slots in)

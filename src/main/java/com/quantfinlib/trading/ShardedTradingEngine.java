@@ -11,13 +11,13 @@ import java.util.function.IntFunction;
  * {@code bus → risk gate → order gateway} stacks (one consumer core and one
  * venue core per shard) behind a single symbol-routing facade. The scaling
  * model is <b>shared-nothing</b>: shards never touch each other's state, so
- * aggregate capacity is per-shard throughput × shard count — measured at
- * measured by {@code examples.ShardScaleBenchmark}.
+ * aggregate capacity scales with shard count up to the available cores;
+ * {@code examples.ShardScaleBenchmark} measures it (see docs/BENCHMARKS.md).
  *
  * <p>Symbol routing rules:</p>
  * <ul>
  *   <li>{@link #registerSymbol(String, int...)} assigns a symbol to one or
- *       MORE shards — multi-shard registration is the cross co-location
+ *       more shards — multi-shard registration is the cross co-location
  *       tool: a synthetic cross must live where both its legs tick, and
  *       duplicating a leg's feed into a second shard costs one extra ring
  *       publish, which is the whole point of shared-nothing;</li>
@@ -40,7 +40,7 @@ public final class ShardedTradingEngine implements AutoCloseable {
     private final HftRiskGate[] gates;
     private final HftOrderGateway[] gateways;
 
-    // Routing tables, indexed by the GLOBAL symbol handle returned from
+    // Routing tables, indexed by the global symbol handle returned from
     // registerSymbol: which shards host it, and its dense id in each.
     private final List<int[]> shardsOf = new ArrayList<>();
     private final List<int[]> localIdOf = new ArrayList<>();
@@ -130,7 +130,7 @@ public final class ShardedTradingEngine implements AutoCloseable {
 
     /**
      * The producer hot path: fans one tick to every shard hosting the
-     * symbol. Zero allocation. Returns false when ANY hosting shard's ring
+     * symbol. Zero allocation. Returns false when any hosting shard's ring
      * was full (that shard missed the tick; counted on its bus).
      */
     public boolean publish(int handle, double price, double size, long timestampNanos) {

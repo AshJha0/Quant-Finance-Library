@@ -9,7 +9,7 @@ import com.quantfinlib.util.MathUtils;
  * are NaN-safe and return {@code false} when the series is too short.
  *
  * <p>Design contract worth stating: a screen answers "does this stock look
- * like X TODAY", so every filter reads only the LAST valid indicator value
+ * like X today", so every filter reads only the last valid indicator value
  * — never a history of signals (that is a backtest's job, over in
  * {@code backtest}). "Too short = false" rather than "too short = throw"
  * is intended: a screen runs across an entire universe, and one

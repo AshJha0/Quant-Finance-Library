@@ -2,7 +2,7 @@ package com.quantfinlib.execution;
 
 /**
  * UCB1 multi-armed bandit — principled selection among venues, LPs or
- * algo variants when the scorecards are still THIN. The exploration
+ * algo variants when the scorecards are still thin. The exploration
  * problem is real: always using the best-so-far venue means never
  * learning whether another improved; rotating uniformly wastes flow on
  * known-bad ones. UCB1 (Auer et al. 2002) picks the arm maximizing
@@ -17,9 +17,9 @@ package com.quantfinlib.execution;
  * exploration balance).
  *
  * <p>Where this sits vs the scorecards: {@code VenueScorecard} and
- * {@code fx.LpScorecard} are the RIGHT tool once hundreds of fills per
+ * {@code fx.LpScorecard} are the right tool once hundreds of fills per
  * venue exist — they model fill rate, latency and markout separately.
- * UCB1 is for the cold start and for A/B-ing ALGO variants (is the
+ * UCB1 is for the cold start and for A/B-ing algo variants (is the
  * new schedule actually better?), where a single scalar reward and a
  * regret guarantee beat a half-warmed-up model. Deterministic
  * (ties break to the lowest index), O(arms) per selection,

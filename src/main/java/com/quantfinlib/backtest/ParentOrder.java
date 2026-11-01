@@ -10,7 +10,7 @@ import java.util.List;
  * that created it, the arrival price (close at signal time — the TCA
  * benchmark), and the child fills with the bar index each filled on.
  * {@code reason} is {@code "ENTRY"} for entries, or the exit reason
- * (SIGNAL / STOP_LOSS / TAKE_PROFIT / END_OF_DATA).
+ * (signal / STOP_LOSS / TAKE_PROFIT / END_OF_DATA).
  */
 public record ParentOrder(Side side, int signalIndex, double arrivalPrice, String reason,
                           List<Execution> fills, int[] fillBarIndices) {

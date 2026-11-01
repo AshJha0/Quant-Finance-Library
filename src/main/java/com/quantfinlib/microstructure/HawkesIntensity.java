@@ -89,7 +89,7 @@ public final class HawkesIntensity {
 
     /**
      * One event arrival. Timestamps must be non-decreasing; an
-     * out-of-order timestamp is dropped (negative decay would GROW past
+     * out-of-order timestamp is dropped (negative decay would grow past
      * excitation instead of fading it).
      */
     public void onEvent(long timestampNanos) {

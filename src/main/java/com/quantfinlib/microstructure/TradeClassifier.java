@@ -60,7 +60,7 @@ public final class TradeClassifier {
         return result;
     }
 
-    /** Convenience for {@code SignalEngine.onTrade}: UNKNOWN maps to the last known side. */
+    /** Convenience for {@code SignalEngine.onTrade}: unknown maps to the last known side. */
     public boolean isBuyAggressor(double tradePrice) {
         int c = classify(tradePrice);
         return (c == UNKNOWN ? lastClassification : c) == BUY;

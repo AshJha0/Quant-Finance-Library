@@ -17,7 +17,7 @@ import java.io.IOException;
  * <h2>The safeguard: prequential out-of-sample IC</h2>
  * The trap with any self-updating alpha is grading its own homework. This
  * learner can't: {@link #train} records the prediction made with the
- * CURRENT weights <em>before</em> the realized return updates them
+ * current weights <em>before</em> the realized return updates them
  * (predict-then-train, "prequential" evaluation), and maintains a
  * time-decayed correlation between those genuinely out-of-sample
  * predictions and the outcomes — {@link #outOfSampleIC}. <b>Gate any use
@@ -53,7 +53,7 @@ public final class OnlineAlphaLearner {
     private double absPredEwma;            // prediction scale, for normalization
     private long samples;
 
-    // trainFrom's snapshot: the engine's ingredients as of the PREVIOUS
+    // trainFrom's snapshot: the engine's ingredients as of the previous
     // call, so a return realized over (t, t+1] is fitted against features
     // observed at t — never against the t+1 features that already contain
     // the move (which would be lookahead leakage the IC could not detect).
@@ -115,7 +115,7 @@ public final class OnlineAlphaLearner {
      * the weights nor sneak into the IC.
      *
      * <p><b>Alignment is the caller's contract here:</b> the four features
-     * must have been observed BEFORE the interval {@code realizedReturn}
+     * must have been observed before the interval {@code realizedReturn}
      * covers. Passing the current features with the return that just ended
      * fits a nowcast — the features already contain the move — and the IC
      * will read high on pure leakage. {@link #trainFrom} handles this
@@ -128,7 +128,7 @@ public final class OnlineAlphaLearner {
                 || !Double.isFinite(realizedReturn)) {
             return;
         }
-        // 1. Score BEFORE learning: genuinely out-of-sample.
+        // 1. Score before learning: genuinely out-of-sample.
         double pred = predict(queueImbalance, tradeImbalance, normalizedOfi, momentumZ);
         meanPred += icAlpha * (pred - meanPred);
         meanRet += icAlpha * (realizedReturn - meanRet);
@@ -154,7 +154,7 @@ public final class OnlineAlphaLearner {
 
     /**
      * The aligned learning step over a SignalEngine: trains on the
-     * ingredients snapshotted at the PREVIOUS call (which predate the
+     * ingredients snapshotted at the previous call (which predate the
      * interval {@code realizedReturn} covers), then snapshots the current
      * ingredients for the next call. The first call only snapshots — there
      * is nothing aligned to train on yet. Call once per interval, with the
@@ -179,7 +179,7 @@ public final class OnlineAlphaLearner {
 
     /**
      * The prequential (out-of-sample) information coefficient: time-decayed
-     * correlation between the predictions made BEFORE each outcome and the
+     * correlation between the predictions made before each outcome and the
      * outcomes themselves. The gate for using the learned alpha; 0 before
      * enough variance exists to measure.
      */
@@ -223,7 +223,7 @@ public final class OnlineAlphaLearner {
     // ------------------------------------------------------------------
 
     /**
-     * Persists the weights AND the prequential IC evidence — restored
+     * Persists the weights and the prequential IC evidence — restored
      * trust must be earned trust: a learner reloaded without its IC
      * history would start silent again ({@link #normalizedPrediction}
      * gates on the IC), which is exactly right for weights with no

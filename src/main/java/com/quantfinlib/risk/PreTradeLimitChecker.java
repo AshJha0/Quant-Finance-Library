@@ -88,7 +88,7 @@ public final class PreTradeLimitChecker {
         long newPosition = currentPositionQty + order.side().sign() * order.quantity();
         // Risk-reducing orders pass even from an over-limit position — a
         // gate that rejects the trade that shrinks the breach wedges the
-        // book at its worst point. But "reducing" means smaller AND the
+        // book at its worst point. But "reducing" means smaller and the
         // same sign: flipping through zero to an over-cap position on the
         // other side is a new breach, not a hedge (same rule as
         // HftRiskGate).

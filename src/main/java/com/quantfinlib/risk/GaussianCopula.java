@@ -7,16 +7,16 @@ import java.util.random.RandomGenerator;
 /**
  * Gaussian and Student-t copula samplers — dependence separated from
  * marginals, which is the entire point of copula modeling: "these five
- * factors co-move like THIS" (the copula) is a different statement from
+ * factors co-move like this" (the copula) is a different statement from
  * "each factor's own distribution looks like THAT" (the marginals), and
  * gluing arbitrary marginals to a chosen dependence structure is how
  * joint risk scenarios get built.
  *
- * <p>Both samplers emit correlated UNIFORMS — feed them through your
+ * <p>Both samplers emit correlated uniforms — feed them through your
  * marginals' inverse CDFs. The Gaussian copula has NO tail dependence:
  * joint extremes are asymptotically independent, the property famously
  * blamed for pre-2008 CDO models. The Student-t copula with few degrees
- * of freedom has strong SYMMETRIC tail dependence — extremes cluster —
+ * of freedom has strong symmetric tail dependence — extremes cluster —
  * and converges to the Gaussian as {@code df → ∞}; the tests pin both
  * behaviors. Correlation matrices are factored at construction with
  * {@link PsdMatrices#choleskyPsd}: a positive semi-definite matrix
@@ -56,8 +56,8 @@ public final class GaussianCopula {
     /**
      * One Student-t-copula draw with {@code df} degrees of freedom:
      * the same correlated Gaussians divided by a shared √(χ²/df) — the
-     * SHARED shock is what creates tail dependence (one bad draw drags
-     * every factor's tail together). Uniforms come from the EXACT t-CDF
+     * shared shock is what creates tail dependence (one bad draw drags
+     * every factor's tail together). Uniforms come from the exact t-CDF
      * ({@link MathUtils#tCdf}); a moment-matched normal approximation
      * here would distort exactly the tail quantiles this sampler exists
      * to model (at df = 3 it puts ~37% excess mass below the 1% level).

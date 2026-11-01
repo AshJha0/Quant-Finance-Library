@@ -49,7 +49,7 @@ public final class CounterpartyExposureTracker {
      * NGR = net current exposure / gross positive MTM. A well-hedged
      * netting set (offsetting MTMs) earns up to a 60% add-on reduction —
      * the gross add-on alone materially over-states exposure for exactly
-     * the books that hedge, which is what the netting agreement is FOR.
+     * the books that hedge, which is what the netting agreement is for.
      * NGR is 1 (no relief) when there is no positive MTM to net against.
      */
     public double potentialFutureExposure(String counterparty) {

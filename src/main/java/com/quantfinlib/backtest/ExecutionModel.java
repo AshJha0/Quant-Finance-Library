@@ -36,7 +36,7 @@ public interface ExecutionModel {
      * engine budgets entry requests as
      * {@code cash / (referencePrice * (1 + worstCaseCostFraction()))}.
      * Default: the bar close. A model that fills off a different price
-     * point (e.g. {@link LastLookExecution} fills at the OPEN) must
+     * point (e.g. {@link LastLookExecution} fills at the open) must
      * override this, or a gap between close and its actual anchor lets a
      * fully-filled request overdraw cash.
      */
@@ -49,9 +49,9 @@ public interface ExecutionModel {
      * {@link #referencePrice} (spread + fees + slippage). The engine uses
      * it to size entries so that a fully-filled parent can never overdraw
      * cash — a model whose fills can cost more than
-     * {@code referencePrice * (1 + worstCaseCostFraction())} MUST override
+     * {@code referencePrice * (1 + worstCaseCostFraction())} must override
      * one or both methods, or the backtest silently trades on margin it
-     * doesn't have. Wrappers must DELEGATE both to the model that actually
+     * doesn't have. Wrappers must delegate both to the model that actually
      * prices the fills. Default 1%.
      */
     default double worstCaseCostFraction() {

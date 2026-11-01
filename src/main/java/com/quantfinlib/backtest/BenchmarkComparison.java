@@ -4,7 +4,7 @@ import com.quantfinlib.risk.RiskMetrics;
 import com.quantfinlib.util.MathUtils;
 
 /**
- * BENCHMARK-RELATIVE performance — the numbers an allocator actually asks
+ * Benchmark-relative performance — the numbers an allocator actually asks
  * for. A standalone Sharpe answers "was this good?"; these answer "was
  * this good <i>compared to just buying the index</i>?", which is the
  * question every active strategy must survive.

@@ -10,7 +10,7 @@ import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Tick capture with the file I/O taken OFF the bus consumer thread — the
+ * Tick capture with the file I/O taken off the bus consumer thread — the
  * hot-lane variant of {@link TickCapture}. The consumer thread only
  * publishes into a private {@link TickRingBuffer}; a dedicated writer
  * thread drains it into the QFLT file. A page-cache writeback, AV scan or

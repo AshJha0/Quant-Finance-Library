@@ -1,21 +1,21 @@
 package com.quantfinlib.risk;
 
 /**
- * LEDOIT-WOLF covariance shrinkage (2004, "A well-conditioned estimator
+ * Ledoit-Wolf covariance shrinkage (2004, "A well-conditioned estimator
  * for large-dimensional covariance matrices") — the standard fix for the
  * dirty secret of portfolio optimization: the sample covariance matrix is
- * the MAXIMALLY overfit estimate. With N assets and T observations it has
+ * the maximally overfit estimate. With N assets and T observations it has
  * N(N+1)/2 free parameters; when T is not a large multiple of N its
  * smallest eigenvalues are far too small and its largest far too large —
  * and a mean-variance optimizer amplifies exactly those errors (it loads
- * up on the directions the matrix WRONGLY calls near-riskless).
+ * up on the directions the matrix wrongly calls near-riskless).
  *
  * <p>The estimator shrinks toward the scaled identity {@code mu·I}
  * (mu = average sample variance):</p>
  *
  * <pre>  Sigma* = delta · mu·I + (1 − delta) · S</pre>
  *
- * <p>with the intensity delta chosen FROM THE DATA to minimize expected
+ * <p>with the intensity delta chosen from the data to minimize expected
  * Frobenius loss: delta = b&#772;²/d², where d² = ||S − mu·I||²_F measures how
  * far the sample matrix is from the target and b&#772;² estimates how much of
  * that distance is pure sampling noise (the average Frobenius distance of

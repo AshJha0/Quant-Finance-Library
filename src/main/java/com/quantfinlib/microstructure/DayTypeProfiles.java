@@ -21,7 +21,7 @@ import java.util.function.Supplier;
  * today.onVolume(bucket, qty);   // learns ONLY the expiry-day shape
  * }</pre>
  *
- * <p>The trade-off is honest and unavoidable: a per-type profile learns
+ * <p>Trade-off: a per-type profile learns
  * from only that type's sessions, so rare types (12 expiries a year)
  * converge slowly. Seed a new type from the regular-day profile via the
  * curve's own seeding method when one exists, or accept the slower

@@ -35,15 +35,15 @@ import java.util.Locale;
  *       (epoch millis internally), so universe dates and bar timestamps
  *       line up by construction. Empty {@code end_date} = open-ended
  *       membership;</li>
- *   <li><b>value</b> — DELIST: the delisting return (final-day return on
+ *   <li><b>value</b> — delist: the delisting return (final-day return on
  *       the last close, −1 = worthless; empty defaults to
  *       {@link PointInTimeUniverse#DEFAULT_INVOLUNTARY_DELISTING_RETURN});
- *       MERGER: cash per share (empty = 0);</li>
- *   <li><b>acquirer_shares / acquirer</b> — MERGER stock component
+ *       merger: cash per share (empty = 0);</li>
+ *   <li><b>acquirer_shares / acquirer</b> — merger stock component
  *       (empty = all-cash deal).</li>
  * </ul>
  *
- * <h2>Sourcing the data (honesty section)</h2>
+ * <h2>Sourcing the data</h2>
  * <p>Free constituent lists — e.g.
  * <a href="https://github.com/datasets/s-and-p-500-companies">datasets/s-and-p-500-companies</a>
  * — publish <em>today's</em> members: loading one gives every symbol an
@@ -123,7 +123,7 @@ public final class UniverseCsvLoader {
         if (!headerSeen) {
             throw new IllegalArgumentException("empty universe file (no header)");
         }
-        // THE seconds-vs-millis heuristic, owned by CsvBarLoader so bar and
+        // the seconds-vs-millis heuristic, owned by CsvBarLoader so bar and
         // universe files can never diverge on timestamp scale.
         long scale = CsvBarLoader.isEpochSecondsFile(allNumeric, minTs, maxTs) ? 1000 : 1;
 

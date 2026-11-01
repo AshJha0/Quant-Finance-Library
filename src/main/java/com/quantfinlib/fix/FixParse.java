@@ -3,7 +3,7 @@ package com.quantfinlib.fix;
 /**
  * Shared primitive parsers for the garbage-free FIX flyweights
  * ({@link FixExecReportView}, {@link FixMarketDataView}) — the
- * fraction-rejection and scaled-long price rules are load-bearing for the
+ * fraction-rejection and scaled-long price rules underpin the
  * "feed-to-order never touches a double" invariant, so they exist exactly
  * once. Package-private, static, zero allocation.
  */
@@ -51,7 +51,7 @@ final class FixParse {
 
     /**
      * Numeric field that may legitimately be non-numeric on the wire —
-     * e.g. ClOrdID (tag 11), which is only numeric by OUR encoder's
+     * e.g. ClOrdID (tag 11), which is only numeric by our encoder's
      * convention; unsolicited venue messages carry counterparty formats
      * ("ORD-2024-17", UUIDs). Returns {@code fallback} on any non-digit
      * instead of throwing: a foreign id must never kill the message pump.

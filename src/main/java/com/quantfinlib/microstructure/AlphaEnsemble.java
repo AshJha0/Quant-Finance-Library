@@ -18,7 +18,7 @@ import java.io.IOException;
  *
  * <p>The ensemble runs one prequential IC per component: each interval,
  * {@link #onObservation} scores the component values snapshotted at the
- * PREVIOUS call against the return just realized (values now would
+ * previous call against the return just realized (values now would
  * contain the move — the same nowcast trap {@code OnlineAlphaLearner}
  * closes), then snapshots the current values for the next round.
  * {@link #combined} weights each component by its IC shrunk toward zero
@@ -53,7 +53,7 @@ public final class AlphaEnsemble {
     private final double[] varRet;
     private final double[] covar;
 
-    // The snapshot: component values as of the PREVIOUS observation.
+    // The snapshot: component values as of the previous observation.
     private final double[] snapshot;
     private boolean hasSnapshot;
     private long samples;
@@ -95,12 +95,12 @@ public final class AlphaEnsemble {
 
     /**
      * One interval: the current component values and the return realized
-     * since the previous call. Scores the PREVIOUS snapshot against the
+     * since the previous call. Scores the previous snapshot against the
      * return (no look-ahead), then snapshots {@code values}. The first
      * call only snapshots. Non-finite handling is per-component: a NaN
-     * component skips ITS scoring (each component's moments stay
+     * component skips its scoring (each component's moments stay
      * conditioned on exactly the returns its covariance saw) while finite
-     * siblings still score — but an observation where NOTHING scored (NaN
+     * siblings still score — but an observation where nothing scored (NaN
      * return, or every snapshot value non-finite) does not count toward
      * the track record: the gate must never open on evidence that scored
      * nothing.

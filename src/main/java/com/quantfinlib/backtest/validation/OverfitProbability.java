@@ -7,15 +7,15 @@ import java.util.List;
 import java.util.function.ToDoubleFunction;
 
 /**
- * PROBABILITY OF BACKTEST OVERFITTING via combinatorially symmetric
+ * Probability OF backtest overfitting via combinatorially symmetric
  * cross-validation — CSCV (Bailey, Borwein, Lopez de Prado &amp; Zhu 2015,
  * "The probability of backtest overfitting").
  *
- * <p>{@link SharpeValidation} asks whether ONE track record is luck. This
- * class asks the prior question: is the SELECTION PROCESS itself broken?
+ * <p>{@link SharpeValidation} asks whether one track record is luck. This
+ * class asks the prior question: is the selection process itself broken?
  * When a desk tries N parameter sets and reports the best, the reported
  * Sharpe is a maximum of N draws — and the right diagnostic is: how often
- * does the in-sample winner turn out to be a BELOW-MEDIAN performer out of
+ * does the in-sample winner turn out to be a below-median performer out of
  * sample?</p>
  *
  * <p>The construction: take the T&times;N matrix of per-period returns

@@ -1,6 +1,7 @@
 /**
- * RFQ market structure for equity derivatives — structured products have
- * no order book; they trade by request-for-quote against a dealer panel:
+ * Request-for-quote auctions for equity derivatives. Structured products
+ * have no order book; they trade by request for quote against a dealer
+ * panel:
  * {@link com.quantfinlib.rfq.RfqAuction} (one auction: best price by the
  * client's direction, the industry-standard cover price, spread to a
  * model fair-value anchor such as

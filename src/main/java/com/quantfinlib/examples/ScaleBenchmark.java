@@ -52,7 +52,7 @@ public final class ScaleBenchmark {
             HftQuoter.Config crossCfg = HftQuoter.Config.of(100_000, 0.0002)
                     .withSkewPerUnit(1e-10)
                     // Move-gated: interval effectively infinite so suppression
-                    // is governed purely by minMove (BOTH gates must pass).
+                    // is governed purely by minMove (both gates must pass).
                     .withConflation(crossMinMove == 0 ? 0 : Long.MAX_VALUE / 4, crossMinMove);
             CrossRateEngine engine = new CrossRateEngine(bus);
             for (int c = 0; c < crosses; c++) {
