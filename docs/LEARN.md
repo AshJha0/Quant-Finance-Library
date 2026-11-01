@@ -7039,7 +7039,12 @@ delivered through typed `Listener` callbacks.
 The initiator opens TCP and sends **Logon (35=A)** carrying its
 HeartBtInt (108) and optionally credentials; the acceptor validates and
 replies with its own Logon -- the handshake is complete only when both
-sides have seen one, and nothing else may be sent before it. Then the
+sides have seen one, and nothing else may be sent before it. An
+application message that arrives before the Logon is not processed: the
+session disconnects. If the initiator's sequence number is ahead, the
+acceptor's Logon reply still goes first and its ResendRequest follows;
+a conformant peer treats any other first message as a failed logon.
+Then the
 steady state: each side sends a **Heartbeat (35=0)** whenever it has been
 quiet for the heartbeat interval, so silence always has an upper bound.
 If a peer has been silent LONGER than the interval (plus tolerance), you
@@ -7053,10 +7058,14 @@ which distinguishes an orderly goodbye from a crash and tells both sides
 the sequence state is clean for the next session.
 
 *In this library:* `fix/FixSession.java` -- `initiate()` blocks until the
-Logon handshake completes (10s establish timeout), a dedicated heartbeat
-thread runs the quiet-interval and TestRequest logic, and the logout
-handshake gates `close()`; `FixSessionTest.java` drives all of it over
-real sockets.
+Logon handshake completes (10 s connect and establish timeouts); an
+acceptor validates CompIDs, SendingTime and HeartBtInt and can refuse a
+Logon through `Listener.onLogonRequest`, answered by a Logout with the
+reason; `onTimer()` runs the quiet-interval and TestRequest logic on an
+injected `FixClock`, and the logout handshake gates `close()`.
+`FixSession.overStream(...)` runs the same state machine over any
+transport without threads, which is how `FixSessionTest.java` drives it
+step by step on a manual clock.
 
 ### 216. "Why does EACH side of a FIX session keep TWO sequence numbers?"
 
@@ -7068,7 +7077,7 @@ peer's next 34 should be). That pair makes every failure mode decidable
 locally. Receive a seqnum HIGHER than expected: messages were lost in
 transit -- issue a ResendRequest for the gap (Q217). Receive one LOWER
 than expected without PossDupFlag: something is deeply wrong -- state was
-lost or you are talking to an impostor -- disconnect immediately (Q218).
+lost or you are talking to an impostor -- send Logout and disconnect (Q218).
 Receive lower WITH PossDup: a resend duplicate, suppress it. The genius
 of the design is that a dropped TCP connection loses nothing that
 matters: both sides persist their counters, reconnect, compare Logon
@@ -7100,11 +7109,17 @@ applies the replayed messages in order, sequence sanity is restored, and
 the session continues as if the gap never happened. This mechanism is
 why a FIX engine is only as good as its message store (Q220).
 
-*In this library:* `fix/FixSession.java` implements both directions --
-the javadoc states it exactly: "application messages are replayed with
-PossDupFlag(43)/OrigSendingTime(122) and admin runs are coalesced into
-SequenceReset-GapFill(4)"; the `Listener.onResendServed` callback reports
-the serviced range, and `FixSessionTest.java` asserts the recovery.
+*In this library:* `fix/FixSession.java` implements both directions:
+the store is synced before each message reaches the socket, so after a
+crash a ResendRequest replays the real application messages
+(PossDupFlag=Y, OrigSendingTime) and only administrative runs are
+coalesced into SequenceReset-GapFill, which must move the number
+forward. `Listener.onResendServed` reports the serviced range,
+`Listener.onResendUnavailable` reports a request reaching below the
+store's retention window, and `FixSessionTest.java` asserts the recovery.
+On the receiving side, replayed fills arrive again with PossDup, so
+`FixExecReportView.ExecIdDeduplicator` drops fills already booked by
+ExecID.
 
 ### 218. "Why does a too-LOW sequence number without PossDup mean immediate disconnect, not repair?"
 
@@ -7119,16 +7134,18 @@ dangerous: the peer that lost state does not know which of your orders
 it acknowledged; processing its messages as fresh could double-execute
 business you already booked. There is no protocol move that repairs it,
 because the disagreement is about the PAST, not about missing messages.
-So the spec's answer is the one: disconnect, and force human or
+So the spec's answer is: send a Logout stating the problem, disconnect,
+and force human or
 explicit operational intervention -- typically an agreed sequence reset
 or store reconciliation -- before trading resumes. The exception that
 proves the rule: too-low WITH PossDupFlag=Y is just a resend duplicate,
 silently suppressed.
 
 *In this library:* `fix/FixSession.java` -- the javadoc contract:
-"Duplicates (PossDup below the expected seqnum) are suppressed; a
-too-low seqnum without PossDup disconnects the session," surfaced through
-`Listener.onDisconnect(reason)`.
+below the expected number without PossDupFlag(43) is answered with
+Logout and a disconnect; below with PossDup is ignored. PossDup
+messages also need OrigSendingTime no later than SendingTime. The
+disconnect is surfaced through `Listener.onDisconnect(reason)`.
 
 ### 219. "The peer has gone quiet. Exactly when do you declare it dead?"
 
@@ -7166,20 +7183,34 @@ written with synchronous semantics is cheap insurance. Second, the
 **outbound message store**: every application message you ever sent,
 keyed by sequence number, because after reconnecting the peer may
 ResendRequest a range from BEFORE your restart -- and you must replay
-those messages with PossDup, not shrug. An append-only log replayed into
-memory on open is the classic shape: crash-safe by construction, and
-reopening rebuilds the resend index. What does NOT need persisting:
-inbound messages (the peer keeps those for you -- that is the symmetry
-of Q216) and admin traffic (coalesced to GapFill on replay anyway). The
-one test that proves the whole design: kill the process between two
-orders, restart, and assert the peer sees a seamless sequence with no
-manual reset.
+those messages with PossDup, not shrug. The ordering rule is what makes
+it work: a message must be on disk before its bytes reach the socket.
+If you write to the socket first and the process dies before the store
+write, the peer has an order you cannot replay, and the best you can do
+is cover it with a GapFill, which tells the peer that a live order was
+an admin message. An append-only journal with a checksum per record is
+the classic shape: on open, scan it and truncate at the first record
+that is short or fails its checksum (a write torn by the crash). Forcing
+to disk per message is expensive, so batch several messages under one
+force (group commit), and bound the journal by compacting to the newest
+N records. What does NOT need persisting with the same urgency: inbound
+messages (the peer keeps those for you -- that is the symmetry of Q216),
+since a lagging incoming counter only makes the peer resend, and the
+duplicates are dropped by ExecID. The one test that proves the whole
+design: kill the process between two orders, restart, and assert the
+peer sees a seamless sequence with no manual reset.
 
-*In this library:* `fix/FileSessionStore.java` -- `seqnums.dat` (16
-bytes, RandomAccessFile "rwd" synchronous writes) plus an append-only
-`messages.dat` replayed into memory on open; `FixPersistenceTest.java`
-exercises restart continuity; the in-memory `FixSessionStore.inMemory()`
-default makes non-durability an explicit choice.
+*In this library:* `fix/FileSessionStore.java` -- `messages.journal`, a
+CRC-32C journal forced to disk by `sync()` before the message reaches
+the socket (admin messages recorded with an empty body, so the next
+outgoing number is recovered from the same stream), plus `session.seq`,
+a page with two alternating checksummed slots; a torn tail is truncated
+on open (`truncatedBytes()`), `FileSessionStore(dir, maxRetained)`
+compacts, and a version-1 directory (`seqnums.dat`, `messages.dat`) is
+migrated on first open. `FixSession.sendBatch` shares one force across
+several messages. `FixPersistenceTest.java` exercises restart
+continuity; the in-memory `FixSessionStore.inMemory()` default (last
+100,000 messages) makes non-durability an explicit choice.
 
 ### 221. "Anatomy of a NewOrderSingle: which fields, and which mistakes hurt?"
 
