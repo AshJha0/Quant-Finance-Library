@@ -9,7 +9,7 @@ package com.quantfinlib.risk;
  * anchored to a stressed period:
  *
  * <pre>  ES = √( Σⱼ [ ESⱼ · √((LHⱼ − LHⱼ₋₁)/10) ]² )      (the LH cascade)
- *  ES   = ES_R,S · max(1, ES_F,C / ES_R,C)                    (MAR33, stressed calibration)</pre>
+ *  ES   = ES_R,S · max(1, ES_F,C / ES_R,C)                    (MAR33.5-33.6, stressed calibration)</pre>
  *
  * <p><b>Styled after BCBS MAR33, not certified</b>: the same
  * stance as the LULD and ESMA-tick implementations elsewhere in this
@@ -48,7 +48,7 @@ public final class FrtbEs {
     /**
      * The liquidity-horizon cascade: given the base 10-day ES computed
      * on the full factor set and the ESs of the nested subsets that
-     * remain shocked at each longer horizon, aggregates per MAR33.5:
+     * remain shocked at each longer horizon, aggregates per MAR33.4:
      *
      * @param esByHorizon esByHorizon[j] = 10-day ES with only the
      *                    factors of liquidity horizon ≥ horizons[j]
@@ -76,11 +76,11 @@ public final class FrtbEs {
         return Math.sqrt(sumSq);
     }
 
-    /** Minimum share of full-set current ES the reduced set must explain (BCBS MAR33). */
+    /** Minimum share of full-set current ES the reduced set must explain (BCBS MAR33.5(2)). */
     public static final double MIN_REDUCED_SET_COVERAGE = 0.75;
 
     /**
-     * Stressed calibration of the IMA expected shortfall (BCBS MAR33):
+     * Stressed calibration of the IMA expected shortfall (BCBS MAR33.5-33.6):
      *
      * <pre>  ES = ES_R,S · max(1, ES_F,C / ES_R,C)</pre>
      *
@@ -112,7 +112,7 @@ public final class FrtbEs {
         }
         if (esCurrentReduced < MIN_REDUCED_SET_COVERAGE * esCurrentFull) {
             throw new IllegalArgumentException("reduced factor set explains "
-                    + esCurrentReduced / esCurrentFull + " of full-set current ES; MAR33 needs >= 0.75");
+                    + esCurrentReduced / esCurrentFull + " of full-set current ES; MAR33.5(2) needs >= 0.75");
         }
         return esStressedReduced * Math.max(1, esCurrentFull / esCurrentReduced);
     }
