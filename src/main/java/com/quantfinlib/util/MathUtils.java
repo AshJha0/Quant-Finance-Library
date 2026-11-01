@@ -27,10 +27,14 @@ public final class MathUtils {
         return s / (to - from);
     }
 
-    /** Sample variance (n - 1 denominator). */
+    /**
+     * Sample variance (n - 1 denominator). Undefined for fewer than two
+     * observations: returns NaN rather than 0, so a one-point Sharpe ratio or
+     * beta reads as "no estimate" instead of a confident zero.
+     */
     public static double variance(double[] v) {
         if (v.length < 2) {
-            return 0;
+            return Double.NaN;
         }
         double m = mean(v), s = 0;
         for (double x : v) {
@@ -40,16 +44,16 @@ public final class MathUtils {
         return s / (v.length - 1);
     }
 
-    /** Sample standard deviation. */
+    /** Sample standard deviation; NaN for fewer than two observations. */
     public static double stdDev(double[] v) {
         return Math.sqrt(variance(v));
     }
 
-    /** Population standard deviation over [from, to). */
+    /** Population standard deviation over [from, to); NaN for an empty range. */
     public static double stdDevP(double[] v, int from, int to) {
         int n = to - from;
         if (n < 1) {
-            return 0;
+            return Double.NaN;
         }
         double m = mean(v, from, to), s = 0;
         for (int i = from; i < to; i++) {
@@ -59,11 +63,11 @@ public final class MathUtils {
         return Math.sqrt(s / n);
     }
 
-    /** Sample standard deviation over [from, to). */
+    /** Sample standard deviation over [from, to); NaN for fewer than two points. */
     public static double stdDevSample(double[] v, int from, int to) {
         int n = to - from;
         if (n < 2) {
-            return 0;
+            return Double.NaN;
         }
         double m = mean(v, from, to), s = 0;
         for (int i = from; i < to; i++) {
