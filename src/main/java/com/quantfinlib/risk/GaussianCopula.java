@@ -12,11 +12,11 @@ import java.util.random.RandomGenerator;
  * gluing arbitrary marginals to a chosen dependence structure is how
  * joint risk scenarios get built.
  *
- * <p>Both samplers emit correlated uniforms — feed them through your
- * marginals' inverse CDFs. The Gaussian copula has NO tail dependence:
+ * <p>Both samplers emit correlated uniforms; feed them through your
+ * marginals' inverse CDFs. The Gaussian copula has no tail dependence:
  * joint extremes are asymptotically independent, the property famously
  * blamed for pre-2008 CDO models. The Student-t copula with few degrees
- * of freedom has strong symmetric tail dependence — extremes cluster —
+ * of freedom has strong symmetric tail dependence (extremes cluster)
  * and converges to the Gaussian as {@code df → ∞}; the tests pin both
  * behaviors. Correlation matrices are factored at construction with
  * {@link PsdMatrices#choleskyPsd}: a positive semi-definite matrix
