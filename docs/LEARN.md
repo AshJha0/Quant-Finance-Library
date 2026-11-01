@@ -20013,7 +20013,10 @@ discovered at settlement.
 *In this library:* `pricing/Black76.java` (`delta` as forward delta
 `dV/dF`, the convention an FX desk quotes and hedges against) versus
 `pricing/BlackScholes.java` (`delta` as spot delta) -- the two numbers
-the "25-delta" label must disambiguate before a quote goes out.
+the "25-delta" label must disambiguate before a quote goes out;
+`fx/FxVolSurface.DeltaConvention` names all four conventions (forward
+or spot, with or without premium adjustment) and the surface builder
+solves strikes in whichever one the pair is quoted in.
 
 ---
 
@@ -23758,9 +23761,12 @@ update, a dropped message" -- which line coverage cannot answer.
 
 *In this library:* the suite leans on pinned formulas
 (`FormulaPinsTest`), invariant/equivalence tests
-(`OrderBookInvariantTest`, `HftOrderBookTest`), and allocation/soak
-proofs rather than a headline coverage number, with examples kept out
-of the tested-logic accounting.
+(`OrderBookInvariantTest`, `HftOrderBookTest`), and allocation proofs.
+Coverage is enforced as a floor rather than a headline: `./mvnw verify`
+fails below 90% line coverage overall or 80% in any package (the
+per-package floor stops a well-tested package from hiding an untested
+one), and the demos and hand-rolled benchmarks ship in a separate
+`examples` jar, outside the library's accounting.
 
 ### 898. "Describe the release train for a version bump. What is the sequence, and where is the one manual gate?"
 
@@ -23784,7 +23790,8 @@ on rails; the human is the switch.
 *In this library:* the project's release discipline -- bump, commit,
 tag, push, watch CI (build + docs + release workflows) green on the
 tag -- with tagging gated on an explicit human decision, not automated
-into every commit.
+into every commit; the release workflow refuses to publish when the
+tag does not match the version in `pom.xml`.
 
 ### 899. "After an edit, a docs file renders as garbled characters -- em-dashes became mojibake. What happened, and what is the operational rule?"
 
@@ -23907,7 +23914,11 @@ fixing in the settlement formula -- a curve cannot know the printed number.
 
 *In this library:* `fx/Ndf.java` -- `markToMarket` clamps to
 `outright(spot)` inside the window, `settlementAmount(fixingRate)` for the
-printed fix, and `fixingLagDays` for the local-calendar fixing date.
+printed fix, and `fixingLagDays` for the local-calendar fixing date. The
+default lag table is documented as not checked against the EMTA
+templates (BRL and CLP in particular); for production take the lag from
+the current template and pass it explicitly through the `Ndf.of`
+overload with `fixingLagDays`.
 
 ### 905. "The 2013 WM/R fixing scandal -- what is the lesson for your own benchmark-fix flow?"
 
@@ -23939,11 +23950,22 @@ the increasing-strikes check at build time. The fix is to switch the
 builder to premium-adjusted and resolve the call-delta ambiguity the way
 the market does: take the OTM (higher-strike) branch. The ATM strike also
 moves -- `F * e^{-sigma^2 tau/2}` premium-adjusted versus `F * e^{+...}`
-plain.
+plain. A second convention bites the same build: the butterfly on a
+broker screen is the market (broker) strangle, one vol at which a
+delta-strangle is priced, not the smile butterfly that sets the pillar
+vols. Read it as the smile butterfly and every wing vol is off by up to
+a few tenths of a vol on a skewed pair like USDJPY; the builder solves
+for the smile butterfly that reprices the market strangle (Clark 2011,
+section 3.6).
 
-*In this library:* `fx/FxVolSurface.java` -- `Builder.premiumAdjusted`,
+*In this library:* `fx/FxVolSurface.java` -- `Builder.deltaConvention`
+(`FORWARD`, `FORWARD_PREMIUM_ADJUSTED`, `SPOT`, `SPOT_PREMIUM_ADJUSTED`;
+`Builder.premiumAdjusted` is the short form), `Builder.atmConvention`,
+`Builder.butterflyQuote` (`BROKER_STRANGLE` by default,
+`SMILE_STRANGLE` when the input already is the smile butterfly),
 `strikeForDelta` (bisects the OTM branch for premium-adjusted deltas),
-`dnsStrike`, and the build-time "strikes not increasing" guard.
+`dnsStrike`, `smileButterfly25`/`smileButterfly10`, and the build-time
+"strikes not increasing" guard.
 
 ### 907. "EURJPY is quoted independently of EURUSD and USDJPY, and the three don't line up. Is there a trade?"
 
