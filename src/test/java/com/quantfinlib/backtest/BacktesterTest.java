@@ -19,9 +19,9 @@ class BacktesterTest {
         BarSeries s = BarSeries.of("CYCLE", TestData.sineTrend(500, 100, 0.02, 10, 60));
         BacktestResult result = Backtester.run(new SmaCrossStrategy(5, 20), s, BacktestConfig.defaults());
 
-        assertEquals(s.size(), result.equityCurve().length);
+        assertEquals(s.size(), result.equityCurveLength());
         assertTrue(result.trades().size() >= 3, "expected several round trips");
-        assertEquals(100_000, result.equityCurve()[0], 1e-6);
+        assertEquals(100_000, result.equityCurve(0), 1e-6);
         // Every trade must close after it opens.
         result.trades().forEach(t -> assertTrue(t.exitIndex() > t.entryIndex()));
     }
@@ -30,11 +30,11 @@ class BacktesterTest {
     void equityNeverNegativeAndMetricsConsistent() {
         BarSeries s = TestData.gbmSeries("GBM", 600, 100, 0.1, 0.25, 21);
         BacktestResult result = Backtester.run(new MacdStrategy(), s, BacktestConfig.defaults());
-        for (double e : result.equityCurve()) {
+        for (double e : result.equityCurveCopy()) {
             assertTrue(e >= 0);
         }
         PerformanceMetrics m = result.metrics();
-        assertEquals(result.equityCurve()[s.size() - 1], m.finalEquity(), 1e-9);
+        assertEquals(result.equityCurve(s.size() - 1), m.finalEquity(), 1e-9);
         assertTrue(m.maxDrawdown() >= 0 && m.maxDrawdown() <= 1);
         assertTrue(m.winRate() >= 0 && m.winRate() <= 1);
     }
@@ -157,7 +157,7 @@ class BacktesterTest {
                 new MacdStrategy(),
                 new BollingerBandsStrategy()}) {
             BacktestResult r = Backtester.run(strat, s, BacktestConfig.defaults());
-            assertFalse(r.equityCurve().length == 0);
+            assertFalse(r.equityCurveLength() == 0);
         }
     }
 }

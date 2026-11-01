@@ -41,6 +41,9 @@ public final class BestExecutionAnalyzer {
             double medianLatencyToFillMillis,
             double atOrBetterThanArrivalPct,
             Map<String, Double> avgSlippageBpsByVenue) {
+        public BestExecutionReport {
+            avgSlippageBpsByVenue = java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(avgSlippageBpsByVenue));
+        }
     }
 
     private final List<OrderOutcome> outcomes = new ArrayList<>();

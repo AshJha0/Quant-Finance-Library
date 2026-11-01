@@ -151,7 +151,11 @@ public final class ItchCodec {
         private byte[] buf;
         private int off;
 
-        /** Points this view at a message; returns {@code this} for chaining. */
+        /**
+         * Points this view at a message; returns {@code this} for chaining.
+         * The buffer is not copied: the caller keeps ownership and must not
+         * overwrite those bytes while reading through this view.
+         */
         public View wrap(byte[] buffer, int offset) {
             this.buf = buffer;
             this.off = offset;

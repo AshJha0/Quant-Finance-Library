@@ -28,8 +28,8 @@ public final class SmaCrossStrategy implements TradingStrategy {
 
     @Override
     public void init(BarSeries series) {
-        fast = Indicators.sma(series.closes(), fastPeriod);
-        slow = Indicators.sma(series.closes(), slowPeriod);
+        fast = Indicators.sma(series.closesCopy(), fastPeriod);
+        slow = Indicators.sma(series.closesCopy(), slowPeriod);
     }
 
     @Override

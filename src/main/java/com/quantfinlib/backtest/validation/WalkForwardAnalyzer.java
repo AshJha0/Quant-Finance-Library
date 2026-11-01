@@ -45,18 +45,137 @@ public final class WalkForwardAnalyzer {
     public record Fold(int trainFrom, int trainTo, int testFrom, int testTo,
                        Map<String, Double> bestParams,
                        double inSampleObjective, double outOfSampleObjective) {
+        public Fold {
+            bestParams = java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(bestParams));
+        }
     }
 
-    /**
-     * @param inSampleEquity      chained in-sample equity of the fold winners
-     * @param inSampleTradeCount  trades the winners made in sample
-     * @param efficiency          OOS objective over IS objective on the stitched curves
-     */
-    public record WalkForwardResult(List<Fold> folds, double[] outOfSampleEquity,
-                                    PerformanceMetrics outOfSampleMetrics,
-                                    List<Trade> outOfSampleTrades, double efficiency,
-                                    double[] inSampleEquity, PerformanceMetrics inSampleMetrics,
-                                    int inSampleTradeCount) {
+    public static final class WalkForwardResult {
+        private final List<Fold> folds;
+        private final double[] outOfSampleEquity;
+        private final PerformanceMetrics outOfSampleMetrics;
+        private final List<Trade> outOfSampleTrades;
+        private final double efficiency;
+        private final double[] inSampleEquity;
+        private final PerformanceMetrics inSampleMetrics;
+        private final int inSampleTradeCount;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         *
+         * @param efficiency OOS objective over IS objective on the stitched curves
+         * @param inSampleEquity chained in-sample equity of the fold winners
+         * @param inSampleTradeCount trades the winners made in sample
+         */
+        public WalkForwardResult(List<Fold> folds, double[] outOfSampleEquity,
+                PerformanceMetrics outOfSampleMetrics, List<Trade> outOfSampleTrades, double efficiency,
+                double[] inSampleEquity, PerformanceMetrics inSampleMetrics, int inSampleTradeCount) {
+            this.folds = List.copyOf(folds);
+            this.outOfSampleEquity = outOfSampleEquity == null ? null : outOfSampleEquity.clone();
+            this.outOfSampleMetrics = outOfSampleMetrics;
+            this.outOfSampleTrades = List.copyOf(outOfSampleTrades);
+            this.efficiency = efficiency;
+            this.inSampleEquity = inSampleEquity == null ? null : inSampleEquity.clone();
+            this.inSampleMetrics = inSampleMetrics;
+            this.inSampleTradeCount = inSampleTradeCount;
+        }
+
+        /** {@code folds}. */
+        public List<Fold> folds() {
+            return folds;
+        }
+
+        /** Element {@code i} of {@code outOfSampleEquity}. */
+        public double outOfSampleEquity(int i) {
+            return outOfSampleEquity[i];
+        }
+
+        /** Length of {@code outOfSampleEquity}. */
+        public int outOfSampleEquityLength() {
+            return outOfSampleEquity.length;
+        }
+
+        /** A fresh copy of {@code outOfSampleEquity}. */
+        public double[] outOfSampleEquityCopy() {
+            return outOfSampleEquity == null ? null : outOfSampleEquity.clone();
+        }
+
+        /** {@code outOfSampleMetrics}. */
+        public PerformanceMetrics outOfSampleMetrics() {
+            return outOfSampleMetrics;
+        }
+
+        /** {@code outOfSampleTrades}. */
+        public List<Trade> outOfSampleTrades() {
+            return outOfSampleTrades;
+        }
+
+        /** {@code efficiency} (OOS objective over IS objective on the stitched curves). */
+        public double efficiency() {
+            return efficiency;
+        }
+
+        /** Element {@code i} of {@code inSampleEquity} (chained in-sample equity of the fold winners). */
+        public double inSampleEquity(int i) {
+            return inSampleEquity[i];
+        }
+
+        /** Length of {@code inSampleEquity}. */
+        public int inSampleEquityLength() {
+            return inSampleEquity.length;
+        }
+
+        /** A fresh copy of {@code inSampleEquity}. */
+        public double[] inSampleEquityCopy() {
+            return inSampleEquity == null ? null : inSampleEquity.clone();
+        }
+
+        /** {@code inSampleMetrics}. */
+        public PerformanceMetrics inSampleMetrics() {
+            return inSampleMetrics;
+        }
+
+        /** {@code inSampleTradeCount} (trades the winners made in sample). */
+        public int inSampleTradeCount() {
+            return inSampleTradeCount;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof WalkForwardResult o)) {
+                return false;
+            }
+            return java.util.Objects.equals(folds, o.folds)
+                    && java.util.Arrays.equals(outOfSampleEquity, o.outOfSampleEquity)
+                    && java.util.Objects.equals(outOfSampleMetrics, o.outOfSampleMetrics)
+                    && java.util.Objects.equals(outOfSampleTrades, o.outOfSampleTrades)
+                    && Double.compare(efficiency, o.efficiency) == 0
+                    && java.util.Arrays.equals(inSampleEquity, o.inSampleEquity)
+                    && java.util.Objects.equals(inSampleMetrics, o.inSampleMetrics)
+                    && inSampleTradeCount == o.inSampleTradeCount;
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + java.util.Objects.hashCode(folds);
+            h = 31 * h + java.util.Arrays.hashCode(outOfSampleEquity);
+            h = 31 * h + java.util.Objects.hashCode(outOfSampleMetrics);
+            h = 31 * h + java.util.Objects.hashCode(outOfSampleTrades);
+            h = 31 * h + Double.hashCode(efficiency);
+            h = 31 * h + java.util.Arrays.hashCode(inSampleEquity);
+            h = 31 * h + java.util.Objects.hashCode(inSampleMetrics);
+            h = 31 * h + Integer.hashCode(inSampleTradeCount);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "WalkForwardResult[" + "folds=" + folds + ", " + "outOfSampleEquity=" + java.util.Arrays.toString(outOfSampleEquity) + ", " + "outOfSampleMetrics=" + outOfSampleMetrics + ", " + "outOfSampleTrades=" + outOfSampleTrades + ", " + "efficiency=" + efficiency + ", " + "inSampleEquity=" + java.util.Arrays.toString(inSampleEquity) + ", " + "inSampleMetrics=" + inSampleMetrics + ", " + "inSampleTradeCount=" + inSampleTradeCount + "]";
+        }
     }
 
     private WalkForwardAnalyzer() {
@@ -101,7 +220,7 @@ public final class WalkForwardAnalyzer {
                     GridSearchOptimizer.best(grid, factory, train, config, objective);
             BacktestResult is = Backtester.run(factory.create(best.params()), train, config);
             isTrades += is.trades().size();
-            double[] isCurve = is.equityCurve();
+            double[] isCurve = is.equityCurveCopy();
             for (int k = 1; k < isCurve.length; k++) {
                 double prev = isEquity.getLast();
                 isEquity.add(prev * (isCurve[k] / isCurve[k - 1]));
@@ -114,7 +233,7 @@ public final class WalkForwardAnalyzer {
             double oosScore = objective.applyAsDouble(seg.result().metrics());
             folds.add(new Fold(start, trainTo, trainTo, testTo,
                     best.params(), best.objective(), oosScore));
-            for (double e : seg.result().equityCurve()) {
+            for (double e : seg.result().equityCurveCopy()) {
                 oosEquity.add(e);
             }
             oosTrades.addAll(seg.result().trades());

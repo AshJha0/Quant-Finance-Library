@@ -1,5 +1,7 @@
 package com.quantfinlib.risk;
 
+import com.quantfinlib.util.ValueArrays;
+
 /**
  * Ledoit-Wolf covariance shrinkage (2004, "A well-conditioned estimator
  * for large-dimensional covariance matrices") — the standard fix for the
@@ -43,14 +45,75 @@ package com.quantfinlib.risk;
  */
 public final class CovarianceShrinkage {
 
-    /**
-     * @param matrix    the shrunk covariance Sigma*
-     * @param intensity delta in [0, 1] — how far toward the target
-     * @param target    identity target: mu, the average sample variance (the
-     *                  target's diagonal); constant-correlation target: the
-     *                  average sample correlation r̄
-     */
-    public record Result(double[][] matrix, double intensity, double target) {
+    public static final class Result {
+        private final double[][] matrix;
+        private final double intensity;
+        private final double target;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         *
+         * @param matrix the shrunk covariance Sigma*
+         * @param intensity delta in [0, 1] — how far toward the target
+         * @param target identity target: mu, the average sample variance (the target's diagonal); constant-correlation target: the average sample correlation r̄
+         */
+        public Result(double[][] matrix, double intensity, double target) {
+            this.matrix = ValueArrays.copy(matrix);
+            this.intensity = intensity;
+            this.target = target;
+        }
+
+        /** Element {@code [i][j]} of {@code matrix} (the shrunk covariance Sigma*). */
+        public double matrix(int i, int j) {
+            return matrix[i][j];
+        }
+
+        /** Number of rows of {@code matrix}. */
+        public int matrixRows() {
+            return matrix.length;
+        }
+
+        /** A deep copy of {@code matrix}. */
+        public double[][] matrixCopy() {
+            return ValueArrays.copy(matrix);
+        }
+
+        /** {@code intensity} (delta in [0, 1] — how far toward the target). */
+        public double intensity() {
+            return intensity;
+        }
+
+        /** {@code target} (identity target: mu, the average sample variance (the target's diagonal); constant-correlation target: the average sample correlation r̄). */
+        public double target() {
+            return target;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Result o)) {
+                return false;
+            }
+            return java.util.Arrays.deepEquals(matrix, o.matrix)
+                    && Double.compare(intensity, o.intensity) == 0
+                    && Double.compare(target, o.target) == 0;
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + java.util.Arrays.deepHashCode(matrix);
+            h = 31 * h + Double.hashCode(intensity);
+            h = 31 * h + Double.hashCode(target);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "Result[" + "matrix=" + java.util.Arrays.deepToString(matrix) + ", " + "intensity=" + intensity + ", " + "target=" + target + "]";
+        }
     }
 
     private CovarianceShrinkage() {
@@ -279,6 +342,6 @@ public final class CovarianceShrinkage {
 
     /** Convenience: the shrunk matrix only. */
     public static double[][] shrink(double[][] returns) {
-        return ledoitWolf(returns).matrix();
+        return ledoitWolf(returns).matrixCopy();
     }
 }

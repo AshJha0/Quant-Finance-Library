@@ -39,8 +39,90 @@ public final class HarRv {
      * Fitted coefficients with Newey-West standard errors (order: intercept,
      * daily, weekly, monthly), residual variance and the regression size.
      */
-    public record Fit(Params params, double[] hacStandardErrors, double residualVariance,
-                      int observations, boolean logModel) {
+    public static final class Fit {
+        private final Params params;
+        private final double[] hacStandardErrors;
+        private final double residualVariance;
+        private final int observations;
+        private final boolean logModel;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         */
+        public Fit(Params params, double[] hacStandardErrors, double residualVariance, int observations,
+                boolean logModel) {
+            this.params = params;
+            this.hacStandardErrors = hacStandardErrors == null ? null : hacStandardErrors.clone();
+            this.residualVariance = residualVariance;
+            this.observations = observations;
+            this.logModel = logModel;
+        }
+
+        /** {@code params}. */
+        public Params params() {
+            return params;
+        }
+
+        /** Element {@code i} of {@code hacStandardErrors}. */
+        public double hacStandardErrors(int i) {
+            return hacStandardErrors[i];
+        }
+
+        /** Length of {@code hacStandardErrors}. */
+        public int hacStandardErrorsLength() {
+            return hacStandardErrors.length;
+        }
+
+        /** A fresh copy of {@code hacStandardErrors}. */
+        public double[] hacStandardErrorsCopy() {
+            return hacStandardErrors == null ? null : hacStandardErrors.clone();
+        }
+
+        /** {@code residualVariance}. */
+        public double residualVariance() {
+            return residualVariance;
+        }
+
+        /** {@code observations}. */
+        public int observations() {
+            return observations;
+        }
+
+        /** {@code logModel}. */
+        public boolean logModel() {
+            return logModel;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Fit o)) {
+                return false;
+            }
+            return java.util.Objects.equals(params, o.params)
+                    && java.util.Arrays.equals(hacStandardErrors, o.hacStandardErrors)
+                    && Double.compare(residualVariance, o.residualVariance) == 0
+                    && observations == o.observations
+                    && logModel == o.logModel;
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + java.util.Objects.hashCode(params);
+            h = 31 * h + java.util.Arrays.hashCode(hacStandardErrors);
+            h = 31 * h + Double.hashCode(residualVariance);
+            h = 31 * h + Integer.hashCode(observations);
+            h = 31 * h + Boolean.hashCode(logModel);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "Fit[" + "params=" + params + ", " + "hacStandardErrors=" + java.util.Arrays.toString(hacStandardErrors) + ", " + "residualVariance=" + residualVariance + ", " + "observations=" + observations + ", " + "logModel=" + logModel + "]";
+        }
     }
 
     private HarRv() {

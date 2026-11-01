@@ -146,7 +146,7 @@ class BacktestQualityRoundTest {
 
         BacktestResult winner = Backtester.run(factory.create(ranked.getFirst().params()),
                 s, BacktestConfig.defaults());
-        double[] eq = winner.equityCurve();
+        double[] eq = winner.equityCurveCopy();
         double[] rets = new double[eq.length - 1];
         for (int i = 1; i < eq.length; i++) {
             rets[i - 1] = eq[i] / eq[i - 1] - 1;
@@ -177,7 +177,7 @@ class BacktestQualityRoundTest {
                 s, grid, factory, BacktestConfig.defaults(), 100, 50,
                 PerformanceMetrics::totalReturn);
         assertEquals(6, r.folds().size());
-        assertEquals(6 * 50, r.outOfSampleEquity().length);
+        assertEquals(6 * 50, r.outOfSampleEquityLength());
         assertTrue(!r.outOfSampleTrades().isEmpty(),
                 "warm folds must actually trade on a cyclical market");
     }
@@ -199,7 +199,7 @@ class BacktestQualityRoundTest {
         // Signal fires at bar 2, but trading starts at bar 5: ignored.
         BacktestResult r = Backtester.run(new Script(2, -1), s,
                 BacktestConfig.defaults(), 5);
-        assertEquals(12 - 5, r.equityCurve().length);
+        assertEquals(12 - 5, r.equityCurveLength());
         assertTrue(r.trades().isEmpty(), "signal before tradeFrom must be ignored");
 
         // Signal at bar 6 IS acted on: it fills at bar 7's open (next-open
@@ -251,7 +251,7 @@ class BacktestQualityRoundTest {
         assertTrue(r.backtest().trades().isEmpty());
         assertEquals(0, model.fillCount());
         assertEquals(6, model.rejectCount(), "bars 4..9 all reject");
-        double[] eq = r.backtest().equityCurve();
+        double[] eq = r.backtest().equityCurveCopy();
         assertEquals(100_000, eq[eq.length - 1], 1e-9, "no fill -> capital intact");
     }
 

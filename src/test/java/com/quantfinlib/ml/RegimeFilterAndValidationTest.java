@@ -39,24 +39,24 @@ class RegimeFilterAndValidationTest {
         int[] truth = new int[2000];
         double[] r = simulate(2000, truth, 3);
         RegimeDetector.RegimeModel m = RegimeDetector.fit(r, 200);
-        double[][] a = m.transition();
+        double[][] a = m.transitionCopy();
         double p1 = 0.5;
         for (int t = 0; t < r.length; t++) {
             double prior1 = t == 0 ? 0.5 : (1 - p1) * a[0][1] + p1 * a[1][1];
-            double l0 = Math.log(1 - prior1) + logPdf(r[t], m.means()[0], m.stdDevs()[0]);
-            double l1 = Math.log(prior1) + logPdf(r[t], m.means()[1], m.stdDevs()[1]);
+            double l0 = Math.log(1 - prior1) + logPdf(r[t], m.means(0), m.stdDevs(0));
+            double l1 = Math.log(prior1) + logPdf(r[t], m.means(1), m.stdDevs(1));
             double mx = Math.max(l0, l1);
             p1 = Math.exp(l1 - mx) / (Math.exp(l0 - mx) + Math.exp(l1 - mx));
             if (t >= 50) {
-                assertEquals(p1, m.filteredHighVolProbability()[t], 1e-8, "t=" + t);
+                assertEquals(p1, m.filteredHighVolProbability(t), 1e-8, "t=" + t);
             }
         }
-        assertEquals(m.currentProbabilities()[1], m.filteredHighVolProbability()[r.length - 1], 0);
+        assertEquals(m.currentProbabilities(1), m.filteredHighVolProbability(r.length - 1), 0);
         // The smoothed path looks ahead: it differs from the filtered one.
         double maxDiff = 0;
         for (int t = 0; t < r.length; t++) {
             maxDiff = Math.max(maxDiff,
-                    Math.abs(m.smoothedHighVolProbability()[t] - m.filteredHighVolProbability()[t]));
+                    Math.abs(m.smoothedHighVolProbability(t) - m.filteredHighVolProbability(t)));
         }
         assertTrue(maxDiff > 0.2);
     }

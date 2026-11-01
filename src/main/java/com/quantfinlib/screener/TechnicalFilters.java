@@ -27,36 +27,36 @@ public final class TechnicalFilters {
     }
 
     public static ScreenFilter rsiBelow(int period, double value) {
-        return s -> lastValid(Indicators.rsi(s.series().closes(), period)) < value;
+        return s -> lastValid(Indicators.rsi(s.series().closesCopy(), period)) < value;
     }
 
     public static ScreenFilter rsiAbove(int period, double value) {
-        return s -> lastValid(Indicators.rsi(s.series().closes(), period)) > value;
+        return s -> lastValid(Indicators.rsi(s.series().closesCopy(), period)) > value;
     }
 
     public static ScreenFilter priceAboveSma(int period) {
-        return s -> s.lastClose() > lastValid(Indicators.sma(s.series().closes(), period));
+        return s -> s.lastClose() > lastValid(Indicators.sma(s.series().closesCopy(), period));
     }
 
     public static ScreenFilter priceBelowSma(int period) {
-        return s -> s.lastClose() < lastValid(Indicators.sma(s.series().closes(), period));
+        return s -> s.lastClose() < lastValid(Indicators.sma(s.series().closesCopy(), period));
     }
 
     public static ScreenFilter priceAboveEma(int period) {
-        return s -> s.lastClose() > lastValid(Indicators.ema(s.series().closes(), period));
+        return s -> s.lastClose() > lastValid(Indicators.ema(s.series().closesCopy(), period));
     }
 
     /** MACD line above its signal line on the last bar. */
     public static ScreenFilter macdBullish() {
         return s -> {
-            Indicators.Macd m = Indicators.macd(s.series().closes(), 12, 26, 9);
+            Indicators.Macd m = Indicators.macd(s.series().closesCopy(), 12, 26, 9);
             int i = s.series().size() - 1;
-            return valid(m.line()[i], m.signal()[i]) && m.line()[i] > m.signal()[i];
+            return valid(m.line(i), m.signal(i)) && m.line(i) > m.signal(i);
         };
     }
 
     public static ScreenFilter adxAbove(int period, double value) {
-        return s -> lastValid(Indicators.adx(s.series(), period).adx()) > value;
+        return s -> lastValid(Indicators.adx(s.series(), period).adxCopy()) > value;
     }
 
     /** ATR as a fraction of price below the threshold (low-volatility screen). */
@@ -104,14 +104,14 @@ public final class TechnicalFilters {
     public static ScreenFilter superTrendBullish(int period, double multiplier) {
         return s -> {
             Indicators.SuperTrend st = Indicators.superTrend(s.series(), period, multiplier);
-            return st.direction()[s.series().size() - 1] == 1;
+            return st.direction(s.series().size() - 1) == 1;
         };
     }
 
     /** Close above the upper Bollinger band (volatility breakout). */
     public static ScreenFilter bollingerBreakout(int period, double k) {
         return s -> {
-            double upper = lastValid(Indicators.bollinger(s.series().closes(), period, k).upper());
+            double upper = lastValid(Indicators.bollinger(s.series().closesCopy(), period, k).upperCopy());
             return !Double.isNaN(upper) && s.lastClose() > upper;
         };
     }
@@ -121,7 +121,7 @@ public final class TechnicalFilters {
         return s -> {
             Indicators.Ichimoku ich = Indicators.ichimoku(s.series(), 9, 26, 52);
             int i = s.series().size() - 1;
-            double a = ich.senkouA()[i], b = ich.senkouB()[i];
+            double a = ich.senkouA(i), b = ich.senkouB(i);
             return valid(a, b) && s.lastClose() > Math.max(a, b);
         };
     }
@@ -150,7 +150,7 @@ public final class TechnicalFilters {
             if (n < lookback + 2) {
                 return false;
             }
-            double avg = MathUtils.mean(series.volumes(), n - 1 - lookback, n - 1);
+            double avg = MathUtils.mean(series.volumesCopy(), n - 1 - lookback, n - 1);
             return avg > 0 && series.volume(n - 1) > multiplier * avg;
         };
     }

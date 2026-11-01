@@ -28,8 +28,7 @@ class FixOrderEncoderTest {
 
     private static FixMessage roundTrip(FixOrderEncoder enc) {
         // FixMessage.parse validates 9= and 10= — a framing bug fails here.
-        return FixMessage.parse(Arrays.copyOfRange(
-                enc.buffer(), enc.offset(), enc.offset() + enc.length()));
+        return FixMessage.parse(enc.toByteArray());
     }
 
     @Test

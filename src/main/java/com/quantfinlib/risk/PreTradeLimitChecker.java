@@ -22,6 +22,9 @@ public final class PreTradeLimitChecker {
     }
 
     public record CheckResult(boolean approved, List<String> violations) {
+        public CheckResult {
+            violations = List.copyOf(violations);
+        }
     }
 
     private long maxOrderQuantity = Long.MAX_VALUE;

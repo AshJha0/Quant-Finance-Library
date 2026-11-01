@@ -49,19 +49,124 @@ public final class SignalEvaluator {
 
     /**
      * The evaluation scorecard; {@link #format} renders it.
-     *
-     * @param tStat             HAC (Newey-West) t-stat of the mean IC
-     * @param naiveTStat        iid t-stat {@code mean/(std/√n)}, for comparison only
-     * @param hacLag            Bartlett lag used for {@code tStat}
-     * @param icAutocorrelation lag-{@code horizon} autocorrelation of the IC
-     *                          series (NaN when the series is too short)
-     * @param horizon           forward-return horizon in bars
-     * @param icSeries          per-date ICs, one per scored bar
      */
-    public record Report(String factorName, double meanIc, double icStd, double ir,
-                         double tStat, double naiveTStat, int hacLag, double icAutocorrelation,
-                         double hitRate, double meanTurnover, int observations, int horizon,
-                         double[] icSeries) {
+    public static final class Report {
+        private final String factorName;
+        private final double meanIc;
+        private final double icStd;
+        private final double ir;
+        private final double tStat;
+        private final double naiveTStat;
+        private final int hacLag;
+        private final double icAutocorrelation;
+        private final double hitRate;
+        private final double meanTurnover;
+        private final int observations;
+        private final int horizon;
+        private final double[] icSeries;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         *
+         * @param tStat HAC (Newey-West) t-stat of the mean IC
+         * @param naiveTStat iid t-stat {@code mean/(std/√n)}, for comparison only
+         * @param hacLag Bartlett lag used for {@code tStat}
+         * @param icAutocorrelation lag-{@code horizon} autocorrelation of the IC series (NaN when the series is too short)
+         * @param horizon forward-return horizon in bars
+         * @param icSeries per-date ICs, one per scored bar
+         */
+        public Report(String factorName, double meanIc, double icStd, double ir, double tStat,
+                double naiveTStat, int hacLag, double icAutocorrelation, double hitRate, double meanTurnover,
+                int observations, int horizon, double[] icSeries) {
+            this.factorName = factorName;
+            this.meanIc = meanIc;
+            this.icStd = icStd;
+            this.ir = ir;
+            this.tStat = tStat;
+            this.naiveTStat = naiveTStat;
+            this.hacLag = hacLag;
+            this.icAutocorrelation = icAutocorrelation;
+            this.hitRate = hitRate;
+            this.meanTurnover = meanTurnover;
+            this.observations = observations;
+            this.horizon = horizon;
+            this.icSeries = icSeries == null ? null : icSeries.clone();
+        }
+
+        /** {@code factorName}. */
+        public String factorName() {
+            return factorName;
+        }
+
+        /** {@code meanIc}. */
+        public double meanIc() {
+            return meanIc;
+        }
+
+        /** {@code icStd}. */
+        public double icStd() {
+            return icStd;
+        }
+
+        /** {@code ir}. */
+        public double ir() {
+            return ir;
+        }
+
+        /** {@code tStat} (HAC (Newey-West) t-stat of the mean IC). */
+        public double tStat() {
+            return tStat;
+        }
+
+        /** {@code naiveTStat}. */
+        public double naiveTStat() {
+            return naiveTStat;
+        }
+
+        /** {@code hacLag}. */
+        public int hacLag() {
+            return hacLag;
+        }
+
+        /** {@code icAutocorrelation}. */
+        public double icAutocorrelation() {
+            return icAutocorrelation;
+        }
+
+        /** {@code hitRate}. */
+        public double hitRate() {
+            return hitRate;
+        }
+
+        /** {@code meanTurnover}. */
+        public double meanTurnover() {
+            return meanTurnover;
+        }
+
+        /** {@code observations}. */
+        public int observations() {
+            return observations;
+        }
+
+        /** {@code horizon} (forward-return horizon in bars). */
+        public int horizon() {
+            return horizon;
+        }
+
+        /** Element {@code i} of {@code icSeries} (per-date ICs, one per scored bar). */
+        public double icSeries(int i) {
+            return icSeries[i];
+        }
+
+        /** Length of {@code icSeries}. */
+        public int icSeriesLength() {
+            return icSeries.length;
+        }
+
+        /** A fresh copy of {@code icSeries}. */
+        public double[] icSeriesCopy() {
+            return icSeries == null ? null : icSeries.clone();
+        }
 
         /** One-line human summary in fixed order for report diffs. */
         public String format() {
@@ -70,6 +175,53 @@ public final class SignalEvaluator {
                             + " hit=%.1f%% turnover=%.1f%%",
                     factorName, meanIc, tStat, hacLag, naiveTStat, observations, horizon,
                     icAutocorrelation, ir, hitRate * 100, meanTurnover * 100);
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Report o)) {
+                return false;
+            }
+            return java.util.Objects.equals(factorName, o.factorName)
+                    && Double.compare(meanIc, o.meanIc) == 0
+                    && Double.compare(icStd, o.icStd) == 0
+                    && Double.compare(ir, o.ir) == 0
+                    && Double.compare(tStat, o.tStat) == 0
+                    && Double.compare(naiveTStat, o.naiveTStat) == 0
+                    && hacLag == o.hacLag
+                    && Double.compare(icAutocorrelation, o.icAutocorrelation) == 0
+                    && Double.compare(hitRate, o.hitRate) == 0
+                    && Double.compare(meanTurnover, o.meanTurnover) == 0
+                    && observations == o.observations
+                    && horizon == o.horizon
+                    && java.util.Arrays.equals(icSeries, o.icSeries);
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + java.util.Objects.hashCode(factorName);
+            h = 31 * h + Double.hashCode(meanIc);
+            h = 31 * h + Double.hashCode(icStd);
+            h = 31 * h + Double.hashCode(ir);
+            h = 31 * h + Double.hashCode(tStat);
+            h = 31 * h + Double.hashCode(naiveTStat);
+            h = 31 * h + Integer.hashCode(hacLag);
+            h = 31 * h + Double.hashCode(icAutocorrelation);
+            h = 31 * h + Double.hashCode(hitRate);
+            h = 31 * h + Double.hashCode(meanTurnover);
+            h = 31 * h + Integer.hashCode(observations);
+            h = 31 * h + Integer.hashCode(horizon);
+            h = 31 * h + java.util.Arrays.hashCode(icSeries);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "Report[" + "factorName=" + factorName + ", " + "meanIc=" + meanIc + ", " + "icStd=" + icStd + ", " + "ir=" + ir + ", " + "tStat=" + tStat + ", " + "naiveTStat=" + naiveTStat + ", " + "hacLag=" + hacLag + ", " + "icAutocorrelation=" + icAutocorrelation + ", " + "hitRate=" + hitRate + ", " + "meanTurnover=" + meanTurnover + ", " + "observations=" + observations + ", " + "horizon=" + horizon + ", " + "icSeries=" + java.util.Arrays.toString(icSeries) + "]";
         }
     }
 
@@ -187,18 +339,136 @@ public final class SignalEvaluator {
      * lowest-scored names' average forward return, the last entry the
      * highest-scored. A real factor shows monotone quantile returns; a factor
      * whose spread lives in one extreme quantile is a tail bet.
-     *
-     * @param spreadSeries per-date top-minus-bottom return
-     * @param spreadTStat  Newey-West t-stat of the mean spread (automatic lag;
-     *                     the date grid does not overlap)
      */
-    public record QuantileReport(String factorName, double[] meanReturns, int[] counts,
-                                 int quantiles, int dates, double[] spreadSeries,
-                                 double spreadTStat) {
+    public static final class QuantileReport {
+        private final String factorName;
+        private final double[] meanReturns;
+        private final int[] counts;
+        private final int quantiles;
+        private final int dates;
+        private final double[] spreadSeries;
+        private final double spreadTStat;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         *
+         * @param spreadSeries per-date top-minus-bottom return
+         * @param spreadTStat Newey-West t-stat of the mean spread (automatic lag; the date grid does not overlap)
+         */
+        public QuantileReport(String factorName, double[] meanReturns, int[] counts, int quantiles,
+                int dates, double[] spreadSeries, double spreadTStat) {
+            this.factorName = factorName;
+            this.meanReturns = meanReturns == null ? null : meanReturns.clone();
+            this.counts = counts == null ? null : counts.clone();
+            this.quantiles = quantiles;
+            this.dates = dates;
+            this.spreadSeries = spreadSeries == null ? null : spreadSeries.clone();
+            this.spreadTStat = spreadTStat;
+        }
+
+        /** {@code factorName}. */
+        public String factorName() {
+            return factorName;
+        }
+
+        /** Element {@code i} of {@code meanReturns}. */
+        public double meanReturns(int i) {
+            return meanReturns[i];
+        }
+
+        /** Length of {@code meanReturns}. */
+        public int meanReturnsLength() {
+            return meanReturns.length;
+        }
+
+        /** A fresh copy of {@code meanReturns}. */
+        public double[] meanReturnsCopy() {
+            return meanReturns == null ? null : meanReturns.clone();
+        }
+
+        /** Element {@code i} of {@code counts}. */
+        public int counts(int i) {
+            return counts[i];
+        }
+
+        /** Length of {@code counts}. */
+        public int countsLength() {
+            return counts.length;
+        }
+
+        /** A fresh copy of {@code counts}. */
+        public int[] countsCopy() {
+            return counts == null ? null : counts.clone();
+        }
+
+        /** {@code quantiles}. */
+        public int quantiles() {
+            return quantiles;
+        }
+
+        /** {@code dates}. */
+        public int dates() {
+            return dates;
+        }
+
+        /** Element {@code i} of {@code spreadSeries} (per-date top-minus-bottom return). */
+        public double spreadSeries(int i) {
+            return spreadSeries[i];
+        }
+
+        /** Length of {@code spreadSeries}. */
+        public int spreadSeriesLength() {
+            return spreadSeries.length;
+        }
+
+        /** A fresh copy of {@code spreadSeries}. */
+        public double[] spreadSeriesCopy() {
+            return spreadSeries == null ? null : spreadSeries.clone();
+        }
+
+        /** {@code spreadTStat} (Newey-West t-stat of the mean spread (automatic lag; the date grid does not overlap)). */
+        public double spreadTStat() {
+            return spreadTStat;
+        }
 
         /** Top-quantile minus bottom-quantile mean forward return. */
         public double spread() {
             return meanReturns[meanReturns.length - 1] - meanReturns[0];
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof QuantileReport o)) {
+                return false;
+            }
+            return java.util.Objects.equals(factorName, o.factorName)
+                    && java.util.Arrays.equals(meanReturns, o.meanReturns)
+                    && java.util.Arrays.equals(counts, o.counts)
+                    && quantiles == o.quantiles
+                    && dates == o.dates
+                    && java.util.Arrays.equals(spreadSeries, o.spreadSeries)
+                    && Double.compare(spreadTStat, o.spreadTStat) == 0;
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + java.util.Objects.hashCode(factorName);
+            h = 31 * h + java.util.Arrays.hashCode(meanReturns);
+            h = 31 * h + java.util.Arrays.hashCode(counts);
+            h = 31 * h + Integer.hashCode(quantiles);
+            h = 31 * h + Integer.hashCode(dates);
+            h = 31 * h + java.util.Arrays.hashCode(spreadSeries);
+            h = 31 * h + Double.hashCode(spreadTStat);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "QuantileReport[" + "factorName=" + factorName + ", " + "meanReturns=" + java.util.Arrays.toString(meanReturns) + ", " + "counts=" + java.util.Arrays.toString(counts) + ", " + "quantiles=" + quantiles + ", " + "dates=" + dates + ", " + "spreadSeries=" + java.util.Arrays.toString(spreadSeries) + ", " + "spreadTStat=" + spreadTStat + "]";
         }
     }
 

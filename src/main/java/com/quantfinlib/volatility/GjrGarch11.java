@@ -42,15 +42,106 @@ public final class GjrGarch11 {
         }
     }
 
-    /**
-     * @param params               ω, α, γ, β and the maximised log-likelihood
-     * @param innovation           the innovation distribution used
-     * @param nu                   Student-t degrees of freedom, NaN for Gaussian
-     * @param standardErrors       SEs of (ω, α, γ, β[, ν]) from the observed information
-     * @param robustStandardErrors Bollerslev-Wooldridge QMLE SEs, same order
-     */
-    public record Fit(Params params, Innovation innovation, double nu,
-                      double[] standardErrors, double[] robustStandardErrors) {
+    public static final class Fit {
+        private final Params params;
+        private final Innovation innovation;
+        private final double nu;
+        private final double[] standardErrors;
+        private final double[] robustStandardErrors;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         *
+         * @param params ω, α, γ, β and the maximised log-likelihood
+         * @param innovation the innovation distribution used
+         * @param nu Student-t degrees of freedom, NaN for Gaussian
+         * @param standardErrors SEs of (ω, α, γ, β[, ν]) from the observed information
+         * @param robustStandardErrors Bollerslev-Wooldridge QMLE SEs, same order
+         */
+        public Fit(Params params, Innovation innovation, double nu, double[] standardErrors,
+                double[] robustStandardErrors) {
+            this.params = params;
+            this.innovation = innovation;
+            this.nu = nu;
+            this.standardErrors = standardErrors == null ? null : standardErrors.clone();
+            this.robustStandardErrors = robustStandardErrors == null ? null : robustStandardErrors.clone();
+        }
+
+        /** {@code params} (ω, α, γ, β and the maximised log-likelihood). */
+        public Params params() {
+            return params;
+        }
+
+        /** {@code innovation} (the innovation distribution used). */
+        public Innovation innovation() {
+            return innovation;
+        }
+
+        /** {@code nu} (Student-t degrees of freedom, NaN for Gaussian). */
+        public double nu() {
+            return nu;
+        }
+
+        /** Element {@code i} of {@code standardErrors} (SEs of (ω, α, γ, β[, ν]) from the observed information). */
+        public double standardErrors(int i) {
+            return standardErrors[i];
+        }
+
+        /** Length of {@code standardErrors}. */
+        public int standardErrorsLength() {
+            return standardErrors.length;
+        }
+
+        /** A fresh copy of {@code standardErrors}. */
+        public double[] standardErrorsCopy() {
+            return standardErrors == null ? null : standardErrors.clone();
+        }
+
+        /** Element {@code i} of {@code robustStandardErrors} (Bollerslev-Wooldridge QMLE SEs, same order). */
+        public double robustStandardErrors(int i) {
+            return robustStandardErrors[i];
+        }
+
+        /** Length of {@code robustStandardErrors}. */
+        public int robustStandardErrorsLength() {
+            return robustStandardErrors.length;
+        }
+
+        /** A fresh copy of {@code robustStandardErrors}. */
+        public double[] robustStandardErrorsCopy() {
+            return robustStandardErrors == null ? null : robustStandardErrors.clone();
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Fit o)) {
+                return false;
+            }
+            return java.util.Objects.equals(params, o.params)
+                    && java.util.Objects.equals(innovation, o.innovation)
+                    && Double.compare(nu, o.nu) == 0
+                    && java.util.Arrays.equals(standardErrors, o.standardErrors)
+                    && java.util.Arrays.equals(robustStandardErrors, o.robustStandardErrors);
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + java.util.Objects.hashCode(params);
+            h = 31 * h + java.util.Objects.hashCode(innovation);
+            h = 31 * h + Double.hashCode(nu);
+            h = 31 * h + java.util.Arrays.hashCode(standardErrors);
+            h = 31 * h + java.util.Arrays.hashCode(robustStandardErrors);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "Fit[" + "params=" + params + ", " + "innovation=" + innovation + ", " + "nu=" + nu + ", " + "standardErrors=" + java.util.Arrays.toString(standardErrors) + ", " + "robustStandardErrors=" + java.util.Arrays.toString(robustStandardErrors) + "]";
+        }
     }
 
     private GjrGarch11() {

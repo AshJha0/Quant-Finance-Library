@@ -113,7 +113,7 @@ class PovAndIsSchedulerTest {
         double lambda = ImplementationShortfallScheduler.riskAversionForFrontLoad(base, 0.30);
         AlmgrenChriss.Trajectory t =
                 AlmgrenChriss.optimalTrajectory(base.withRiskAversion(lambda));
-        assertEquals(0.30, t.trades()[0] / 100_000, 1e-3);
+        assertEquals(0.30, t.trades(0) / 100_000, 1e-3);
         assertThrows(IllegalArgumentException.class,
                 () -> ImplementationShortfallScheduler.riskAversionForFrontLoad(base, 0.05));
     }
@@ -132,7 +132,7 @@ class PovAndIsSchedulerTest {
                 .riskAversionForFrontLoad(params(0), 0.90);
         AlmgrenChriss.Trajectory t = AlmgrenChriss
                 .optimalTrajectory(params(0).withRiskAversion(lambda));
-        assertEquals(0.90, t.trades()[0] / 100_000, 1e-2);
+        assertEquals(0.90, t.trades(0) / 100_000, 1e-2);
     }
 
     @Test

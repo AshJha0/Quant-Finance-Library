@@ -44,7 +44,11 @@ public final class QuoteFlyweight {
     private ByteBuffer buffer;
     private int offset;
 
-    /** Positions this flyweight over {@code buffer} at {@code offset} (the header start). */
+    /**
+     * Positions this flyweight over {@code buffer} at {@code offset} (the header start).
+     * The buffer is not copied: the caller keeps ownership, and reads and
+     * writes through this flyweight go straight to its bytes.
+     */
     public QuoteFlyweight wrap(ByteBuffer buffer, int offset) {
         this.buffer = buffer;
         this.offset = offset;

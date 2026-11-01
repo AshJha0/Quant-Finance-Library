@@ -1,6 +1,5 @@
 package com.quantfinlib.backtest;
 
-import java.util.Collections;
 import java.util.List;
 
 /**
@@ -19,14 +18,19 @@ public final class BacktestResult {
                           List<Trade> trades, int periodsPerYear) {
         this.strategyName = strategyName;
         this.symbol = symbol;
-        this.equityCurve = equityCurve;
-        this.trades = Collections.unmodifiableList(trades);
-        this.metrics = PerformanceAnalytics.compute(equityCurve, trades, periodsPerYear);
+        this.equityCurve = equityCurve.clone();
+        this.trades = List.copyOf(trades);
+        this.metrics = PerformanceAnalytics.compute(this.equityCurve, this.trades, periodsPerYear);
     }
 
     public String strategyName()       { return strategyName; }
     public String symbol()             { return symbol; }
-    public double[] equityCurve()      { return equityCurve; }
+    /** Equity at bar {@code i}. */
+    public double equityCurve(int i)   { return equityCurve[i]; }
+    /** Number of points on the equity curve (one per bar). */
+    public int equityCurveLength()     { return equityCurve.length; }
+    /** A fresh copy of the equity curve. */
+    public double[] equityCurveCopy()  { return equityCurve.clone(); }
     public List<Trade> trades()        { return trades; }
     public PerformanceMetrics metrics() { return metrics; }
 

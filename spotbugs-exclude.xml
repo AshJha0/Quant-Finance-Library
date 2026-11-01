@@ -5,17 +5,159 @@
         <Package name="~com\.quantfinlib\.examples(\..*)?"/>
     </Match>
 
-    <!-- Arrays and collaborators are passed by reference, not copied.
-         Result records (backtests, fits, reports) hand freshly allocated
-         arrays to the caller, who owns them; copying in every accessor would
-         make indexed loops such as result.equity()[i] quadratic. BarSeries
-         columns are read in tight loops by every indicator. Flyweights, buses,
-         gateways, calendars and scorecards are shared objects by design.
-         The convention is stated in the javadoc of the classes concerned:
-         callers must not mutate arrays they did not allocate. -->
+    <!-- EI_EXPOSE_REP / EI_EXPOSE_REP2: no global exclusion. Value and
+         result types copy arrays and collections on construction and hand
+         out elements or copies only. The matches below are per method, each
+         with its reason. -->
+
+    <!-- Flyweight wrap(...): the view reads the caller's buffer in place by
+         design (zero-copy decode/encode). The caller keeps ownership; the
+         view holds the reference only until the next wrap, and the javadoc
+         of each wrap method says so. Copying would defeat the flyweight. -->
     <Match>
-        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+        <Class name="com.quantfinlib.fix.FixExecReportView"/>
+        <Method name="wrap"/>
+        <Field name="buf"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
     </Match>
+    <Match>
+        <Class name="com.quantfinlib.fix.FixMarketDataView"/>
+        <Method name="wrap"/>
+        <Field name="buf"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+    <Match>
+        <Class name="com.quantfinlib.marketdata.ItchCodec$View"/>
+        <Method name="wrap"/>
+        <Field name="buf"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+    <Match>
+        <Class name="com.quantfinlib.sbe.OrderFlyweight"/>
+        <Method name="wrap"/>
+        <Field name="buffer"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+    <Match>
+        <Class name="com.quantfinlib.sbe.QuoteFlyweight"/>
+        <Method name="wrap"/>
+        <Field name="buffer"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+    <Match>
+        <Class name="com.quantfinlib.sbe.TradeFlyweight"/>
+        <Method name="wrap"/>
+        <Field name="buffer"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+
+    <!-- Injected collaborators: these constructors and setters wire a shared
+         service (a gateway, risk gate, scorecard, venue book, output channel,
+         covariance model or universe) into the object that uses it. The
+         reference is the dependency, not internal state, and sharing it is
+         the point: the quoter must send through the same gateway the venue
+         acknowledges into. Copying would break the wiring. -->
+    <Match>
+        <Class name="com.quantfinlib.backtest.portfolio.CrossSectionalMomentum"/>
+        <Method name="&lt;init&gt;"/>
+        <Field name="universe"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+    <Match>
+        <Class name="com.quantfinlib.execution.AdaptiveSor"/>
+        <Method name="&lt;init&gt;"/>
+        <Field name="scorecard"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+    <Match>
+        <Class name="com.quantfinlib.execution.AdaptiveSor"/>
+        <Method name="scorecard"/>
+        <Field name="scorecard"/>
+        <Bug pattern="EI_EXPOSE_REP"/>
+    </Match>
+    <Match>
+        <Class name="com.quantfinlib.execution.PortfolioExecutor"/>
+        <Method name="useRiskModel"/>
+        <Field name="riskModel"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+    <Match>
+        <Class name="com.quantfinlib.fx.LpRouter"/>
+        <Method name="&lt;init&gt;"/>
+        <Field name="book"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+    <Match>
+        <Class name="com.quantfinlib.fx.LpRouter"/>
+        <Method name="&lt;init&gt;"/>
+        <Field name="card"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+    <Match>
+        <Class name="com.quantfinlib.sbe.BinaryOrderPublisher"/>
+        <Method name="&lt;init&gt;"/>
+        <Field name="channel"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+    <Match>
+        <Class name="com.quantfinlib.trading.AutoHedger"/>
+        <Method name="&lt;init&gt;"/>
+        <Field name="gateway"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+    <Match>
+        <Class name="com.quantfinlib.trading.HftQuoter"/>
+        <Method name="&lt;init&gt;"/>
+        <Field name="gateway"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+    <Match>
+        <Class name="com.quantfinlib.trading.LoopbackVenue"/>
+        <Method name="&lt;init&gt;"/>
+        <Field name="gateway"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+    <Match>
+        <Class name="com.quantfinlib.trading.TradingDashboard"/>
+        <Method name="&lt;init&gt;"/>
+        <Field name="gateway"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+    <Match>
+        <Class name="com.quantfinlib.trading.HftOrderGateway"/>
+        <Method name="&lt;init&gt;"/>
+        <Field name="riskGate"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+    <Match>
+        <Class name="com.quantfinlib.trading.HftOrderGateway"/>
+        <Method name="riskGate"/>
+        <Field name="riskGate"/>
+        <Bug pattern="EI_EXPOSE_REP"/>
+    </Match>
+
+    <!-- Recorded failures: failure() returns the exception the worker
+         thread caught, so the caller can inspect or rethrow it. It is a
+         diagnostic hand-off, not state the object depends on. -->
+    <Match>
+        <Class name="com.quantfinlib.data.TickCapture"/>
+        <Method name="failure"/>
+        <Field name="failure"/>
+        <Bug pattern="EI_EXPOSE_REP"/>
+    </Match>
+    <Match>
+        <Class name="com.quantfinlib.marketdata.HftMarketDataBus"/>
+        <Method name="failure"/>
+        <Field name="failure"/>
+        <Bug pattern="EI_EXPOSE_REP"/>
+    </Match>
+    <Match>
+        <Class name="com.quantfinlib.trading.HftOrderGateway"/>
+        <Method name="failure"/>
+        <Field name="failure"/>
+        <Bug pattern="EI_EXPOSE_REP"/>
+    </Match>
+
 
     <!-- Single-writer classes documented as not thread-safe. The AT_
          detectors assume any field may be shared. -->

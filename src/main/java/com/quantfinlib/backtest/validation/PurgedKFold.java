@@ -45,7 +45,80 @@ public final class PurgedKFold {
      * One fold: test on {@code [testFrom, testTo)}, train on
      * {@code trainIndices} (ascending, purged and embargoed).
      */
-    public record Split(int fold, int testFrom, int testTo, int[] trainIndices) {
+    public static final class Split {
+        private final int fold;
+        private final int testFrom;
+        private final int testTo;
+        private final int[] trainIndices;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         */
+        public Split(int fold, int testFrom, int testTo, int[] trainIndices) {
+            this.fold = fold;
+            this.testFrom = testFrom;
+            this.testTo = testTo;
+            this.trainIndices = trainIndices == null ? null : trainIndices.clone();
+        }
+
+        /** {@code fold}. */
+        public int fold() {
+            return fold;
+        }
+
+        /** {@code testFrom}. */
+        public int testFrom() {
+            return testFrom;
+        }
+
+        /** {@code testTo}. */
+        public int testTo() {
+            return testTo;
+        }
+
+        /** Element {@code i} of {@code trainIndices}. */
+        public int trainIndices(int i) {
+            return trainIndices[i];
+        }
+
+        /** Length of {@code trainIndices}. */
+        public int trainIndicesLength() {
+            return trainIndices.length;
+        }
+
+        /** A fresh copy of {@code trainIndices}. */
+        public int[] trainIndicesCopy() {
+            return trainIndices == null ? null : trainIndices.clone();
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Split o)) {
+                return false;
+            }
+            return fold == o.fold
+                    && testFrom == o.testFrom
+                    && testTo == o.testTo
+                    && java.util.Arrays.equals(trainIndices, o.trainIndices);
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + Integer.hashCode(fold);
+            h = 31 * h + Integer.hashCode(testFrom);
+            h = 31 * h + Integer.hashCode(testTo);
+            h = 31 * h + java.util.Arrays.hashCode(trainIndices);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "Split[" + "fold=" + fold + ", " + "testFrom=" + testFrom + ", " + "testTo=" + testTo + ", " + "trainIndices=" + java.util.Arrays.toString(trainIndices) + "]";
+        }
     }
 
     private PurgedKFold() {

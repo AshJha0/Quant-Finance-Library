@@ -160,7 +160,7 @@ public final class ConstrainedPortfolioOptimizer {
                 new double[ineq], x0);
         double[] w = new double[n];
         for (int i = 0; i < n; i++) {
-            w[i] = s.x()[i] / s.x()[kIdx];
+            w[i] = s.x(i) / s.x(kIdx);
         }
         return toAllocation(clipToBounds(w), riskFreeRate);
     }
@@ -247,7 +247,7 @@ public final class ConstrainedPortfolioOptimizer {
                 x0[2 * n + i] = Math.max(0, -d);
             }
         }
-        double[] x = QuadraticProgram.solve(q, c, a, b, g, h, x0).x();
+        double[] x = QuadraticProgram.solve(q, c, a, b, g, h, x0).xCopy();
         return java.util.Arrays.copyOf(x, n);
     }
 

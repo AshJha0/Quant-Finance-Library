@@ -66,7 +66,7 @@ class TradeCostModelTest {
                 new PortfolioBacktester.Config(1_000_000, 999 /* superseded */, 1, 252,
                         TradeCostModel.flat(10)));
         assertEquals(legacy.totalCosts(), modeled.totalCosts(), 1e-9);
-        assertEquals(legacy.equityCurve()[BARS - 1], modeled.equityCurve()[BARS - 1], 1e-9);
+        assertEquals(legacy.equityCurve(BARS - 1), modeled.equityCurve(BARS - 1), 1e-9);
     }
 
     @Test
@@ -123,7 +123,7 @@ class TradeCostModelTest {
         assertTrue(r.totalCosts() > 1_000_000 * 4.0 / 1e4 * 0.9,
                 "costs=" + r.totalCosts());
         // Equity reflects BOTH: the DOOM wipeout and the cost drag.
-        assertTrue(r.equityCurve()[BARS - 1] < 520_000, // ~half book gone + costs
-                "final=" + r.equityCurve()[BARS - 1]);
+        assertTrue(r.equityCurve(BARS - 1) < 520_000, // ~half book gone + costs
+                "final=" + r.equityCurve(BARS - 1));
     }
 }

@@ -54,17 +54,73 @@ public final class AlphaValidation {
 
     /**
      * All folds plus the aggregate in-sample vs out-of-sample comparison.
-     *
-     * @param meanInSampleIc    observation-weighted mean training IC of the winners
-     * @param meanOutOfSampleIc observation-weighted mean test IC (equal to
-     *                          the mean of {@code outOfSampleIcSeries})
-     * @param outOfSampleIcSeries every test-window IC of the chosen candidates, in order
-     * @param outOfSampleTStat  Newey-West t-stat of that series (automatic lag)
-     * @param meanSelectionBias observation-weighted mean of the folds' selection bias
      */
-    public record WalkForwardResult(List<Fold> folds, double meanInSampleIc,
-                                    double meanOutOfSampleIc, double[] outOfSampleIcSeries,
-                                    double outOfSampleTStat, double meanSelectionBias) {
+    public static final class WalkForwardResult {
+        private final List<Fold> folds;
+        private final double meanInSampleIc;
+        private final double meanOutOfSampleIc;
+        private final double[] outOfSampleIcSeries;
+        private final double outOfSampleTStat;
+        private final double meanSelectionBias;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         *
+         * @param meanInSampleIc observation-weighted mean training IC of the winners
+         * @param meanOutOfSampleIc observation-weighted mean test IC (equal to the mean of {@code outOfSampleIcSeries})
+         * @param outOfSampleIcSeries every test-window IC of the chosen candidates, in order
+         * @param outOfSampleTStat Newey-West t-stat of that series (automatic lag)
+         * @param meanSelectionBias observation-weighted mean of the folds' selection bias
+         */
+        public WalkForwardResult(List<Fold> folds, double meanInSampleIc, double meanOutOfSampleIc,
+                double[] outOfSampleIcSeries, double outOfSampleTStat, double meanSelectionBias) {
+            this.folds = List.copyOf(folds);
+            this.meanInSampleIc = meanInSampleIc;
+            this.meanOutOfSampleIc = meanOutOfSampleIc;
+            this.outOfSampleIcSeries = outOfSampleIcSeries == null ? null : outOfSampleIcSeries.clone();
+            this.outOfSampleTStat = outOfSampleTStat;
+            this.meanSelectionBias = meanSelectionBias;
+        }
+
+        /** {@code folds}. */
+        public List<Fold> folds() {
+            return folds;
+        }
+
+        /** {@code meanInSampleIc} (observation-weighted mean training IC of the winners). */
+        public double meanInSampleIc() {
+            return meanInSampleIc;
+        }
+
+        /** {@code meanOutOfSampleIc}. */
+        public double meanOutOfSampleIc() {
+            return meanOutOfSampleIc;
+        }
+
+        /** Element {@code i} of {@code outOfSampleIcSeries} (every test-window IC of the chosen candidates, in order). */
+        public double outOfSampleIcSeries(int i) {
+            return outOfSampleIcSeries[i];
+        }
+
+        /** Length of {@code outOfSampleIcSeries}. */
+        public int outOfSampleIcSeriesLength() {
+            return outOfSampleIcSeries.length;
+        }
+
+        /** A fresh copy of {@code outOfSampleIcSeries}. */
+        public double[] outOfSampleIcSeriesCopy() {
+            return outOfSampleIcSeries == null ? null : outOfSampleIcSeries.clone();
+        }
+
+        /** {@code outOfSampleTStat} (Newey-West t-stat of that series (automatic lag)). */
+        public double outOfSampleTStat() {
+            return outOfSampleTStat;
+        }
+
+        /** {@code meanSelectionBias} (observation-weighted mean of the folds' selection bias). */
+        public double meanSelectionBias() {
+            return meanSelectionBias;
+        }
 
         /**
          * OOS/IS efficiency, NaN when the in-sample IC is not positive.
@@ -77,6 +133,39 @@ public final class AlphaValidation {
         /** In-sample IC net of the expected best-of-N luck. */
         public double deflatedInSampleIc() {
             return meanInSampleIc - meanSelectionBias;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof WalkForwardResult o)) {
+                return false;
+            }
+            return java.util.Objects.equals(folds, o.folds)
+                    && Double.compare(meanInSampleIc, o.meanInSampleIc) == 0
+                    && Double.compare(meanOutOfSampleIc, o.meanOutOfSampleIc) == 0
+                    && java.util.Arrays.equals(outOfSampleIcSeries, o.outOfSampleIcSeries)
+                    && Double.compare(outOfSampleTStat, o.outOfSampleTStat) == 0
+                    && Double.compare(meanSelectionBias, o.meanSelectionBias) == 0;
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + java.util.Objects.hashCode(folds);
+            h = 31 * h + Double.hashCode(meanInSampleIc);
+            h = 31 * h + Double.hashCode(meanOutOfSampleIc);
+            h = 31 * h + java.util.Arrays.hashCode(outOfSampleIcSeries);
+            h = 31 * h + Double.hashCode(outOfSampleTStat);
+            h = 31 * h + Double.hashCode(meanSelectionBias);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "WalkForwardResult[" + "folds=" + folds + ", " + "meanInSampleIc=" + meanInSampleIc + ", " + "meanOutOfSampleIc=" + meanOutOfSampleIc + ", " + "outOfSampleIcSeries=" + java.util.Arrays.toString(outOfSampleIcSeries) + ", " + "outOfSampleTStat=" + outOfSampleTStat + ", " + "meanSelectionBias=" + meanSelectionBias + "]";
         }
     }
 
@@ -234,7 +323,44 @@ public final class AlphaValidation {
     // ------------------------------------------------------------------
 
     /** Per-block ICs with their dispersion: consistency across regimes. */
-    public record CrossValidationResult(double[] blockIcs, double meanIc, double icStd) {
+    public static final class CrossValidationResult {
+        private final double[] blockIcs;
+        private final double meanIc;
+        private final double icStd;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         */
+        public CrossValidationResult(double[] blockIcs, double meanIc, double icStd) {
+            this.blockIcs = blockIcs == null ? null : blockIcs.clone();
+            this.meanIc = meanIc;
+            this.icStd = icStd;
+        }
+
+        /** Element {@code i} of {@code blockIcs}. */
+        public double blockIcs(int i) {
+            return blockIcs[i];
+        }
+
+        /** Length of {@code blockIcs}. */
+        public int blockIcsLength() {
+            return blockIcs.length;
+        }
+
+        /** A fresh copy of {@code blockIcs}. */
+        public double[] blockIcsCopy() {
+            return blockIcs == null ? null : blockIcs.clone();
+        }
+
+        /** {@code meanIc}. */
+        public double meanIc() {
+            return meanIc;
+        }
+
+        /** {@code icStd}. */
+        public double icStd() {
+            return icStd;
+        }
 
         /** Fraction of blocks where the IC kept the overall sign. */
         public double signConsistency() {
@@ -249,6 +375,33 @@ public final class AlphaValidation {
                 }
             }
             return (double) agree / blockIcs.length;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof CrossValidationResult o)) {
+                return false;
+            }
+            return java.util.Arrays.equals(blockIcs, o.blockIcs)
+                    && Double.compare(meanIc, o.meanIc) == 0
+                    && Double.compare(icStd, o.icStd) == 0;
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + java.util.Arrays.hashCode(blockIcs);
+            h = 31 * h + Double.hashCode(meanIc);
+            h = 31 * h + Double.hashCode(icStd);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "CrossValidationResult[" + "blockIcs=" + java.util.Arrays.toString(blockIcs) + ", " + "meanIc=" + meanIc + ", " + "icStd=" + icStd + "]";
         }
     }
 
@@ -446,19 +599,99 @@ public final class AlphaValidation {
 
     /**
      * IC across the sweep.
-     *
-     * @param worstNeighborDrop  best mean IC minus the lower of its immediate
-     *                           neighbours' mean ICs (0 when the best is
-     *                           flanked by equal values)
-     * @param largestAdjacentJump largest |IC difference| between any two
-     *                           adjacent candidates
      */
-    public record SensitivityResult(String[] names, double[] meanIcs, double worstNeighborDrop,
-                                    double largestAdjacentJump) {
+    public static final class SensitivityResult {
+        private final String[] names;
+        private final double[] meanIcs;
+        private final double worstNeighborDrop;
+        private final double largestAdjacentJump;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         *
+         * @param worstNeighborDrop best mean IC minus the lower of its immediate neighbours' mean ICs (0 when the best is flanked by equal values)
+         * @param largestAdjacentJump largest |IC difference| between any two adjacent candidates
+         */
+        public SensitivityResult(String[] names, double[] meanIcs, double worstNeighborDrop,
+                double largestAdjacentJump) {
+            this.names = names == null ? null : names.clone();
+            this.meanIcs = meanIcs == null ? null : meanIcs.clone();
+            this.worstNeighborDrop = worstNeighborDrop;
+            this.largestAdjacentJump = largestAdjacentJump;
+        }
+
+        /** Element {@code i} of {@code names}. */
+        public String names(int i) {
+            return names[i];
+        }
+
+        /** Length of {@code names}. */
+        public int namesLength() {
+            return names.length;
+        }
+
+        /** A fresh copy of {@code names}. */
+        public String[] namesCopy() {
+            return names == null ? null : names.clone();
+        }
+
+        /** Element {@code i} of {@code meanIcs}. */
+        public double meanIcs(int i) {
+            return meanIcs[i];
+        }
+
+        /** Length of {@code meanIcs}. */
+        public int meanIcsLength() {
+            return meanIcs.length;
+        }
+
+        /** A fresh copy of {@code meanIcs}. */
+        public double[] meanIcsCopy() {
+            return meanIcs == null ? null : meanIcs.clone();
+        }
+
+        /** {@code worstNeighborDrop} (best mean IC minus the lower of its immediate neighbours' mean ICs (0 when the best is flanked by equal values)). */
+        public double worstNeighborDrop() {
+            return worstNeighborDrop;
+        }
+
+        /** {@code largestAdjacentJump} (largest |IC difference| between any two adjacent candidates). */
+        public double largestAdjacentJump() {
+            return largestAdjacentJump;
+        }
 
         /** The candidate with the best mean IC. */
         public String best() {
             return names[bestIndex(meanIcs)];
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof SensitivityResult o)) {
+                return false;
+            }
+            return java.util.Arrays.equals(names, o.names)
+                    && java.util.Arrays.equals(meanIcs, o.meanIcs)
+                    && Double.compare(worstNeighborDrop, o.worstNeighborDrop) == 0
+                    && Double.compare(largestAdjacentJump, o.largestAdjacentJump) == 0;
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + java.util.Arrays.hashCode(names);
+            h = 31 * h + java.util.Arrays.hashCode(meanIcs);
+            h = 31 * h + Double.hashCode(worstNeighborDrop);
+            h = 31 * h + Double.hashCode(largestAdjacentJump);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "SensitivityResult[" + "names=" + java.util.Arrays.toString(names) + ", " + "meanIcs=" + java.util.Arrays.toString(meanIcs) + ", " + "worstNeighborDrop=" + worstNeighborDrop + ", " + "largestAdjacentJump=" + largestAdjacentJump + "]";
         }
     }
 

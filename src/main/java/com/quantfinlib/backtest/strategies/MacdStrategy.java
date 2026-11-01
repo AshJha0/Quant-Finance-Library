@@ -31,9 +31,9 @@ public final class MacdStrategy implements TradingStrategy {
 
     @Override
     public void init(BarSeries series) {
-        Indicators.Macd m = Indicators.macd(series.closes(), fast, slow, signalPeriod);
-        line = m.line();
-        signal = m.signal();
+        Indicators.Macd m = Indicators.macd(series.closesCopy(), fast, slow, signalPeriod);
+        line = m.lineCopy();
+        signal = m.signalCopy();
     }
 
     @Override

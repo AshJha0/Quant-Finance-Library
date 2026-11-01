@@ -112,7 +112,62 @@ public final class StressTester {
     }
 
     /** The reverse-stress answer: the most-probable shock vector and its distance. */
-    public record ReverseStress(double[] shocks, double mahalanobisSigmas) {
+    public static final class ReverseStress {
+        private final double[] shocks;
+        private final double mahalanobisSigmas;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         */
+        public ReverseStress(double[] shocks, double mahalanobisSigmas) {
+            this.shocks = shocks == null ? null : shocks.clone();
+            this.mahalanobisSigmas = mahalanobisSigmas;
+        }
+
+        /** Element {@code i} of {@code shocks}. */
+        public double shocks(int i) {
+            return shocks[i];
+        }
+
+        /** Length of {@code shocks}. */
+        public int shocksLength() {
+            return shocks.length;
+        }
+
+        /** A fresh copy of {@code shocks}. */
+        public double[] shocksCopy() {
+            return shocks == null ? null : shocks.clone();
+        }
+
+        /** {@code mahalanobisSigmas}. */
+        public double mahalanobisSigmas() {
+            return mahalanobisSigmas;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof ReverseStress o)) {
+                return false;
+            }
+            return java.util.Arrays.equals(shocks, o.shocks)
+                    && Double.compare(mahalanobisSigmas, o.mahalanobisSigmas) == 0;
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + java.util.Arrays.hashCode(shocks);
+            h = 31 * h + Double.hashCode(mahalanobisSigmas);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "ReverseStress[" + "shocks=" + java.util.Arrays.toString(shocks) + ", " + "mahalanobisSigmas=" + mahalanobisSigmas + "]";
+        }
     }
 
     /**

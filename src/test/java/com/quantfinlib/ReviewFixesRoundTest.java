@@ -220,8 +220,8 @@ class ReviewFixesRoundTest {
         // must be computed UNDER those parameters — the old loop shape
         // returned parameters one M-step ahead of the probabilities.
         RegimeDetector.RegimeModel untrained = RegimeDetector.fit(returns, 0);
-        assertEquals(0.95, untrained.transition()[0][0], 1e-12);
-        assertEquals(0.95, untrained.transition()[1][1], 1e-12);
+        assertEquals(0.95, untrained.transition(0, 0), 1e-12);
+        assertEquals(0.95, untrained.transition(1, 1), 1e-12);
         assertTrue(Double.isFinite(untrained.logLikelihood()));
 
         // Training moves the parameters and improves the likelihood.

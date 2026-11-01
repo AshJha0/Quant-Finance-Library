@@ -19,16 +19,103 @@ package com.quantfinlib.alpha;
  */
 public final class Ols {
 
-    /**
-     * @param coefficients    fitted coefficients in design-matrix column order
-     * @param standardErrors  classical standard errors
-     * @param hacStandardErrors Newey-West standard errors at {@code hacLag}
-     * @param hacLag          Bartlett lag used for the HAC errors
-     * @param residuals       {@code y − Xb}
-     * @param rSquared        {@code 1 − SSR/SST} (centred; 0 when y is constant)
-     */
-    public record Fit(double[] coefficients, double[] standardErrors, double[] hacStandardErrors,
-                      int hacLag, double[] residuals, double rSquared) {
+    public static final class Fit {
+        private final double[] coefficients;
+        private final double[] standardErrors;
+        private final double[] hacStandardErrors;
+        private final int hacLag;
+        private final double[] residuals;
+        private final double rSquared;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         *
+         * @param coefficients fitted coefficients in design-matrix column order
+         * @param standardErrors classical standard errors
+         * @param hacStandardErrors Newey-West standard errors at {@code hacLag}
+         * @param hacLag Bartlett lag used for the HAC errors
+         * @param residuals {@code y − Xb}
+         * @param rSquared {@code 1 − SSR/SST} (centred; 0 when y is constant)
+         */
+        public Fit(double[] coefficients, double[] standardErrors, double[] hacStandardErrors, int hacLag,
+                double[] residuals, double rSquared) {
+            this.coefficients = coefficients == null ? null : coefficients.clone();
+            this.standardErrors = standardErrors == null ? null : standardErrors.clone();
+            this.hacStandardErrors = hacStandardErrors == null ? null : hacStandardErrors.clone();
+            this.hacLag = hacLag;
+            this.residuals = residuals == null ? null : residuals.clone();
+            this.rSquared = rSquared;
+        }
+
+        /** Element {@code i} of {@code coefficients} (fitted coefficients in design-matrix column order). */
+        public double coefficients(int i) {
+            return coefficients[i];
+        }
+
+        /** Length of {@code coefficients}. */
+        public int coefficientsLength() {
+            return coefficients.length;
+        }
+
+        /** A fresh copy of {@code coefficients}. */
+        public double[] coefficientsCopy() {
+            return coefficients == null ? null : coefficients.clone();
+        }
+
+        /** Element {@code i} of {@code standardErrors} (classical standard errors). */
+        public double standardErrors(int i) {
+            return standardErrors[i];
+        }
+
+        /** Length of {@code standardErrors}. */
+        public int standardErrorsLength() {
+            return standardErrors.length;
+        }
+
+        /** A fresh copy of {@code standardErrors}. */
+        public double[] standardErrorsCopy() {
+            return standardErrors == null ? null : standardErrors.clone();
+        }
+
+        /** Element {@code i} of {@code hacStandardErrors}. */
+        public double hacStandardErrors(int i) {
+            return hacStandardErrors[i];
+        }
+
+        /** Length of {@code hacStandardErrors}. */
+        public int hacStandardErrorsLength() {
+            return hacStandardErrors.length;
+        }
+
+        /** A fresh copy of {@code hacStandardErrors}. */
+        public double[] hacStandardErrorsCopy() {
+            return hacStandardErrors == null ? null : hacStandardErrors.clone();
+        }
+
+        /** {@code hacLag} (Bartlett lag used for the HAC errors). */
+        public int hacLag() {
+            return hacLag;
+        }
+
+        /** Element {@code i} of {@code residuals}. */
+        public double residuals(int i) {
+            return residuals[i];
+        }
+
+        /** Length of {@code residuals}. */
+        public int residualsLength() {
+            return residuals.length;
+        }
+
+        /** A fresh copy of {@code residuals}. */
+        public double[] residualsCopy() {
+            return residuals == null ? null : residuals.clone();
+        }
+
+        /** {@code rSquared}. */
+        public double rSquared() {
+            return rSquared;
+        }
 
         /** Classical t-statistic of coefficient {@code j}. */
         public double tStat(int j) {
@@ -45,6 +132,39 @@ public final class Ols {
                 return b / se;
             }
             return b == 0 ? 0 : Math.signum(b) * Double.POSITIVE_INFINITY;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Fit o)) {
+                return false;
+            }
+            return java.util.Arrays.equals(coefficients, o.coefficients)
+                    && java.util.Arrays.equals(standardErrors, o.standardErrors)
+                    && java.util.Arrays.equals(hacStandardErrors, o.hacStandardErrors)
+                    && hacLag == o.hacLag
+                    && java.util.Arrays.equals(residuals, o.residuals)
+                    && Double.compare(rSquared, o.rSquared) == 0;
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + java.util.Arrays.hashCode(coefficients);
+            h = 31 * h + java.util.Arrays.hashCode(standardErrors);
+            h = 31 * h + java.util.Arrays.hashCode(hacStandardErrors);
+            h = 31 * h + Integer.hashCode(hacLag);
+            h = 31 * h + java.util.Arrays.hashCode(residuals);
+            h = 31 * h + Double.hashCode(rSquared);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "Fit[" + "coefficients=" + java.util.Arrays.toString(coefficients) + ", " + "standardErrors=" + java.util.Arrays.toString(standardErrors) + ", " + "hacStandardErrors=" + java.util.Arrays.toString(hacStandardErrors) + ", " + "hacLag=" + hacLag + ", " + "residuals=" + java.util.Arrays.toString(residuals) + ", " + "rSquared=" + rSquared + "]";
         }
     }
 

@@ -121,7 +121,7 @@ class TailAndPsdTest {
         for (int i = 0; i < 3; i++) {
             assertEquals(1, x[i][i], 0);
         }
-        double[] eig = PsdMatrices.symmetricEigen(x).values();
+        double[] eig = PsdMatrices.symmetricEigen(x).valuesCopy();
         assertTrue(eig[2] > -1e-10);
         // The result is factorable.
         PsdMatrices.choleskyPsd(x);
@@ -139,8 +139,8 @@ class TailAndPsdTest {
     void eigenDecompositionOfAKnownMatrix() {
         // [[2,1],[1,2]]: eigenvalues 3 and 1.
         PsdMatrices.Eigen e = PsdMatrices.symmetricEigen(new double[][]{{2, 1}, {1, 2}});
-        assertEquals(3, e.values()[0], 1e-14);
-        assertEquals(1, e.values()[1], 1e-14);
-        assertEquals(Math.abs(e.vectors()[0][0]), Math.sqrt(0.5), 1e-14);
+        assertEquals(3, e.values(0), 1e-14);
+        assertEquals(1, e.values(1), 1e-14);
+        assertEquals(Math.abs(e.vectors(0, 0)), Math.sqrt(0.5), 1e-14);
     }
 }
