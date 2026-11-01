@@ -30,6 +30,55 @@ class BenchmarkExecutorTest {
     // ------------------------------------------------------------------
 
     @Test
+    void workingChildrenAreNotResent() {
+        BenchmarkExecutor e = new BenchmarkExecutor(Side.BUY, 10_000, Benchmark.TWAP,
+                0.1, 0, 1.0);
+        long first = e.dueQuantity(0.2, neutral(0.2));
+        assertEquals(2_000, first);
+        e.onChildSent(first);                       // rests unfilled
+        assertEquals(0, e.dueQuantity(0.2, neutral(0.2)), "deficit already working");
+        assertEquals(1_000, e.dueQuantity(0.3, neutral(0.3)), "only the new increment");
+        e.onFill(500);
+        e.onChildDone(1_500);                       // cancelled remainder
+        assertEquals(0, e.openQuantity());
+        assertEquals(2_500, e.dueQuantity(0.3, neutral(0.3)));
+    }
+
+    @Test
+    void shortfallFollowsTheAlmgrenChrissTrajectory() {
+        // Completed fraction 1 - sinh(kT(1-f))/sinh(kT); kT = 2, f = 0.25:
+        // 1 - sinh(1.5)/sinh(2) = 1 - 2.129279455/3.626860408 = 0.412914...
+        BenchmarkExecutor e = new BenchmarkExecutor(Side.BUY, 1_000_000,
+                Benchmark.IMPLEMENTATION_SHORTFALL, 0.1, 0, 1.0).withShortfallUrgency(2.0);
+        assertEquals(412_914, e.dueQuantity(0.25, neutral(0.25)), 1);
+        // Small kT approaches TWAP.
+        BenchmarkExecutor flat = new BenchmarkExecutor(Side.BUY, 1_000_000,
+                Benchmark.IMPLEMENTATION_SHORTFALL, 0.1, 0, 1.0).withShortfallUrgency(1e-6);
+        assertEquals(250_000, flat.dueQuantity(0.25, neutral(0.25)), 1);
+    }
+
+    @Test
+    void horizonForcesCompletionPastTheDepthCap() {
+        BenchmarkExecutor e = new BenchmarkExecutor(Side.BUY, 100_000, Benchmark.TWAP,
+                0.1, 0, 0.25);
+        MarketState thin = new MarketState(100, 0, 0, 40_000, 0.5, 0, 0);
+        // Mid-horizon: 25 % of 40k displayed.
+        assertEquals(10_000, e.dueQuantity(0.5, thin));
+        // Ramp: at f = 0.95 the cap fraction is 0.25 + 0.75 * 0.5 = 0.625 -> 25k.
+        assertEquals(25_000, e.dueQuantity(0.95, thin));
+        // Horizon: the whole remainder, whatever the depth.
+        assertEquals(100_000, e.dueQuantity(1.0, thin));
+    }
+
+    @Test
+    void childBoundsSuppressDribblesAndCapSize() {
+        BenchmarkExecutor e = new BenchmarkExecutor(Side.BUY, 100_000, Benchmark.TWAP,
+                0.1, 0, 1.0).withChildBounds(5_000, 20_000);
+        assertEquals(0, e.dueQuantity(0.01, neutral(0.01)), "1k due < 5k minimum");
+        assertEquals(20_000, e.dueQuantity(0.5, neutral(0.5)), "50k due capped at 20k");
+    }
+
+    @Test
     void twapIsLinearInTime() {
         BenchmarkExecutor e = new BenchmarkExecutor(Side.BUY, 10_000, Benchmark.TWAP,
                 0.1, 0, 1.0);
@@ -99,16 +148,18 @@ class BenchmarkExecutorTest {
 
     @Test
     void participationChasesRealizedVolume() {
+        // Target = p / (1 - p) * others' volume (share of total volume).
         BenchmarkExecutor e = BenchmarkExecutor.pov(Side.BUY, 1_000_000, 0.10);
         assertEquals(0, e.dueQuantity(0.0, neutral(0.0)));
-        e.onMarketVolume(500_000);                 // target = 50k
-        assertEquals(50_000, e.dueQuantity(0.0, neutral(0.0)));
-        e.onFill(50_000);
-        e.onMarketVolume(300_000);                 // target 80k, done 50k
+        e.onMarketVolume(500_000);                 // 500k / 9 = 55,555.6 -> 55,555
+        assertEquals(55_555, e.dueQuantity(0.0, neutral(0.0)));
+        e.onFill(55_555);
+        e.onMarketVolume(300_000);                 // 800k / 9 = 88,888.9 -> 88,888
         long due = e.dueQuantity(0.0, neutral(0.0));
-        assertEquals(30_000, due);
-        e.onFill(due);                             // once filled, we're at target
-        assertEquals(0.10, e.realizedParticipation(), 1e-9);
+        assertEquals(33_333, due);
+        e.onFill(due);
+        // 88,888 / (88,888 + 800,000): within one share of 10 %.
+        assertEquals(0.10, e.realizedParticipation(), 1.0 / 888_888);
     }
 
     // ------------------------------------------------------------------

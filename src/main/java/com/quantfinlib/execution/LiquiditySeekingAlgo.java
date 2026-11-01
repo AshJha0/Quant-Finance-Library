@@ -34,6 +34,11 @@ import com.quantfinlib.util.MathUtils;
  * moment cannot be judged cheap (no opportunistic burst), but the floor
  * still guarantees completion. Zero allocation per decision, single
  * parent, single writer.</p>
+ *
+ * <p>Sent-but-unfilled children count against the remainder: report them
+ * with {@link #onChildSent} and their unfilled remainders with
+ * {@link #onChildDone}, so a burst that rests is not repeated while it
+ * works.</p>
  */
 public final class LiquiditySeekingAlgo {
 
@@ -69,6 +74,7 @@ public final class LiquiditySeekingAlgo {
     private final long parentQty;
     private final Config config;
     private long executed;
+    private long open;
 
     public LiquiditySeekingAlgo(long parentQty, Config config) {
         if (parentQty <= 0) {
@@ -95,7 +101,7 @@ public final class LiquiditySeekingAlgo {
      *                         cheapness unknowable, floor only
      */
     public long dueQuantity(double scheduleFraction, MarketState m, double forecastSpread) {
-        long remaining = parentQty - executed;
+        long remaining = parentQty - executed - open;
         if (remaining <= 0) {
             return 0;
         }
@@ -136,11 +142,31 @@ public final class LiquiditySeekingAlgo {
         return spreadCheap && calm && lowImpact;
     }
 
-    /** Our own child fill. */
+    /** Our own child fill; reduces the open quantity by the same amount. */
     public void onFill(long qty) {
         if (qty > 0) {
             executed += qty;
+            open = Math.max(0, open - qty);
         }
+    }
+
+    /** A child of {@code qty} was sent and is working. */
+    public void onChildSent(long qty) {
+        if (qty > 0) {
+            open += qty;
+        }
+    }
+
+    /** A child ended with {@code unfilledQty} never executed. */
+    public void onChildDone(long unfilledQty) {
+        if (unfilledQty > 0) {
+            open = Math.max(0, open - unfilledQty);
+        }
+    }
+
+    /** Sent child quantity not yet filled or reported done. */
+    public long openQuantity() {
+        return open;
     }
 
     public long executed() {

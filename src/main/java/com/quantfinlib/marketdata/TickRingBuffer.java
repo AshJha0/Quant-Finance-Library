@@ -1,31 +1,32 @@
 package com.quantfinlib.marketdata;
 
-import java.util.concurrent.atomic.AtomicLong;
-
 /**
  * Zero-allocation single-producer / single-consumer ring buffer for market
- * data ticks, in the style of the LMAX Disruptor:
+ * data ticks, in the style of the LMAX Disruptor (Thompson et al., 2011):
  *
  * <ul>
- *   <li><b>Preallocated primitive slots</b> — ticks live in parallel
+ *   <li><b>Preallocated primitive slots</b>: ticks live in parallel
  *       {@code int[]/double[]/long[]} arrays; nothing is allocated per tick
- *       on either side, so the steady-state GC load is zero.</li>
- *   <li><b>Cache-line-padded sequences</b> — head and tail counters are padded
- *       to avoid false sharing between the producer and consumer cores.</li>
- *   <li><b>Acquire/release ordering</b> — slot writes are published with a
- *       single release store of the tail; no CAS, no locks on the hot path.</li>
- *   <li><b>Sequence caching</b> — each side caches the other's sequence and
- *       only re-reads the volatile counter when it appears blocked, removing
- *       most cross-core traffic.</li>
+ *       on either side.</li>
+ *   <li><b>Strided sequences</b>: head, tail and the two local sequence
+ *       caches live in one {@link StridedSequences} array, 128 bytes apart,
+ *       so producer and consumer never write the same cache line and the
+ *       layout does not depend on JVM field ordering.</li>
+ *   <li><b>Acquire/release ordering</b>: slot writes are published with a
+ *       single release store of the tail; no CAS, no locks.</li>
+ *   <li><b>Sequence caching</b>: each side caches the other's sequence and
+ *       only re-reads it when it appears blocked.</li>
  * </ul>
+ *
+ * <p>Sequences are 64-bit and never wrap in practice (2^63 ticks); slot
+ * indices wrap with {@code sequence & mask}.</p>
  */
 public final class TickRingBuffer {
 
-    /** Right-padded sequence counter (own cache line for the value). */
-    @SuppressWarnings("unused")
-    private static final class PaddedSequence extends AtomicLong {
-        private volatile long p1, p2, p3, p4, p5, p6, p7;
-    }
+    private static final int HEAD = 0;         // next slot to consume (consumer writes)
+    private static final int TAIL = 1;         // next slot to fill (producer writes)
+    private static final int CACHED_HEAD = 2;  // producer-local view of head
+    private static final int CACHED_TAIL = 3;  // consumer-local view of tail
 
     private final int[] symbolIds;
     private final double[] prices;
@@ -33,22 +34,7 @@ public final class TickRingBuffer {
     private final long[] timestamps;
     private final int mask;
     private final int capacity;
-
-    private final PaddedSequence head = new PaddedSequence(); // next slot to consume
-    private final PaddedSequence tail = new PaddedSequence(); // next slot to fill
-    // The local sequence caches are padded apart too: the producer stores
-    // cachedHead and the consumer stores cachedTail on their refresh paths,
-    // and unpadded they would share one cache line with each other and the
-    // mask/array fields read on every call — reintroducing exactly the
-    // false sharing the padded head/tail exist to avoid.
-    @SuppressWarnings("unused")
-    private long hp1, hp2, hp3, hp4, hp5, hp6, hp7;
-    private long cachedHead;   // producer-local view of head
-    @SuppressWarnings("unused")
-    private long tp1, tp2, tp3, tp4, tp5, tp6, tp7;
-    private long cachedTail;   // consumer-local view of tail
-    @SuppressWarnings("unused")
-    private long ep1, ep2, ep3, ep4, ep5, ep6, ep7;
+    private final StridedSequences seq = new StridedSequences(4);
 
     /** @param requestedCapacity rounded up to the next power of two */
     public TickRingBuffer(int requestedCapacity) {
@@ -61,14 +47,14 @@ public final class TickRingBuffer {
     }
 
     /**
-     * Producer side; single producer thread only. Returns false when full —
+     * Producer side; single producer thread only. Returns false when full;
      * the caller chooses the backpressure policy (spin, drop, or count).
      */
     public boolean publish(int symbolId, double price, double size, long timestampNanos) {
-        long t = tail.getPlain();
-        if (t - cachedHead >= capacity) {
-            cachedHead = head.getAcquire();
-            if (t - cachedHead >= capacity) {
+        long t = seq.getPlain(TAIL);
+        if (t - seq.getPlain(CACHED_HEAD) >= capacity) {
+            seq.setPlain(CACHED_HEAD, seq.getAcquire(HEAD));
+            if (t - seq.getPlain(CACHED_HEAD) >= capacity) {
                 return false;
             }
         }
@@ -77,34 +63,48 @@ public final class TickRingBuffer {
         prices[i] = price;
         sizes[i] = size;
         timestamps[i] = timestampNanos;
-        tail.setRelease(t + 1);
+        seq.setRelease(TAIL, t + 1);
         return true;
     }
 
     /**
      * Consumer side; single consumer thread only. Drains up to {@code limit}
-     * ticks into the sink and returns how many were delivered.
+     * ticks into the sink and returns how many were consumed. If the sink
+     * throws, the head is advanced past the tick that threw (it counts as
+     * consumed) before the exception propagates, so a poison tick cannot be
+     * redelivered forever.
      */
     public int drainTo(TickListener sink, int limit) {
-        long h = head.getPlain();
+        long h = seq.getPlain(HEAD);
+        long cachedTail = seq.getPlain(CACHED_TAIL);
         if (h >= cachedTail) {
-            cachedTail = tail.getAcquire();
+            cachedTail = seq.getAcquire(TAIL);
+            seq.setPlain(CACHED_TAIL, cachedTail);
             if (h >= cachedTail) {
                 return 0;
             }
         }
         int n = (int) Math.min(cachedTail - h, limit);
-        for (int k = 0; k < n; k++) {
-            int i = (int) (h & mask);
-            sink.onTick(symbolIds[i], prices[i], sizes[i], timestamps[i]);
-            h++;
+        long start = h;
+        try {
+            for (int k = 0; k < n; k++) {
+                int i = (int) (h & mask);
+                h++;
+                sink.onTick(symbolIds[i], prices[i], sizes[i], timestamps[i]);
+            }
+        } finally {
+            seq.setRelease(HEAD, h);
         }
-        head.setRelease(h);
-        return n;
+        return (int) (h - start);
     }
 
     public boolean isEmpty() {
-        return head.getAcquire() >= tail.getAcquire();
+        return seq.getAcquire(HEAD) >= seq.getAcquire(TAIL);
+    }
+
+    /** Ticks published and not yet consumed (approximate when read concurrently). */
+    public long size() {
+        return seq.getAcquire(TAIL) - seq.getAcquire(HEAD);
     }
 
     public int capacity() {
