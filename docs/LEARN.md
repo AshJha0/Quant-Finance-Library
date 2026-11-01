@@ -16743,9 +16743,8 @@ calls by receiver type: one observed implementation inlines
 (monomorphic), two get an inline cache (bimorphic, still fast).
 The THIRD distinct TickListener implementation tips the dispatch
 site megamorphic: vtable lookup, no inlining, no optimization
-across the call boundary -- the bus javadoc prices it at roughly
-10-20ns per listener per tick. At millions of ticks per second,
-tens of nanoseconds per dispatch is your 30%. And the tax is
+across the call boundary. At millions of ticks per second, a small
+extra cost per dispatch is your 30%. And the tax is
 collective: the site serves ALL listeners, so the third team
 slowed the first two -- which is why "nothing in their code is
 slow" is true and irrelevant. The fix is in the same javadoc:
@@ -23320,19 +23319,21 @@ characters. On a path measured in hundreds of nanoseconds, any of
 those is disqualifying, and a String also drags in garbage that
 disturbs the latency tail. So the library never lets a String onto
 feed-to-order: symbols are dense `int` ids resolved once at the edge,
-and prices travel as SCALED LONGS -- 1.08505 carried as mantissa
-108505 with a fixed number of decimals -- so a "price" is an integer
-you read with a cast, never a decimal you parse, and it is also exact
-(a `double` cannot represent most decimal fractions, and rounding
-errors in prices fail audits). Binary codecs read fields at
-compile-time-constant offsets, so even the inbound decode is a cast,
-not a parse. The String-shaped conveniences all live behind the cold
-edge.
+and prices never exist as text. On the wire they are integers: an
+int64 mantissa with an int8 exponent (`Decimal64`), so 1.08505 travels
+as 108505 with exponent -5, exact and read at a fixed offset, never a
+decimal you parse (a `double` cannot represent most decimal fractions,
+and a price that rounds on the wire fails audits). Inside the process
+the bus carries a primitive `double` per tick, converted once at the
+decode edge, and the venue book converts again to integer ticks on
+entry, so matching compares integers. The String-shaped conveniences
+all live behind the cold edge.
 
-*In this library:* scaled-long prices and dense-int symbols across the
-`sbe/` flyweights, `marketdata/HftMarketDataBus`, and
-`orderbook/HftOrderBook` (int-tick prices); String handling stays on
-setup/registry paths.
+*In this library:* `sbe/Decimal64` mantissa-plus-exponent prices in
+the `sbe/` flyweights; dense-int symbols and primitive
+`publish(symbolId, price, size, timestampNanos)` on
+`marketdata/HftMarketDataBus`; `orderbook/HftOrderBook` (int-tick
+prices); String handling stays on setup/registry paths.
 
 ### 881. "You need to represent a market-data message with no per-message allocation. When is a flyweight the right call over a record, and what do you give up?"
 
@@ -23353,9 +23354,10 @@ the library follows is flyweight on the zero-alloc reading path,
 record/object where a durable, comparable value is what you want.
 
 *In this library:* `sbe/QuoteFlyweight`, `TradeFlyweight`,
-`OrderFlyweight` (offset cursors over a reused buffer, "reading a
-price is a cast, not a parse"); records are used for cold-path config
-like `trading/HftQuoter.Config`.
+`OrderFlyweight` (offset cursors over a reused buffer, after the 8-byte
+`MessageHeader`; a price is an integer mantissa read at a fixed offset,
+not a parse); records are used for cold-path config like
+`trading/HftQuoter.Config`.
 
 ### 882. "An observability counter on the drain loop was made `volatile` and the consumer slowed down. It is only a count -- what is the cheaper correct design?"
 
@@ -23401,33 +23403,37 @@ size, the platform ate the tail, not your code. It records into the
 same zero-alloc histogram, so watching the tail does not create one.
 
 *In this library:* `util/HiccupMonitor` (jHiccup-style excess-park
-recorder into a `LatencyRecorder`) and `docs/ULTRA_LOW_LATENCY.md`'s
-coordinated-omission warning about paced benchmarks.
+recorder into a `LatencyRecorder`; use `HiccupMonitor.spinning` on
+Windows, where park mode measures the timer tick) and the benchmarks,
+which run open-loop fixed-rate passes timed from each operation's
+intended start next to the closed-loop ones and print the clock step,
+so the two can be compared (`docs/BENCHMARKS.md`).
 
-### 884. "The docs quote 204ns publish-to-strategy, 504ns tick-to-order, 592ns tick-to-two-sided-quote. A change regressed one. What are those budgets made of, and what typically breaks them?"
+### 884. "The benchmarks report publish-to-strategy, tick-to-order and tick-to-two-sided-quote latencies. A change regressed one. What are those budgets made of, and what typically breaks them?"
 
-Those are p50s of composed hot paths, and each is a sum of small,
-known costs, so a regression means one summand grew. The 204ns
-publish-to-strategy is a ring publish (one release store), the
+Those are percentiles of composed hot paths, and each is a sum of
+small, known costs, so a regression means one summand grew. The
+publish-to-strategy figure is a ring publish (one release store), the
 consumer drain, and one interface dispatch into the strategy. The
-504ns tick-to-order adds the risk check (~3ns), the quote/decision
+tick-to-order figure adds the risk check, the quote/decision
 arithmetic, and the order-ring hand-off to the venue thread. The
-592ns tick-to-two-sided-quote is the same but building and gating TWO
-orders plus the tick-grid snap. What breaks them is anything that
+tick-to-two-sided-quote figure is the same but building and gating TWO
+orders plus the tick-grid snap. The measured values are in
+`docs/BENCHMARKS.md`. What breaks them is anything that
 reintroduces the costs the design removed: a stray allocation (GC
 jitter into the tail), a lock or a `volatile` store on the path (a
 fence, or worse a block), an autobox or String (allocation plus
-work), a call site going megamorphic and losing inlining (~10-20ns per
-listener), or an O(n) creeping into what was an O(1) array index. The
+work), a call site going megamorphic and losing inlining, or an O(n)
+creeping into what was an O(1) array index. The
 diagnosis is to bisect the budget: the counter tests catch the
 allocation regressions, the benchmarks catch the latency ones, and
 the HiccupMonitor separates "your code got slower" from "the platform
 stalled."
 
-*In this library:* the budgets in `docs/ULTRA_LOW_LATENCY.md`
-(HftOrderBenchmark / HftQuoterBenchmark: 204ns, 504ns/p99 1us,
-592ns/p99 912ns), defended by the allocation-counter tests and the
-throughput floors in `trading/LoadAndSoakTest`.
+*In this library:* the measured figures in `docs/BENCHMARKS.md`
+(`HftOrderBenchmark`, `HftQuoterBenchmark`, JMH `CoreBenchmarks`),
+defended by the allocation-counter tests and the throughput floors in
+`trading/LoadAndSoakTest`.
 
 ### 885. "A subscribed listener that adds a third distinct implementation on one symbol made dispatch mysteriously slower for ALL of them. Why, and what is the fix?"
 
@@ -23437,8 +23443,8 @@ while the site sees one or two concrete `TickListener` types
 (monomorphic / bimorphic) -- it specializes on them. Add a third
 distinct implementation and the JIT gives up specializing: the site
 becomes megamorphic, falls back to a full virtual dispatch through the
-vtable with no inlining, and that penalty (~10-20ns per listener)
-applies to every call through the site, slowing the other listeners
+vtable with no inlining, and that penalty applies to every call
+through the site, slowing the other listeners
 too, not just the new one. The fix the library recommends and follows
 is to keep the per-symbol listener count at one or two and fan out
 INSIDE your own single listener when you need several consumers -- your
@@ -23447,10 +23453,10 @@ dispatch site stays inlinable. It is a real, documented cost of the
 otherwise-clean "just subscribe another listener" ergonomics, and it
 is why the hot dispatch is deliberately narrow.
 
-*In this library:* `marketdata/HftMarketDataBus` dispatch note ("three
-or more distinct TickListener implementations on one symbol ... goes
-megamorphic (~10-20 ns per listener, no inlining) ... fan out inside
-your own listener").
+*In this library:* `marketdata/HftMarketDataBus` dispatch note (with
+three or more distinct listener implementations on one symbol the call
+site goes megamorphic, a virtual call per listener with no inlining;
+keep one or two and fan out inside your own listener).
 
 ### 886. "The very first tick after startup is dramatically slower than the millionth. Is that a bug, and how do you keep it out of your latency numbers?"
 
@@ -23505,8 +23511,8 @@ A pure-JDK library can promise the things that are properties of the
 CODE, and it can prove them: zero allocation on the hot path (counter
 tests plus Epsilon runs), no locks and correct lock-free ordering on
 the hand-offs, O(1) primitive-indexed operations, and MEASURED
-medians and percentiles on a described machine (the 204/504/592ns
-figures, with their p99s). What it CANNOT promise is a hard latency
+medians and percentiles on a described machine (the figures in
+`docs/BENCHMARKS.md`, with their p99s). What it CANNOT promise is a hard latency
 bound, because the tail is owned by things outside the JVM's reach: OS
 scheduler preemption, CPU frequency scaling and SMT neighbors,
 safepoint and JIT deopt pauses, NUMA placement, and the network. Those
