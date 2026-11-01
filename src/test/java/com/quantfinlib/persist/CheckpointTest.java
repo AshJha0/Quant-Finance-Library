@@ -45,7 +45,7 @@ class CheckpointTest {
         spread.onSpread(0, 0.02, 0);
         spread.onSpread(1, 0.01, 1);
         spread.rollDay();
-        // Leave intraday residue that must NOT survive the restore.
+        // Leave intraday residue that must not survive the restore.
         volume.onVolume(0, 999);
         spread.onSpread(0, 5.0, 2);            // huge live deviation
 
