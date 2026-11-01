@@ -26,10 +26,10 @@ import com.quantfinlib.pricing.BlackScholes.OptionType;
  * <p><b>Limits:</b> the Feller condition {@code 2κθ ≥ σᵥ²} keeps
  * the variance strictly positive; parameters violating it are accepted
  * (markets calibrate there constantly) but the Monte Carlo cross-check
- * in the tests uses full-truncation Euler for exactly that reason. No
- * calibration is shipped — calibrating five parameters to a vol surface
- * is an optimization-layer exercise ({@code optimization} package tools
- * apply); this class prices given parameters. Research lane.</p>
+ * in the tests uses full-truncation Euler for exactly that reason. The
+ * COS-method pricer with analytic Greeks is {@link HestonCos}; calibration to
+ * an implied-vol grid is {@link HestonCalibrator}. This class prices given
+ * parameters and serves as the independent cross-check. Research lane.</p>
  */
 public final class Heston {
 
