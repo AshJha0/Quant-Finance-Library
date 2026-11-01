@@ -38,6 +38,9 @@ jobs:
       # timing tags are skipped here and run in nightly.yml.
       - name: Build, test and check coverage
         run: ./mvnw -B --no-transfer-progress verify
+      - name: Compile COOKBOOK recipes against the build
+        if: matrix.os == 'ubuntu-latest'
+        run: python3 scripts/check-cookbook.py
       - name: Coverage summary
         if: always() && hashFiles('target/site/jacoco/jacoco.csv') != ''
         run: |
