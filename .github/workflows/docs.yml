@@ -17,6 +17,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - name: Set up JDK 25
@@ -26,7 +27,7 @@ jobs:
           java-version: '25'
           cache: maven
       - name: Generate javadoc
-        run: mvn -B --no-transfer-progress -DskipTests javadoc:javadoc
+        run: ./mvnw -B --no-transfer-progress -DskipTests javadoc:javadoc
       - name: Assemble site
         run: |
           mkdir -p _site/api
@@ -44,6 +45,7 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

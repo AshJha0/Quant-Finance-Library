@@ -2,6 +2,7 @@ package com.quantfinlib.fix;
 
 import com.quantfinlib.orderbook.Side;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -25,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * session dies on sight (proved by the control test); with it, both sides
  * restart at 1 and trade flows with no resend storm and no disconnect.
  */
+@Tag("socket")
 class FixResetSeqNumTest {
 
     private final ExecutorService executor = Executors.newCachedThreadPool();

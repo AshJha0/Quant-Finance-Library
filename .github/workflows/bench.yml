@@ -12,6 +12,7 @@ on:
 jobs:
   bench:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: Set up JDK 25
@@ -21,7 +22,7 @@ jobs:
           java-version: '25'
           cache: maven
       - name: Compile
-        run: mvn -B --no-transfer-progress -DskipTests compile
+        run: ./mvnw -B --no-transfer-progress -DskipTests compile
       - name: HFT market data benchmark
         run: |
           {
