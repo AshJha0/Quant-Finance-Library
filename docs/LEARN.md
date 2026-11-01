@@ -7063,9 +7063,10 @@ acceptor validates CompIDs, SendingTime and HeartBtInt and can refuse a
 Logon through `Listener.onLogonRequest`, answered by a Logout with the
 reason; `onTimer()` runs the quiet-interval and TestRequest logic on an
 injected `FixClock`, and the logout handshake gates `close()`.
+`FixSessionTest.java` drives it over real sockets, and
 `FixSession.overStream(...)` runs the same state machine over any
-transport without threads, which is how `FixSessionTest.java` drives it
-step by step on a manual clock.
+transport without threads, which is how `FixConformanceTest.java` steps
+through the session-level test cases on a manual clock.
 
 ### 216. "Why does EACH side of a FIX session keep TWO sequence numbers?"
 
@@ -7307,13 +7308,14 @@ rejects into the order path (or order rejects into session alarms) is a
 classic integration bug; the three belong to engine telemetry, gateway
 telemetry, and order state respectively.
 
-*In this library:* the outer two channels are implemented:
-`fix/FixSession.java` delivers 35=3 through
-`Listener.onReject(session, refSeqNum, text)`, and
-`fix/ExecutionReport.java` carries EXEC_TYPE_REJECTED and
-ORD_STATUS_REJECTED for the per-order channel (35=j is described for
-completeness; this engine's declared scope is the session and
-single-order message types).
+*In this library:* all three channels are delivered:
+`fix/FixSession.java` sends a session Reject (35=3, with
+SessionRejectReason 373) for a well-framed message with a bad field and
+delivers incoming ones through `Listener.onReject(session, refSeqNum,
+text)`; 35=j arrives through `Listener.onBusinessMessageReject` and 35=9
+through `Listener.onOrderCancelReject`; and `fix/ExecutionReport.java`
+carries EXEC_TYPE_REJECTED and ORD_STATUS_REJECTED for the per-order
+channel.
 
 ### 225. "How does market data travel over FIX, and how do you read it without allocating?"
 
@@ -7364,7 +7366,8 @@ encode (Q213).
 
 *In this library:* `fix/FixOrderEncoder.java` -- every one of those five
 techniques is named in its javadoc, including the backwards prefix and
-the mantissa-times-10^-decimals price representation;
+the mantissa-times-10^-decimals price representation, and
+`encodeCancel` (35=F) and `encodeReplace` (35=G) are garbage-free too;
 `FixOrderEncoderTest.java` does the round-trip through
 `FixMessage.parse` plus the zero-allocation assertion.
 
@@ -7418,7 +7421,10 @@ logic.
 harness -- initiator and acceptor over a local ServerSocket, a Recorder
 listener full of CountDownLatches (logon, gap, resendServed,
 disconnected), and scenario tests for orders, gaps and recovery;
-`FixPersistenceTest.java` adds the restart-with-FileSessionStore leg.
+`FixPersistenceTest.java` adds the restart-with-FileSessionStore leg,
+and `FixConformanceTest.java` walks the session-level test cases on a
+thread-free session (`FixSession.overStream`) with a manual clock, so
+heartbeat and timeout scenarios run without sleeping.
 
 ---
 
