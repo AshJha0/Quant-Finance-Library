@@ -8,6 +8,8 @@ public final class LimitOrder {
     private final double price;
     private final long timestampNanos;
     long quantity;   // mutated by the book on fills (package-private)
+    LimitOrder prev; // intrusive FIFO links of the order's price level
+    LimitOrder next;
 
     LimitOrder(long id, Side side, double price, long quantity, long timestampNanos) {
         this.id = id;

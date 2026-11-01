@@ -93,6 +93,8 @@ public final class FileSessionStore implements FixSessionStore, AutoCloseable {
     private boolean closed;
     private final long truncatedBytes;
     private final Map<Long, Long> appOffsets = new HashMap<>();
+    private final Path periodPath;
+    private long sessionStart = UNKNOWN_SESSION_START;
 
     /** Opens (or creates) a store keeping up to one million records. */
     public FileSessionStore(Path directory) throws IOException {
@@ -137,6 +139,8 @@ public final class FileSessionStore implements FixSessionStore, AutoCloseable {
             migrateLegacy();
         }
         writeSeqPage();
+        this.periodPath = directory.resolve("session.period");
+        this.sessionStart = readPeriod(periodPath);
     }
 
     // ------------------------------------------------------------------
@@ -230,6 +234,50 @@ public final class FileSessionStore implements FixSessionStore, AutoCloseable {
             seqChannel.force(false);
         } catch (IOException e) {
             throw new UncheckedIOException("failed to reset FIX store", e);
+        }
+    }
+
+    @Override
+    public synchronized long sessionStartMillis() {
+        return sessionStart;
+    }
+
+    /**
+     * Writes the period start to {@code session.period} (decimal text, written
+     * to a temporary file, forced and moved over the old one).
+     */
+    @Override
+    public synchronized void saveSessionStartMillis(long epochMillis) {
+        Path tmp = directory.resolve("session.period.tmp");
+        try {
+            try (FileChannel out = FileChannel.open(tmp, StandardOpenOption.CREATE,
+                    StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
+                writeFully(out, ByteBuffer.wrap(Long.toString(epochMillis)
+                        .getBytes(StandardCharsets.US_ASCII)), 0);
+                out.force(true);
+            }
+            try {
+                Files.move(tmp, periodPath, StandardCopyOption.REPLACE_EXISTING,
+                        StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(tmp, periodPath, StandardCopyOption.REPLACE_EXISTING);
+            }
+            forceDirectory(directory);
+            sessionStart = epochMillis;
+        } catch (IOException e) {
+            throw new UncheckedIOException("failed to persist FIX session period", e);
+        }
+    }
+
+    private static long readPeriod(Path path) throws IOException {
+        if (!Files.exists(path)) {
+            return UNKNOWN_SESSION_START;
+        }
+        String text = Files.readString(path, StandardCharsets.US_ASCII).trim();
+        try {
+            return Long.parseLong(text);
+        } catch (NumberFormatException e) {
+            return UNKNOWN_SESSION_START;   // torn or foreign file: treated as never recorded
         }
     }
 

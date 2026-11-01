@@ -50,7 +50,8 @@ package com.quantfinlib.orderbook;
  *       increasing sequence number, delivered to a
  *       {@link SequencedTradeSink} and readable as {@link #lastTradeSequence}.</li>
  * </ul>
- * <p>Not provided: stop orders, auctions and a journal.</p>
+ * <p>Not provided: stop orders and a journal. Opening and closing call
+ * auctions are in {@link AuctionBook}, whose residual moves into this book.</p>
  *
  * <h2>Trade delivery</h2>
  * <p>Trades are buffered in primitive arrays while matching and delivered to

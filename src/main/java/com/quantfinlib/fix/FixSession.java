@@ -82,8 +82,30 @@ import java.util.concurrent.locks.LockSupport;
  * 34=1 and restart both counters; the receiving side resets its store (the
  * file store rolls its journal) and confirms with 141=Y.
  *
- * <p>Not implemented: session schedules and end-of-day reset, encryption,
- * NextExpectedMsgSeqNum(789).</p>
+ * <h2>Session schedule</h2>
+ * With a {@link FixSessionSchedule} in {@link FixSessionOptions}, a Logon
+ * outside the session window is refused (acceptor: Logout with the reason;
+ * initiator: {@link #sendLogon()} throws), an established session sends
+ * Logout when {@link #onTimer()} finds the window closed, and the store rolls
+ * (both counters back to 1, history discarded) the first time the session is
+ * created, logs on or ticks in a new period. The period the store belongs to
+ * is kept by {@link FixSessionStore#saveSessionStartMillis}, so a process
+ * restarted the next morning resets instead of resuming yesterday's numbers.
+ *
+ * <h2>NextExpectedMsgSeqNum(789)</h2>
+ * With {@link FixSessionOptions#nextExpectedMsgSeqNum()} the Logon carries
+ * 789, the next MsgSeqNum this side expects. A peer 789 above the number this
+ * side is about to use is a fatal error (messages the peer claims to expect
+ * were never sent): Logout and disconnect. A lower 789 makes this side replay
+ * the missing range right after the Logon exchange, as it would for a
+ * ResendRequest. When the peer's Logon carries 789 and its MsgSeqNum is
+ * above the expected one, this side does not send a ResendRequest: the peer
+ * replays the gap and the Logon's own number is consumed once the gap is
+ * closed. The acceptor's reply carries 789 whenever the initiator's Logon
+ * did. Source: FIX 4.4 errata (Logon, tag 789) and FIXT 1.1 "Session
+ * Protocol", section on NextExpectedMsgSeqNum.
+ *
+ * <p>Not implemented: encryption.</p>
  */
 public final class FixSession implements AutoCloseable {
 
@@ -273,9 +295,19 @@ public final class FixSession implements AutoCloseable {
     private final boolean sentResetLogon;     // this side initiated the 141=Y reset
     private final Thread readerThread;
     private final Thread heartbeatThread;
+    private final FixSessionSchedule schedule;    // null: always open, never rolls
+    private final boolean useNextExpected;
+    private long ourLogonSeq = -1;                // guarded by writeLock
+    private volatile long pendingLogonSeq;        // peer Logon number consumed after its 789 replay
 
     private FixSession(Socket socket, OutputStream out, Config config, Listener listener,
                        boolean acceptor, FixSessionStore store, FixClock clock) throws IOException {
+        this(socket, out, config, listener, acceptor, store, clock, FixSessionOptions.none());
+    }
+
+    private FixSession(Socket socket, OutputStream out, Config config, Listener listener,
+                       boolean acceptor, FixSessionStore store, FixClock clock,
+                       FixSessionOptions options) throws IOException {
         this.socket = socket;
         if (socket != null) {
             socket.setTcpNoDelay(true);
@@ -296,9 +328,19 @@ public final class FixSession implements AutoCloseable {
         // An initiator configured for reset-on-logon starts both counters at
         // 1 before any thread runs (its Logon goes out as 34=1, 141=Y); the
         // store rolls so the abandoned history cannot be replayed.
+        this.schedule = options.schedule();
+        this.useNextExpected = options.nextExpectedMsgSeqNum();
         this.sentResetLogon = !acceptor && config.resetOnLogon();
         if (sentResetLogon) {
             store.reset();
+        }
+        if (schedule != null) {
+            long period = schedule.sessionStartMillis(clock.currentTimeMillis());
+            long recorded = store.sessionStartMillis();
+            if (recorded != FixSessionStore.UNKNOWN_SESSION_START && recorded != period) {
+                store.reset();
+            }
+            store.saveSessionStartMillis(period);
         }
         this.outgoingSeq = store.nextOutgoingSeq();
         this.expectedIncomingSeq = store.expectedIncomingSeq();
@@ -334,6 +376,26 @@ public final class FixSession implements AutoCloseable {
         return session;
     }
 
+    /** As {@link #initiate(String, int, Config, Listener, FixSessionStore)} with session options. */
+    public static FixSession initiate(String host, int port, Config config, Listener listener,
+                                      FixSessionStore store, FixSessionOptions options)
+            throws IOException {
+        Socket socket = new Socket();
+        socket.connect(new InetSocketAddress(host, port), 10_000);
+        FixSession session = new FixSession(socket, null, config, listener, false, store,
+                FixClock.system(), java.util.Objects.requireNonNull(options, "options"));
+        session.readerThread.start();
+        session.heartbeatThread.start();
+        try {
+            session.sendLogon();
+        } catch (IllegalStateException e) {
+            session.close();
+            throw new IOException(e.getMessage(), e);
+        }
+        session.awaitEstablished();
+        return session;
+    }
+
     /** Accepts one connection, awaits the peer's Logon, replies, and returns established. */
     public static FixSession accept(ServerSocket server, Config config, Listener listener)
             throws IOException {
@@ -349,6 +411,33 @@ public final class FixSession implements AutoCloseable {
         session.heartbeatThread.start();
         session.awaitEstablished();
         return session;
+    }
+
+    /** As {@link #accept(ServerSocket, Config, Listener, FixSessionStore)} with session options. */
+    public static FixSession accept(ServerSocket server, Config config, Listener listener,
+                                    FixSessionStore store, FixSessionOptions options)
+            throws IOException {
+        FixSession session = new FixSession(server.accept(), null, config, listener, true, store,
+                FixClock.system(), java.util.Objects.requireNonNull(options, "options"));
+        session.readerThread.start();
+        session.heartbeatThread.start();
+        session.awaitEstablished();
+        return session;
+    }
+
+    /**
+     * As {@link #overStream(Config, Listener, boolean, FixSessionStore, OutputStream, FixClock)}
+     * with a session schedule and NextExpectedMsgSeqNum(789) behaviour.
+     */
+    public static FixSession overStream(Config config, Listener listener, boolean acceptor,
+                                        FixSessionStore store, OutputStream out, FixClock clock,
+                                        FixSessionOptions options) {
+        try {
+            return new FixSession(null, out, config, listener, acceptor, store, clock,
+                    java.util.Objects.requireNonNull(options, "options"));
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);   // unreachable without a socket
+        }
     }
 
     /**
@@ -384,10 +473,22 @@ public final class FixSession implements AutoCloseable {
         }
     }
 
-    /** Initiator: sends the Logon (HeartBtInt, optional 141=Y and credentials). */
+    /**
+     * Initiator: sends the Logon (HeartBtInt, optional 141=Y, 789 and
+     * credentials).
+     *
+     * @throws IllegalStateException on an acceptor, or outside the schedule's session window
+     */
     public void sendLogon() {
         if (acceptor) {
             throw new IllegalStateException("an acceptor answers Logon, it does not send one first");
+        }
+        if (schedule != null) {
+            long now = clock.currentTimeMillis();
+            if (!schedule.isInSession(now)) {
+                throw new IllegalStateException("logon outside session window (" + schedule + ")");
+            }
+            rollIfNewPeriod(now);
         }
         FixMessage.Builder logon = FixMessage.builder(FixMessage.LOGON)
                 .field(FixMessage.ENCRYPT_METHOD, "0")
@@ -401,7 +502,33 @@ public final class FixSession implements AutoCloseable {
         if (config.password() != null) {
             logon.field(FixMessage.PASSWORD, config.password());
         }
-        send(logon);
+        if (useNextExpected) {
+            logon.field(FixMessage.NEXT_EXPECTED_MSG_SEQ_NUM, expectedIncomingSeq);
+        }
+        synchronized (writeLock) {
+            ourLogonSeq = outgoingSeq;
+            send(logon);
+        }
+    }
+
+    /**
+     * Rolls the store and both counters when {@code now} lies in a later
+     * session period than the store's. Only called while not established.
+     */
+    private void rollIfNewPeriod(long now) {
+        long period = schedule.sessionStartMillis(now);
+        if (store.sessionStartMillis() == period) {
+            return;
+        }
+        synchronized (writeLock) {
+            store.reset();
+            outgoingSeq = 1;
+        }
+        store.saveSessionStartMillis(period);
+        expectedIncomingSeq = 1;
+        resendPending = false;
+        resendTriggerSeq = 0;
+        pendingLogonSeq = 0;
     }
 
     // ------------------------------------------------------------------
@@ -837,6 +964,20 @@ public final class FixSession implements AutoCloseable {
                     + " 56=" + m.getString(FixMessage.TARGET_COMP_ID, ""));
             return;
         }
+        if (schedule != null && acceptor) {
+            long now = clock.currentTimeMillis();
+            if (!schedule.isInSession(now)) {
+                refuseLogon("logon outside session window");
+                return;
+            }
+            rollIfNewPeriod(now);
+        }
+        String nextExpectedRaw = m.getString(FixMessage.NEXT_EXPECTED_MSG_SEQ_NUM, null);
+        long peerNextExpected = parsePositive(nextExpectedRaw);
+        if (nextExpectedRaw != null && peerNextExpected < 1) {
+            refuseLogon("NextExpectedMsgSeqNum(789) invalid: " + nextExpectedRaw);
+            return;
+        }
         String timeProblem = sendingTimeProblem(m);
         if (timeProblem != null) {
             refuseLogon(timeProblem);
@@ -874,23 +1015,64 @@ public final class FixSession implements AutoCloseable {
                     + " but received " + seq);
             return;
         }
+        // Highest 789 the peer may send: our reply's number (acceptor), or one
+        // past our Logon (initiator).
+        long maxPeerExpected;
+        synchronized (writeLock) {
+            maxPeerExpected = acceptor ? outgoingSeq : ourLogonSeq + 1;
+        }
+        boolean peerUses789 = peerNextExpected >= 1;
+        if (peerUses789 && peerNextExpected > maxPeerExpected) {
+            String reason = "NextExpectedMsgSeqNum(789) " + peerNextExpected
+                    + " higher than next to send " + maxPeerExpected;
+            if (acceptor) {
+                refuseLogon(reason);
+            } else {
+                logoutAndDisconnect(reason);
+            }
+            return;
+        }
+        long logonSeqOfOurs;
         if (acceptor) {
             // The Logon reply is the first message the initiator sees; any
-            // ResendRequest for our inbound gap follows it.
+            // ResendRequest for our inbound gap, or 789 replay, follows it.
             FixMessage.Builder reply = FixMessage.builder(FixMessage.LOGON)
                     .field(FixMessage.ENCRYPT_METHOD, "0")
                     .field(FixMessage.HEART_BT_INT, heartbeatNanos / 1_000_000_000L);
             if (reset) {
                 reply.field(FixMessage.RESET_SEQ_NUM_FLAG, "Y");
             }
-            send(reply);
+            if (useNextExpected || peerUses789) {
+                reply.field(FixMessage.NEXT_EXPECTED_MSG_SEQ_NUM,
+                        seq == expectedIncomingSeq ? seq + 1 : expectedIncomingSeq);
+            }
+            synchronized (writeLock) {
+                ourLogonSeq = outgoingSeq;
+                send(reply);
+            }
+        }
+        synchronized (writeLock) {
+            logonSeqOfOurs = ourLogonSeq;
         }
         established = true;
         logonLatch.countDown();
         if (seq > expectedIncomingSeq) {
-            onGap(seq);
+            if (peerUses789 && (acceptor || useNextExpected)) {
+                // The peer saw our 789 (or will, in our reply) and replays
+                // [expected, seq - 1] itself; its Logon number is consumed
+                // once that range is in.
+                listener.onSequenceGap(expectedIncomingSeq, seq);
+                pendingLogonSeq = seq;
+                resendPending = true;
+                resendTriggerSeq = seq;
+            } else {
+                onGap(seq);
+            }
         } else {
             advanceIncoming(seq + 1);
+        }
+        if (peerUses789 && peerNextExpected < logonSeqOfOurs) {
+            replay(peerNextExpected, logonSeqOfOurs - 1);
         }
         listener.onMessage(this, m);
         listener.onLogon(this);
@@ -990,6 +1172,12 @@ public final class FixSession implements AutoCloseable {
     private void onGap(long receivedSeq) {
         listener.onSequenceGap(expectedIncomingSeq, receivedSeq);
         resendTriggerSeq = Math.max(resendTriggerSeq, receivedSeq);
+        if (pendingLogonSeq > 0 && receivedSeq > pendingLogonSeq) {
+            // The peer moved past its Logon without replaying the 789 gap:
+            // fall back to an explicit ResendRequest.
+            pendingLogonSeq = 0;
+            resendPending = false;
+        }
         if (!resendPending) {
             resendPending = true;
             send(FixMessage.builder(FixMessage.RESEND_REQUEST)
@@ -1057,10 +1245,15 @@ public final class FixSession implements AutoCloseable {
         }
         resendPending = false;
         resendTriggerSeq = 0;
+        pendingLogonSeq = 0;
         expectedIncomingSeq = 1;
     }
 
     private void advanceIncoming(long newExpected) {
+        if (pendingLogonSeq > 0 && newExpected >= pendingLogonSeq) {
+            newExpected = Math.max(newExpected, pendingLogonSeq + 1);   // the peer's Logon
+            pendingLogonSeq = 0;
+        }
         expectedIncomingSeq = newExpected;
         store.saveIncomingSeq(newExpected);
         if (resendPending && expectedIncomingSeq > resendTriggerSeq) {
@@ -1082,10 +1275,21 @@ public final class FixSession implements AutoCloseable {
                     "invalid BeginSeqNo/EndSeqNo");
             return;
         }
+        long end;
+        synchronized (writeLock) {
+            long last = outgoingSeq - 1;
+            end = endRequested == 0 ? last : Math.min(endRequested, last);
+        }
+        replay(begin, end);
+    }
+
+    /**
+     * Replays stored application messages in [begin, end] with PossDupFlag and
+     * OrigSendingTime, coalescing runs without one into SequenceReset-GapFill.
+     */
+    private void replay(long begin, long end) {
         try {
             synchronized (writeLock) {
-                long last = outgoingSeq - 1;
-                long end = endRequested == 0 ? last : Math.min(endRequested, last);
                 long firstRetained = store.firstRetainedSeq();
                 if (begin < firstRetained && begin <= end) {
                     listener.onResendUnavailable(begin, Math.min(end, firstRetained - 1));
@@ -1137,6 +1341,16 @@ public final class FixSession implements AutoCloseable {
     public long onTimer() {
         if (!running) {
             return Long.MAX_VALUE;
+        }
+        if (schedule != null) {
+            long nowMillis = clock.currentTimeMillis();
+            if (established && !schedule.isInSession(nowMillis)) {
+                logoutAndDisconnect("end of session");
+                return Long.MAX_VALUE;
+            }
+            if (!established && schedule.isInSession(nowMillis)) {
+                rollIfNewPeriod(nowMillis);
+            }
         }
         if (!established) {
             return NOT_ESTABLISHED_TIMER_NANOS;
