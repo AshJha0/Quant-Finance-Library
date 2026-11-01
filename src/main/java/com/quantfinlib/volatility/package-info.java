@@ -31,4 +31,7 @@
  * targeting, or option pricing; stochastic volatility lives in
  * {@code pricing.Heston}.
  */
+@NullMarked
 package com.quantfinlib.volatility;
+
+import org.jspecify.annotations.NullMarked;

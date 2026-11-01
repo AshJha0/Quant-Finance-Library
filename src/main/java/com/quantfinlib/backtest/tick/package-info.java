@@ -9,4 +9,7 @@
  * simulated queue; optional tick-size grid for real-world prices; no fills
  * against the triggering print).
  */
+@NullMarked
 package com.quantfinlib.backtest.tick;
+
+import org.jspecify.annotations.NullMarked;

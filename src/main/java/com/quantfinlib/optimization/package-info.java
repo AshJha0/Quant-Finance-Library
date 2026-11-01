@@ -8,4 +8,7 @@
  * {@link com.quantfinlib.optimization.ConstrainedPortfolioOptimizer}
  * (position caps/floors and turnover penalties against current holdings).
  */
+@NullMarked
 package com.quantfinlib.optimization;
+
+import org.jspecify.annotations.NullMarked;

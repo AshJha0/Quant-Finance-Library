@@ -7,4 +7,7 @@
  * and take profit in a fluent chain. All rules are NaN-safe during indicator
  * warm-up.
  */
+@NullMarked
 package com.quantfinlib.dsl;
+
+import org.jspecify.annotations.NullMarked;

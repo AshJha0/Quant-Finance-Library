@@ -10,4 +10,7 @@
  * (crack/calendar) and {@code execution.FuturesRollAlgo} for
  * rolling the position. Research lane.
  */
+@NullMarked
 package com.quantfinlib.commodities;
+
+import org.jspecify.annotations.NullMarked;

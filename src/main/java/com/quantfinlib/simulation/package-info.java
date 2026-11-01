@@ -7,4 +7,7 @@
  * analytics — probability of profit/loss, VaR/CVaR, confidence intervals,
  * best/worst/expected/median terminal values.
  */
+@NullMarked
 package com.quantfinlib.simulation;
+
+import org.jspecify.annotations.NullMarked;

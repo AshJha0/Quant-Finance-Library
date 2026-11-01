@@ -15,4 +15,7 @@
  * {@link com.quantfinlib.backtest.portfolio.PositionSizing} supplies Kelly,
  * fixed-fractional risk, inverse-volatility weights and vol-target leverage.
  */
+@NullMarked
 package com.quantfinlib.backtest.portfolio;
+
+import org.jspecify.annotations.NullMarked;
