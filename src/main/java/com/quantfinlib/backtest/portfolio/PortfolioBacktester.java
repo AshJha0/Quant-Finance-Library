@@ -346,7 +346,7 @@ public final class PortfolioBacktester {
                         eventsApplied++;
                     }
                 }
-                // 3) Index drops: alive but no longer a member → forced sale
+                // 3) Index drops: alive but no longer a member, so a forced sale
                 //    at this bar's close (commission charged like any trade).
                 for (String symbol : symbols) {
                     double qty = positions.getOrDefault(symbol, 0.0);
