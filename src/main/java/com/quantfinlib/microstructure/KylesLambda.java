@@ -88,11 +88,23 @@ public final class KylesLambda {
 
     /**
      * The estimated impact of trading {@code quantity} now, in basis
-     * points of {@code mid} — the live producer for
-     * {@code MarketState.impactBps}. The SIGN of the quantity is ignored
-     * (impact is a cost in both directions — a signed sell size must not
-     * read as free), a negative λ estimate is clamped to 0 (noise, never
-     * a subsidy), and non-finite inputs are neutral.
+     * points of {@code mid}, the live producer for
+     * {@code MarketState.impactBps}. The sign of the quantity is ignored
+     * (impact is a cost in both directions), a negative λ estimate is
+     * clamped to 0 (noise, never a subsidy), and non-finite inputs are
+     * neutral.
+     *
+     * <p><b>Units and aggregation.</b> λ is estimated from
+     * {@link #onSample} windows as price change per unit of <em>net signed
+     * volume over one aggregation window</em> (Kyle 1985, Econometrica
+     * 53(6); Hasbrouck 2007, ch. 5). Pricing a single child order with it
+     * assumes the child is the window's entire net flow: a child that is
+     * 10% of the window's flow is charged as if it moved the whole window.
+     * Pass the net quantity you expect to trade over one window of the same
+     * length as the one used for estimation (for example the parent
+     * order's slice per window), not an individual fill, and keep
+     * {@code quantity} in the same share units as the signed volume fed to
+     * {@link #onSample}.</p>
      */
     public double impactBps(double quantity, double mid) {
         double size = Math.abs(quantity);

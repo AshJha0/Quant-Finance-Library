@@ -191,14 +191,18 @@ public final class OnlineAlphaLearner {
     /**
      * The prediction scaled by its own typical magnitude and clamped to
      * [-1, 1] — the {@code BenchmarkExecutor.MarketState.alpha}-ready form.
-     * Returns 0 while the out-of-sample IC is not positive OR the track
-     * record is shorter than one IC memory (~1/icAlpha samples): a learner
-     * that hasn't demonstrated live predictive power over a meaningful
-     * window emits no signal — a lucky first hour is not evidence.
+     * Returns 0 while the out-of-sample IC is not significant, that is
+     * {@code IC ≤ 2·SE} with SE the null standard error of the EWMA
+     * correlation ({@link IcSignificance}; about 0.07 at {@code icAlpha =
+     * 0.01}), or while the track record is shorter than one IC memory
+     * (~1/icAlpha samples). A true-zero learner would pass an {@code IC > 0}
+     * gate half the time; this gate passes it about 2.3% of the time.
      */
     public double normalizedPrediction(double queueImbalance, double tradeImbalance,
                                        double normalizedOfi, double momentumZ) {
-        if (samples * icAlpha < 1 || outOfSampleIC() <= 0 || absPredEwma <= 0) {
+        if (samples * icAlpha < 1 || absPredEwma <= 0
+                || outOfSampleIC() <= IcSignificance.DEFAULT_Z
+                        * IcSignificance.standardError(icAlpha, samples)) {
             return 0;
         }
         double pred = predict(queueImbalance, tradeImbalance, normalizedOfi, momentumZ);

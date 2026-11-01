@@ -21,13 +21,15 @@ import java.io.IOException;
  * PREVIOUS call against the return just realized (values now would
  * contain the move — the same nowcast trap {@code OnlineAlphaLearner}
  * closes), then snapshots the current values for the next round.
- * {@link #combined} weights each component by {@code max(0, IC)} and the
- * weights ARE the sizing — deliberately NOT renormalized to sum to 1,
- * because renormalizing would let a lone component with IC 0.01 emit at
- * full strength: a barely-trusted blend must be a barely-sized signal.
- * A component that has not demonstrated live predictive power gets zero
- * weight, and while the track record spans less than one IC memory the
- * ensemble emits 0 outright. Output is clamped to [-1, 1]: drop-in for
+ * {@link #combined} weights each component by its IC shrunk toward zero
+ * by {@code z} standard errors, {@code max(0, IC − z·SE)} (see
+ * {@link IcSignificance}; z = 2 by default). Gating on {@code IC > 0}
+ * alone would hand weight to a true-zero component half the time, since
+ * with {@code icAlpha = 0.01} the EWMA IC has an effective sample of about
+ * 200 and a standard error near 0.07. The weights are the sizing and are
+ * not renormalised to sum to 1: renormalising would let a lone component
+ * with a marginal IC emit at full strength. While the track record spans
+ * less than one IC memory the ensemble emits 0 outright. Output is clamped to [-1, 1]: drop-in for
  * {@code BenchmarkExecutor.MarketState.alpha}.</p>
  *
  * <p>Same caveat as every learned signal here: the live IC is a
@@ -42,6 +44,7 @@ public final class AlphaEnsemble {
 
     private final int components;
     private final double icAlpha;
+    private final double significanceZ;
 
     // Per-component prequential IC moments.
     private final double[] meanSig;
@@ -61,11 +64,22 @@ public final class AlphaEnsemble {
      * @param icAlpha    EWMA weight of the IC statistics, e.g. 0.01
      */
     public AlphaEnsemble(int components, double icAlpha) {
-        if (components < 1 || icAlpha <= 0 || icAlpha > 1) {
-            throw new IllegalArgumentException("need components >= 1, icAlpha in (0,1]");
+        this(components, icAlpha, IcSignificance.DEFAULT_Z);
+    }
+
+    /**
+     * @param significanceZ standard errors subtracted from each component IC
+     *                      before it earns weight (0 reproduces the
+     *                      ungated {@code max(0, IC)} weighting)
+     */
+    public AlphaEnsemble(int components, double icAlpha, double significanceZ) {
+        if (components < 1 || icAlpha <= 0 || icAlpha > 1 || !(significanceZ >= 0)) {
+            throw new IllegalArgumentException(
+                    "need components >= 1, icAlpha in (0,1], significanceZ >= 0");
         }
         this.components = components;
         this.icAlpha = icAlpha;
+        this.significanceZ = significanceZ;
         this.meanSig = new double[components];
         this.meanRet = new double[components];
         this.varSig = new double[components];
@@ -118,12 +132,11 @@ public final class AlphaEnsemble {
     }
 
     /**
-     * The blended alpha in [-1, 1]: {@code clamp(Σ max(0, ICᶜ) × valueᶜ)}.
-     * The IC weights are the SIZE of the signal, not just its mix (see the
-     * class doc for why they are not renormalized). 0 while the track
-     * record spans less than one IC memory or no component has a positive
-     * IC — an unproven blend is silent, exactly like the learner it sits
-     * above.
+     * The blended alpha in [-1, 1]:
+     * {@code clamp(Σ max(0, ICᶜ − z·SE) × valueᶜ)}. The weights are the size
+     * of the signal, not just its mix. 0 while the track record spans less
+     * than one IC memory or no component's IC clears its standard-error
+     * band.
      */
     public double combined(double[] values) {
         requireLength(values);
@@ -132,9 +145,10 @@ public final class AlphaEnsemble {
         }
         double weighted = 0;
         for (int c = 0; c < components; c++) {
-            double ic = componentIC(c);
-            if (ic > 0 && Double.isFinite(values[c])) {
-                weighted += ic * values[c];
+            double weight = IcSignificance.shrunkWeight(componentIC(c), icAlpha, samples,
+                    significanceZ);
+            if (weight > 0 && Double.isFinite(values[c])) {
+                weighted += weight * values[c];
             }
         }
         return MathUtils.clamp(weighted, -1, 1);
