@@ -651,6 +651,107 @@ public final class AlphaReport {
     }
 
     // ------------------------------------------------------------------
+    // Report tables: IC by horizon, cost decomposition, exposure
+    // ------------------------------------------------------------------
+
+    /**
+     * Mean IC of each factor at each forward horizon ({@code [factor][horizon]}),
+     * the same statistic as {@link #decayProfile} for one factor.
+     */
+    public static double[][] icTable(AlphaContext ctx, List<AlphaFactor> factors, int startIndex,
+                                     int[] horizons) {
+        if (factors.isEmpty() || horizons.length == 0) {
+            throw new IllegalArgumentException("need factors and horizons");
+        }
+        double[][] out = new double[factors.size()][horizons.length];
+        for (int k = 0; k < factors.size(); k++) {
+            for (int h = 0; h < horizons.length; h++) {
+                if (horizons[h] < 1) {
+                    throw new IllegalArgumentException("horizons must be >= 1");
+                }
+                out[k][h] = AlphaValidation.meanIc(ctx, factors.get(k), startIndex, ctx.bars(),
+                        horizons[h]);
+            }
+        }
+        return out;
+    }
+
+    /** {@link #icTable} as plain text, one row per factor. */
+    public static String formatIcTable(AlphaContext ctx, List<AlphaFactor> factors,
+                                       int startIndex, int[] horizons) {
+        double[][] t = icTable(ctx, factors, startIndex, horizons);
+        StringBuilder b = new StringBuilder(String.format(java.util.Locale.ROOT, "%-24s",
+                "factor \\ horizon"));
+        for (int h : horizons) {
+            b.append(String.format(java.util.Locale.ROOT, " %8d", h));
+        }
+        b.append('\n');
+        for (int k = 0; k < t.length; k++) {
+            String name = factors.get(k).name();
+            b.append(String.format(java.util.Locale.ROOT, "%-24s",
+                    name.length() > 24 ? name.substring(0, 24) : name));
+            for (double v : t[k]) {
+                b.append(String.format(java.util.Locale.ROOT, " %8.4f", v));
+            }
+            b.append('\n');
+        }
+        return b.toString();
+    }
+
+    /**
+     * Cost decomposition of a backtest: each drag as a fraction of equity
+     * and as a share of the total, with mean turnover and tracking gap.
+     */
+    public static String costBreakdown(AlphaBacktester.Result r) {
+        double total = r.totalCostDrag();
+        String[] names = {"commission", "spread", "slippage", "impact", "financing"};
+        double[] v = {r.commissionDrag(), r.spreadDrag(), r.slippageDrag(), r.impactDrag(),
+                r.financingDrag()};
+        StringBuilder b = new StringBuilder(String.format(java.util.Locale.ROOT,
+                "%-12s %10s %8s%n", "cost", "drag", "share"));
+        for (int i = 0; i < v.length; i++) {
+            b.append(String.format(java.util.Locale.ROOT, "%-12s %10.6f %7.1f%%%n", names[i], v[i],
+                    total == 0 ? 0 : 100 * v[i] / total));
+        }
+        b.append(String.format(java.util.Locale.ROOT, "%-12s %10.6f%n", "total", total));
+        b.append(String.format(java.util.Locale.ROOT, "%-12s %10.4f%n", "turnover",
+                r.meanTurnover()));
+        b.append(String.format(java.util.Locale.ROOT, "%-12s %10.4f%n", "trackingGap",
+                r.meanTrackingGap()));
+        return b.toString();
+    }
+
+    /**
+     * Mean book exposure over a traced run, per bar:
+     * {@code [gross Σ|w|, net Σw, long Σw⁺, short Σw⁻, names held]}.
+     */
+    public static double[] exposureSummary(AlphaBacktester.Traced traced) {
+        double[] out = new double[5];
+        int steps = traced.steps();
+        if (steps == 0) {
+            return out;
+        }
+        for (int s = 0; s < steps; s++) {
+            for (double w : traced.heldCopy(s)) {
+                out[0] += Math.abs(w);
+                out[1] += w;
+                if (w > 0) {
+                    out[2] += w;
+                } else if (w < 0) {
+                    out[3] += w;
+                }
+                if (w != 0) {
+                    out[4]++;
+                }
+            }
+        }
+        for (int i = 0; i < out.length; i++) {
+            out[i] /= steps;
+        }
+        return out;
+    }
+
+    // ------------------------------------------------------------------
     // Curves and rolling metrics
     // ------------------------------------------------------------------
 
