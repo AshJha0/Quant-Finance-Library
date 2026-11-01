@@ -2,6 +2,7 @@ package com.quantfinlib.fix;
 
 import com.quantfinlib.orderbook.Side;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -20,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Username/Password logon, cancel/replace (35=F/G), and session Reject (35=3). */
+@Tag("socket")
 class FixProtocolExtrasTest {
 
     private final ExecutorService executor = Executors.newCachedThreadPool();

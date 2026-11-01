@@ -3,6 +3,7 @@ package com.quantfinlib.trading;
 import com.quantfinlib.marketdata.HftMarketDataBus;
 import com.quantfinlib.orderbook.HftOrderBook;
 import com.quantfinlib.orderbook.Side;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.SplittableRandom;
@@ -31,6 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *       burst passes.</li>
  * </ul>
  */
+@Tag("load")
 class LoadAndSoakTest {
 
     private static HftRiskGate openGate() {

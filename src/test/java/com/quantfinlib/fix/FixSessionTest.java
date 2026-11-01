@@ -2,6 +2,7 @@ package com.quantfinlib.fix;
 
 import com.quantfinlib.orderbook.Side;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -21,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@Tag("socket")
 class FixSessionTest {
 
     private final ExecutorService executor = Executors.newCachedThreadPool();
@@ -182,6 +184,7 @@ class FixSessionTest {
     }
 
     @Test
+    @Tag("timing")
     void heartbeatsFlowAndKeepTheSessionAlive() throws Exception {
         connect(1);
         Thread.sleep(2_500);
@@ -199,6 +202,7 @@ class FixSessionTest {
     }
 
     @Test
+    @Tag("timing")
     void deadPeerEscalatesToTestRequestThenDisconnects() throws Exception {
         // A HALF-DEAD peer: TCP established and reading, application
         // silent — the failure mode that hangs sessions forever when the
