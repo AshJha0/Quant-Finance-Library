@@ -30,7 +30,8 @@ public final class BinomialTree {
         double d = 1 / u;
         double growth = Math.exp((rate - carry) * dt);
         double p = (growth - d) / (u - d);
-        if (p <= 0 || p >= 1) {
+        // Written so that NaN (vol = 0 makes u = d = 1 and p = 0/0) also fails.
+        if (!(p > 0 && p < 1)) {
             throw new IllegalArgumentException(
                     "degenerate tree (p=" + p + "): increase steps or check inputs");
         }

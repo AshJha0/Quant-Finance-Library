@@ -16,7 +16,12 @@ import java.util.List;
  * points <b>linearly in actual days</b> between pillars — the interbank
  * convention for broken dates. Beyond the last pillar it extrapolates the
  * slope of the final segment; before the first pillar it interpolates from
- * zero points at spot.</p>
+ * zero points at spot. Interpolating points linearly in days ignores the
+ * discount-factor structure of the forward; that is the interbank
+ * convention for broken dates within a year and becomes biased for long
+ * dates with large carry, where interpolating the implied carry is better.
+ * Pre-spot dates (today, tomorrow) are read from explicit
+ * {@link Builder#preSpot} quotes.</p>
  *
  * <p>Covered interest parity connects the curve to rates: with continuously
  * compounded rates, {@code F = S * exp((r_quote - r_base) * tau)}. The
@@ -38,15 +43,19 @@ public final class SwapPointsCurve {
     /** Forward points in price terms (pips already scaled by pip size). */
     private final double[] pillarPoints;
     private final String[] tenors;
+    /** Pre-spot dates (days before spot, positive) and points from that date to spot. */
+    private final java.util.Map<Long, Double> preSpot;
 
     private SwapPointsCurve(CurrencyPair pair, LocalDate spotDate, double spotRate,
-                            long[] pillarDays, double[] pillarPoints, String[] tenors) {
+                            long[] pillarDays, double[] pillarPoints, String[] tenors,
+                            java.util.Map<Long, Double> preSpot) {
         this.pair = pair;
         this.spotDate = spotDate;
         this.spotRate = spotRate;
         this.pillarDays = pillarDays;
         this.pillarPoints = pillarPoints;
         this.tenors = tenors;
+        this.preSpot = preSpot;
     }
 
     public static Builder builder(CurrencyPair pair, LocalDate tradeDate, double spotRate) {
@@ -61,6 +70,7 @@ public final class SwapPointsCurve {
         private final List<String> tenors = new ArrayList<>();
         private final List<LocalDate> dates = new ArrayList<>();
         private final List<Double> points = new ArrayList<>();
+        private final java.util.Map<Long, Double> preSpot = new java.util.HashMap<>();
 
         private Builder(CurrencyPair pair, LocalDate tradeDate, double spotRate) {
             if (spotRate <= 0) {
@@ -89,6 +99,26 @@ public final class SwapPointsCurve {
             return this;
         }
 
+        /**
+         * Pre-spot value date (today or tomorrow) with the cumulative swap
+         * points, in pips, from that date to spot: the outright for that date
+         * is {@code spot − points}. For a T+2 pair, tomorrow takes the TN
+         * points and today takes ON + TN. The caller states the cumulative
+         * amount so no quoting-side convention is assumed here.
+         */
+        public Builder preSpot(LocalDate valueDate, double pipsToSpot) {
+            LocalDate spot = pair.spotDate(tradeDate);
+            long d = ChronoUnit.DAYS.between(valueDate, spot);
+            if (d <= 0 || valueDate.isBefore(tradeDate)) {
+                throw new IllegalArgumentException("pre-spot date must be in [trade date, spot)");
+            }
+            if (!Double.isFinite(pipsToSpot)) {
+                throw new IllegalArgumentException("points must be finite");
+            }
+            preSpot.put(d, pipsToSpot * pair.pipSize());
+            return this;
+        }
+
         public SwapPointsCurve build() {
             if (dates.isEmpty()) {
                 throw new IllegalStateException("at least one pillar required");
@@ -113,7 +143,8 @@ public final class SwapPointsCurve {
                     throw new IllegalArgumentException("duplicate pillar date at " + tns[i]);
                 }
             }
-            return new SwapPointsCurve(pair, spot, spotRate, days, pts, tns);
+            return new SwapPointsCurve(pair, spot, spotRate, days, pts, tns,
+                    java.util.Map.copyOf(preSpot));
         }
     }
 
@@ -128,7 +159,12 @@ public final class SwapPointsCurve {
     public double forwardPoints(LocalDate valueDate) {
         long d = ChronoUnit.DAYS.between(spotDate, valueDate);
         if (d < 0) {
-            throw new IllegalArgumentException("valueDate " + valueDate + " is before spot " + spotDate);
+            Double pre = preSpot.get(-d);
+            if (pre == null) {
+                throw new IllegalArgumentException("valueDate " + valueDate + " is before spot "
+                        + spotDate + " and no pre-spot points were given for it");
+            }
+            return -pre;
         }
         if (d == 0) {
             return 0;
@@ -180,11 +216,15 @@ public final class SwapPointsCurve {
      * Positive when the quote currency yields more (points ascending).
      */
     public double impliedCarry(LocalDate valueDate) {
-        long d = ChronoUnit.DAYS.between(spotDate, valueDate);
-        if (d <= 0) {
+        return impliedCarry(valueDate, com.quantfinlib.rates.DayCount.ACT_365);
+    }
+
+    /** {@link #impliedCarry(LocalDate)} with tau measured in the given day count. */
+    public double impliedCarry(LocalDate valueDate, com.quantfinlib.rates.DayCount dayCount) {
+        if (!valueDate.isAfter(spotDate)) {
             throw new IllegalArgumentException("valueDate must be after spot");
         }
-        double tau = d / 365.0;
+        double tau = dayCount.yearFraction(spotDate, valueDate);
         return Math.log(outright(valueDate) / spotRate) / tau;
     }
 

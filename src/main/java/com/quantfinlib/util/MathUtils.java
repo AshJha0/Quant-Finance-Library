@@ -27,10 +27,14 @@ public final class MathUtils {
         return s / (to - from);
     }
 
-    /** Sample variance (n - 1 denominator). */
+    /**
+     * Sample variance (n - 1 denominator). Undefined for fewer than two
+     * observations: returns NaN rather than 0, so a one-point Sharpe ratio or
+     * beta reads as "no estimate" instead of a confident zero.
+     */
     public static double variance(double[] v) {
         if (v.length < 2) {
-            return 0;
+            return Double.NaN;
         }
         double m = mean(v), s = 0;
         for (double x : v) {
@@ -40,16 +44,16 @@ public final class MathUtils {
         return s / (v.length - 1);
     }
 
-    /** Sample standard deviation. */
+    /** Sample standard deviation; NaN for fewer than two observations. */
     public static double stdDev(double[] v) {
         return Math.sqrt(variance(v));
     }
 
-    /** Population standard deviation over [from, to). */
+    /** Population standard deviation over [from, to); NaN for an empty range. */
     public static double stdDevP(double[] v, int from, int to) {
         int n = to - from;
         if (n < 1) {
-            return 0;
+            return Double.NaN;
         }
         double m = mean(v, from, to), s = 0;
         for (int i = from; i < to; i++) {
@@ -59,11 +63,11 @@ public final class MathUtils {
         return Math.sqrt(s / n);
     }
 
-    /** Sample standard deviation over [from, to). */
+    /** Sample standard deviation over [from, to); NaN for fewer than two points. */
     public static double stdDevSample(double[] v, int from, int to) {
         int n = to - from;
         if (n < 2) {
-            return 0;
+            return Double.NaN;
         }
         double m = mean(v, from, to), s = 0;
         for (int i = from; i < to; i++) {
@@ -189,9 +193,21 @@ public final class MathUtils {
     }
 
     /**
-     * Inverse standard normal CDF (Acklam's approximation, |error| &lt; 1.15e-9).
+     * Inverse standard normal CDF: Acklam's rational seed (|error| &lt; 1.15e-9)
+     * refined by one Halley step on {@link #normCdf}, which brings it to
+     * double precision apart from the last few bits.
      */
     public static double normInv(double p) {
+        double x = normInvAcklam(p);
+        // One Halley step against the double-precision CDF (the refinement
+        // Acklam recommends). The error is formed on the short side of 0.5 so
+        // it does not cancel in the upper tail.
+        double e = p < 0.5 ? normCdf(x) - p : (1 - p) - normCdf(-x);
+        double u = e * Math.sqrt(2 * Math.PI) * Math.exp(0.5 * x * x);
+        return x - u / (1 + 0.5 * x * u);
+    }
+
+    private static double normInvAcklam(double p) {
         if (p <= 0 || p >= 1) {
             throw new IllegalArgumentException("p must be in (0,1): " + p);
         }
@@ -325,23 +341,87 @@ public final class MathUtils {
         v[b] = tv;
     }
 
+    /** Natural log of the standard normal density, finite for any finite x. */
+    public static double logNormPdf(double x) {
+        return -0.5 * x * x - 0.91893853320467274178; // ln sqrt(2 pi)
+    }
+
     /** Standard normal density. */
     public static double normPdf(double x) {
         return Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI);
     }
 
     /**
-     * Standard normal CDF (Abramowitz &amp; Stegun 26.2.17, |error| &lt; 7.5e-8).
+     * Standard normal CDF to full double precision.
+     *
+     * <p>W. J. Cody's rational Chebyshev approximations (Cody 1969, "Rational
+     * Chebyshev approximations for the error function", Math. Comp. 23,
+     * 631-637; coefficients from his SPECFUN routine ANORM, 1993, the set R's
+     * {@code pnorm} also uses). Three regions: |x| &lt;= 0.67449, |x| &lt;= sqrt(32)
+     * and the asymptotic tail. The Gaussian factor is split as
+     * exp(-xs^2/2) exp(-(x-xs)(x+xs)/2) with xs = |x| truncated to a multiple of
+     * 1/16, so the exponent carries no rounding error and the lower tail keeps
+     * relative accuracy (about 1e-15) down to x = -37.5. Further out the value
+     * is subnormal and then 0. NaN in gives NaN out.</p>
      */
     public static double normCdf(double x) {
-        if (x < 0) {
-            return 1 - normCdf(-x);
+        if (Double.isNaN(x)) {
+            return Double.NaN;
         }
-        double t = 1 / (1 + 0.2316419 * x);
-        double poly = t * (0.319381530 + t * (-0.356563782 + t * (1.781477937
-                + t * (-1.821255978 + t * 1.330274429))));
-        return 1 - normPdf(x) * poly;
+        double y = Math.abs(x);
+        if (y <= 0.67448975) {
+            double xsq = y > 1.1e-16 ? x * x : 0;
+            double xnum = CODY_A[4] * xsq, xden = xsq;
+            for (int i = 0; i < 3; i++) {
+                xnum = (xnum + CODY_A[i]) * xsq;
+                xden = (xden + CODY_B[i]) * xsq;
+            }
+            return 0.5 + x * (xnum + CODY_A[3]) / (xden + CODY_B[3]);
+        }
+        double tail;
+        if (y <= 5.656854249492380195206754896838) {
+            double xnum = CODY_C[8] * y, xden = y;
+            for (int i = 0; i < 7; i++) {
+                xnum = (xnum + CODY_C[i]) * y;
+                xden = (xden + CODY_D[i]) * y;
+            }
+            tail = (xnum + CODY_C[7]) / (xden + CODY_D[7]);
+        } else {
+            if (y > 40) {
+                return x > 0 ? 1.0 : 0.0;
+            }
+            double xsq = 1 / (x * x);
+            double xnum = CODY_P[5] * xsq, xden = xsq;
+            for (int i = 0; i < 4; i++) {
+                xnum = (xnum + CODY_P[i]) * xsq;
+                xden = (xden + CODY_Q[i]) * xsq;
+            }
+            double t = xsq * (xnum + CODY_P[4]) / (xden + CODY_Q[4]);
+            tail = (INV_SQRT_2PI - t) / y;
+        }
+        double xs = Math.floor(y * 16) / 16;
+        double del = (y - xs) * (y + xs);
+        double lower = Math.exp(-xs * xs * 0.5) * Math.exp(-del * 0.5) * tail;
+        return x > 0 ? 1 - lower : lower;
     }
+
+    private static final double INV_SQRT_2PI = 0.398942280401432677939946059934;
+    private static final double[] CODY_A = {2.2352520354606839287, 161.02823106855587881,
+            1067.6894854603709582, 18154.981253343561249, 0.065682337918207449113};
+    private static final double[] CODY_B = {47.20258190468824187, 976.09855173777669322,
+            10260.932208618978205, 45507.789335026729956};
+    private static final double[] CODY_C = {0.39894151208813466764, 8.8831497943883759412,
+            93.506656132177855979, 597.27027639480026226, 2494.5375852903726711,
+            6848.1904505362823326, 11602.651437647350124, 9842.7148383839780218,
+            1.0765576773720192317e-8};
+    private static final double[] CODY_D = {22.266688044328115691, 235.38790178262499861,
+            1519.377599407554805, 6485.558298266760755, 18615.571640885098091,
+            34900.952721145977266, 38912.003286093271411, 19685.429676859990727};
+    private static final double[] CODY_P = {0.21589853405795699, 0.1274011611602473639,
+            0.022235277870649807, 0.001421619193227893466, 2.9112874951168792e-5,
+            0.02307344176494017303};
+    private static final double[] CODY_Q = {1.28426009614491121, 0.468238212480865118,
+            0.0659881378689285515, 0.00378239633202758244, 7.29751555083966205e-5};
 
     /**
      * Solves {@code A x = b} by Gaussian elimination with partial pivoting.

@@ -99,12 +99,54 @@ public final class VannaVolga {
      * Smile-consistent implied vol at any strike: the vanna-volga price
      * inverted through Black-Scholes. Pillar strikes recover their market
      * vols exactly.
+     *
+     * <p>The inversion uses the out-of-the-money option (put below the
+     * forward, call above), whose price is all time value; inverting a deep
+     * in-the-money call loses the smile adjustment in the intrinsic value.</p>
+     *
+     * <p>Wings. Beyond the {@link #WING_DELTA} strikes (forward delta at the
+     * ATM vol, never inside the outer pillars) the quadratic log-strike
+     * weights grow without bound and produce negative butterflies, so the
+     * raw formula is not used there. Where the vol at the cutoff falls going
+     * outward it is held flat (a convex join); where it rises outward it is
+     * continued linearly in log-strike with the cutoff slope, which joins
+     * smoothly instead of leaving the concave kink a flat cap would. The
+     * continuation does not enforce Lee's (2004) moment bound and should not
+     * be pushed many standard deviations out.</p>
      */
     public double impliedVol(double spot, double strike) {
-        // Calls are numerically safest OTM-forward and equivalent by parity.
-        double p = price(OptionType.CALL, spot, strike);
-        return BlackScholes.impliedVol(OptionType.CALL, p, spot, strike, rate, carry, timeYears);
+        if (!(spot > 0) || !(strike > 0)) {
+            throw new IllegalArgumentException("spot and strike must be > 0");
+        }
+        double forward = spot * Math.exp((rate - carry) * timeYears);
+        double sv = vols[1] * Math.sqrt(timeYears);
+        double kLo = Math.min(strikes[0], forward
+                * Math.exp(-com.quantfinlib.util.MathUtils.normInv(1 - WING_DELTA) * sv + 0.5 * sv * sv));
+        double kHi = Math.max(strikes[2], forward
+                * Math.exp(-com.quantfinlib.util.MathUtils.normInv(WING_DELTA) * sv + 0.5 * sv * sv));
+        if (strike >= kLo && strike <= kHi) {
+            return rawVol(spot, strike, forward);
+        }
+        double kc = strike < kLo ? kLo : kHi;
+        double outward = strike < kLo ? -1 : 1;           // direction of increasing |x|
+        double vc = rawVol(spot, kc, forward);
+        double dx = 1e-4;
+        double vIn = rawVol(spot, kc * Math.exp(-outward * dx), forward);
+        double slopeOut = (vc - vIn) / dx;                 // dσ per unit log-strike, outward
+        if (slopeOut <= 0) {
+            return vc;
+        }
+        return vc + slopeOut * Math.abs(Math.log(strike / kc));
     }
+
+    private double rawVol(double spot, double k, double forward) {
+        OptionType otm = k < forward ? OptionType.PUT : OptionType.CALL;
+        double p = price(otm, spot, k);
+        return BlackScholes.impliedVol(otm, p, spot, k, rate, carry, timeYears);
+    }
+
+    /** Forward delta of the strikes beyond which {@link #impliedVol} stops using the raw formula. */
+    public static final double WING_DELTA = 0.10;
 
     /** The classic log-strike interpolation weights (exact at the pillars). */
     private double weight(int i, double k, double vegaK, double vegaI) {

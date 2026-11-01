@@ -7,6 +7,12 @@ import com.quantfinlib.util.MathUtils;
  * yield {@code q}: set {@code q} to the dividend yield for equities or the
  * foreign interest rate for FX (Garman-Kohlhagen). All rates and volatility
  * are annualized; theta is per year; vega/rho are per 1.00 change.
+ *
+ * <p>With {@code vol <= 0} every function returns the deterministic limit
+ * instead of dividing by σ√T: delta is the discounted in-the-money indicator
+ * on the forward (one half at F = K), gamma is 0, vega is 0 except exactly
+ * at the forward, theta and rho are the derivatives of the discounted forward
+ * intrinsic value.</p>
  */
 public final class BlackScholes {
 
@@ -54,6 +60,10 @@ public final class BlackScholes {
         if (timeYears <= 0) {
             return intrinsicDelta(type, spot, strike);
         }
+        if (vol <= 0) {
+            return Math.exp(-carry * timeYears) * type.sign()
+                    * zeroVolProb(type.sign(), spot, strike, rate, carry, timeYears);
+        }
         double d1 = d1(spot, strike, rate, carry, vol, timeYears);
         double cf = Math.exp(-carry * timeYears);
         return type == OptionType.CALL
@@ -64,6 +74,10 @@ public final class BlackScholes {
     public static double gamma(double spot, double strike, double rate, double carry,
                                double vol, double timeYears) {
         if (timeYears <= 0) {
+            return 0;
+        }
+        if (vol <= 0) {
+            // Zero away from the forward; a Dirac mass at F = K, reported as 0.
             return 0;
         }
         double d1 = d1(spot, strike, rate, carry, vol, timeYears);
@@ -77,6 +91,13 @@ public final class BlackScholes {
         if (timeYears <= 0) {
             return 0;
         }
+        if (vol <= 0) {
+            // Limit as vol -> 0: zero unless the option is exactly at the forward.
+            double fwd = spot * Math.exp((rate - carry) * timeYears);
+            return fwd == strike
+                    ? spot * Math.exp(-carry * timeYears) * MathUtils.normPdf(0) * Math.sqrt(timeYears)
+                    : 0;
+        }
         double d1 = d1(spot, strike, rate, carry, vol, timeYears);
         return spot * Math.exp(-carry * timeYears) * MathUtils.normPdf(d1) * Math.sqrt(timeYears);
     }
@@ -86,6 +107,14 @@ public final class BlackScholes {
                                double rate, double carry, double vol, double timeYears) {
         if (timeYears <= 0) {
             return 0;
+        }
+        if (vol <= 0) {
+            // Derivative of the deterministic price theta*(S e^{-qT} - K e^{-rT})^+.
+            int w = type.sign();
+            double n1 = zeroVolProb(w, spot, strike, rate, carry, timeYears);
+            double n2 = zeroVolProb(w, spot, strike, rate, carry, timeYears);
+            return w * (carry * spot * Math.exp(-carry * timeYears) * n1
+                    - rate * strike * Math.exp(-rate * timeYears) * n2);
         }
         double sqrtT = Math.sqrt(timeYears);
         double d1 = d1(spot, strike, rate, carry, vol, timeYears);
@@ -107,6 +136,11 @@ public final class BlackScholes {
         if (timeYears <= 0) {
             return 0;
         }
+        if (vol <= 0) {
+            int w = type.sign();
+            return w * strike * timeYears * Math.exp(-rate * timeYears)
+                    * zeroVolProb(w, spot, strike, rate, carry, timeYears);
+        }
         double d2 = d1(spot, strike, rate, carry, vol, timeYears) - vol * Math.sqrt(timeYears);
         double df = Math.exp(-rate * timeYears);
         return type == OptionType.CALL
@@ -126,28 +160,21 @@ public final class BlackScholes {
     }
 
     /**
-     * Implied volatility by bisection. Returns {@code NaN} when the price
-     * is not attainable inside the [1e-4, 5.0] vol bracket (below
-     * intrinsic, or above the maximum BS price) — a stale or rounded
-     * market price must surface as "no vol", not silently come back as
-     * the 500% search bound and poison a smile.
+     * Implied volatility from a market price, through {@link ImpliedVolatility#black}
+     * on the forward F = S e^{(r-q)T} and the undiscounted price. Accurate to a
+     * few ulps of σ wherever the price itself carries information, including
+     * deep wings and very short or long expiries. Returns NaN when the price
+     * is outside the attainable range (below intrinsic, or at or above the
+     * discounted zero-strike bound) and 0 when it equals intrinsic exactly.
      */
     public static double impliedVol(OptionType type, double marketPrice, double spot,
                                     double strike, double rate, double carry, double timeYears) {
-        double lo = 1e-4, hi = 5.0;
-        if (marketPrice < price(type, spot, strike, rate, carry, lo, timeYears)
-                || marketPrice > price(type, spot, strike, rate, carry, hi, timeYears)) {
+        if (!(spot > 0) || !Double.isFinite(rate) || !Double.isFinite(carry)) {
             return Double.NaN;
         }
-        for (int i = 0; i < 200; i++) {
-            double mid = (lo + hi) / 2;
-            if (price(type, spot, strike, rate, carry, mid, timeYears) < marketPrice) {
-                lo = mid;
-            } else {
-                hi = mid;
-            }
-        }
-        return (lo + hi) / 2;
+        double forward = spot * Math.exp((rate - carry) * timeYears);
+        return ImpliedVolatility.black(type, marketPrice * Math.exp(rate * timeYears),
+                forward, strike, timeYears);
     }
 
     public static double intrinsic(OptionType type, double spot, double strike) {
@@ -159,6 +186,20 @@ public final class BlackScholes {
             return spot > strike ? 1 : 0;
         }
         return spot < strike ? -1 : 0;
+    }
+
+    /**
+     * Zero-vol limit of Φ(w·d1) (or Φ(w·d2)): 1 if the option finishes in
+     * the money on the deterministic forward, 0 if out, 1/2 at F = K (the
+     * limit of Φ(±σ√T/2) for d1/d2 at the forward).
+     */
+    private static double zeroVolProb(int w, double spot, double strike, double rate,
+                                      double carry, double timeYears) {
+        double fwd = spot * Math.exp((rate - carry) * timeYears);
+        if (fwd == strike) {
+            return 0.5;
+        }
+        return w * (fwd - strike) > 0 ? 1 : 0;
     }
 
     private static double d1(double spot, double strike, double rate, double carry,

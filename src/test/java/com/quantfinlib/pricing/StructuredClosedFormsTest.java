@@ -75,25 +75,51 @@ class StructuredClosedFormsTest {
     // -------------------------------------------------------------------- quanto
 
     @Test
-    void zeroCorrelationQuantoIsThePlainVanilla() {
-        double q = QuantoOption.price(OptionType.CALL, 100, 100, 0.03, 0.01, 0.2, 0.1, 0.0, 1);
-        double bs = BlackScholes.price(OptionType.CALL, 100, 100, 0.03, 0.01, 0.2, 1);
-        assertEquals(bs, q, 1e-12);
-        assertEquals(100 * Math.exp(0.02), QuantoOption.quantoForward(
-                100, 0.03, 0.01, 0.2, 0.1, 0.0, 1), 1e-12);
+    void quantoForwardUsesTheForeignRateAndDiscountsDomestic() {
+        // Nikkei-in-USD style: r_f = 0, r_d = 5%. F = S e^{(r_f - q - rho sS sX)T}.
+        // Reference values computed independently (scipy, closed form of Hull's quanto).
+        double fwd = QuantoOption.quantoForward(100, 0.0, 0.01, 0.2, 0.1, 0.3, 1);
+        assertEquals(98.41273200552851, fwd, 1e-12);
+        assertEquals(6.785980578296187,
+                QuantoOption.price(OptionType.CALL, 100, 100, 0.05, 0.0, 0.01, 0.2, 0.1, 0.3, 1), 1e-12);
+        assertEquals(8.295836599205705,
+                QuantoOption.price(OptionType.PUT, 100, 100, 0.05, 0.0, 0.01, 0.2, 0.1, 0.3, 1), 1e-12);
+        // The old code drifted at r_d: forward 100 e^{0.05-0.016} = 103.46, a 5% overstatement.
+        assertTrue(Math.abs(fwd - 100 * Math.exp(0.034)) > 4);
     }
 
     @Test
-    void positiveCorrelationLowersTheQuantoForwardAndCall() {
-        // Asset up when foreign ccy strengthens: the hedger's drag, priced.
-        double f0 = QuantoOption.quantoForward(100, 0.03, 0.01, 0.2, 0.1, 0.0, 1);
-        double fPos = QuantoOption.quantoForward(100, 0.03, 0.01, 0.2, 0.1, 0.6, 1);
-        assertTrue(fPos < f0);
-        // Exact drift: rho*sigmaS*sigmaFX = 0.012 off the carry.
-        assertEquals(100 * Math.exp(0.02 - 0.012), fPos, 1e-12);
-        double callPos = QuantoOption.price(OptionType.CALL, 100, 100, 0.03, 0.01, 0.2, 0.1, 0.6, 1);
-        double call0 = QuantoOption.price(OptionType.CALL, 100, 100, 0.03, 0.01, 0.2, 0.1, 0.0, 1);
-        assertTrue(callPos < call0, "a lower forward makes the call cheaper");
+    void zeroCorrelationQuantoIsTheForeignForwardDiscountedDomestic() {
+        double q = QuantoOption.price(OptionType.CALL, 100, 100, 0.03, 0.01, 0.0, 0.2, 0.1, 0.0, 1);
+        double f = 100 * Math.exp(0.01);
+        double b76 = Math.exp(-0.03) * Black76.price(OptionType.CALL, f, 100, 0.0, 0.2, 1);
+        assertEquals(b76, q, 1e-12);
+    }
+
+    @Test
+    void quantoMatchesMonteCarloUnderTheForeignMeasure() {
+        // Independent check: simulate S and X (domestic per foreign) under the
+        // foreign risk-neutral measure and change numeraire with
+        // dQd/dQf = X_0 e^{r_d T} / (X_T e^{r_f T}).
+        double s0 = 100, k = 105, rd = 0.05, rf = 0.01, q = 0.02, sS = 0.25, sX = 0.12, rho = -0.4, t = 2;
+        java.util.SplittableRandom rng = new java.util.SplittableRandom(20261101L);
+        int n = 400_000;
+        double sum = 0, sum2 = 0;
+        double sqrtT = Math.sqrt(t);
+        for (int i = 0; i < n; i++) {
+            double z1 = rng.nextGaussian();
+            double z2 = rho * z1 + Math.sqrt(1 - rho * rho) * rng.nextGaussian();
+            double sT = s0 * Math.exp((rf - q - 0.5 * sS * sS) * t + sS * sqrtT * z1);
+            // Under Q_f, X has drift r_d - r_f + sX^2.
+            double xRatio = Math.exp((rd - rf + 0.5 * sX * sX) * t + sX * sqrtT * z2);
+            double v = Math.max(sT - k, 0) * Math.exp(-rd * t) * Math.exp((rd - rf) * t) / xRatio;
+            sum += v;
+            sum2 += v * v;
+        }
+        double mean = sum / n;
+        double se = Math.sqrt((sum2 / n - mean * mean) / n);
+        double exact = QuantoOption.price(OptionType.CALL, s0, k, rd, rf, q, sS, sX, rho, t);
+        assertEquals(exact, mean, 4 * se, "MC " + mean + " +- " + se);
     }
 
     // ------------------------------------------------------------ vol swap strike
