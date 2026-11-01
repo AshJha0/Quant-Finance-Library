@@ -23112,9 +23112,9 @@ interleavings. The library leans on all three rather than trusting
 that "it passed."
 
 *In this library:* `trading/HftRiskGate` (every cross-thread field a
-VarHandle acquire/release, so "a plain long[] would let the JIT serve
-a stale position ... forever"); `trading/LoadAndSoakTest` (sustained
-mixed load, heap-flat and count-conservation asserts).
+VarHandle acquire/release or atomic add); `trading/LoadAndSoakTest`
+(sustained multi-threaded load with exact count-conservation
+asserts) and the randomized equivalence tests in `orderbook/`.
 
 ### 872. "The market-data consumer can either busy-spin or parkNanos between drains. What are you trading, and how does the library let you pick?"
 
@@ -23469,17 +23469,17 @@ for all of that and the millionth runs fully compiled -- the difference
 is expected and can be orders of magnitude. You keep it out of steady-
 state numbers by WARMING UP: run the path enough iterations to trigger
 compilation before you start recording, and only then measure -- which
-is exactly what the benchmarks and the soak test do (warm the JIT and
-lazily-initialized internals, settle, THEN assert). What you must NOT
+is exactly what the benchmarks and the allocation tests do (warm the
+JIT and lazily-initialized internals, settle, THEN assert). What you must NOT
 do is warm away a real cold-start requirement: if first-tick latency
 matters to your product (the open), measure it separately and
 deliberately, rather than letting one number mean two different
 regimes.
 
-*In this library:* `trading/LoadAndSoakTest.sustainedMixedLoadKeeps
-TheHeapFlat` ("Warm everything (JIT + lazily-initialized JDK
-internals), settle the heap, then run 5M ... and demand the heap ends
-where it started"); the committed benchmarks warm before recording.
+*In this library:* the benchmarks warm before recording (JMH
+`CoreBenchmarks` run 5 warm-up and 10 measurement iterations in each
+of 3 forks), and the allocation-counter tests warm the path before
+taking the exactly-zero reading.
 
 ### 887. "Someone wants to shave the last microsecond with kernel bypass. When does that actually pay off, and why is it out of scope for this library?"
 
@@ -23522,14 +23522,16 @@ has done them does "guaranteed sub-microsecond tail" become
 meaningful. So the honest promise is layered: the library guarantees
 the algorithmic and allocation properties and publishes measured
 latencies; the DEPLOYMENT converts good medians into a bounded tail.
-The library even encodes this humility in its tests -- the load test
-BUDGETS dropped messages under OS preemption rather than pretending an
-unpinned box can promise zero.
+The library encodes the same split in its tests: correctness
+(conservation, allocation) is asserted exactly on every build, while
+throughput and timing tests, whose results depend on the machine,
+are tagged and run nightly against floors far below measured numbers.
 
 *In this library:* `docs/ULTRA_LOW_LATENCY.md` (the tiered boundary:
 JVM-honorable properties vs OS/hardware tail) and
-`trading/LoadAndSoakTest`'s drop-budget under preemption -- tests that
-encode what the platform can actually guarantee.
+`trading/LoadAndSoakTest` (`@Tag("load")`, floors as tripwires,
+exact conservation) -- tests that encode what the platform can
+actually guarantee.
 
 ## Testing & release engineering (Q889-Q900)
 
@@ -23607,27 +23609,33 @@ reference/spec.
 
 ### 892. "Your pipeline test asserts zero dropped messages and it flakes on CI but never locally. Is the assertion wrong, and how does the library make it robust?"
 
-The assertion is testing something the platform cannot promise, which
-is why it flakes. Under saturation, even a busy-spinning venue thread
-gets preempted by the OS for whole timeslices, and a multi-million-
-orders-per-second burst overruns any finite ring in that window --
-zero-drop under saturation is what Tier-3 core pinning buys, not
-something an unpinned CI box can deliver. So a literal zero-drop
-assertion is not measuring a bug; it is measuring the runner's
-scheduler. The library fixes this two ways. First, it BUDGETS drops
-instead of forbidding them: a small percentage of sides may drop, and
-the assertion is a tripwire (a broken consumer drops 50-100%), not a
-demand for perfection. Second, it separates the flaky number from the
-real correctness check: whatever drops, a CONSERVATION invariant must
-hold exactly -- delivered plus rejected equals total, in both
-environments -- so the exact assertion tests logic and the budgeted
-assertion tolerates the platform. That split is what makes it robust
-without making it meaningless.
+First ask what "dropped" means, because there are two very different
+numbers. A message the system accepted and then lost is a bug on any
+machine; a message the system refused under backpressure is the
+platform talking. The current pipeline test keeps them apart. The
+quoter keeps at most one working order per side and requotes by
+cancel/replace once the venue has answered, deferring updates while a
+side waits, so it no longer floods the order ring with a fresh pair of
+orders per tick; and `HftOrderGateway.submit` returns 0 when the ring
+is full, with nothing reserved, so a refusal is visible and never half
+done. The test then asserts conservation exactly: every message the
+gateway accepted (new orders, replaces and cancels) must reach the
+venue, `sent == delivered`, with no tolerance. Throughput is the part
+that depends on the runner, so it is a floor set far below desktop
+measurements (a tripwire for a broken consumer, not a benchmark).
+Finally, tests whose result depends on shared-runner CPU contention
+are tagged `load` or `timing` and excluded from the default build;
+`./mvnw -Pfull test` runs them, and so does the nightly workflow, so a
+noisy CI neighbour cannot fail a pull request while a real regression
+still surfaces within a day. An earlier version of this test allowed a
+percentage of dropped quote sides instead; once the quoter stopped
+stacking orders, the exact assertion became possible and the budget
+was removed.
 
-*In this library:* `trading/LoadAndSoakTest.fullPipelineSustainsThe
-ThroughputFloorUnderLoad` -- drops budgeted (not forbidden), the exact
-`delivered + rejected == 2n` conservation assert kept exact in both
-environments.
+*In this library:* `trading/LoadAndSoakTest.fullPipelineSustainsTheThroughputFloorUnderLoad`
+(`@Tag("load")`; exact `sent == delivered` conservation, at most one
+working order per side, a 100k ticks/s floor), the `full` profile and
+`test.excludedGroups` in `pom.xml`, and `.github/workflows/nightly.yml`.
 
 ### 893. "What does it mean to 'pin' a formula, and how is a pin different from the behavioral test it replaces?"
 
@@ -23665,20 +23673,20 @@ it guards nothing. The discipline is to first write the test and watch
 it fail on the buggy version (or on a mental model of it), then apply
 the fix and watch it pass -- that failing step is the proof the test
 has teeth. The library carries these as narrow, named cases tied to
-the incident: a full order ring dropping a single quote side once hung
-the pipeline test forever, so the fix (drain against a deadline,
-account for rejected sides) is locked in by a test that reproduces the
-transiently-full-ring condition. The value is permanence: the same bug
+the incident: an overload test once flaked because it asserted exact
+counts while the consumer was still draining the burst, so the fix (let
+the processed count stabilise before taking the snapshot, then wait on
+a deadline rather than forever) is locked in by a test that reproduces
+the burst-then-recover condition. The value is permanence: the same bug
 cannot silently return, because a test now encodes exactly what "not
 this bug" means.
 
-*In this library:* `trading/LoadAndSoakTest` -- the deadline-bounded
-drain that replaced an unconditional wait ("once hung this suite
-forever when a transiently full order ring dropped a single quote
-side"), and the settle-before-snapshot loop that fixed a drain/snapshot
-race.
+*In this library:* `trading/LoadAndSoakTest.overloadDegradesGracefullyAndRecovers`
+-- the settle-before-snapshot loop ("asserting exact counts while the
+drain races the snapshot flaked this test once") and the
+deadline-bounded waits that replaced unconditional ones.
 
-### 895. "Your docs contain three hundred code recipes. A reader copies one and it doesn't compile. How do you prevent that class of failure?"
+### 895. "Your docs contain many code recipes. A reader copies one and it doesn't compile. How do you prevent that class of failure?"
 
 You make the documentation's code EXECUTE as part of the build,
 because prose examples rot the instant an API changes and nobody
@@ -23686,19 +23694,23 @@ recompiles a markdown block. The failure mode is silent: a method gets
 renamed, a signature gains a parameter, and every doc snippet using it
 is now wrong while the docs still look fine -- until a reader pastes it
 and it fails, which is the worst place to discover it. The fix is to
-treat the cookbook recipes as real, compiled, run code: each recipe
-exists as something the test/build pipeline actually compiles and runs
-(and, where it produces a number, checks), so a breaking API change
-fails the build at the recipe, not in a user's editor. The library's
-cookbook is built this way -- the recipes are end-to-end runnable, not
-illustrative fragments -- which is the only way three hundred of them stay
-correct across releases. The lesson generalizes: any documentation
+treat the recipes as real code: extract each fenced Java block into a
+compilation unit during the build (or keep the recipe as a source file
+and include it into the document), compile it against the current
+library, and run the ones that print a number with an assertion on the
+output. A breaking API change then fails the build at the recipe, not
+in a reader's editor. Where that is not yet in place, the fallback is a
+review rule: any change to a public signature greps the docs for its
+name in the same pull request. The lesson generalizes: documentation
 that shows code should be executable and under CI, or it is a
 liability that grows with every commit.
 
-*In this library:* `docs/COOKBOOK.md` (the three hundred end-to-end recipes)
-paired with compile-and-run coverage so an API change breaks the build
-at the recipe rather than in a reader's paste.
+*In this library:* `docs/COOKBOOK.md` holds the recipes. Not
+implemented: the build does not compile or run them (the docs
+workflow only generates javadoc), so they are kept in step with the
+API by review, and the v2 signature changes (`QuantoOption`,
+`BondPricer`, the SBE codecs, `GlobalRiskAggregator.start`) are the
+kind of change that has to be swept by hand.
 
 ### 896. "A stats test that compares a Monte Carlo result to a null passes on most seeds and fails on one. Is the failing seed a bug?"
 
@@ -23797,31 +23809,34 @@ touch the file with UTF-8-safe tooling.
 UTF-8-safe editing only) exists precisely to prevent the PowerShell-
 5.1 read/write mojibake incident from recurring across `docs/`.
 
-### 900. "Your load test allows 0.5% dropped sides locally but 8% on CI. Isn't that just making the test pass? Justify the two numbers."
+### 900. "Why does the default build skip the load tests, and how do you keep a skipped test from rotting?"
 
-It is the opposite of making it pass -- it is calibrating the tripwire
-to each platform's real behavior so the test still MEANS something on
-both. The drop is caused by OS preemption of the venue thread under
-saturation, and the two environments preempt differently: a desktop
-with spare cores loses ~0.5% of sides, while a shared CI runner (two
-vCPUs, noisy neighbors) preempts the venue thread for whole timeslices
-and was MEASURED dropping 2.5-4.3% of sides at v1.12.0. Setting CI's
-budget to 8% is roughly twice the worst observation -- headroom against
-the runner's variance -- while still being a tripwire, because a
-genuinely broken consumer drops 50-100%, nowhere near 8%. Using the
-desktop's 0.5% on CI would flake constantly on a healthy build (a
-false alarm, which trains people to ignore the suite); using 8%
-locally would let a real desktop regression through. So the budget is
-environment-aware via a `CI` env-var branch, and -- crucially -- the
-EXACT conservation assert (delivered + rejected == total) stays
-identical in both, so correctness is never on the sliding scale, only
-the platform's preemption tolerance is.
+Because a test whose verdict depends on how busy the machine is cannot
+gate a pull request. Throughput floors, soak runs and wall-clock
+timing all measure the runner as much as the code: a shared CI runner
+with two vCPUs and noisy neighbours preempts a spinning thread for
+whole timeslices, and a test that fails for that reason trains people
+to re-run until green, which is worse than no test. So the suite
+splits by what a failure means. Logic, invariants, conservation and
+allocation (exactly zero bytes after warm-up) are deterministic and
+run on every build. Anything sensitive to CPU contention is tagged
+`load` or `timing`, excluded from the default run, and executed by
+`./mvnw -Pfull test` and by the nightly workflow. Two rules keep the
+skipped tests honest. Their floors are set far below desktop
+measurements, so on a quiet machine they only fail for an
+order-of-magnitude regression (an accidental lock, allocation or O(n)
+on a hot path). And they still carry exact assertions where exactness
+is possible: the full-pipeline test asserts that every accepted
+message reached the venue, with no tolerance, so the only thing on a
+sliding scale is the speed. A skipped test that nobody runs rots; one
+that runs nightly with a visible result does not.
 
-*In this library:* `trading/LoadAndSoakTest` -- `budget =
-System.getenv("CI") != null ? 2n*8/100 : 2n/200`, justified in the
-comment by the 2.5-4.3% GitHub-runner observation, with the exact
-`delivered + rejected` conservation assert unchanged across
-environments.
+*In this library:* `trading/LoadAndSoakTest` (`@Tag("load")`,
+floors described in its class doc as regression tripwires, not
+benchmarks), `test.excludedGroups` and the `full` profile in
+`pom.xml`, `.github/workflows/nightly.yml`; the measured numbers live
+in `docs/BENCHMARKS.md`.
+
 ## FX desk days (Q901-Q913)
 
 ### 901. "You booked a EURUSD spot on Friday and the confirm shows settlement on Sunday. What went wrong?"
