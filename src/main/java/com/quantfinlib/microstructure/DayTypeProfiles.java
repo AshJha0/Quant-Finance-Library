@@ -10,15 +10,15 @@ import java.util.function.Supplier;
  * (month-end, the 4pm London WM/R window) concentrate flow around the
  * fix. A single averaged profile is wrong on exactly the days that
  * matter most, so this container holds one independently-learned curve
- * per day type — one {@link VolumeCurve}, {@link VolatilityCurve}, or
- * {@link SpreadForecaster} each — and the caller selects today's profile
+ * per day type (one {@link VolumeCurve}, {@link VolatilityCurve}, or
+ * {@link SpreadForecaster} each), and the caller selects today's profile
  * once at session start.
  *
  * <pre>{@code
  * // 0=regular, 1=expiry, 2=half day  (the caller owns the taxonomy)
  * var volume = new DayTypeProfiles<>(3, () -> new VolumeCurve(78, 0.1));
  * VolumeCurve today = volume.profile(calendar.isExpiry(date) ? 1 : 0);
- * today.onVolume(bucket, qty);   // learns ONLY the expiry-day shape
+ * today.onVolume(bucket, qty);   // learns only the expiry-day shape
  * }</pre>
  *
  * <p>Trade-off: a per-type profile learns

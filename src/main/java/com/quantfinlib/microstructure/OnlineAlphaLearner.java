@@ -20,12 +20,12 @@ import java.io.IOException;
  * current weights <em>before</em> the realized return updates them
  * (predict-then-train, "prequential" evaluation), and maintains a
  * time-decayed correlation between those genuinely out-of-sample
- * predictions and the outcomes — {@link #outOfSampleIC}. <b>Gate any use
+ * predictions and the outcomes ({@link #outOfSampleIC}). <b>Gate any use
  * of the learned alpha on that number</b>: persistently positive
  * (intraday, ~0.02–0.10 is real) means the weights found signal; an IC
  * hovering at zero means they found noise, and {@link #normalizedPrediction}
  * should be treated as such. This diagnostic is a live tripwire, not a
- * validation — before trading a weighting seriously, run it through the
+ * validation. Before trading a weighting seriously, run it through the
  * {@code alpha} package's walk-forward and permutation machinery like any
  * other signal.
  *
@@ -117,7 +117,7 @@ public final class OnlineAlphaLearner {
      * <p><b>Alignment is the caller's contract here:</b> the four features
      * must have been observed before the interval {@code realizedReturn}
      * covers. Passing the current features with the return that just ended
-     * fits a nowcast — the features already contain the move — and the IC
+     * fits a nowcast (the features already contain the move), and the IC
      * will read high on pure leakage. {@link #trainFrom} handles this
      * alignment automatically; use it unless you keep your own snapshots.</p>
      */

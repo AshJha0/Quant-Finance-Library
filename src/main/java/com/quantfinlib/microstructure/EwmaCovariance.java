@@ -8,13 +8,13 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 /**
- * Streaming EWMA covariance matrix — the multi-asset risk picture that
+ * Streaming EWMA covariance matrix: the multi-asset risk picture that
  * single-symbol volatility cannot see. RiskMetrics-style: one return
  * vector per sampling interval, {@code cov ← λ·cov + (1−λ)·rᵢrⱼ}, with
- * the classic zero-mean convention (intraday returns have negligible mean
- * at these horizons; carrying decayed means would double the state for a
- * correction smaller than the estimation noise — a documented choice, not
- * an oversight).
+ * the classic zero-mean convention. Intraday returns have negligible
+ * mean at these horizons; carrying decayed means would double the state
+ * for a correction smaller than the estimation noise (a documented
+ * choice, not an oversight).
  *
  * <p><b>Who consumes it.</b> {@code execution.PortfolioExecutor}
  * documents its capacity allocation as the <em>diagonal</em> approximation
@@ -71,7 +71,7 @@ public final class EwmaCovariance {
 
     /**
      * One sampling interval: every symbol's return over the interval that
-     * just closed (0 for a symbol that did not move — that IS its return).
+     * just closed (0 for a symbol that did not move — that is its return).
      * A vector containing any non-finite entry is dropped entirely: a
      * partial update would break positive-semidefiniteness, so a bad print
      * on one symbol must not corrupt the whole matrix.
@@ -146,10 +146,10 @@ public final class EwmaCovariance {
 
     /**
      * Marginal contribution to portfolio risk:
-     * {@code out[i] = wᵢ·(Σw)ᵢ / (w'Σw)} — the fraction of total basket
+     * {@code out[i] = wᵢ·(Σw)ᵢ / (w'Σw)}, the fraction of total basket
      * variance symbol i's position is responsible for (contributions sum
      * to 1; a natural hedge contributes negatively). All zeros while the
-     * portfolio variance is not positive — no risk picture, no signal.
+     * portfolio variance is not positive: no risk picture, no signal.
      *
      * @return the portfolio variance {@code w'Σw}, so a caller gating on
      *         "is there a risk picture?" needs exactly one call — a
