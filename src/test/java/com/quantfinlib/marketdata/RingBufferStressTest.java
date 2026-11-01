@@ -2,6 +2,7 @@ package com.quantfinlib.marketdata;
 
 import com.quantfinlib.orderbook.Side;
 import com.quantfinlib.trading.OrderRingBuffer;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.SplittableRandom;
@@ -16,6 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * wrap-around, full-ring backpressure and empty-ring polling are all hit
  * millions of times. Asserts strict FIFO with no loss or duplication.
  */
+@Tag("load")
 class RingBufferStressTest {
 
     private static final int ITEMS = 2_000_000;

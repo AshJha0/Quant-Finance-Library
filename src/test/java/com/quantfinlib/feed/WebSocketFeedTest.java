@@ -3,6 +3,7 @@ package com.quantfinlib.feed;
 import com.quantfinlib.data.TickCapture;
 import com.quantfinlib.data.TickFileReader;
 import com.quantfinlib.marketdata.HftMarketDataBus;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -16,6 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@Tag("socket")
 class WebSocketFeedTest {
 
     private static final String BTC_TRADE =

@@ -1,10 +1,12 @@
 package com.quantfinlib.util;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@Tag("timing")
 class HiccupMonitorTest {
 
     @Test

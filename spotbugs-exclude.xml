@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Demos and hand-rolled benchmarks are not library code. -->
+<FindBugsFilter>
+    <Match>
+        <Package name="~com\.quantfinlib\.examples(\..*)?"/>
+    </Match>
+</FindBugsFilter>

@@ -1,6 +1,7 @@
 package com.quantfinlib.trading;
 
 import com.quantfinlib.orderbook.Side;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.atomic.AtomicLong;
@@ -101,6 +102,7 @@ class ShardedTradingTest {
     }
 
     @Test
+    @Tag("timing")
     void aggregatorTripsAcrossShardsAndRecoversWithHysteresis() throws Exception {
         HftRiskGate gate0 = openGate(0);
         HftRiskGate gate1 = openGate(1);
