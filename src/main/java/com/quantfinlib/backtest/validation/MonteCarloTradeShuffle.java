@@ -13,7 +13,7 @@ import java.util.SplittableRandom;
  * equity. But the ORDER is itself a sample. Reshuffle the same trade
  * P&amp;Ls into thousands of random sequences and you get the distribution
  * of drawdowns and terminal wealth the strategy's OWN trades imply — and
- * the honest question stops being "the backtest drew down 18%" and
+ * the question stops being "the backtest drew down 18%" and
  * becomes "the 95th-percentile drawdown of my trade set is 31%, so plan
  * for 31, not 18".
  *

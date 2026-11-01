@@ -98,7 +98,7 @@ public final class GridSearchOptimizer {
      * (the deflated Sharpe of {@link SharpeValidation#probabilisticSharpe}
      * against {@code E[max]} with N̂ in place of the raw grid size). A grid search computes a
      * Sharpe for every trial and then quietly reports only the maximum —
-     * this is the one number that makes that selection honest. Values near
+     * this is the number that accounts for that selection. Values near
      * 1 mean the winner survives its own search; below ~0.95 the "best"
      * parameter set is indistinguishable from picking the luckiest of N
      * random ones.

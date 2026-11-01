@@ -3,7 +3,7 @@ package com.quantfinlib.alpha;
 import com.quantfinlib.util.MathUtils;
 
 /**
- * Turns raw factor scores into tradeable weight vectors — deliberately a
+ * Turns raw factor scores into tradeable weight vectors, as a
  * chain of small, composable, pure functions so a construction pipeline
  * reads as what it does:
  *
