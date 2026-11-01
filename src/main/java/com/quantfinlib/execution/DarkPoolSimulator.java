@@ -36,7 +36,7 @@ public final class DarkPoolSimulator {
     private long nextId = 1;
 
     /**
-     * Update the lit reference mid. A LOCKED or CROSSED reference (bid >=
+     * Update the lit reference mid. A locked or crossed reference (bid >=
      * ask) or a non-positive/non-finite side invalidates the mid: a real
      * midpoint pool is prohibited from executing during a locked/crossed
      * NBBO, so crossing pauses until a valid two-sided market returns —
@@ -53,7 +53,7 @@ public final class DarkPoolSimulator {
      * the current mid (time priority), then rests the remainder. Returns the
      * fills generated (empty if it fully rested).
      *
-     * <p>Minimum-execution-quantity is honored AGGREGATE-first, the common
+     * <p>Minimum-execution-quantity is honored aggregate-first, the common
      * pool semantics: the incoming order's MEQ is checked against the total
      * crossable contra quantity (an order wanting 100 fills against two
      * resting 60s), while each resting order's own MEQ still gates its
@@ -74,10 +74,10 @@ public final class DarkPoolSimulator {
             LinkedList<Resting> contra = side == Side.BUY ? sells : buys;
             // Dry-run the exact time-priority consumption below to learn the
             // aggregate quantity that would actually execute. A static scan
-            // against the ORIGINAL remaining overcounts: a later resting
+            // against the original remaining overcounts: a later resting
             // order's MEQ can become unsatisfiable once earlier fills shrink
             // the remainder, and crossing on the inflated total would
-            // violate the INCOMING order's aggregate MEQ.
+            // violate the incoming order's aggregate MEQ.
             long crossable = 0;
             long dryRemaining = remaining;
             for (Resting r : contra) {
@@ -97,7 +97,7 @@ public final class DarkPoolSimulator {
                     Resting r = it.next();
                     long fill = Math.min(remaining, r.qty);
                     if (fill < r.minQty) {
-                        continue;   // the RESTING order's own constraint
+                        continue;   // the resting order's own constraint
                     }
                     r.qty -= fill;
                     remaining -= fill;

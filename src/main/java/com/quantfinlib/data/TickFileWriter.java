@@ -71,8 +71,9 @@ public final class TickFileWriter implements AutoCloseable {
      *                    the anchor is taken now from both system clocks
      */
     public TickFileWriter(Path path, ClockDomain clockDomain) throws IOException {
-        if (path.getParent() != null) {
-            Files.createDirectories(path.getParent());
+        Path parent = path.getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
         }
         this.clockDomain = clockDomain;
         this.channel = FileChannel.open(path, StandardOpenOption.CREATE,

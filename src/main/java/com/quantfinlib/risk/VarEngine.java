@@ -6,11 +6,11 @@ import java.util.SplittableRandom;
 
 /**
  * Portfolio Value-at-Risk, all four classic flavors over one input
- * shape: factor EXPOSURES (currency P&amp;L per unit factor return — a
+ * shape: factor exposures (currency P&amp;L per unit factor return — a
  * delta vector) against a factor covariance matrix or a factor-return
  * history. {@code RiskMetrics} answers the single-series question; this
- * engine answers the PORTFOLIO one, where the methods genuinely
- * disagree and the disagreement is the point:
+ * engine answers the portfolio one, where the methods
+ * disagree and the disagreement is informative:
  *
  * <ul>
  *   <li><b>Delta-normal (variance-covariance)</b> — σ_P = √(δ'Σδ),
@@ -21,7 +21,7 @@ import java.util.SplittableRandom;
  *       harness can price non-linear books by full revaluation;</li>
  *   <li><b>Delta-gamma (Cornish-Fisher)</b> — second-order P&amp;L
  *       {@code δ'Δx + ½Δx'ΓΔx} whose skew tilts the quantile via the
- *       Cornish-Fisher expansion: a short-gamma book's VaR is WORSE
+ *       Cornish-Fisher expansion: a short-gamma book's VaR is worse
  *       than delta-normal says, a long-gamma book's better — the
  *       asymmetry delta-normal cannot see;</li>
  *   <li><b>Historical</b> — replay actual factor-return rows through
@@ -29,7 +29,7 @@ import java.util.SplittableRandom;
  *       matrix, exactly as fat-tailed as the sample was.</li>
  * </ul>
  *
- * <p>Conventions: VaR and ES are returned as POSITIVE losses in
+ * <p>Conventions: VaR and ES are returned as positive losses in
  * currency units; confidence is the one-sided level (0.99 = 99%);
  * factor returns and Σ are per-horizon (scale √t outside). Sample-based
  * methods share the tail definitions of {@link TailRisk}. Monte Carlo
@@ -119,7 +119,7 @@ public final class VarEngine {
      * delta-gamma P&amp;L. Moments of {@code δ'Δx + ½Δx'ΓΔx} under
      * Gaussian factors: mean {@code ½tr(ΓΣ)}, variance
      * {@code δ'Σδ + ½tr((ΓΣ)²)}, and the skew that moves the quantile.
-     * Accurate for MODERATE gamma — the expansion degrades when the
+     * Accurate for moderate gamma — the expansion degrades when the
      * quadratic term dominates (skew beyond ~1), which is when full
      * revaluation Monte Carlo earns its cost; that boundary is the
      * documented limit, not a hidden one.
@@ -131,7 +131,7 @@ public final class VarEngine {
             return 0;
         }
         double z = zOf(confidence);
-        // Cornish-Fisher: the LOSS quantile uses -z (left tail of P&L).
+        // Cornish-Fisher: the loss quantile uses -z (left tail of P&L).
         double zCf = -z + (z * z - 1) * c.skew() / 6;
         double pnlQuantile = c.mean() + zCf * Math.sqrt(c.variance());
         return Math.max(0, -pnlQuantile);
@@ -139,12 +139,12 @@ public final class VarEngine {
 
     /**
      * Second-order ES: the tail mean of the Cornish-Fisher loss
-     * quantile, integrated in CLOSED FORM. With loss quantile
+     * quantile, integrated in closed form. With loss quantile
      * {@code q(p) = −μ + σ·(z_p + (z_p²−1)·s/6)} (s = loss skew), the
      * identities {@code E[Z·1{Z>z}] = φ(z)} and
      * {@code E[(Z²−1)·1{Z>z}] = z·φ(z)} give
      * {@code ES = −μ + σ·φ(z)/(1−c)·(1 + z·s/6)} — no numerical
-     * integration, and it reduces EXACTLY to {@link #deltaNormalEs}
+     * integration, and it reduces exactly to {@link #deltaNormalEs}
      * when Γ = 0. Same moderate-gamma validity bound as
      * {@link #deltaGammaVar}.
      */
@@ -310,7 +310,7 @@ public final class VarEngine {
 
     /**
      * Full-revaluation VaR: every scenario repriced through the
-     * CALLER'S pricer — the method that sees what every sensitivity
+     * caller's pricer — the method that sees what every sensitivity
      * shortcut misses (a knocked-out barrier, a pinned short gamma, an
      * autocall triggered by the scenario itself). Scenarios are rows of
      * factor moves — historical rows for historical full-reval,

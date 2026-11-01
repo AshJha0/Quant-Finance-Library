@@ -46,7 +46,7 @@ public final class IcebergExecution implements ExecutionModel {
 
     @Override
     public double worstCaseCostFraction() {
-        // The INNER model prices the fills; a wrapper that reports the 1%
+        // The inner model prices the fills; a wrapper that reports the 1%
         // default while wrapping a costlier model re-opens the cash
         // overdraw the engine's sizing exists to prevent.
         return inner.worstCaseCostFraction();

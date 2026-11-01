@@ -3,7 +3,7 @@ package com.quantfinlib.microstructure;
 import com.quantfinlib.util.MathUtils;
 
 /**
- * Passive-fill probability for a limit order resting AWAY from the touch —
+ * Passive-fill probability for a limit order resting away from the touch —
  * the placement question {@link QueueModel} alone can't answer. A resting
  * order fills only if two things happen:
  *
@@ -18,9 +18,9 @@ import com.quantfinlib.util.MathUtils;
  * </ol>
  *
  * {@link #passiveFillProbability} composes the two under an independence
- * approximation — documented honestly: touch and queue-clearing are
+ * approximation. Touch and queue-clearing are
  * positively correlated (the flow that moves price also eats queues), so
- * the composition is a mild UNDERestimate; treat it as a conservative
+ * the composition is a mild underestimate; treat it as a conservative
  * placement score, not a calibrated probability.
  *
  * <p>Volatility enters as return-per-√second (what

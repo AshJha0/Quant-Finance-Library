@@ -25,8 +25,8 @@ public final class SyntheticCross {
 
     /**
      * All-in synthetic ASK (cost to BUY the cross via the legs).
-     * MULTIPLY (A/B × B/C = A/C): buy both legs → askA × askB.
-     * DIVIDE (A/C ÷ B/C = A/B): buy leg A, sell leg B → askA ÷ bidB.
+     * Multiply (A/B × B/C = A/C): buy both legs → askA × askB.
+     * Divide (A/C ÷ B/C = A/B): buy leg A, sell leg B → askA ÷ bidB.
      */
     public static double syntheticAsk(Op op, double bidA, double askA,
                                       double bidB, double askB) {
@@ -34,7 +34,7 @@ public final class SyntheticCross {
     }
 
     /**
-     * All-in synthetic BID (proceeds of SELLING the cross via the legs):
+     * All-in synthetic BID (proceeds of selling the cross via the legs):
      * the mirror of {@link #syntheticAsk}.
      */
     public static double syntheticBid(Op op, double bidA, double askA,

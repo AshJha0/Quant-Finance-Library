@@ -134,7 +134,7 @@ public final class Factors {
      *
      * <p><b>Definition note</b>: this is <em>Cutler's</em> RSI (arithmetic
      * average of gains/losses over the window), chosen because it is
-     * stateless and exactly recomputable at any bar. It is NOT the same
+     * stateless and exactly recomputable at any bar. It is not the same
      * number as {@code indicators.Indicators#rsi}, which uses Wilder
      * smoothing — after a trend the two can disagree near the 30/70
      * thresholds. The factor name says so to keep reports unambiguous.</p>
@@ -226,7 +226,7 @@ public final class Factors {
      * Quality composite: profitability minus leverage —
      * {@code ROE − 0.1 × debt/equity}. The 0.1 haircut puts one turn of
      * leverage on the same scale as 10 points of ROE, the usual
-     * quality-minus-junk shape (profitable AND conservatively financed).
+     * quality-minus-junk shape (profitable and conservatively financed).
      */
     public static AlphaFactor quality() {
         return fundamental("QUALITY", (f, price) -> {

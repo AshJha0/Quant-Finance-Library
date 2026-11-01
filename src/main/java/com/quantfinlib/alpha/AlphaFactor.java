@@ -6,7 +6,7 @@ package com.quantfinlib.alpha;
  *
  * <p>Scores are <em>raw</em>, in whatever natural unit the factor has
  * (return spread, z-score, yield). Normalization into portfolio weights is
- * deliberately a separate step ({@link PortfolioConstruction}) so that the
+ * a separate step ({@link PortfolioConstruction}) so that the
  * same factor can be evaluated rank-wise ({@link SignalEvaluator} uses rank
  * IC, which is scale-invariant) and constructed under different schemes
  * without re-implementing the signal.</p>

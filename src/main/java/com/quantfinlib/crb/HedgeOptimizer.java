@@ -5,7 +5,7 @@ import com.quantfinlib.util.MathUtils;
 /**
  * Cost-aware minimum-variance hedging of the central risk book's
  * residual — the question is never "how do we flatten this" (sell
- * everything) but "what is the CHEAPEST basket of liquid instruments
+ * everything) but "what is the cheapest basket of liquid instruments
  * that takes the risk below the limit". Minimizes
  *
  * <pre>  (e + L·h)' Σ (e + L·h)  +  λ · Σᵢ cᵢ·|hᵢ|</pre>
@@ -19,7 +19,7 @@ import com.quantfinlib.util.MathUtils;
  * <p>Solved by cyclic coordinate descent with the exact soft-threshold
  * update — deterministic, no external optimizer, and the L1 term does
  * what a hedging desk actually wants: instruments whose marginal risk
- * reduction is worth less than their cost get EXACTLY zero, not a dusty
+ * reduction is worth less than their cost get exactly zero, not a dusty
  * small position. {@code λ = 0} recovers the closed-form minimum-
  * variance hedge (the tests pin that against the normal equations).
  * Every 50 sweeps the solver tries to finish exactly: it solves the
@@ -168,7 +168,7 @@ public final class HedgeOptimizer {
                     maxH = mag;
                 }
             }
-            // RELATIVE tolerance: notionals run in the millions, and an
+            // relative tolerance: notionals run in the millions, and an
             // absolute epsilon there is either never met or means nothing.
             if (maxDelta < RELATIVE_TOLERANCE * maxH) {
                 return h;

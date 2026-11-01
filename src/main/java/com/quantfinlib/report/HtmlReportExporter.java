@@ -12,7 +12,7 @@ import java.time.format.DateTimeFormatter;
  * stylesheet lives on a CDN is a report that rots). The one exporter that
  * renders {@link Report.Section#isHtml() HTML sections} (inline
  * {@link SvgCharts} output); tabular exporters skip them. Every title,
- * header and cell is HTML-escaped — report content is DATA, and a symbol
+ * header and cell is HTML-escaped — report content is data, and a symbol
  * named {@code <script>} must render as text, not execute (tested).
  */
 public final class HtmlReportExporter implements ReportExporter {
@@ -58,8 +58,10 @@ public final class HtmlReportExporter implements ReportExporter {
         }
         sb.append("</body>\n</html>\n");
 
-        if (path.getParent() != null) {
-            Files.createDirectories(path.getParent());
+        Path parent = path.getParent();
+
+        if (parent != null) {
+            Files.createDirectories(parent);
         }
         Files.writeString(path, sb.toString());
     }

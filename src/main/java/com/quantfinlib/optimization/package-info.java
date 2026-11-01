@@ -1,5 +1,5 @@
 /**
- * Portfolio construction:
+ * Portfolio optimisers and the solvers behind them. The main classes:
  * {@link com.quantfinlib.optimization.PortfolioOptimizer} (max Sharpe, min
  * volatility, efficient frontier — derivative-free and deterministic),
  * {@link com.quantfinlib.optimization.RiskParityOptimizer} (equal risk

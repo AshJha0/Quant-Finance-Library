@@ -1,5 +1,7 @@
 /**
- * Order entry, two lanes (mirroring {@code marketdata}):
+ * Order entry, pre-trade risk and quoting: a zero-allocation lane for the
+ * hot path and a paper-trading lane for simulation, mirroring
+ * {@code marketdata}.
  *
  * <p><b>Fast lane</b>: {@link com.quantfinlib.trading.HftRiskGate}
  * (zero-allocation pre-trade checks over int ids: price validity, size,

@@ -3,7 +3,7 @@ package com.quantfinlib.risk;
 import com.quantfinlib.util.MathUtils;
 
 /**
- * COMPONENT VaR — the answer to the risk committee's actual question. A
+ * Component VaR — the answer to the risk committee's actual question. A
  * portfolio VaR of $10m is a fact; "which desk owns how much of it?" is
  * the decision. Under the delta-normal model the Euler allocation makes
  * the split exact and additive:
@@ -14,7 +14,7 @@ import com.quantfinlib.util.MathUtils;
  *   component_i = w_i · marginal_i            and &Sigma;_i component_i = sigma_p  (exact)
  * </pre>
  *
- * <p>Scaled by the same z-score, component VaRs SUM EXACTLY to portfolio
+ * <p>Scaled by the same z-score, component VaRs sum exactly to portfolio
  * VaR — no "diversification residual" bucket to argue over. The three
  * numbers answer three different questions:</p>
  * <ul>
@@ -23,10 +23,10 @@ import com.quantfinlib.util.MathUtils;
  *   <li><b>marginal VaR</b> — how fast VaR moves per unit added (the
  *       "should the next dollar go here?" number);</li>
  *   <li><b>incremental VaR</b> — how much VaR disappears if the position
- *       is CLOSED entirely (a full re-computation without it — NOT
+ *       is closed entirely (a full re-computation without it — not
  *       component VaR, and the difference is the whole point: a large
- *       position that hedges the book has POSITIVE size, NEGATIVE
- *       component, and closing it RAISES VaR).</li>
+ *       position that hedges the book has positive size, negative
+ *       component, and closing it raises VaR).</li>
  * </ul>
  *
  * <p>Delta-normal only, stated: allocations inherit the model's
@@ -100,7 +100,7 @@ public final class ComponentVar {
     /**
      * Incremental VaR of position {@code i}: portfolio VaR now minus VaR
      * with the position closed (weight zeroed). Positive means closing it
-     * REDUCES risk; negative means the position is a hedge and closing it
+     * reduces risk; negative means the position is a hedge and closing it
      * raises VaR.
      */
     public static double incremental(double[] weights, double[][] covariance,

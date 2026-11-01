@@ -3,21 +3,21 @@ package com.quantfinlib.microstructure;
 import com.quantfinlib.util.MathUtils;
 
 /**
- * Liquidity estimated from BARS ALONE — the estimators for every
+ * Liquidity estimated from bars alone — the estimators for every
  * market where you have prices but no quotes: history before your tick
  * capture started, less-developed markets, bonds marked once a day, or
  * a 20-year backtest that would otherwise pretend spreads were zero.
  *
  * <ul>
  *   <li><b>Roll (1984)</b> — the effective spread implied by bid-ask
- *       BOUNCE: trade prices ping-ponging between bid and ask create
+ *       bounce: trade prices ping-ponging between bid and ask create
  *       negative autocovariance in price changes, and
  *       {@code s = 2√(−cov(Δp_t, Δp_{t−1}))}. When the autocovariance
- *       is POSITIVE (trending sample, no bounce signature) the
+ *       is positive (trending sample, no bounce signature) the
  *       estimator is undefined and returns NaN — not zero, because
- *       "zero spread" is a claim and NaN is an honest shrug;</li>
+ *       "zero spread" would be a claim the data do not support;</li>
  *   <li><b>Corwin-Schultz (2012)</b> — the spread from two days'
- *       HIGH-LOW ranges: variance grows with time but the spread does
+ *       high-low ranges: variance grows with time but the spread does
  *       not, so comparing one 2-day range against two 1-day ranges
  *       isolates the spread. Negative estimates clamp to 0 (standard
  *       practice, stated);</li>
@@ -27,7 +27,7 @@ import com.quantfinlib.util.MathUtils;
  *       "per million" quotation.</li>
  * </ul>
  *
- * <p>Static, deterministic, research lane. These are ESTIMATORS with
+ * <p>Static, deterministic, research lane. These are estimators with
  * real sampling error on short windows — rank with them, do not
  * mark books with them.</p>
  */
@@ -64,7 +64,7 @@ public final class LiquidityMeasures {
     }
 
     /**
-     * Corwin-Schultz high-low spread estimate as a FRACTION of price,
+     * Corwin-Schultz high-low spread estimate as a fraction of price,
      * from two consecutive periods' highs and lows. Negative estimates
      * clamp to 0 (stated standard practice).
      */

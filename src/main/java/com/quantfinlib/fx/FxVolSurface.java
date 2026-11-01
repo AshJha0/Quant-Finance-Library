@@ -536,7 +536,7 @@ public final class FxVolSurface {
         if (expiryYears >= expiries[n - 1]) {
             return smileVol(n - 1, Math.log(strike / forwards[n - 1]));
         }
-        // ONE bracket search serves both the forward interpolation and the
+        // one bracket search serves both the forward interpolation and the
         // variance interpolation — this is the documented hot lookup.
         int lo = bracket(expiryYears);
         int hi = lo + 1;

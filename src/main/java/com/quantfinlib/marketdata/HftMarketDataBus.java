@@ -54,7 +54,7 @@ public final class HftMarketDataBus implements AutoCloseable {
 
     private volatile boolean running;
     // Consumer-thread counter in its own object (no line sharing with the
-    // producer-written ringFull) and updated once per DRAIN BATCH with a
+    // producer-written ringFull) and updated once per drain batch with a
     // release store — a per-tick volatile store would pay a StoreLoad
     // fence on every dispatch for an observability-only number.
     private final java.util.concurrent.atomic.AtomicLong processed =

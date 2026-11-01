@@ -100,7 +100,7 @@ public final class CrossSectionalMomentum implements PortfolioStrategy {
         }
         long now = clock.timestamp(index);
 
-        // The point-in-time step: rank ONLY the names that are members at
+        // The point-in-time step: rank only the names that are members at
         // this bar. Dead and dropped stocks never enter the cross-section.
         // Primitive arrays + MathUtils.pairSort: no boxed Doubles/Integers
         // through a comparator per rebalance.

@@ -361,7 +361,7 @@ public final class HftRiskGate {
         double collar = (double) COLLAR_PCT.getAcquire(this);
         if (collar != Double.MAX_VALUE) {
             double ref = (double) DOUBLES.getAcquire(referencePrices, symbolId);
-            if (ref == ref) {
+            if (!Double.isNaN(ref)) {
                 if (Math.abs(price - ref) > ref * collar) {
                     return reject(REJECT_PRICE_COLLAR);
                 }

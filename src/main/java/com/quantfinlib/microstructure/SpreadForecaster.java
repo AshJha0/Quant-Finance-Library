@@ -33,7 +33,7 @@ import java.util.Arrays;
  * than merely observed, so the algo damps aggression <em>before</em> a
  * known-wide window (the close) instead of reacting after. Before the first
  * {@link #rollDay} there is no learned baseline yet, so the forecast
- * degrades honestly to the last observed spread. Volatility is the
+ * falls back to the last observed spread. Volatility is the
  * correlated cousin — a wide-spread forecast usually coincides with high
  * {@code volPerSqrtSecond} from {@link SignalEngine}, and an algo should
  * treat both as timing-cost signals. Cross-asset, zero allocation, single
@@ -43,7 +43,7 @@ public final class SpreadForecaster {
 
     /**
      * Per-observation blend weight of the live deviation (distinct from
-     * {@code dayAlpha}, which is the DAY-over-day baseline weight — the two
+     * {@code dayAlpha}, which is the day-over-day baseline weight — the two
      * timescales must not share a knob).
      */
     public static final double DEVIATION_ALPHA = 0.25;
@@ -132,7 +132,7 @@ public final class SpreadForecaster {
      * Closes the session: folds today's per-bucket mean spreads into the
      * baseline with the day-over-day EWMA (buckets with no observations
      * keep their learned value) and resets the intraday state. Seeding is
-     * PER BUCKET — a bucket first observed on a later day (feed started
+     * PER bucket — a bucket first observed on a later day (feed started
      * mid-session, half day) seeds from its own first observation rather
      * than EWMA-ramping from 0 and forecasting too-tight spreads at that
      * hour for weeks.
@@ -161,7 +161,7 @@ public final class SpreadForecaster {
      * Forecast spread at {@code bucket} as of {@code nowNanos}: the learned
      * time-of-day baseline plus the mean-reverting live deviation. Before
      * the first {@link #rollDay}/seed there is no baseline, so it returns
-     * the last observed spread (the honest live estimate), or NaN before
+     * the last observed spread, or NaN before
      * any observation at all.
      */
     public double forecast(int bucket, long nowNanos) {

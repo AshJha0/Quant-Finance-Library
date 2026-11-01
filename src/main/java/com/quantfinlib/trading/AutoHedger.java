@@ -117,9 +117,9 @@ public final class AutoHedger implements TickListener, QuoteListener {
         }
         Side side = position > 0 ? Side.SELL : Side.BUY;
         double price = side == Side.SELL ? bestBid[symbolId] : bestAsk[symbolId];
-        if (price != price) {
+        if (Double.isNaN(price)) {
             price = lastTrade;
-            if (price != price) {
+            if (Double.isNaN(price)) {
                 return; // quote update without a usable touch: wait for the next event
             }
             counters.incrementOpaque(NO_TOUCH);

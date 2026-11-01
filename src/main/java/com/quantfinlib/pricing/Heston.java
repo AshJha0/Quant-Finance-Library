@@ -10,7 +10,7 @@ import com.quantfinlib.pricing.BlackScholes.OptionType;
  * <pre>  dS = (r−q)S dt + √v S dW₁
  *  dv = κ(θ − v) dt + σᵥ √v dW₂,   d⟨W₁,W₂⟩ = ρ dt</pre>
  *
- * so the model PRODUCES a smile: ρ &lt; 0 tilts it (equity skew — spot
+ * so the model produces a smile: ρ &lt; 0 tilts it (equity skew — spot
  * down, vol up), σᵥ fattens the wings, κ/θ set how fast and where
  * variance mean-reverts.
  *
@@ -54,7 +54,7 @@ public final class Heston {
 
     private static final int BASE_INTEGRATION_STEPS = 4_096;   // Simpson: must be even
     // Window sized for the 20%-vol / 1y reference; the integrand's decay
-    // scale is ~1/(σ_eff·√T), NOT parameter-free, so probability() stretches
+    // scale is ~1/(σ_eff·√T), not parameter-free, so probability() stretches
     // both the window and the step count for short-dated / low-vol inputs
     // (a fixed 200 silently truncates a 1-week 4%-vol option's integral).
     private static final double BASE_INTEGRATION_LIMIT = 200;
@@ -110,7 +110,7 @@ public final class Heston {
         double sum = 0;
         for (int i = 0; i <= steps; i++) {
             double u = i * h + 1e-9;       // dodge the u=0 singularity of the integrand
-            double weight = (i == 0 || i == steps) ? 1 : (i % 2 == 1 ? 4 : 2);
+            double weight = (i == 0 || i == steps) ? 1 : ((i & 1) == 1 ? 4 : 2);
             sum += weight * integrand(u, logMoneyness, t, p, first);
         }
         return 0.5 + (h / 3) * sum / Math.PI;
@@ -137,9 +137,9 @@ public final class Heston {
         double imB = sv * sv * (-2 * uSign * u);           // σ²(−2i·uSign·u)
         double reD2 = reA2 + reB;
         double imD2 = imA2 + imB;
-        // Complex sqrt of (reD2 + i·imD2), principal branch — STABLE form:
+        // Complex sqrt of (reD2 + i·imD2), principal branch — stable form:
         // reD2 = b² + σ²u²(1−ρ²) ≥ 0 always, so the real part is the large
-        // component; the imaginary part MUST come from imD2/(2·reD), not
+        // component; the imaginary part must come from imD2/(2·reD), not
         // from sqrt((mod − re)/2), which underflows to 0 when |imD2| ≪ reD2
         // and silently zeroes the phase slope near u = 0 (a first-node
         // corruption worth ~0.5% of an ATM price — caught by the BS-limit
@@ -148,7 +148,7 @@ public final class Heston {
         double reD = Math.sqrt((modD2 + reD2) / 2);
         double imD = imD2 / (2 * reD);
 
-        // g₂ = (b − iρσu − d)/(b − iρσu + d)   — the LITTLE-TRAP ratio
+        // g₂ = (b − iρσu − d)/(b − iρσu + d)   — the little-trap ratio
         double reNum = reA - reD;
         double imNum = imA - imD;
         double reDen = reA + reD;
@@ -177,7 +177,7 @@ public final class Heston {
             ratioIm = (imOneMinusGe * reOneMinusG - reOneMinusGe * imOneMinusG) / d2;
         }
         double logModRatio = 0.5 * Math.log(ratioRe * ratioRe + ratioIm * ratioIm);
-        // Principal-branch arg is valid ONLY for the little-trap ratio with
+        // Principal-branch arg is valid only for the little-trap ratio with
         // Re(d) >= 0 (Lord & Kahl: its winding number is zero for all t) —
         // the 1993 g or a flipped d branch would need phase tracking here.
         double argRatio = Math.atan2(ratioIm, ratioRe);

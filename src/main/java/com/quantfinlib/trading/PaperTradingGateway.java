@@ -340,7 +340,7 @@ public final class PaperTradingGateway implements OrderGateway {
     /** Fills up to the displayed size on the side this order takes; consumes that size. */
     private void takeLiquidity(WorkingOrder order, Quote q, double price, List<Fill> out) {
         double displayed = order.side == Side.BUY ? q.askSize : q.bidSize;
-        long qty = (long) Math.min(order.leaves(), Math.floor(displayed));
+        long qty = (long) Math.min((double) order.leaves(), Math.floor(displayed));
         if (qty <= 0) {
             return;
         }
@@ -378,7 +378,7 @@ public final class PaperTradingGateway implements OrderGateway {
             p.avgCost = (p.avgCost * Math.abs(p.quantity) + price * qty) / Math.abs(newQty);
             p.quantity = newQty;
         } else {
-            double closing = Math.min(Math.abs(p.quantity), qty);
+            double closing = Math.min(Math.abs(p.quantity), (double) qty);
             realizedPnl += (price - p.avgCost) * closing * Math.signum(p.quantity);
             double newQty = p.quantity + signed;
             if (Math.signum(newQty) != Math.signum(p.quantity) && newQty != 0) {

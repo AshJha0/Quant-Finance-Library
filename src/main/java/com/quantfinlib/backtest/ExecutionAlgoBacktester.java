@@ -7,27 +7,27 @@ import com.quantfinlib.execution.BenchmarkExecutor.MarketState;
 import com.quantfinlib.orderbook.Side;
 
 /**
- * Backtests the DYNAMIC execution stack over bar data — the bridge
+ * Backtests the dynamic execution stack over bar data — the bridge
  * between {@code execution.BenchmarkExecutor} (built for live intervals)
  * and the backtest lane: replay a session's bars, let the executor
  * re-decide each bar exactly as it would live, fill against the bar with
  * a {@link TradeCostModel}, and grade the result the way a TCA desk
  * would (implementation shortfall vs arrival, slippage vs the session
  * VWAP). {@code ExecutionAwareBacktester} answers "how do fills change a
- * STRATEGY's results?"; this answers the execution desk's own question:
+ * strategy's results?"; this answers the execution desk's own question:
  * <b>"which benchmark algorithm, and at what cost?"</b> — one parent
  * order, N bars, a number per benchmark.
  *
- * <p><b>Honest simplifications</b> (each visible, none silent): fills
+ * <p><b>Simplifications</b>: fills
  * print at the bar close plus the cost model's bps (no intra-bar
  * microstructure); the per-bar liquidity cap is
- * {@code participationCap × bar volume} — and it is the ONLY cap: the
+ * {@code participationCap × bar volume} — and it is the only cap: the
  * executor is constructed with its internal depth fraction at 1 so the
  * two knobs cannot silently compound; the VWAP volume curve uses the
- * session's REALIZED cumulative volume — an oracle curve, so the VWAP
+ * session's realized cumulative volume — an oracle curve, so the VWAP
  * benchmark result here is an upper bound on what a live volume-curve
  * forecast can achieve (live, use {@code microstructure.VolumeCurve});
- * and each bar's volume enters the POV target BEFORE that bar trades —
+ * and each bar's volume enters the POV target before that bar trades —
  * one bar of look-ahead versus a strictly reactive live POV, so POV
  * completion here is mildly optimistic. Deterministic: same bars, same
  * config, same numbers. Research lane.</p>
@@ -68,9 +68,9 @@ public final class ExecutionAlgoBacktester {
      * @param arrivalPrice      the decision price (first bar's open)
      * @param sessionVwap       volume-weighted average close of the session
      * @param shortfallBps      implementation shortfall vs arrival, in bps,
-     *                          signed so that POSITIVE = cost (both sides)
+     *                          signed so that positive = cost (both sides)
      * @param vwapSlippageBps   average fill vs session VWAP, in bps,
-     *                          POSITIVE = worse than VWAP (both sides)
+     *                          positive = worse than VWAP (both sides)
      */
     public record Result(long executed, boolean completed, double avgFillPrice,
                          double arrivalPrice, double sessionVwap,
@@ -89,7 +89,7 @@ public final class ExecutionAlgoBacktester {
 
     /**
      * Works {@code parentQty} through the session under {@code benchmark}
-     * and grades it. PARTICIPATION parents use {@link BenchmarkExecutor#pov}
+     * and grades it. Participation parents use {@link BenchmarkExecutor#pov}
      * with {@code povRate}; other benchmarks ignore it.
      */
     public Result run(BarSeries series, Side side, long parentQty,

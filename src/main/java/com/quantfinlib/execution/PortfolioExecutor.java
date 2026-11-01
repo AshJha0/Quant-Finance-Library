@@ -28,7 +28,7 @@ import com.quantfinlib.util.MathUtils;
  *       approximation of multi-asset Almgren-Chriss — weight ∝
  *       (1 + volatility regime) × due notional. Plug in a streaming
  *       {@link EwmaCovariance} via {@link #useRiskModel} and it becomes
- *       the real thing: weight ∝ (1 + marginal contribution to BASKET
+ *       the real thing: weight ∝ (1 + marginal contribution to basket
  *       variance) × due notional, so two correlated legs are recognized
  *       as one concentrated risk and a natural hedge earns no urgency.</li>
  * </ol>
@@ -37,7 +37,7 @@ import com.quantfinlib.util.MathUtils;
  * so per-symbol benchmark integrity holds by construction, and anything
  * deferred reappears through each child's behind-schedule catch-up next
  * interval. A binding cap can therefore leave a residual at the horizon —
- * that is the constraint's honest meaning, not a bug.</p>
+ * that is what the constraint means, not a bug.</p>
  *
  * <p>Usage: {@link #add} each child once (buys and sells mixed freely),
  * then each interval call {@link #decide} with per-symbol
@@ -100,7 +100,7 @@ public final class PortfolioExecutor {
     /**
      * Upgrades the capacity allocation from the diagonal approximation to
      * true basket risk: with a covariance model, a binding
-     * {@code maxIntervalNotional} flows to the symbols whose REMAINING
+     * {@code maxIntervalNotional} flows to the symbols whose remaining
      * position contributes most to portfolio variance
      * ({@link EwmaCovariance#marginalContribution}) — two correlated buys
      * carry more joint timing risk than their individual vols admit, and a
@@ -195,7 +195,7 @@ public final class PortfolioExecutor {
      * that has a live risk picture: {@code 1 + clamp(MRC, 0, 1)} where MRC
      * is the remaining position's marginal contribution to basket variance
      * — a natural hedge (negative MRC) earns no extra capacity, because
-     * executing it INCREASES the risk left behind. Otherwise the diagonal
+     * executing it increases the risk left behind. Otherwise the diagonal
      * fallback {@code 1 + volatilityRegime}. Same bounded [1, 2] shape
      * either way, so the two modes are interchangeable mid-flight.
      */
@@ -227,7 +227,7 @@ public final class PortfolioExecutor {
     /**
      * The leg-balance band: if this interval's dues would carry the net
      * filled notional past {@code maxNetNotional}, scale down the leg that
-     * is pushing it over. Reads the CURRENT dues, so it is safe to apply
+     * is pushing it over. Reads the current dues, so it is safe to apply
      * again after another overlay has changed them.
      */
     private void applyLegBand(long[] dueOut) {
@@ -279,7 +279,7 @@ public final class PortfolioExecutor {
      * ledger. A non-positive or non-finite price still advances the child's
      * schedule but cannot enter the notional ledger.
      *
-     * <p><b>Report every fill through THIS method, never through
+     * <p><b>Report every fill through this method, never through
      * {@code child(h).onFill(...)}</b> — the child call advances that
      * symbol's schedule but silently bypasses the buy/sell notional ledger
      * the leg-balance band reads, leaving the basket's net exposure
@@ -318,7 +318,7 @@ public final class PortfolioExecutor {
 
     /**
      * The child executor behind a handle — for progress/drift reads and for
-     * feeding {@code onMarketVolume} to VWAP/POV children. Do NOT report
+     * feeding {@code onMarketVolume} to VWAP/POV children. Do not report
      * fills via {@code child(h).onFill(...)}: fills must go through
      * {@link #onFill(int, long, double)} so the leg-balance ledger sees them.
      */

@@ -147,7 +147,7 @@ public final class SignalEngine {
                         long timestampNanos) {
         quoteCount++;
         flow[symbolId].onQuote(bid, bidSize, ask, askSize, timestampNanos);
-        // Gap gate: sizes must be positive and prices DEALABLE (strictly
+        // Gap gate: sizes must be positive and prices dealable (strictly
         // positive and finite) — !(x > 0) also catches NaN. A zero-price
         // placeholder quote passing this gate would seed prevMid = 0 and the
         // next return r = (mid − 0)/0 would poison the variance EWMA with
@@ -159,7 +159,7 @@ public final class SignalEngine {
             return;
         }
         double mid = 0.5 * (bid + ask);
-        microprice[symbolId] = FairValueEngine.microprice(bid, ask, bidSize, askSize);
+        microprice[symbolId] = FairValueEngine.microprice(bid, ask, (double) bidSize, (double) askSize);
 
         if (hasMid[symbolId]) {
             long dt = timestampNanos - prevMidTime[symbolId];
@@ -187,7 +187,7 @@ public final class SignalEngine {
             // window — mid/microprice refresh above, estimators wait.
         } else {
             // Seed all baselines from the first two-sided quote after a gap.
-            // Seed EVERY estimator from this first post-gap quote, so a gap
+            // Seed every estimator from this first post-gap quote, so a gap
             // (halt, stale feed) rebuilds cleanly instead of resuming a
             // pre-gap volatility/intensity into the first decisions. The
             // rate estimators (var, gap) have no value until a second quote,

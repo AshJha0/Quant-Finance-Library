@@ -5,7 +5,7 @@ import java.util.List;
 
 /**
  * Immutable, cache-friendly OHLCV time series backed by primitive arrays
- * (structure-of-arrays layout, no boxing) for ultra-low-latency computation.
+ * (structure-of-arrays layout, no boxing) so indicators read primitive columns directly.
  *
  * <p>Array accessors ({@link #opens()}, {@link #closes()}, ...) return the
  * internal arrays without copying for zero-allocation hot paths. Callers must

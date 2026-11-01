@@ -15,11 +15,11 @@ import java.util.Set;
  * the payment system is closed, so every real-world date in a trade — the
  * settlement date (spot = trade + 2 business days in most FX pairs, T+1 US
  * equities), each coupon date, an option expiry — must land on a business
- * day, and WHICH way a weekend date rolls changes the accrual period and
+ * day, and which way a weekend date rolls changes the accrual period and
  * therefore the payment ({@link DayCount} then converts the rolled dates
  * to a year fraction). {@code MODIFIED_FOLLOWING} — roll forward unless
  * that crosses month-end, then backward — is the near-universal swap
- * convention precisely because plain FOLLOWING would occasionally push a
+ * convention precisely because plain following would occasionally push a
  * month's payment into the next month and break month-bucketed accounting.
  * A holiday missing from the set silently shifts settlement by a day: the
  * classic source of small unexplained cash breaks between two systems that
@@ -76,7 +76,7 @@ public final class BusinessCalendar {
 
     /**
      * The joint calendar of two trading centers: a day is a business day
-     * only when it is one in BOTH (holiday sets union). This is the FX
+     * only when it is one in both (holiday sets union). This is the FX
      * settlement rule — one calendar object, so every roll convention and
      * schedule helper works unchanged on the pair, instead of each caller
      * re-implementing dual-calendar walks.

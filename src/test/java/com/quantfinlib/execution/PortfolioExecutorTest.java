@@ -65,7 +65,7 @@ class PortfolioExecutorTest {
         var config = new PortfolioExecutor.Config(300_000, Double.POSITIVE_INFINITY);
         var pe = new PortfolioExecutor(2, config);
         int buy = pe.add(BenchmarkExecutor.of(Side.BUY, 10_000, Benchmark.TWAP));
-        int sell = pe.add(BenchmarkExecutor.of(Side.SELL, 10_000, Benchmark.TWAP));
+        pe.add(BenchmarkExecutor.of(Side.SELL, 10_000, Benchmark.TWAP));
         pe.onFill(buy, 2_000, 100);            // net +200k
 
         long[] due = new long[2];

@@ -167,16 +167,19 @@ public final class VolSurface {
         }
         java.util.List<CalendarViolation> out = new java.util.ArrayList<>();
         Double prev = null;
-        for (double t : smiles.keySet()) {
+        TreeMap<Double, Double> prevSmile = null;
+        for (java.util.Map.Entry<Double, TreeMap<Double, Double>> e : smiles.entrySet()) {
+            double t = e.getKey();
+            TreeMap<Double, Double> smile = e.getValue();
             if (prev != null) {
-                double xMin = Math.min(logMoneyness(prev, smiles.get(prev).firstKey()),
-                        logMoneyness(t, smiles.get(t).firstKey()));
-                double xMax = Math.max(logMoneyness(prev, smiles.get(prev).lastKey()),
-                        logMoneyness(t, smiles.get(t).lastKey()));
+                double xMin = Math.min(logMoneyness(prev, prevSmile.firstKey()),
+                        logMoneyness(t, smile.firstKey()));
+                double xMax = Math.max(logMoneyness(prev, prevSmile.lastKey()),
+                        logMoneyness(t, smile.lastKey()));
                 for (int i = 0; i < gridPoints; i++) {
                     double x = xMin + (xMax - xMin) * i / (gridPoints - 1);
-                    double v1 = smileVol(smiles.get(prev), fromMoneyness(prev, x));
-                    double v2 = smileVol(smiles.get(t), fromMoneyness(t, x));
+                    double v1 = smileVol(prevSmile, fromMoneyness(prev, x));
+                    double v2 = smileVol(smile, fromMoneyness(t, x));
                     double w1 = v1 * v1 * prev;
                     double w2 = v2 * v2 * t;
                     if (w2 < w1 * (1 - 1e-12)) {
@@ -184,6 +187,7 @@ public final class VolSurface {
                     }
                 }
             }
+            prevSmile = smile;
             prev = t;
         }
         return out;

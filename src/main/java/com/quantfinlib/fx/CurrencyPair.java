@@ -43,7 +43,7 @@ public final class CurrencyPair {
     private final int spotLagDays;
     private final BusinessCalendar baseCalendar;
     private final BusinessCalendar quoteCalendar;
-    // Both centers as ONE calendar (holiday union): every roll convention
+    // Both centers as one calendar (holiday union): every roll convention
     // below delegates to rates.BusinessCalendar, so the market rules live
     // in exactly one place instead of drifting between two packages.
     private final BusinessCalendar jointCalendar;

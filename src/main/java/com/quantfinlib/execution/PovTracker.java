@@ -53,7 +53,7 @@ public final class PovTracker {
         this.maxSlice = maxSlice;
     }
 
-    /** A market trade print that was NOT our fill. */
+    /** A market trade print that was not our fill. */
     public void onMarketVolume(long qty) {
         if (qty > 0) {
             marketVolume += qty;

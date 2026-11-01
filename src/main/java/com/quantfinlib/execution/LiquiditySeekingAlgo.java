@@ -7,7 +7,7 @@ import com.quantfinlib.util.MathUtils;
  * The opportunistic execution archetype — the counterpart to
  * {@link BenchmarkExecutor}'s schedule-driven family. A schedule algo
  * asks "am I behind the curve?"; a liquidity seeker asks <b>"is the
- * market cheap RIGHT NOW?"</b> and trades in bursts when it is: spread
+ * market cheap right now?"</b> and trades in bursts when it is: spread
  * tighter than its time-of-day forecast, calm volatility regime, low
  * estimated impact. Between opportunities it sits still — which is why
  * it needs the one discipline every seek-style algo ships with: a
@@ -15,7 +15,7 @@ import com.quantfinlib.util.MathUtils;
  * horizon, so patience can never become a missed parent.
  *
  * <p>Inputs reuse the {@link MarketState} units contract (normalized vol
- * regime, impact in bps, take-now depth) plus the spread FORECAST from
+ * regime, impact in bps, take-now depth) plus the spread forecast from
  * {@code microstructure.SpreadForecaster} — cheapness is always relative
  * to what the spread usually is at this hour, not to an absolute number
  * (2 pips is cheap at the London open and expensive at midnight):</p>
@@ -26,7 +26,7 @@ import com.quantfinlib.util.MathUtils;
  *
  * <p>Decision per interval: score the moment — spread at-or-under
  * forecast, vol regime below the calm threshold, impact below the cap —
- * and if ALL hold, take an aggressive clip ({@code maxDepthFraction ×
+ * and if all hold, take an aggressive clip ({@code maxDepthFraction ×
  * displayedDepth}). If not, send only the completion floor: 0 until
  * {@code forceCompleteFrom}, then the remaining quantity spread linearly
  * over what is left of the horizon (at f = 1 the floor IS the
@@ -134,7 +134,7 @@ public final class LiquiditySeekingAlgo {
         boolean spreadCheap = m.spread() >= 0 && forecastSpread > 0
                 && forecastSpread != Double.POSITIVE_INFINITY
                 && m.spread() <= forecastSpread * (1 + config.spreadTolerance());
-        // NaN fails BOTH remaining gates (NaN <= x is false): an unknowable
+        // NaN fails both remaining gates (NaN <= x is false): an unknowable
         // regime or impact must never authorize a burst — a vol-feed outage
         // during a spike is exactly when firing would hurt most.
         boolean calm = m.volatility() <= config.maxVolRegime();

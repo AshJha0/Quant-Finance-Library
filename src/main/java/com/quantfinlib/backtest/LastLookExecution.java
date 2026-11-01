@@ -18,10 +18,10 @@ import java.util.List;
  *
  * <p><b>Signal-bar handling</b>: when worked through
  * {@link ExecutionAwareBacktester}, the parent is created at the signal
- * bar's CLOSE — so on that first bar there is no hold window left to
+ * bar's close — so on that first bar there is no hold window left to
  * observe, and filling at that bar's <i>open</i> would credit a price from
  * before the signal existed (intrabar time travel). The model therefore
- * HOLDS on the parent's signal bar (no fill, no reject counted — it is
+ * holds on the parent's signal bar (no fill, no reject counted — it is
  * pure latency, the LP has seen nothing yet); the first real attempt is
  * the next bar, whose open is the price standing when the order actually
  * arrived. Direct calls without {@link #onParentOrder} keep the plain
@@ -35,7 +35,7 @@ import java.util.List;
  *       {@code spreadBps} half-spread (all-in price).</li>
  * </ul>
  *
- * <p>The asymmetry here is deliberate <em>as a taker's worst-case model</em>:
+ * <p>The asymmetry is intended, as a taker's worst-case model:
  * it simulates the adverse LP behavior the FX Global Code prohibits but a
  * taker must still budget for. The Code-compliant maker-side mechanism —
  * symmetric rejection in both directions — is
@@ -75,7 +75,7 @@ public final class LastLookExecution implements ExecutionModel {
 
     @Override
     public double referencePrice(BarSeries series, int index) {
-        // Fills anchor to the bar OPEN, not the close: sizing against the
+        // Fills anchor to the bar open, not the close: sizing against the
         // close would overdraw cash on any accepted bar that gaps open-high
         // (the engine budgets request * referencePrice * (1 + spread)).
         return series.open(index);
@@ -100,7 +100,7 @@ public final class LastLookExecution implements ExecutionModel {
         }
         double open = series.open(index);
         double close = series.close(index);
-        // Signed move in the TAKER's favor: up for a buy, down for a sell.
+        // Signed move in the taker's favor: up for a buy, down for a sell.
         double favorableMoveBps = side.sign() * (close - open) / open * 1e4;
         if (favorableMoveBps > rejectThresholdBps) {
             // The LP saw the market run away and pulled the quote. The

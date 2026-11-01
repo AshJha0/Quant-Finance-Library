@@ -313,7 +313,7 @@ public final class TickBacktester implements TickFileReader.ReplayHandler, TickT
 
     /**
      * The comparison tick for a print/limit pair: a banded schedule wins
-     * over the flat size, and the FINER of the two prices' bands decides —
+     * over the flat size, and the finer of the two prices' bands decides —
      * when a print and a limit straddle a band boundary, snapping the print
      * onto the limit's coarser grid would misclassify a genuine
      * trade-through as "same level" (and clamped lookup keeps this total
@@ -330,7 +330,7 @@ public final class TickBacktester implements TickFileReader.ReplayHandler, TickT
     private boolean samePriceLevel(double a, double b) {
         double tick = comparisonTick(a, b);
         if (tick > 0) {
-            // Bucket equality on the finer tick: a TOTAL partition — every
+            // Bucket equality on the finer tick: a total partition — every
             // print is either same-level, through, or behind, with no dead
             // zone at half-tick boundaries (midpoint/sub-penny prints must
             // either fill or accrue queue, never vanish).

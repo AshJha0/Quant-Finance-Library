@@ -219,7 +219,7 @@ public final class HftOrderBook {
         this.seqSink = sink;
     }
 
-    /** Self-trade prevention policy for owner-tagged orders (default NONE). */
+    /** Self-trade prevention policy for owner-tagged orders (default none). */
     public HftOrderBook selfTradePrevention(SelfTradePrevention policy) {
         this.stp = policy;
         return this;
@@ -278,8 +278,8 @@ public final class HftOrderBook {
     private void enter(long id, Side side, int idx, long quantity, int ownerId, long ts) {
         startMatch(ts);
         long remaining = side == Side.BUY
-                ? matchBuy(id, ownerId, idx, quantity, ts)
-                : matchSell(id, ownerId, idx, quantity, ts);
+                ? matchBuy(id, ownerId, idx, quantity)
+                : matchSell(id, ownerId, idx, quantity);
         lastEnterResult = id;
         if (remaining > 0 && !takerStopped) {
             if (freeHead == NONE) {
@@ -320,13 +320,13 @@ public final class HftOrderBook {
                 if (protectionTicks != Integer.MAX_VALUE && bestAskIdx != NONE) {
                     limit = (int) Math.min(ladder - 1L, (long) bestAskIdx + protectionTicks);
                 }
-                remaining = matchBuy(id, ownerId, limit, quantity, timestampNanos);
+                remaining = matchBuy(id, ownerId, limit, quantity);
             } else {
                 int limit = 0;
                 if (protectionTicks != Integer.MAX_VALUE && bestBidIdx != NONE) {
                     limit = (int) Math.max(0L, (long) bestBidIdx - protectionTicks);
                 }
-                remaining = matchSell(id, ownerId, limit, quantity, timestampNanos);
+                remaining = matchSell(id, ownerId, limit, quantity);
             }
         } finally {
             emitTrades();
@@ -359,8 +359,8 @@ public final class HftOrderBook {
         try {
             startMatch(timestampNanos);
             remaining = side == Side.BUY
-                    ? matchBuy(id, ownerId, buyLimitIdx(priceTick), quantity, timestampNanos)
-                    : matchSell(id, ownerId, sellLimitIdx(priceTick), quantity, timestampNanos);
+                    ? matchBuy(id, ownerId, buyLimitIdx(priceTick), quantity)
+                    : matchSell(id, ownerId, sellLimitIdx(priceTick), quantity);
         } finally {
             emitTrades();
         }
@@ -532,7 +532,7 @@ public final class HftOrderBook {
     }
 
     /** Buy taker: lift asks from the lowest occupied level up to limitIdx. */
-    private long matchBuy(long takerId, int owner, int limitIdx, long quantity, long ts) {
+    private long matchBuy(long takerId, int owner, int limitIdx, long quantity) {
         long remaining = quantity;
         while (remaining > 0 && !takerStopped && bestAskIdx != NONE && bestAskIdx <= limitIdx) {
             remaining = fillLevel(askHead, askTail, askQty, askBits, bestAskIdx,
@@ -545,7 +545,7 @@ public final class HftOrderBook {
     }
 
     /** Sell taker: hit bids from the highest occupied level down to limitIdx. */
-    private long matchSell(long takerId, int owner, int limitIdx, long quantity, long ts) {
+    private long matchSell(long takerId, int owner, int limitIdx, long quantity) {
         long remaining = quantity;
         while (remaining > 0 && !takerStopped && bestBidIdx != NONE && bestBidIdx >= limitIdx) {
             remaining = fillLevel(bidHead, bidTail, bidQty, bidBits, bestBidIdx,

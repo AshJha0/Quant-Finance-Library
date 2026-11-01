@@ -1,6 +1,7 @@
 /**
- * Event-driven tick-level backtesting — the level below bars, where queue
- * position decides whether a passive order actually trades:
+ * Event-driven tick-level backtesting with queue-aware passive fills.
+ * Below the bar level, queue position decides whether a passive order
+ * trades:
  * {@link com.quantfinlib.backtest.tick.TickBacktester} replays QFLT tick
  * files through a {@link com.quantfinlib.backtest.tick.TickStrategy} with
  * microstructure-aware fills (market orders pay half the spread; limit

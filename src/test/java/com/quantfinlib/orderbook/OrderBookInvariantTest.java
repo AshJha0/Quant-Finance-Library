@@ -59,7 +59,7 @@ class OrderBookInvariantTest {
                 // Limit order on a price grid that regularly crosses.
                 Side side = rnd.nextBoolean() ? Side.BUY : Side.SELL;
                 double price = 90 + rnd.nextInt(41) * 0.5;
-                long qty = 1 + rnd.nextInt(500);
+                long qty = 1L + rnd.nextInt(500);
                 takerFills.clear();
                 long id = book.submitLimit(side, price, qty, op);
                 long filled = takerFills.getOrDefault(id, 0L);

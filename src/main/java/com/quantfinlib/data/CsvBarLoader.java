@@ -43,10 +43,10 @@ public final class CsvBarLoader {
             throw new IllegalArgumentException("empty CSV");
         }
         String headerLine = lines.getFirst().replace("﻿", "");   // strip BOM
-        // Delimiter is a FILE-level fact: a semicolon-delimited file is the
-        // European convention, where the comma is the DECIMAL separator —
+        // Delimiter is a file-level fact: a semicolon-delimited file is the
+        // European convention, where the comma is the decimal separator —
         // exactly the character the US-convention number parser strips.
-        // Detect once from the header, counting only semicolons OUTSIDE
+        // Detect once from the header, counting only semicolons outside
         // quotes: a quoted extra-column name containing ';' in a comma file
         // must not flip the whole file to European decimals.
         boolean semicolon = containsUnquoted(headerLine, ';');
@@ -109,8 +109,9 @@ public final class CsvBarLoader {
 
     /** Writes the series as {@code timestamp,open,high,low,close,volume} with epoch-millis timestamps. */
     public static void save(BarSeries series, Path path) throws IOException {
-        if (path.getParent() != null) {
-            Files.createDirectories(path.getParent());
+        Path parent = path.getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
         }
         try (Writer w = Files.newBufferedWriter(path)) {
             w.write("timestamp,open,high,low,close,volume\n");
@@ -132,7 +133,7 @@ public final class CsvBarLoader {
     }
 
     /**
-     * RFC-4180-style field split on ONE delimiter. Splitting a semicolon
+     * RFC-4180-style field split on one delimiter. Splitting a semicolon
      * file on commas too would shred its decimal commas ("100,25" is one
      * number, not two cells) — the delimiter is a file-level fact decided
      * once from the header, never per line.
@@ -190,7 +191,7 @@ public final class CsvBarLoader {
      * Locale-aware numeric parse. US convention (comma files): the comma is
      * a thousands separator and is stripped ("1,234.5"). European
      * convention (semicolon files): the DOT is the thousands separator and
-     * the COMMA is the decimal point ("1.234,56") — stripping commas there
+     * the comma is the decimal point ("1.234,56") — stripping commas there
      * would silently read 1,6 as 16, corrupting every value by 10x.
      */
     static double parseNumber(String value, boolean europeanDecimals) {

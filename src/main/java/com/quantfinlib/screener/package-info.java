@@ -1,5 +1,6 @@
 /**
- * Stock screening: {@link com.quantfinlib.screener.StockScreener} applies
+ * Stock screening by technical and fundamental filters, with ranking and
+ * CSV export. {@link com.quantfinlib.screener.StockScreener} applies
  * composable {@link com.quantfinlib.screener.ScreenFilter}s —
  * {@link com.quantfinlib.screener.TechnicalFilters} (RSI, moving averages,
  * MACD, ADX, VWAP, SuperTrend, Bollinger, Ichimoku, breakouts, volume

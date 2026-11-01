@@ -29,7 +29,7 @@ import java.util.Map;
  *       {@link VenueQuote#latencyNanos} once observed;</li>
  *   <li><b>Adverse selection</b> — a venue whose fills are followed by
  *       reversion ({@link VenueScorecard#postFillMarkout} negative) charges
- *       that reversion as a per-share cost: two identical quotes are NOT
+ *       that reversion as a per-share cost: two identical quotes are not
  *       equal when one venue's fills systematically fade;</li>
  *   <li><b>Hidden liquidity</b> — dark pools are probed with sizes learned
  *       from realized probe fills ({@link VenueScorecard#onDarkProbe}),
@@ -56,8 +56,8 @@ import java.util.Map;
  * {@code fx.LpRouter}, which prices last-look rejects and hold time
  * natively from {@code fx.LpScorecard}.</p>
  *
- * <p>Research/decision lane (allocates the plan); the per-decision cost is
- * microseconds, spent once per parent slice, not per tick. Venue identity
+ * <p>Research/decision lane (allocates the plan); the decision runs
+ * once per parent slice, not per tick (timings in docs/BENCHMARKS.md). Venue identity
  * is by name, mapped once to dense scorecard ids at registration.</p>
  */
 public final class AdaptiveSor {
@@ -210,7 +210,7 @@ public final class AdaptiveSor {
     }
 
     /**
-     * Fill probability for a PASSIVE child joining a queue with
+     * Fill probability for a passive child joining a queue with
      * {@code qtyAhead} ahead of it — the queue-position leg of the routing
      * checklist, delegated to {@link QueueModel}. Feed {@code qtyAhead}
      * from {@code marketdata.L3BookBuilder.sharesAhead} when you track the

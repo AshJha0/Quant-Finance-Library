@@ -3,13 +3,13 @@ package com.quantfinlib.volatility;
 import com.quantfinlib.util.MathUtils;
 
 /**
- * GJR-GARCH(1,1,1) — GARCH with the LEVERAGE term equity markets demand:
+ * GJR-GARCH(1,1,1) — GARCH with the leverage term equity markets demand:
  *
  * <pre>  h_t = ω + (α + γ·1{r&lt;0}) r_{t-1}² + β h_{t-1}</pre>
  *
  * A down move raises tomorrow's variance by {@code α + γ}; an equal up
  * move by only {@code α}. That asymmetry (Glosten-Jagannathan-Runkle,
- * 1993) is not a refinement — on equity indices γ is typically LARGER
+ * 1993) is not a refinement — on equity indices γ is typically larger
  * than α, i.e. most of the ARCH effect is the leverage effect, and a
  * symmetric {@link Garch11} systematically underestimates post-selloff
  * volatility. Fitting a GJR and finding γ ≈ 0 is itself information:

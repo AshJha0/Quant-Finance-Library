@@ -3,8 +3,8 @@ package com.quantfinlib.rates;
 import com.quantfinlib.util.MathUtils;
 
 /**
- * SVENSSON (Nelson-Siegel-Svensson) yield-curve fit — {@link NelsonSiegel}
- * with a SECOND curvature hump, the form most central banks actually
+ * Svensson (Nelson-Siegel-Svensson) yield-curve fit — {@link NelsonSiegel}
+ * with a second curvature hump, the form most central banks actually
  * publish (the ECB's daily curve is exactly this):
  *
  * <pre>
@@ -13,27 +13,27 @@ import com.quantfinlib.util.MathUtils;
  * </pre>
  *
  * <ul>
- *   <li><b>b0</b> — the LEVEL: z(infinity);</li>
- *   <li><b>b1</b> — the SLOPE: z(0) = b0 + b1 (b1 &gt; 0 is inversion);</li>
- *   <li><b>b2, lambda1</b> — the FIRST hump and where it sits;</li>
- *   <li><b>b3, lambda2</b> — the SECOND hump: the long-end flex a single
+ *   <li><b>b0</b> — the level: z(infinity);</li>
+ *   <li><b>b1</b> — the slope: z(0) = b0 + b1 (b1 &gt; 0 is inversion);</li>
+ *   <li><b>b2, lambda1</b> — the first hump and where it sits;</li>
+ *   <li><b>b3, lambda2</b> — the second hump: the long-end flex a single
  *       hump cannot bend into — real curves routinely show a short-end
- *       bump (policy expectations) AND a 10y+ dip (convexity demand), and
+ *       bump (policy expectations) and a 10y+ dip (convexity demand), and
  *       plain Nelson-Siegel must split the difference.</li>
  * </ul>
  *
- * <p>Fitting mirrors {@link NelsonSiegel} exactly: for FIXED (l1, l2) the
- * model is LINEAR in (b0, b1, b2, b3) — an exact 4-regressor OLS solve —
+ * <p>Fitting mirrors {@link NelsonSiegel} exactly: for fixed (l1, l2) the
+ * model is linear in (b0, b1, b2, b3) — an exact 4-regressor OLS solve —
  * so the fit is a 2-D log-spaced grid over the lambdas with an OLS solve
  * per node, deterministic and free of local-minimum roulette. Nodes with
  * {@code lambda2 <= lambda1} are skipped: the two f2 regressors collide as
  * the lambdas meet (exact collinearity at equality), and the ordering
  * makes the parameterization identifiable — hump one is always the
- * shorter-dated one. Betas are NOT sign-constrained: an inverted or
+ * shorter-dated one. Betas are not sign-constrained: an inverted or
  * double-dipped curve is data, not an error.</p>
  *
  * <p>With b3 = 0 the model IS Nelson-Siegel, so with the lambdas free
- * Svensson can always match NS in-sample; the two FITTERS search different
+ * Svensson can always match NS in-sample; the two fitters search different
  * lambda grids (NS: 80 nodes 1-D; here: 50 nodes 2-D with lambda1 &lt; 10),
  * so on data whose best single lambda falls between this grid's nodes NS
  * can win by a grid-granularity sliver (rmse differences at the 1e-8

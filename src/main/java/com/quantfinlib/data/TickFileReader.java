@@ -55,6 +55,8 @@ public final class TickFileReader {
     /** Thrown when a file is cut short or corrupt; ticks before the damage were delivered. */
     public static final class TruncatedTickFileException extends IOException {
 
+        private static final long serialVersionUID = 1L;
+
         private final long ticksDelivered;
 
         TruncatedTickFileException(String message, long ticksDelivered, Throwable cause) {

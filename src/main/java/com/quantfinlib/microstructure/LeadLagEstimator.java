@@ -84,7 +84,7 @@ public final class LeadLagEstimator {
      * is dropped entirely (no moment updates, ring untouched) so a bad
      * print can't poison the correlations. <b>Gap caveat:</b> after a
      * dropped interval the ring holds the last valid samples, so lag
-     * {@code k} means "k valid samples ago", which is MORE than k
+     * {@code k} means "k valid samples ago", which is more than k
      * wall-clock intervals across the gap. On a feed that gaps often,
      * read {@link #bestLag} as a lead in valid samples, not wall-clock
      * time.
@@ -185,7 +185,7 @@ public final class LeadLagEstimator {
         if (k == 0 || varLead[k] <= 0) {
             return 0;
         }
-        // The leader return that is k intervals before the follower's NEXT
+        // The leader return that is k intervals before the follower's next
         // interval is the one observed k-1 intervals before now.
         return covar[k] / varLead[k] * leaderRing[index(k - 1)];
     }
