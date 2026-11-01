@@ -16,24 +16,45 @@ class PovAndIsSchedulerTest {
     // ------------------------------------------------------------------
 
     @Test
-    void povChasesTargetParticipation() {
+    void povChasesTargetShareOfTotalVolume() {
+        // Target x solves x / (x + V) = p, i.e. x = p / (1 - p) * V.
+        // p = 10 %, V = 5000: x = 5000 / 9 = 555.6 -> 555 (floor).
         PovTracker pov = new PovTracker(10_000, 0.10, 0, 1_000);
         assertEquals(0, pov.dueQuantity());
-        pov.onMarketVolume(5_000);                  // target = 500
-        assertEquals(500, pov.dueQuantity());
-        pov.onExecuted(500);
+        pov.onMarketVolume(5_000);
+        assertEquals(555, pov.dueQuantity());
+        pov.onExecuted(555);
         assertEquals(0, pov.dueQuantity());
-        pov.onMarketVolume(3_000);                  // target = 800, executed 500
-        assertEquals(300, pov.dueQuantity());
-        assertEquals(0.0625, pov.realizedParticipation(), 1e-12);
+        pov.onMarketVolume(3_000);                  // V = 8000: x = 888.9 -> 888
+        assertEquals(333, pov.dueQuantity());
+        pov.onExecuted(333);
+        // Realised share of TOTAL volume: 888 / (888 + 8000) = 0.09993...,
+        // within one share of the 10 % target. The old p * V target would
+        // have realised 800 / 8800 = 9.09 % = p / (1 + p).
+        assertEquals(888.0 / 8_888.0, pov.realizedParticipation(), 1e-12);
+        assertEquals(0.10, pov.realizedParticipation(), 1.0 / 8_888);
+    }
+
+    @Test
+    void povCountsWorkingChildrenAgainstTheTarget() {
+        PovTracker pov = new PovTracker(10_000, 0.5, 0, 10_000);
+        pov.onMarketVolume(1_000);                  // p/(1-p) = 1: target 1000
+        assertEquals(1_000, pov.dueQuantity());
+        pov.onChildSent(1_000);                     // resting, unfilled
+        assertEquals(0, pov.dueQuantity(), "a working child must not be re-sent");
+        pov.onExecuted(400);
+        pov.onChildDone(600);                       // cancelled remainder
+        assertEquals(0, pov.openQuantity());
+        assertEquals(600, pov.dueQuantity());
     }
 
     @Test
     void povRespectsSliceBoundsAndParentRemainder() {
+        // p = 0.5: target = V exactly.
         PovTracker pov = new PovTracker(1_000, 0.5, 100, 400);
-        pov.onMarketVolume(150);                    // behind by 75 < minSlice
+        pov.onMarketVolume(75);                     // behind by 75 < minSlice
         assertEquals(0, pov.dueQuantity());
-        pov.onMarketVolume(1_850);                  // behind by 1000 -> capped at 400
+        pov.onMarketVolume(1_925);                  // behind by 2000 -> capped at 400
         assertEquals(400, pov.dueQuantity());
         pov.onExecuted(900);
         pov.onMarketVolume(10_000);                 // behind, but only 100 left
@@ -49,6 +70,8 @@ class PovAndIsSchedulerTest {
         assertThrows(IllegalArgumentException.class, () -> new PovTracker(0, 0.1, 0, 10));
         assertThrows(IllegalArgumentException.class, () -> new PovTracker(100, 0, 0, 10));
         assertThrows(IllegalArgumentException.class, () -> new PovTracker(100, 1.5, 0, 10));
+        // p = 1 would need infinite volume share: rejected.
+        assertThrows(IllegalArgumentException.class, () -> new PovTracker(100, 1.0, 0, 10));
         assertThrows(IllegalArgumentException.class, () -> new PovTracker(100, 0.1, 20, 10));
     }
 

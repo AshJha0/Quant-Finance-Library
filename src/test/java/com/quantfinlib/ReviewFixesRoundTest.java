@@ -104,9 +104,10 @@ class ReviewFixesRoundTest {
         MarketState maxAlpha = new MarketState(100, 0, 0,
                 Double.POSITIVE_INFINITY, 0.5, 1.0, 0);
         long due = e.dueQuantity(0.5, maxAlpha);
-        assertTrue(due <= 1_000, "POV must respect its rate, got " + due);
+        // Target share of total volume: p / (1 - p) * 10_000 = 1_111.
+        assertTrue(due <= 1_111, "POV must respect its rate, got " + due);
         e.onFill(due);
-        assertTrue(e.executed() <= 1_000);
+        assertTrue(e.executed() <= 1_111);
     }
 
     // ------------------------------------------- settlement tie-break conservatism
