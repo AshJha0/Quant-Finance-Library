@@ -7,15 +7,16 @@ package com.quantfinlib.rates;
  * schedule with the last payment at maturity.
  *
  * <p>The risk numbers and what each is for: <b>Macaulay duration</b> is the
- * cash-flow-weighted average time to payment (years — an intuition number);
+ * cash-flow-weighted average time to payment (years; an intuition number);
  * <b>modified duration</b> = Macaulay / (1 + y/f) is the first-order price
  * sensitivity, {@code dP/P ≈ -modDur · dy}; <b>DV01</b> is the same
- * derivative in money terms per 1bp — the number the desk actually hedges,
- * because DV01s ADD across positions while durations must be
+ * derivative in money terms per 1bp, the number the desk actually hedges,
+ * because DV01s add across positions while durations must be
  * value-weighted. <b>Convexity</b> is the second-order term that makes the
- * duration hedge wrong for large moves — always in the long bondholder's
- * favor (price rises more than duration predicts when yields fall, drops
- * less when they rise), which is why long-convexity positions cost carry.</p>
+ * duration hedge wrong for large moves. It is always in the long
+ * bondholder's favor (price rises more than duration predicts when yields
+ * fall, drops less when they rise), which is why long-convexity positions
+ * cost carry.</p>
  *
  * <p>The {@code yearsToMaturity} functions work in whole coupon periods
  * (no accrued interest, no settlement inside a period): the textbook bond.

@@ -113,7 +113,7 @@ class ConventionsTest {
 
     @Test
     void unionCalendarBlocksEitherCentersHoliday() {
-        // The FX settlement rule as ONE calendar: a holiday in either center
+        // The FX settlement rule as one calendar: a holiday in either center
         // makes the day a non-business day of the union.
         BusinessCalendar london = BusinessCalendar.withHolidays(LocalDate.of(2026, 8, 31));
         BusinessCalendar newYork = BusinessCalendar.withHolidays(LocalDate.of(2026, 9, 7));

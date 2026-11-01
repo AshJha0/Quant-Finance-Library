@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Swaptions and caps priced off the curve, pinned by the two parities
- * that any correct implementation must satisfy EXACTLY, whatever the vol:
+ * that any correct implementation must satisfy exactly, whatever the vol:
  * payer − receiver = annuity·(F − K), and cap − floor = the swap PV.
  */
 class RatesOptionsTest {
