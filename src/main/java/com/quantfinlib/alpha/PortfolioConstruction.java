@@ -287,7 +287,7 @@ public final class PortfolioConstruction {
         }
         String[] sectors = new String[weights.length];
         for (int i = 0; i < sectors.length; i++) {
-            // Unknown sector → unique label → the name demeans against
+            // An unknown sector gets a unique label, so the name demeans against
             // itself (to zero) instead of polluting a real sector's offset.
             sectors[i] = sectorBySymbol.getOrDefault(ctx.symbols().get(i),
                     "\0UNKNOWN:" + ctx.symbols().get(i));
@@ -334,10 +334,10 @@ public final class PortfolioConstruction {
 
     /**
      * Beta neutrality: removes the market-beta component by projecting the
-     * weight vector orthogonal to the beta vector —
-     * {@code w − β · (w·β)/(β·β)} — so {@code Σ wᵢβᵢ = 0} exactly and the
-     * book's P&amp;L stops being a leveraged market bet. Gross changes;
-     * re-target afterwards if needed.
+     * weight vector orthogonal to the beta vector,
+     * {@code w − β · (w·β)/(β·β)}. After the projection {@code Σ wᵢβᵢ = 0}
+     * exactly and the book's P&amp;L stops being a leveraged market bet.
+     * Gross changes; re-target afterwards if needed.
      */
     public static double[] betaNeutralize(double[] weights, double[] betas) {
         if (weights.length != betas.length) {

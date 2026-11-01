@@ -340,10 +340,10 @@ public final class SignalEvaluator {
     }
 
     /**
-     * Midrank transform (average rank for ties), 1-based — values only feed
-     * Pearson. Primitive throughout: sort a copy, then each value's midrank
-     * is the average of its first/last positions in the sorted array via
-     * binary search — no boxed index sort, no comparator dispatch.
+     * Midrank transform (average rank for ties), 1-based; the values only
+     * feed Pearson. Primitive throughout: sort a copy, then each value's
+     * midrank is the average of its first/last positions in the sorted
+     * array via binary search. No boxed index sort, no comparator dispatch.
      */
     private static double[] ranks(double[] v) {
         int n = v.length;
