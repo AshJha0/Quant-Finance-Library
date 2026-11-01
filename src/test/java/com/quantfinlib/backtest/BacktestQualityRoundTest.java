@@ -162,7 +162,7 @@ class BacktestQualityRoundTest {
                 () -> GridSearchOptimizer.deflatedSharpeOfWinner(ranked, rets, 0));
     }
 
-    // ------------------------------------------------------- walk-forward honesty
+    // ------------------------------------------------------- walk-forward state carry-over
 
     @Test
     void walkForwardFoldsTradeBecauseIndicatorsArriveWarm() {

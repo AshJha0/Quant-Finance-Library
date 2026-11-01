@@ -35,7 +35,7 @@ class QuantModels5Test {
     void aNoisyNegativeLambdaIsNeverASubsidy() {
         KylesLambda kyle = new KylesLambda(0.5);
         kyle.onSample(-0.01, 1_000);       // flow up, price down: negative estimate
-        assertTrue(kyle.lambda() < 0, "the raw diagnostic stays honest");
+        assertTrue(kyle.lambda() < 0, "the raw diagnostic keeps its sign");
         assertEquals(0, kyle.impactBps(10_000, 100), 0.0,
                 "the executor never gets paid to trade");
     }

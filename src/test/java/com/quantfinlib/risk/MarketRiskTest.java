@@ -424,7 +424,7 @@ class MarketRiskTest {
     // ------------------------------------------------------------------
 
     @Test
-    void gjrFindsTheLeverageEffectAndItsAbsenceHonestly() {
+    void gjrFindsTheLeverageEffectAndItsAbsence() {
         // Simulate a GJR process with a strong planted leverage term.
         Random rnd = new Random(42);
         int n = 4_000;
