@@ -6713,11 +6713,12 @@ why the industry splits: FIX tag=value survives on the session/order edge
 where volumes are thousands per second and debuggability wins; market
 data at millions of messages per second is binary everywhere.
 
-*In this library:* the `sbe` package is the statement of this philosophy
--- its `package-info.java` calls it "the professional-grade alternative
-to the text edges (JSON WebSocket in, FIX tag-value out)"; compare
-`fix/FixMessage.java` (String parse, right for session plumbing) against
-`sbe/TradeFlyweight.java` (five absolute reads).
+*In this library:* the `sbe` package -- binary codecs in the SBE 1.0
+style, every message led by the standard 8-byte header, fields at fixed
+offsets with 64-bit fields 8-byte aligned; compare `fix/FixMessage.java`
+(String parse, right for session plumbing) against
+`sbe/TradeFlyweight.java` (a header read plus a handful of absolute
+reads).
 
 ### 203. "Explain the flyweight pattern over a ByteBuffer. Why not decode into a message object?"
 
@@ -6739,8 +6740,8 @@ at the wrong bytes -- so type discipline must be enforced by asserts or
 dispatch structure.
 
 *In this library:* `sbe/TradeFlyweight.java`, `sbe/OrderFlyweight.java`,
-`sbe/QuoteFlyweight.java` (wire layouts in the javadoc, "reuse one
-instance for millions of messages"), and `marketdata/ItchCodec.java`'s
+`sbe/QuoteFlyweight.java` (wire layouts in the javadoc; one instance is
+reused for every message), and `marketdata/ItchCodec.java`'s
 `View`, whose getters assert the message type so misdispatch fails loudly
 in tests.
 
@@ -6766,8 +6767,10 @@ allocates per operation.
 takes prices as mantissa x 10^-decimals ("doubles never touch the
 encoder"), `fix/FixMarketDataView.java` exposes MDEntryPx the same way so
 feed-to-order never converts through a double, and `marketdata/ItchCodec.java`
-uses 4-implied-decimal integers; the internal `sbe` flyweights carry
-doubles on trusted intra-process hops, documented in their layouts.
+uses 4-implied-decimal integers; the `sbe` flyweights carry prices and
+sizes as int64 mantissas with an int8 exponent (`sbe/Decimal64.java`),
+and `sbe/BinaryOrderPublisher.java` puts prices on a per-symbol
+`10^exponent` grid and refuses an off-grid price rather than rounding it.
 
 ### 205. "Big-endian or little-endian on the wire -- does it matter, and what do real feeds do?"
 
@@ -6835,11 +6838,15 @@ treat an unknown message type as skippable (length-prefixed framing makes
 that possible, Q208), so a venue adding message types does not take your
 handler down.
 
-*In this library:* the ingredients are visible in miniature: every
-`sbe/*Flyweight` starts with a `MESSAGE_TYPE` int at offset 0 and
-declares `BLOCK_LENGTH`; `data/TickFileWriter.java` writes a magic plus
-an explicit `VERSION` byte at the head of every QFLT file, so the reader
-can refuse or adapt before parsing a single record.
+*In this library:* the ingredients are all there: every `sbe/*Flyweight`
+message starts with `sbe/MessageHeader.java` (blockLength, templateId,
+schemaId, version; schema version 2), each flyweight declares its
+`TEMPLATE_ID`, `BLOCK_LENGTH` (the body) and `ENCODED_LENGTH` (the whole
+message), and the readers skip unknown templates by block length, stop
+on a foreign schema id, and still decode version-1 frames.
+`data/TickFileWriter.java` writes a magic plus an explicit version byte
+(now 2) at the head of every QFLT file, so the reader can refuse or adapt
+before parsing a single record; version-1 files are still read.
 
 ### 208. "TCP gives you a byte stream, not messages. How do you frame?"
 
@@ -6881,13 +6888,20 @@ references it**, but may appear anywhere, so new symbols can join
 mid-capture without rewriting the header -- the same state-before-deltas
 rule as snapshot+incremental feeds (Q197). Store the EXCHANGE event time,
 not write time, so replays reproduce true market pacing; buffer writes
-(a megabyte-class BufferedOutputStream) so capture is sequential I/O; and
-keep the writer off the trading thread entirely (Q236).
+so capture is sequential I/O; and keep the writer off the trading thread
+entirely (Q236). Two things a replay file also needs: integrity and
+clock provenance. Group records in blocks with a checksum each (CRC-32C),
+so the reader detects corruption and a torn tail from a crash instead of
+replaying garbage; and record which clock the timestamps came from
+(exchange epoch time or a local monotonic clock) with one instant
+anchored on both, so monotonic timestamps can be placed on the calendar.
 
-*In this library:* `data/TickFileWriter.java` -- magic "QFLT", VERSION
-byte, TYPE_SYMBOL/TYPE_TICK framing, the defineSymbol-before-write
-contract enforced with an IllegalStateException; `data/AsyncTickCapture.java`
-is the off-thread writer around it.
+*In this library:* `data/TickFileWriter.java` -- magic "QFLT", version
+2 header with a clock domain (`TickFileWriter.ClockDomain`) and an
+epoch/monotonic anchor, records grouped in about 64 KiB CRC-32C blocks,
+TYPE_SYMBOL/TYPE_TICK framing, the defineSymbol-before-write contract,
+and a force to the device on close; `data/AsyncTickCapture.java` is the
+off-thread writer around it.
 
 ### 210. "A single byte corrupts in an incoming FIX BodyLength. What happens to a naive decoder, and how do you harden it?"
 
@@ -6957,9 +6971,9 @@ and instanceof chains over decoded objects. The pattern scales: ITCH
 handlers are exactly a byte-switch over 20-odd types; a well-built one
 runs an entire trading day without a single decode-path allocation.
 
-*In this library:* `sbe/TradeFlyweight.typeAt(buffer, offset)` is the
-static peek ("reads the message-type discriminator without wrapping"),
-each flyweight declares its `MESSAGE_TYPE`; `marketdata/ItchCodec.java`
+*In this library:* `sbe/MessageHeader.templateId(buffer, offset)` is the
+static peek (it reads the header without wrapping a flyweight), and
+each flyweight declares its `TEMPLATE_ID`; `marketdata/ItchCodec.java`
 gives the byte-switch vocabulary and the `length(type)` table that
 advances the framer; `sbe/BinaryMarketDataClient.java` and
 `sbe/BinaryOrderReceiver.java` are the dispatch loops built on them.
