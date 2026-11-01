@@ -14,7 +14,7 @@
  * {@link com.quantfinlib.pricing.TouchOption},
  * {@link com.quantfinlib.pricing.BarrierOption},
  * {@link com.quantfinlib.pricing.VannaVolga}) and
- * {@link com.quantfinlib.pricing.Autocallable} (the flagship equity
+ * {@link com.quantfinlib.pricing.Autocallable} (the most common equity
  * structured product: memory coupons, autocall observations, European
  * knock-in — Monte Carlo with antithetic variates under documented GBM
  * simplifications; RFQ market structure for trading it lives in
