@@ -1,0 +1,4 @@
+jdk:
+  - openjdk25
+install:
+  - ./mvnw -B -q --no-transfer-progress -DskipTests install
