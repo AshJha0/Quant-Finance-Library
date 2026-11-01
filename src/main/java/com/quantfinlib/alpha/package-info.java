@@ -1,6 +1,7 @@
 /**
- * The alpha research pipeline: signal to evaluated, validated, cost-aware,
- * constructed and reported strategy, each stage a separate step.
+ * Cross-sectional alpha research: signal generation, evaluation,
+ * validation, execution-aware backtesting, portfolio construction and
+ * reporting, each a separate step.
  *
  * <ol>
  *   <li><b>Signal generation</b>: {@link com.quantfinlib.alpha.Factors}

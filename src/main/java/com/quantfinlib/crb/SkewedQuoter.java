@@ -4,12 +4,12 @@ import com.quantfinlib.util.MathUtils;
 
 /**
  * Inventory-skewed two-way pricing — the central risk book's quoting
- * face. A CRB long inventory shades BOTH quotes down: the ask gets more
+ * face. A CRB long inventory shades both quotes down: the ask gets more
  * attractive (sell what we hold), the bid less (stop accumulating).
  * That is the Avellaneda-Stoikov reservation-price intuition applied at
  * book level, without the vol/horizon machinery: skew is linear in
  * inventory as a fraction of the inventory limit, capped so the quote
- * NEVER crosses itself.
+ * never crosses itself.
  *
  * <pre>  skew = −(inventory/limit)·skewFraction·halfSpread   (clamped ±1)
  *  bid  = mid·(1 + (−halfSpread + skew)/1e4)
@@ -48,7 +48,7 @@ public final class SkewedQuoter {
             throw new IllegalArgumentException("skewFraction must be in [0, 1)");
         }
         // The worst-case downward shade is halfSpread·(1 + skewFraction):
-        // past 10,000 bps that quotes a ZERO or NEGATIVE bid — no market
+        // past 10,000 bps that quotes a zero or negative bid — no market
         // this class serves has 100% half spreads, so reject loudly.
         if (halfSpreadBps * (1 + skewFraction) >= 10_000) {
             throw new IllegalArgumentException("halfSpreadBps " + halfSpreadBps

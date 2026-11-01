@@ -6,7 +6,7 @@ package com.quantfinlib.risk;
  * at 99.9% from 500 observations is reading the worst half-observation;
  * EVT instead fits the Generalized Pareto Distribution to the
  * exceedances over a high threshold (the Pickands-Balkema-de Haan
- * theorem says the tail of ANY well-behaved distribution converges to a
+ * theorem says the tail of any well-behaved distribution converges to a
  * GPD), then extrapolates along the fitted tail:
  *
  * <pre>  VaR_p = u + (β/ξ)·[((n/Nᵤ)(1−p))^{−ξ} − 1]</pre>
@@ -107,7 +107,7 @@ public final class ExtremeValueTheory {
         int thresholdIndex = (int) Math.floor(thresholdQuantile * n) - 1;
         double u = sorted[Math.max(0, thresholdIndex)];
 
-        // Exceedances y_i = loss − u, ascending — STRICTLY above u: on
+        // Exceedances y_i = loss − u, ascending — strictly above u: on
         // discretized data (P&L snapped to ticks) ties equal to u would
         // otherwise enter as y = 0 exceedances, deflating both PWMs and
         // biasing the shape estimate.
@@ -122,7 +122,7 @@ public final class ExtremeValueTheory {
         }
         // Probability-weighted moments (Hosking & Wallis 1987):
         // b0 = E[Y] = mean(y);  a1 = E[Y·(1−F(Y))], estimated over the
-        // ASCENDING order statistics with weight (m−1−i)/(m−1). Then
+        // ascending order statistics with weight (m−1−i)/(m−1). Then
         // ξ = 2 − b0/(b0 − 2a1),  β = 2·b0·a1/(b0 − 2a1) — for GPD(ξ, β):
         // b0 = β/(1−ξ), a1 = β/(2(2−ξ)), and the algebra inverts exactly.
         double b0 = 0;

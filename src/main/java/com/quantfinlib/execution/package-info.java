@@ -1,5 +1,6 @@
 /**
- * Execution strategy support:
+ * Order routing, execution algorithms and the venue models they learn
+ * from. The main classes:
  * {@link com.quantfinlib.execution.SmartOrderRouter} (fee-adjusted
  * multi-venue splitting, dark-first option), its zero-allocation
  * hot-lane sibling {@link com.quantfinlib.execution.HftSor}, and the
@@ -17,7 +18,7 @@
  * (Almgren-Chriss-optimal slicing),
  * {@link com.quantfinlib.execution.WmrFixingScheduler} (benchmark-window
  * TWAP replication),
- * {@link com.quantfinlib.execution.BenchmarkExecutor} (the DYNAMIC
+ * {@link com.quantfinlib.execution.BenchmarkExecutor} (the dynamic
  * benchmark algo: one stateful executor tracking VWAP / TWAP / Arrival /
  * Implementation Shortfall / Closing / Opening / Participation, re-deciding
  * each interval from live spread, depth, volatility, volume curve, alpha
@@ -41,7 +42,7 @@
  * <p>The spread-and-microstructure layer:
  * {@link com.quantfinlib.execution.SpreadExecutionAlgo} (two-legged
  * pairs/basis execution — the illiquid lead leg worked patiently, the
- * liquid hedge leg chasing at the ratio, and a HARD legging-risk cap),
+ * liquid hedge leg chasing at the ratio, and a hard legging-risk cap),
  * {@link com.quantfinlib.execution.OrderPlacementPolicy} (post-or-cross
  * as expected-cost arithmetic, with the post region in closed form),
  * {@link com.quantfinlib.execution.AntiGamingJitter} (seeded size/time

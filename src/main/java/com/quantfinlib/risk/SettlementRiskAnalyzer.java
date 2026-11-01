@@ -56,7 +56,7 @@ public final class SettlementRiskAnalyzer {
             events.add(new Event(leg.payTimeMillis(), leg.receiveAmount()));
             events.add(new Event(leg.receiveTimeMillis(), -leg.receiveAmount()));
         }
-        // At equal timestamps apply PAYMENTS (positive deltas) before
+        // At equal timestamps apply payments (positive deltas) before
         // receipts: for a worst-case exposure metric the conservative
         // reading of a simultaneous pay/receive is that your money left
         // first. Receipts-first would quietly understate the peak — the

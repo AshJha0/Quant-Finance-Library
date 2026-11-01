@@ -3,8 +3,8 @@ package com.quantfinlib.pricing;
 import com.quantfinlib.util.MathUtils;
 
 /**
- * ASIAN (average-price) options — the corporate hedger's option: paying off
- * on the AVERAGE of n fixings instead of one closing print kills both the
+ * Asian (average-price) options — the corporate hedger's option: paying off
+ * on the average of n fixings instead of one closing print kills both the
  * expiry-day manipulation incentive and most of the vol (an average is
  * smoother than its endpoints), which is why commodity and FX hedging
  * programs default to them. Two averages, two methods:
@@ -21,11 +21,11 @@ import com.quantfinlib.util.MathUtils;
  *       and the price is the Black-76 form on the lognormal G: discount
  *       {@code E[G] N(d1) - K N(d2)}. As n grows, Var goes to
  *       {@code vol^2 T / 3} — continuous averaging cuts the variance to a
- *       THIRD; at n = 1 both moments collapse to the terminal price and
+ *       third; at n = 1 both moments collapse to the terminal price and
  *       the formula IS vanilla Black-Scholes (tested exact).</li>
  *   <li><b>Arithmetic average — Turnbull-Wakeman (1991) moment matching.</b>
  *       A sum of lognormals is not lognormal and has no closed form; TW
- *       computes the arithmetic average's first two moments EXACTLY under
+ *       computes the arithmetic average's first two moments exactly under
  *       GBM,
  *       <pre>
  *         M1 = (S/n) sum_i e^{g t_i}                          g = r - q
@@ -38,13 +38,13 @@ import com.quantfinlib.util.MathUtils;
  *       double sum is evaluated in O(n) with suffix sums.</li>
  * </ul>
  *
- * <p>AM-GM guarantees {@code A >= G} pathwise, so an arithmetic CALL is
+ * <p>AM-GM guarantees {@code A >= G} pathwise, so an arithmetic call is
  * always worth at least the geometric call (tested) — the geometric price
  * is the standard control variate for Monte Carlo on the arithmetic. Rates
  * and vol are annualized and continuously compounded; {@code carry} is the
  * dividend/foreign yield exactly as {@link BlackScholes}. Fixings strictly
  * after inception ({@code t_1 = T/n > 0}): a seasoned Asian with fixings
- * already struck is a payoff on the REMAINING average plus a known cash
+ * already struck is a payoff on the remaining average plus a known cash
  * amount — decompose it before calling. Research lane.</p>
  */
 public final class AsianOption {

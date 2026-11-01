@@ -1,5 +1,6 @@
 /**
- * Limit order book modelling, in two lanes:
+ * Limit order book models: a readable research book and a zero-allocation
+ * matching book. In detail:
  * {@link com.quantfinlib.orderbook.OrderBook} is the research model
  * (price-time-priority matching with cancels, partial fills, queue-position
  * queries and order-to-trade counters; readable TreeMap/object internals);
@@ -8,7 +9,7 @@
  * pooled intrusive order nodes, primitive open-addressing id map, owner ids
  * with self-trade prevention, modify with priority rules, market-order
  * protection bands and trade sequence numbers; throughput measured by
- * {@code examples.HftBookBenchmark}).
+ * {@code examples.HftBookBenchmark}, results in docs/BENCHMARKS.md).
  * {@link com.quantfinlib.orderbook.BookAnalytics} adds spread, microprice,
  * depth imbalance and non-destructive sweep simulation. Correctness is
  * checked by a 100k-operation model-based fuzz test on the reference book

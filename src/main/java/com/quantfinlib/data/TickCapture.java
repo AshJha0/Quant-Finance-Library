@@ -5,6 +5,7 @@ import com.quantfinlib.marketdata.TickListener;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Records every tick flowing through an {@link HftMarketDataBus} into a QFLT
@@ -26,7 +27,7 @@ public final class TickCapture implements TickListener, AutoCloseable {
     private final TickFileWriter writer;
     private final HftMarketDataBus bus;
     private volatile IOException failure;
-    private long droppedTicks;
+    private final AtomicLong droppedTicks = new AtomicLong();
 
     private TickCapture(HftMarketDataBus bus, Path file, TickFileWriter.ClockDomain domain)
             throws IOException {
@@ -57,7 +58,7 @@ public final class TickCapture implements TickListener, AutoCloseable {
     @Override
     public void onTick(int symbolId, double price, double size, long timestampNanos) {
         if (failure != null) {
-            droppedTicks++;
+            droppedTicks.incrementAndGet();
             return;
         }
         try {
@@ -65,7 +66,7 @@ public final class TickCapture implements TickListener, AutoCloseable {
             writer.write(symbolId, price, size, timestampNanos);
         } catch (IOException e) {
             failure = e;
-            droppedTicks++;
+            droppedTicks.incrementAndGet();
         }
     }
 
@@ -75,7 +76,7 @@ public final class TickCapture implements TickListener, AutoCloseable {
 
     /** Ticks not recorded because the writer had failed. */
     public long droppedTicks() {
-        return droppedTicks;
+        return droppedTicks.get();
     }
 
     /** False once a write has failed. */

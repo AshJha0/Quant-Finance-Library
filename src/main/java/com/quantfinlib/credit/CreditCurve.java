@@ -3,18 +3,18 @@ package com.quantfinlib.credit;
 import com.quantfinlib.rates.YieldCurve;
 
 /**
- * CREDIT CURVE — piecewise-constant hazard rates bootstrapped from CDS par
+ * Credit curve — piecewise-constant hazard rates bootstrapped from CDS par
  * spreads, the credit market's exact analogue of {@link YieldCurve}'s
  * bootstrap: walk the quotes from shortest to longest, at each pillar
  * solving for the one hazard rate that reprices that maturity's CDS to
  * zero upfront given everything already solved.
  *
- * <p>The objects: the HAZARD RATE h(t) is the instantaneous default
+ * <p>The objects: the hazard rate h(t) is the instantaneous default
  * intensity ("conditional on surviving to t, the annualized probability
- * of defaulting right now"); SURVIVAL is its exponential integral,
+ * of defaulting right now"); survival is its exponential integral,
  * {@code Q(t) = exp(-integral of h)} — piecewise-constant h makes that a
  * product of exponentials, evaluated exactly. The rule-of-thumb every
- * desk carries — the CREDIT TRIANGLE {@code spread ~ h * (1 - R)} — falls
+ * desk carries — the credit triangle {@code spread ~ h * (1 - R)} — falls
  * out of setting premium = protection on a flat curve, and the tests pin
  * this class against it.</p>
  *

@@ -1,6 +1,7 @@
 /**
- * Runnable demonstrations and benchmarks (excluded from coverage — they are
- * run manually or by the {@code Benchmarks (Linux)} workflow):
+ * Runnable demonstrations and benchmarks, shipped in the separate
+ * {@code examples} jar and excluded from coverage. They are run by hand or
+ * by the {@code Benchmarks (Linux)} workflow:
  * {@link com.quantfinlib.examples.QuickStartDemo} tours every capability on
  * synthetic data;
  * {@link com.quantfinlib.examples.HftLatencyBenchmark} measures the market

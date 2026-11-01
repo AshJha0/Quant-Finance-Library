@@ -15,6 +15,8 @@ package com.quantfinlib.fix;
  */
 public final class FixParseException extends IllegalArgumentException {
 
+    private static final long serialVersionUID = 1L;
+
     private final boolean garbled;
     private final int rejectReason;
     private final int refTagId;

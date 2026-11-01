@@ -152,12 +152,12 @@ public final class MathUtils {
 
     /**
      * Cholesky decomposition: returns lower-triangular L with A = L * L'.
-     * Adds tiny diagonal jitter if the matrix is BORDERLINE non-PSD
+     * Adds tiny diagonal jitter if the matrix is borderline non-PSD
      * (rank-deficient factor models produce pivots a hair below zero),
      * but a pivot grossly negative relative to the diagonal scale means
      * the input is genuinely indefinite — a typo'd correlation &gt; 1, or
      * inconsistent pairwise estimates — and simulating a silently
-     * clamped, DIFFERENT dependence structure would misstate risk, so
+     * clamped, different dependence structure would misstate risk, so
      * that fails loudly instead.
      */
     public static double[][] cholesky(double[][] a) {

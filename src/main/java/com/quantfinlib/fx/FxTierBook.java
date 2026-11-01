@@ -69,7 +69,7 @@ public final class FxTierBook {
      *
      * @throws IllegalArgumentException on an out-of-range {@code lp} or
      *         {@code tier} — the flat layout means an unchecked overflow
-     *         would silently land in the NEXT LP's ladder, which is the one
+     *         would silently land in the next LP's ladder, which is the one
      *         failure mode a price store must never have
      */
     public void tier(int lp, boolean bid, int tier, double price, double size) {
@@ -113,7 +113,7 @@ public final class FxTierBook {
     // ------------------------------------------------------------------
 
     /**
-     * Best (highest) bid across LPs, taken at each LP's FRONTIER tier —
+     * Best (highest) bid across LPs, taken at each LP's frontier tier —
      * the first well-formed one — so a malformed tier 0 (NaN/zero) masks
      * nothing, consistent with how sweeps and full-amount queries read the
      * same ladder. NaN when nobody bids.
@@ -148,7 +148,7 @@ public final class FxTierBook {
     }
 
     /**
-     * All-in cost of BUYING {@code size} by sweeping ask tiers across LPs,
+     * All-in cost of buying {@code size} by sweeping ask tiers across LPs,
      * cheapest tier first. Returns the notional paid (Σ px×qty), or NaN
      * when the book cannot fill the size — a partial sweep is not a price.
      * Zero allocation (internal scratch; single writer).
@@ -157,7 +157,7 @@ public final class FxTierBook {
         return sweep(size, /*buy*/ true, null);
     }
 
-    /** Mirror: proceeds of SELLING {@code size} into the bid tiers; NaN if unfillable. */
+    /** Mirror: proceeds of selling {@code size} into the bid tiers; NaN if unfillable. */
     public double sweepSellProceeds(double size) {
         return sweep(size, false, null);
     }

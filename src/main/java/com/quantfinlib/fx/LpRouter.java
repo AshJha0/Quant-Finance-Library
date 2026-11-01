@@ -15,7 +15,7 @@ package com.quantfinlib.fx;
  *
  * <p>Full-amount only, one LP per clip — the FX convention that avoids
  * spraying child orders (each child leaks intent to another counterparty's
- * last-look window). For deliberate multi-LP sweeps, use
+ * last-look window). For intended multi-LP sweeps, use
  * {@link FxTierBook#sweepPlan} directly and accept the signaling.</p>
  *
  * <p>Zero allocation, single writer. The route decision returns the LP
@@ -51,7 +51,7 @@ public final class LpRouter {
 
     /**
      * With a hold-time urgency: an LP's last-look hold is FX's latency
-     * dimension — while it deliberates, the market drifts against you. A
+     * dimension — while the LP holds the order, the market drifts against you. A
      * positive {@code holdUrgencyBpsPerMs} charges each LP's EWMA hold
      * time against its quote (bps of price per millisecond held), so a
      * slow-holding LP loses ties exactly like a high-latency venue does in

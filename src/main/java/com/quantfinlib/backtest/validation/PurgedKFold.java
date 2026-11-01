@@ -4,11 +4,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * PURGED K-fold cross-validation splits with an EMBARGO — the fix for the
+ * Purged K-fold cross-validation splits with an embargo — the fix for the
  * quiet leak that ordinary K-fold has on financial data (Lopez de Prado,
  * <i>Advances in Financial Machine Learning</i>, ch. 7).
  *
- * <p>The leak: a sample's LABEL is usually computed from bars that come
+ * <p>The leak: a sample's label is usually computed from bars that come
  * after it (e.g. "the 5-bar forward return"). Ordinary K-fold happily puts
  * bar 99 in the training set and bar 100 in the test set — but bar 99's
  * label was computed from bars 100–104, so the model has already seen the
@@ -19,8 +19,8 @@ import java.util.List;
  *   <li><b>Purging</b> removes every training sample whose label window
  *       {@code [i, i + labelHorizon]} overlaps any test label window. For a
  *       contiguous test fold {@code [t0, t1)} that means dropping training
- *       indices in {@code [t0 - labelHorizon, t0)} (labels reach INTO the
- *       fold) and {@code [t1, t1 + labelHorizon)} (labels reach OUT of
+ *       indices in {@code [t0 - labelHorizon, t0)} (labels reach into the
+ *       fold) and {@code [t1, t1 + labelHorizon)} (labels reach out of
  *       it).</li>
  *   <li><b>Embargo</b> drops a further {@code embargo} samples after the
  *       purge zone that follows the test fold. Serial correlation means
@@ -36,7 +36,7 @@ import java.util.List;
  * silently training on nothing is how "great" fold scores happen.</p>
  *
  * <p>Static, deterministic, research lane. Pair with
- * {@link OverfitProbability} (is the SELECTION process overfit?) and
+ * {@link OverfitProbability} (is the selection process overfit?) and
  * {@link WalkForwardAnalyzer} (the strictly-forward-in-time variant).</p>
  */
 public final class PurgedKFold {

@@ -105,7 +105,7 @@ public final class NeweyWest {
         double rho = Math.max(-0.97, Math.min(0.97, autocorrelation(x, 1)));
         double alpha = 4 * rho * rho / (Math.pow(1 - rho, 2) * Math.pow(1 + rho, 2));
         double s = 1.1447 * Math.cbrt(alpha * n);
-        return (int) Math.min(n / 2, Math.floor(s));
+        return Math.min(n / 2, (int) Math.floor(s));
     }
 
     /**

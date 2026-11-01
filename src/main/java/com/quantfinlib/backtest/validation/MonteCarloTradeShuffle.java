@@ -7,24 +7,24 @@ import java.util.List;
 import java.util.SplittableRandom;
 
 /**
- * MONTE CARLO trade reshuffling — the answer to "was my equity curve's
- * SHAPE luck?". A backtest reports one path: this strategy's trades in
+ * Monte Carlo trade reshuffling — the answer to "was my equity curve's
+ * shape luck?". A backtest reports one path: this strategy's trades in
  * the order they happened, producing one max drawdown and one terminal
- * equity. But the ORDER is itself a sample. Reshuffle the same trade
+ * equity. But the order is itself a sample. Reshuffle the same trade
  * P&amp;Ls into thousands of random sequences and you get the distribution
- * of drawdowns and terminal wealth the strategy's OWN trades imply — and
+ * of drawdowns and terminal wealth the strategy's own trades imply — and
  * the question stops being "the backtest drew down 18%" and
  * becomes "the 95th-percentile drawdown of my trade set is 31%, so plan
  * for 31, not 18".
  *
  * <p>What reshuffling holds fixed and what it breaks: it preserves the
- * MULTISET of trade outcomes (win rate, average win/loss, profit factor
- * are invariant) and destroys their ORDER — so it isolates
+ * multiset of trade outcomes (win rate, average win/loss, profit factor
+ * are invariant) and destroys their order — so it isolates
  * "path/sequencing risk" from "edge". Its blind spot, stated plainly:
- * it assumes trades are exchangeable, so it UNDERSTATES risk for a
+ * it assumes trades are exchangeable, so it understates risk for a
  * strategy whose losses cluster (serial correlation, regime dependence)
  * — a martingale that wins small and loses catastrophically looks
- * tamer reshuffled than it is. For serially-correlated PATHS use
+ * tamer reshuffled than it is. For serially-correlated paths use
  * {@link BlockBootstrap} on the return series; this class is the
  * per-trade complement, and the two disagreeing is itself the signal
  * that your trades are not independent.</p>
@@ -50,7 +50,7 @@ public final class MonteCarloTradeShuffle {
      * @param actualMaxDrawdown    the observed (unshuffled) path's max drawdown
      * @param actualDrawdownPct    where the observed drawdown sits in the
      *                             shuffle distribution (0..1); high = the
-     *                             real order was UNUSUALLY painful, a hint
+     *                             real order was unusually painful, a hint
      *                             of loss clustering
      */
     public record Result(double medianMaxDrawdown, double p95MaxDrawdown, double p99MaxDrawdown,
@@ -61,7 +61,11 @@ public final class MonteCarloTradeShuffle {
     private MonteCarloTradeShuffle() {
     }
 
-    /** @param trades the strategy's completed trades, &ge; 2; @param shuffles &ge; 100 */
+    /**
+     * @param trades   the strategy's completed trades, at least 2
+     * @param shuffles number of shuffles, at least 100
+     * @param seed     random seed
+     */
     public static Result analyze(List<Trade> trades, int shuffles, long seed) {
         int n = trades.size();
         if (n < 2) {

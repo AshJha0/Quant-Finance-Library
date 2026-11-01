@@ -3,11 +3,11 @@ package com.quantfinlib.pricing;
 import com.quantfinlib.volatility.VolatilityIndex;
 
 /**
- * VARIANCE SWAP analytics — the cleanest pure-volatility trade there is:
+ * Variance swap analytics — the cleanest pure-volatility trade there is:
  * at expiry the swap pays {@code notional × (realized variance − strike)},
  * no delta, no path-dependent barriers, no vega decay games. The
  * remarkable fact (Demeterfi-Derman-Kamal-Zou 1999) is that its fair
- * strike is MODEL-FREE: a static portfolio of OTM options weighted
+ * strike is model-free: a static portfolio of OTM options weighted
  * {@code 1/K²} replicates the log contract, so the strike is readable off
  * the option chain with no volatility model at all — the same integral a
  * VIX-style index computes. {@link #fairVariance} therefore delegates to
@@ -16,12 +16,12 @@ import com.quantfinlib.volatility.VolatilityIndex;
  *
  * <p>The two quantities a desk actually books:</p>
  * <ul>
- *   <li><b>Variance vs vega notional</b> — dealers quote in VEGA (P&amp;L
- *       per vol point) but settle in VARIANCE units; the bridge is
+ *   <li><b>Variance vs vega notional</b> — dealers quote in vega (P&amp;L
+ *       per vol point) but settle in variance units; the bridge is
  *       {@code varianceNotional = vegaNotional / (2·K_vol)}, the
  *       linearization of variance in vol at the strike. Get this wrong
  *       and every P&amp;L number is off by a factor of 2·K_vol.</li>
- *   <li><b>Mark-to-market of a seasoned swap</b> — variance is ADDITIVE
+ *   <li><b>Mark-to-market of a seasoned swap</b> — variance is additive
  *       in time, so a swap part-way through its life is just realized
  *       variance so far (locked in) blended with the fair strike for the
  *       remaining leg, discounted:
@@ -37,7 +37,7 @@ import com.quantfinlib.volatility.VolatilityIndex;
  * choose your sampling convention for you). The replication carries the
  * discretization bias documented on {@link VolatilityIndex} (~+5e-4 in
  * variance for a coarse chain) and, like all 1/K² replication, prices
- * CONTINUOUS variance — jump risk is why dealers cap payoffs in
+ * continuous variance — jump risk is why dealers cap payoffs in
  * practice; the cap is not modeled here, stated. Research lane.</p>
  */
 public final class VarianceSwap {
@@ -46,7 +46,7 @@ public final class VarianceSwap {
     }
 
     /**
-     * Model-free fair strike (annualized VARIANCE, e.g. 0.04) replicated
+     * Model-free fair strike (annualized variance, e.g. 0.04) replicated
      * from one expiry's option chain — parameters exactly as
      * {@link VolatilityIndex#index}.
      */
@@ -57,9 +57,9 @@ public final class VarianceSwap {
     }
 
     /**
-     * VOLATILITY swap fair strike via the Brockhaus-Long convexity
+     * Volatility swap fair strike via the Brockhaus-Long convexity
      * correction: {@code E[√V] ≈ √E[V] − Var(V) / (8·E[V]^{3/2})}. A vol
-     * swap strike is always BELOW the square root of the variance strike
+     * swap strike is always below the square root of the variance strike
      * (Jensen: √ is concave), and by how much depends on the variance of
      * variance — which is a model input, not chain-readable; that is
      * exactly why vol swaps are not model-free while variance swaps are.
@@ -83,7 +83,7 @@ public final class VarianceSwap {
      * {@code vegaNotional / (2 · strikeVol)}.
      *
      * @param vegaNotional P&amp;L per 1.00 of volatility (per "100 vol points")
-     * @param strikeVol    the strike in VOL terms (0.20, not 0.04), &gt; 0
+     * @param strikeVol    the strike in vol terms (0.20, not 0.04), &gt; 0
      */
     public static double varianceNotional(double vegaNotional, double strikeVol) {
         if (!(strikeVol > 0) || strikeVol == Double.POSITIVE_INFINITY) {

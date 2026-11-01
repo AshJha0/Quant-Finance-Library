@@ -157,7 +157,7 @@ class HftOrderBookTest {
             if (kind < 6 || alive.isEmpty()) {
                 Side side = rnd.nextBoolean() ? Side.BUY : Side.SELL;
                 int tick = MIN + rnd.nextInt(MAX - MIN + 1);
-                long qty = 1 + rnd.nextInt(100);
+                long qty = 1L + rnd.nextInt(100);
                 long fastId = fast.submitLimit(side, tick, qty, op);
                 long refId = reference.submitLimit(side, tick / 100.0, qty, op);
                 assertTrue(fastId > 0);
@@ -176,7 +176,7 @@ class HftOrderBookTest {
                         "cancel disagreement at op " + op);
             } else {
                 Side side = rnd.nextBoolean() ? Side.BUY : Side.SELL;
-                long qty = 1 + rnd.nextInt(150);
+                long qty = 1L + rnd.nextInt(150);
                 fast.submitMarket(side, qty, op);
                 reference.submitMarket(side, qty, op);
             }
@@ -233,7 +233,7 @@ class HftOrderBookTest {
                 }
                 boolean buy = rnd.nextBoolean();
                 int tick = buy ? rnd.nextInt(90) : 110 + rnd.nextInt(90);
-                long qty = 1 + rnd.nextInt(1000);
+                long qty = 1L + rnd.nextInt(1000);
                 long id = b.submitLimit(buy ? Side.BUY : Side.SELL, tick, qty, op);
                 assertTrue(id > 0);
                 expected.put(id, qty);

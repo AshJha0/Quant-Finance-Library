@@ -129,10 +129,10 @@ public final class VolumeCurve {
     // ------------------------------------------------------------------
 
     /**
-     * Expected fraction of TODAY's total volume already traded, at
+     * Expected fraction of today's total volume already traded, at
      * {@code fracWithinBucket} through {@code bucket} — the live VWAP
      * curve input. Falls back to linear time when no profile is learned
-     * yet (VWAP degrades to TWAP, the honest default).
+     * yet (VWAP degrades to TWAP).
      */
     public double expectedFractionElapsed(int bucket, double fracWithinBucket) {
         double f = Math.max(0, Math.min(1, fracWithinBucket));

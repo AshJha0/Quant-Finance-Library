@@ -80,7 +80,7 @@ class BookPrimitivesTest {
             if (oracle.size() < 30 && (oracle.isEmpty() || rnd.nextBoolean())) {
                 long key;
                 do {
-                    key = 1 + rnd.nextInt(1_000_000); // strictly positive, 0 is the sentinel
+                    key = 1L + rnd.nextInt(1_000_000); // strictly positive, 0 is the sentinel
                 } while (oracle.containsKey(key));
                 BookPrimitives.mapPut(keys, vals, mask, key, nextVal);
                 oracle.put(key, nextVal);

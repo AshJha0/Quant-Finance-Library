@@ -46,7 +46,7 @@ public final class VarBacktest {
             return independencePValue > significance;
         }
 
-        /** Joint test: right rate AND independent. */
+        /** Joint test: right rate and independent. */
         public boolean passes(double significance) {
             return conditionalCoveragePValue > significance;
         }

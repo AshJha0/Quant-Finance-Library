@@ -20,7 +20,7 @@ import com.quantfinlib.util.MathUtils;
  * which cannot forecast a negative variance and is the better-behaved
  * specification on real data.
  *
- * <p>Feed it realized DAILY variance — squared returns summed
+ * <p>Feed it realized daily variance — squared returns summed
  * intraday, or {@code JumpRobustVolatility}'s bipower variance when
  * jumps should not contaminate the forecast (the standard pairing).
  * Static, deterministic, research lane.</p>

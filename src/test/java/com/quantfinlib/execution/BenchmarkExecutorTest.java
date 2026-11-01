@@ -50,11 +50,11 @@ class BenchmarkExecutorTest {
         // 1 - sinh(1.5)/sinh(2) = 1 - 2.129279455/3.626860408 = 0.412914...
         BenchmarkExecutor e = new BenchmarkExecutor(Side.BUY, 1_000_000,
                 Benchmark.IMPLEMENTATION_SHORTFALL, 0.1, 0, 1.0).withShortfallUrgency(2.0);
-        assertEquals(412_914, e.dueQuantity(0.25, neutral(0.25)), 1);
+        assertEquals(412_914.0, (double) e.dueQuantity(0.25, neutral(0.25)), 1.0);
         // Small kT approaches TWAP.
         BenchmarkExecutor flat = new BenchmarkExecutor(Side.BUY, 1_000_000,
                 Benchmark.IMPLEMENTATION_SHORTFALL, 0.1, 0, 1.0).withShortfallUrgency(1e-6);
-        assertEquals(250_000, flat.dueQuantity(0.25, neutral(0.25)), 1);
+        assertEquals(250_000.0, (double) flat.dueQuantity(0.25, neutral(0.25)), 1.0);
     }
 
     @Test

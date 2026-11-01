@@ -3,7 +3,7 @@ package com.quantfinlib.backtest;
 import java.util.List;
 
 /**
- * TRADE-LEVEL analytics — the numbers a discretionary reviewer asks for
+ * Trade-level analytics — the numbers a discretionary reviewer asks for
  * that a Sharpe ratio hides. Two strategies with the same Sharpe can have
  * completely different trade signatures: one wins small and often with a
  * few large losses (a hidden short-gamma profile that blows up), the
@@ -21,7 +21,7 @@ import java.util.List;
  *       "high win rate" systems whose few losses are huge;</li>
  *   <li><b>streaks</b> — the longest run of consecutive losers (and
  *       winners): the number that decides whether you can psychologically
- *       and financially SIT through the strategy. A positive-expectancy
+ *       and financially sit through the strategy. A positive-expectancy
  *       system with an 11-trade losing streak gets turned off by its
  *       owner at trade 8;</li>
  *   <li><b>Kelly fraction</b>: the fraction {@code f ∈ [0, 1]} of equity
@@ -44,7 +44,7 @@ import java.util.List;
  * record with no positive mean return reports Kelly 0.
  * Static, deterministic, research lane. Complements
  * {@link PerformanceAnalytics} (equity-curve metrics) and
- * {@code validation.MonteCarloTradeShuffle} (is the SEQUENCE luck?).</p>
+ * {@code validation.MonteCarloTradeShuffle} (is the sequence luck?).</p>
  */
 public final class TradeAnalytics {
 

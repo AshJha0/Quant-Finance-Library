@@ -261,7 +261,7 @@ public final class PortfolioBacktester {
         int eventsApplied = 0;
         // Dead = terminal event processed: never traded or valued again.
         Set<String> dead = new HashSet<>();
-        // Per-symbol date-sorted dividends with their cursor in ONE holder:
+        // Per-symbol date-sorted dividends with their cursor in one holder:
         // impossible to desynchronize, and no boxed-Integer churn per bar.
         Map<String, DividendStream> divs = new HashMap<>();
         for (Map.Entry<String, List<CorporateActions.CorporateAction>> e : cashDividends.entrySet()) {
@@ -284,7 +284,7 @@ public final class PortfolioBacktester {
             }
 
             // 1) Cash dividends on the ex-date: holders receive, shorts pay.
-            //    Processed BEFORE same-bar lifecycle events: the entitlement
+            //    Processed before same-bar lifecycle events: the entitlement
             //    belongs to whoever held through the prior close, so a name
             //    that delists (or drops from the index) on its own ex-date
             //    still pays its holder before the position terminates.
@@ -306,8 +306,8 @@ public final class PortfolioBacktester {
             }
 
             if (universe != null) {
-                // 2) Terminal events reaching their effective bar — MERGERS
-                //    first, then DELISTINGS, so a target's shares flow into
+                // 2) Terminal events reaching their effective bar — mergers
+                //    first, then delistings, so a target's shares flow into
                 //    an acquirer that dies on the same bar and settle at the
                 //    acquirer's terms, independent of symbol ordering.
                 for (PointInTimeUniverse.EventType phase : TERMINAL_ORDER) {
@@ -321,7 +321,7 @@ public final class PortfolioBacktester {
                         }
                         double qty = positions.getOrDefault(symbol, 0.0);
                         if (qty != 0) {
-                            // Proceeds anchor on the last close BEFORE the event —
+                            // Proceeds anchor on the last close before the event —
                             // the event bar's own (possibly forward-filled) price
                             // is exactly what must not be trusted.
                             double lastClose = data.get(symbol).close(Math.max(0, i - 1));

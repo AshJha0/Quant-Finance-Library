@@ -4,11 +4,11 @@ import java.util.NavigableMap;
 import java.util.TreeMap;
 
 /**
- * COMMODITY futures curve — where the P&amp;L of a commodity position
- * mostly does NOT come from being right about the spot price. A futures
- * curve in CONTANGO (upward: deferred contracts above spot) charges a
- * long position negative ROLL YIELD every month — selling the expiring
- * cheap contract to buy the deferred rich one — while BACKWARDATION
+ * Commodity futures curve — where the P&amp;L of a commodity position
+ * mostly does not come from being right about the spot price. A futures
+ * curve in contango (upward: deferred contracts above spot) charges a
+ * long position negative roll yield every month — selling the expiring
+ * cheap contract to buy the deferred rich one — while backwardation
  * (downward) pays the long for rolling. Over a decade this roll term has
  * dominated most commodity index returns, which is the single most
  * misunderstood fact about the asset class (the USO oil fund's 2020
@@ -25,7 +25,7 @@ import java.util.TreeMap;
  *       relation {@code F = S * exp((r + u - y) * t)}, the market-implied
  *       {@code u - y} (storage cost minus convenience yield) is
  *       {@code ln(F(t)/S)/t - r}. A deeply negative value means the
- *       market pays dearly to HOLD the physical (convenience yield —
+ *       market pays dearly to hold the physical (convenience yield —
  *       think heating oil before a cold snap);</li>
  *   <li><b>shape tests</b>: {@code isContango()/isBackwardation()} across
  *       the whole curve, strict at every adjacent pillar pair.</li>
@@ -91,7 +91,7 @@ public final class CommodityCurve {
     }
 
     /**
-     * Annualized roll yield earned by a LONG rolling from {@code nearYears}
+     * Annualized roll yield earned by a long rolling from {@code nearYears}
      * to {@code farYears}: positive in backwardation.
      */
     public double annualizedRollYield(double nearYears, double farYears) {

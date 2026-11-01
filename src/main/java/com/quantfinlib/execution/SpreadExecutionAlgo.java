@@ -1,15 +1,15 @@
 package com.quantfinlib.execution;
 
 /**
- * Two-legged spread execution with LEGGING-RISK control — pairs trades,
- * cash-vs-futures basis, stub-vs-hedge: the trade is the SPREAD, and
+ * Two-legged spread execution with legging-risk control — pairs trades,
+ * cash-vs-futures basis, stub-vs-hedge: the trade is the spread, and
  * the risk is the moment you own one leg without the other. The
  * discipline every spread desk runs:
  *
  * <ul>
- *   <li>the LEAD leg (the illiquid one — single name, off-the-run,
+ *   <li>the lead leg (the illiquid one — single name, off-the-run,
  *       basis leg) is worked patiently, because it is the constraint;</li>
- *   <li>the HEDGE leg (the liquid one — future, ETF, benchmark) CHASES
+ *   <li>the hedge leg (the liquid one — future, ETF, benchmark) chases
  *       the lead leg's fills at the spread ratio, because liquidity is
  *       cheap there;</li>
  *   <li>the legging imbalance |executedLead·ratio − executedHedge| is
@@ -72,10 +72,10 @@ public final class SpreadExecutionAlgo {
     }
 
     /**
-     * The next children. The hedge chases the CURRENT imbalance; the
+     * The next children. The hedge chases the current imbalance; the
      * lead child is sized so even a full fill cannot push the projected
      * imbalance past the cap (assuming the hedge child also fills —
-     * the cap protects against the hedge NOT filling, which is why the
+     * the cap protects against the hedge not filling, which is why the
      * lead stops entirely at the cap).
      */
     public Children decide() {
@@ -129,7 +129,7 @@ public final class SpreadExecutionAlgo {
         return hedgeExecuted;
     }
 
-    /** Done when the lead is complete AND the hedge has caught up. */
+    /** Done when the lead is complete and the hedge has caught up. */
     public boolean done() {
         return leadExecuted == leadParent && imbalanceHedgeUnits() <= 0;
     }

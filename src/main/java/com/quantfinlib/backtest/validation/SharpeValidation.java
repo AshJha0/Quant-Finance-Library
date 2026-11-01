@@ -69,7 +69,7 @@ public final class SharpeValidation {
 
     /**
      * Minimum track record length (Bailey &amp; López de Prado): how many
-     * periods of THIS performance are needed before
+     * periods of this performance are needed before
      * {@link #probabilisticSharpe} would clear {@code confidence} that
      * the true Sharpe exceeds the benchmark — the allocator's question
      * ("how long until this manager's record means something?") in

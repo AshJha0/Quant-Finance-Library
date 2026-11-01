@@ -1,7 +1,7 @@
 package com.quantfinlib.risk;
 
 /**
- * FRTB P&amp;L attribution test (PLAT) — the exam a risk MODEL must pass
+ * FRTB P&amp;L attribution test (PLAT) — the exam a risk model must pass
  * to keep internal-model approval: does the risk engine's theoretical
  * P&amp;L (RTPL — what the model's factors and pricers say the desk made)
  * actually track the desk's hypothetical P&amp;L (HPL — what revaluing
@@ -9,9 +9,9 @@ package com.quantfinlib.risk;
  *
  * <ul>
  *   <li><b>Spearman correlation</b> between daily HPL and RTPL — do
- *       they RANK days the same way;</li>
+ *       they rank days the same way;</li>
  *   <li><b>Kolmogorov-Smirnov</b> statistic between their empirical
- *       distributions — do they have the same SHAPE.</li>
+ *       distributions — do they have the same shape.</li>
  * </ul>
  *
  * Zones per the regulation: GREEN (corr &gt; 0.80 and KS &lt; 0.09),
@@ -61,7 +61,7 @@ public final class PnlAttribution {
 
     /**
      * The two-sample KS statistic: max gap between the empirical CDFs,
-     * evaluated after BOTH samples have consumed each distinct value —
+     * evaluated after both samples have consumed each distinct value —
      * ties must not register a transient gap (identical series score
      * exactly 0).
      */
@@ -75,7 +75,7 @@ public final class PnlAttribution {
         java.util.Arrays.sort(sb);
         // A NaN would freeze the tie-consuming advance below (NaN == NaN
         // is false — neither index ever moves), turning one missing P&L
-        // day into an INFINITE LOOP. Sorted arrays put -Inf first and
+        // day into an infinite loop. Sorted arrays put -Inf first and
         // NaN/+Inf last, so checking the ends rejects every non-finite.
         if (!Double.isFinite(sa[0]) || !Double.isFinite(sa[sa.length - 1])
                 || !Double.isFinite(sb[0]) || !Double.isFinite(sb[sb.length - 1])) {

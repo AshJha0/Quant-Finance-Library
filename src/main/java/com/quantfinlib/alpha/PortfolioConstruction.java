@@ -217,7 +217,7 @@ public final class PortfolioConstruction {
      * {@code grossTarget}.
      *
      * <p>Related but different: {@code backtest.portfolio.PositionSizing.
-     * inverseVolatilityWeights} builds long-only weights FROM vols alone and
+     * inverseVolatilityWeights} builds long-only weights from vols alone and
      * silently equal-weights on a degenerate vol; this method rescales an
      * existing signed book and <b>throws</b> on unusable vols — a flat
      * (σ = 0) name inside a signal-weighted book is a data problem to
@@ -306,7 +306,7 @@ public final class PortfolioConstruction {
      *
      * @param sectors sector label per symbol, aligned with the weights —
      *                which follow {@code AlphaContext.symbols()} order
-     *                (SORTED, not your input map's order); prefer the
+     *                (sorted, not your input map's order); prefer the
      *                {@link #sectorNeutralize(AlphaContext, double[], java.util.Map)}
      *                overload, which cannot misalign
      */

@@ -23,7 +23,7 @@ import java.util.Set;
  * Multi-day persistence of learned state: everything the models learn
  * across sessions — volume/vol/spread baselines, alpha weights and their
  * out-of-sample IC evidence, venue and LP scorecards — is exactly what a
- * desk does NOT want to relearn from zero every morning. A checkpoint is
+ * desk does not want to relearn from zero every morning. A checkpoint is
  * one binary file of named sections, written at end of day and restored at
  * the next session start:
  *
@@ -280,7 +280,7 @@ public final class Checkpoint {
     }
 
     /**
-     * Reads a length-prefixed double array INTO {@code a} — a length
+     * Reads a length-prefixed double array into {@code a} — a length
      * mismatch means the checkpoint was written by a differently-configured
      * instance (other bucket/venue count) and throws before touching it.
      */

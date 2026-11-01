@@ -3,7 +3,7 @@ package com.quantfinlib.risk;
 /**
  * Stress testing and scenario analysis — the risk numbers VaR cannot
  * give you, because VaR is calibrated to the recent past and a stress
- * test deliberately is not. Three modes over one book representation
+ * test is not. Three modes over one book representation
  * (factor exposures δ, optional gammas Γ):
  *
  * <ul>
@@ -11,7 +11,7 @@ package com.quantfinlib.risk;
  *       −0.20 = down 20%) applied through the delta-gamma P&amp;L
  *       {@code δ'Δx + ½Δx'ΓΔx}. Ship-your-own scenarios, plus
  *       {@link #blackMonday1987}, {@link #lehman2008} and
- *       {@link #covidMarch2020} as STARTING TEMPLATES — stylized
+ *       {@link #covidMarch2020} as starting templates — stylized
  *       single-day shock magnitudes from the public record for a
  *       [equity, rates(bp/1e4), FX-USD, commodity, vol-points/1e2]
  *       factor ordering, documented as approximations to edit, not
@@ -25,7 +25,7 @@ package com.quantfinlib.risk;
  *       closed form {@code Δx* = −(L/(δ'Σδ))·Σδ}: the worst direction
  *       is along Σδ, and its Mahalanobis distance {@code L/√(δ'Σδ)}
  *       says how implausible the breaking move is (in "sigmas") — a
- *       book broken by a 2σ move has a problem TODAY.</li>
+ *       book broken by a 2σ move has a problem today.</li>
  * </ul>
  *
  * <p>Losses are returned as negative P&amp;L (a scenario that makes
@@ -69,7 +69,7 @@ public final class StressTester {
     /**
      * One factor swept over {@code [−range, +range]} in {@code steps}
      * increments, everything else flat — the sensitivity ladder.
-     * Returns P&amp;L per rung, ascending shock. DELTA-ONLY: curvature is
+     * Returns P&amp;L per rung, ascending shock. Delta-only: curvature is
      * ignored — a book carrying gamma needs the delta-gamma overload,
      * or the down rungs will look symmetric when they are not.
      */
@@ -91,7 +91,7 @@ public final class StressTester {
     /**
      * The delta-gamma ladder: the same sweep with the swept factor's own
      * curvature {@code ½·Γ_ff·shock²} included — the rung table a
-     * short-gamma book actually needs, since its down rungs are WORSE
+     * short-gamma book actually needs, since its down rungs are worse
      * than the linear ladder admits (cross-gammas stay out: the other
      * factors are flat by construction).
      */
@@ -150,7 +150,7 @@ public final class StressTester {
     }
 
     // ------------------------------------------------------------------
-    // Historical templates — STARTING POINTS, not certified replays.
+    // Historical templates — starting points, not certified replays.
     // Factor order: [equity, rates(Δr as a fraction, +50bp = +0.005),
     // FX (USD strength), commodity, vol (Δ vol points as a fraction)].
     // ------------------------------------------------------------------

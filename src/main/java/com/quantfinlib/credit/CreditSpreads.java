@@ -3,21 +3,21 @@ package com.quantfinlib.credit;
 import com.quantfinlib.rates.YieldCurve;
 
 /**
- * BOND credit-spread measures — the translation layer between a bond's
- * PRICE and how much of it is credit.
+ * Bond credit-spread measures — the translation layer between a bond's
+ * price and how much of it is credit.
  *
- * <p>The <b>Z-SPREAD</b> is the single constant shift z added to every
+ * <p>The <b>Z-spread</b> is the single constant shift z added to every
  * point of the risk-free zero curve that makes the bond's discounted
  * cash flows equal its dirty price:</p>
  *
  * <pre>  price = sum cf_i * exp(-(z(t_i) + z) * t_i)</pre>
  *
- * <p>It is the honest successor to "yield spread over the 10y": a yield
+ * <p>It replaces "yield spread over the 10y": a yield
  * spread compares one bond's YTM to one government point and mixes curve
  * shape into the number; the Z-spread strips the entire risk-free curve
  * out first, so what remains is compensation for credit and liquidity.
  * A desk triangulates it against the same name's CDS: {@code zSpread -
- * cdsParSpread} is the CDS-BOND BASIS, the classic relative-value trade
+ * cdsParSpread} is the CDS-BOND basis, the classic relative-value trade
  * (negative basis: buy the bond, buy CDS protection, collect the
  * difference — a trade that famously blew through funding constraints
  * in 2008, which is why the basis is not free money).</p>
