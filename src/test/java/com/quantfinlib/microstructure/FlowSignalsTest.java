@@ -88,7 +88,7 @@ class FlowSignalsTest {
         assertEquals(200, f.ofi(), 1e-9);
 
         // The last offering venue drops (Nbbo sentinel): queue imbalance must
-        // read 0 (documented), and OFI must NOT book a fake buy sweep.
+        // read 0 (documented), and OFI must not book a fake buy sweep.
         f.onQuote(100, 700, Integer.MAX_VALUE, 0, T0 + 2);
         assertEquals(0, f.queueImbalance(), 1e-12);
         assertEquals(200, f.ofi(), 1e-9, "a sentinel is not order flow");
@@ -106,7 +106,7 @@ class FlowSignalsTest {
 
     @Test
     void zeroOrInfinitePriceSentinelsAreGapsEvenWithSizes() {
-        // Regression: a placeholder quote with dead prices but POSITIVE
+        // Regression: a placeholder quote with dead prices but positive
         // sizes (bid 0 reads as "price collapsed below prevBid") must be a
         // gap, not a phantom sell sweep — the same dealable-price gate
         // SignalEngine applies.

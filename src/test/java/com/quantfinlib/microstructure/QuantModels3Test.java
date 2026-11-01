@@ -110,12 +110,12 @@ class QuantModels3Test {
         SignalEngine sig = new SignalEngine(1);
         OnlineAlphaLearner learner = new OnlineAlphaLearner(0.1, 0, 0.01);
 
-        // State at t: heavy bid queue -> queueImbalance strongly POSITIVE.
+        // State at t: heavy bid queue -> queueImbalance strongly positive.
         sig.onQuote(0, 100.00, 900, 100.02, 100, 1_000_000L);
         learner.trainFrom(sig, 0, 0.0);                     // first call: snapshot only
         assertEquals(0, learner.samples(), "nothing aligned to train on yet");
 
-        // State at t+1: the book flipped -> queueImbalance strongly NEGATIVE,
+        // State at t+1: the book flipped -> queueImbalance strongly negative,
         // and the interval's return was positive.
         sig.onQuote(0, 100.00, 100, 100.02, 900, 2_000_000L);
         learner.trainFrom(sig, 0, +1.0);

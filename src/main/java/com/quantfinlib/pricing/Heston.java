@@ -137,12 +137,12 @@ public final class Heston {
         double imB = sv * sv * (-2 * uSign * u);           // σ²(−2i·uSign·u)
         double reD2 = reA2 + reB;
         double imD2 = imA2 + imB;
-        // Complex sqrt of (reD2 + i·imD2), principal branch — stable form:
+        // Complex sqrt of (reD2 + i·imD2), principal branch, in a stable form.
         // reD2 = b² + σ²u²(1−ρ²) ≥ 0 always, so the real part is the large
         // component; the imaginary part must come from imD2/(2·reD), not
         // from sqrt((mod − re)/2), which underflows to 0 when |imD2| ≪ reD2
         // and silently zeroes the phase slope near u = 0 (a first-node
-        // corruption worth ~0.5% of an ATM price — caught by the BS-limit
+        // corruption worth ~0.5% of an ATM price, caught by the BS-limit
         // test).
         double modD2 = Math.hypot(reD2, imD2);
         double reD = Math.sqrt((modD2 + reD2) / 2);

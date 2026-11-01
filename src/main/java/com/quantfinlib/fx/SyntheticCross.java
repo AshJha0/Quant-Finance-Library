@@ -44,11 +44,11 @@ public final class SyntheticCross {
 
     /**
      * Savings per unit of buying synthetically instead of directly
-     * (positive = the legs are cheaper). NaN when either route is unpriced —
+     * (positive = the legs are cheaper). NaN when either route is unpriced,
      * where "unpriced" means NaN, zero (the Java default and what an empty
-     * {@code FxTierBook} tier reads as) or negative — so an unquoted book
-     * can never masquerade as an attractive route, including via the
-     * divide-by-zero infinity a raw {@link #syntheticBid} would produce.
+     * {@code FxTierBook} tier reads as) or negative. An unquoted book
+     * can therefore never masquerade as an attractive route, including via
+     * the divide-by-zero infinity a raw {@link #syntheticBid} would produce.
      */
     public static double buySavings(double directAsk, Op op, double bidA, double askA,
                                     double bidB, double askB) {

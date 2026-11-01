@@ -3,13 +3,13 @@ package com.quantfinlib.fx;
 /**
  * Tiered multi-LP FX book: the depth structure e-FX actually has. Equities
  * venues publish one anonymous order book; FX liquidity providers each
- * stream a private ladder of size tiers — 1M at 1.08500/02, 5M at
- * 1.08498/04, 10M wider still — and the practical questions are per-clip:
+ * stream a private ladder of size tiers (1M at 1.08500/02, 5M at
+ * 1.08498/04, 10M wider still), and the practical questions are per-clip:
  * <em>what does 20M actually cost if I sweep</em>
  * ({@link #sweepBuyCost}/{@link #sweepSellProceeds}), and <em>which single
  * LP fills the whole clip at one price</em>
- * ({@link #bestFullAmountAsk}/{@link #bestFullAmountBid} — the full-amount
- * convention that avoids signaling the market with a spray of children).
+ * ({@link #bestFullAmountAsk}/{@link #bestFullAmountBid}; the full-amount
+ * convention avoids signaling the market with a spray of children).
  *
  * <p>{@code AggregatedBook} remains the top-of-book composite; this class
  * holds the tiers underneath it. Zero allocation: fixed
@@ -113,8 +113,8 @@ public final class FxTierBook {
     // ------------------------------------------------------------------
 
     /**
-     * Best (highest) bid across LPs, taken at each LP's frontier tier —
-     * the first well-formed one — so a malformed tier 0 (NaN/zero) masks
+     * Best (highest) bid across LPs, taken at each LP's frontier tier (the
+     * first well-formed one), so a malformed tier 0 (NaN/zero) masks
      * nothing, consistent with how sweeps and full-amount queries read the
      * same ladder. NaN when nobody bids.
      */
@@ -229,8 +229,8 @@ public final class FxTierBook {
     /**
      * First tier at or after {@code from} with a dealable price and positive
      * size; n = exhausted. Dealable = strictly positive: FX outrights are
-     * never zero or negative, so 0.0 (the array default — e.g. a decoded
-     * empty price field) and NaN both read as "no quote" — a zero ask must
+     * never zero or negative, so 0.0 (the array default, e.g. a decoded
+     * empty price field) and NaN both read as "no quote". A zero ask must
      * never win a buy sweep.
      */
     private int frontier(int lp, double[] px, double[] sz, int n, int from) {
@@ -292,7 +292,7 @@ public final class FxTierBook {
     /**
      * One LP's full-amount price for a clip: the tightest tier whose clip
      * capacity covers {@code size}, NaN when the LP doesn't quote it (or
-     * only at a malformed NaN price). Public because it IS the full-amount
+     * only at a malformed NaN price). Public because it is the full-amount
      * convention — routers must consume it, not re-derive it.
      */
     public double fullAmountPrice(int lp, boolean buy, double size) {

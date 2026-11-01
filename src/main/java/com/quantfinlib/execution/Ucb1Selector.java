@@ -1,7 +1,7 @@
 package com.quantfinlib.execution;
 
 /**
- * UCB1 multi-armed bandit — principled selection among venues, LPs or
+ * UCB1 multi-armed bandit: principled selection among venues, LPs or
  * algo variants when the scorecards are still thin. The exploration
  * problem is real: always using the best-so-far venue means never
  * learning whether another improved; rotating uniformly wastes flow on
@@ -9,12 +9,12 @@ package com.quantfinlib.execution;
  *
  * <pre>  mean reward + √(2·ln N / nᵢ)</pre>
  *
- * — the optimism bonus shrinks as an arm is tried, so exploration
+ * The optimism bonus shrinks as an arm is tried, so exploration
  * decays exactly as fast as the evidence accumulates, with logarithmic
- * regret guaranteed. Rewards must be in [0, 1] (the theory's scale —
- * map fill quality, negated cost bps, or markout onto it; the gate
+ * regret guaranteed. Rewards must be in [0, 1], the theory's scale (map
+ * fill quality, negated cost bps, or markout onto it). The gate
  * enforces it because a mis-scaled reward silently breaks the
- * exploration balance).
+ * exploration balance.
  *
  * <p>Where this sits vs the scorecards: {@code VenueScorecard} and
  * {@code fx.LpScorecard} are the right tool once hundreds of fills per

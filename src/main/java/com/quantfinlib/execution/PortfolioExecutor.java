@@ -8,24 +8,24 @@ import com.quantfinlib.util.MathUtils;
  * True multi-symbol portfolio-level scheduling: a basket (rebalance,
  * transition, program trade) executed as one coordinated schedule rather
  * than N independent parents. Each symbol keeps its own
- * {@link BenchmarkExecutor} child — its benchmark, curve and per-symbol
- * shaping stay intact — and the portfolio layer applies the two overlays
+ * {@link BenchmarkExecutor} child (its benchmark, curve and per-symbol
+ * shaping stay intact), and the portfolio layer applies the two overlays
  * that only exist at basket level:
  *
  * <ol>
- *   <li><b>Leg balance</b> — the defining constraint of a two-sided
- *       transition: the buy leg and the sell leg must stay in step, or the
+ *   <li><b>Leg balance</b>: the defining constraint of a two-sided
+ *       transition. The buy leg and the sell leg must stay in step, or the
  *       basket carries unintended net market exposure mid-flight. When the
  *       projected net filled notional (buys − sells, plus this interval's
  *       dues) would breach {@code maxNetNotional}, the interval throttles
- *       the leg that is ahead. It never accelerates the lagging leg —
+ *       the leg that is ahead. It never accelerates the lagging leg:
  *       pushing a child past its own schedule would break the benchmark it
  *       is measured against;</li>
- *   <li><b>Capacity allocation</b> — {@code maxIntervalNotional} caps the
+ *   <li><b>Capacity allocation</b>: {@code maxIntervalNotional} caps the
  *       basket's total demand per interval (participation budget, cash
  *       constraint). When it binds, capacity goes to the symbols carrying
  *       the most residual risk. By default that is the diagonal
- *       approximation of multi-asset Almgren-Chriss — weight ∝
+ *       approximation of multi-asset Almgren-Chriss, weight ∝
  *       (1 + volatility regime) × due notional. Plug in a streaming
  *       {@link EwmaCovariance} via {@link #useRiskModel} and it becomes
  *       the real thing: weight ∝ (1 + marginal contribution to basket

@@ -15,9 +15,9 @@ import java.util.List;
  *       {@code winRate*avgWin - lossRate*avgLoss}: the single number that
  *       says whether the edge survives being averaged over every
  *       trade;</li>
- *   <li><b>payoff ratio</b> — avgWin / avgLoss: paired with win rate it
- *       IS the strategy's character. A 40% win rate needs a payoff above
- *       1.5 to have positive expectancy — the arithmetic that kills most
+ *   <li><b>payoff ratio</b>: avgWin / avgLoss. Paired with win rate it
+ *       is the strategy's character. A 40% win rate needs a payoff above
+ *       1.5 to have positive expectancy, the arithmetic that kills most
  *       "high win rate" systems whose few losses are huge;</li>
  *   <li><b>streaks</b> — the longest run of consecutive losers (and
  *       winners): the number that decides whether you can psychologically

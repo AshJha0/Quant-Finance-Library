@@ -9,12 +9,12 @@ import com.quantfinlib.util.MathUtils;
  * <pre>  ln h_t = ω + β·ln h_{t-1} + α(|z_{t-1}| − √(2/π)) + γ·z_{t-1}</pre>
  *
  * with standardized shocks {@code z = r/√h}. Two things the log form
- * buys: no positivity constraints AT all (any parameter signs give a
- * valid variance — the exp does the work {@code Garch11}'s ω,α,β ≥ 0
- * constraints do), and leverage as a sign — {@code γ < 0} means a
- * down move raises tomorrow's volatility more than an equal up move,
- * and the magnitude reads directly. Stationarity is {@code |β| < 1},
- * nothing else.
+ * buys. First, no positivity constraints at all: any parameter signs give
+ * a valid variance, because the exp does the work {@code Garch11}'s
+ * ω,α,β ≥ 0 constraints do. Second, leverage as a sign: {@code γ < 0}
+ * means a down move raises tomorrow's volatility more than an equal up
+ * move, and the magnitude reads directly. Stationarity is
+ * {@code |β| < 1}, nothing else.
  *
  * <p>Estimation is full maximum likelihood over (ω, α, γ, β) and, for
  * {@link Innovation#STUDENT_T}, ν, with ω, α, γ free and {@code β = tanh(u)} so

@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AdaptiveQuantAlgosTest {
 
     // ------------------------------------------------------------------
-    // Variance ratio — which regime IS this series?
+    // Variance ratio — which regime is this series?
     // ------------------------------------------------------------------
 
     @Test
@@ -129,7 +129,7 @@ class AdaptiveQuantAlgosTest {
         WhalleyWilmott.Action high = WhalleyWilmott.rebalance(0.60, 0.50, 0.05);
         assertEquals(0.55, high.targetHedge(), 1e-12);
 
-        // Zero gamma degenerates honestly: zero band, hedge exactly to delta.
+        // Zero gamma degenerates cleanly: zero band, hedge exactly to delta.
         assertEquals(0, WhalleyWilmott.bandHalfWidth(100, 0, 0.0005, 1), 0.0);
         assertEquals(0.50, WhalleyWilmott.rebalance(0.40, 0.50, 0).targetHedge(), 1e-12);
 

@@ -20,10 +20,10 @@ import com.quantfinlib.util.MathUtils;
  * launches) diversifies across names and is exactly what single-name
  * hedges, pairs trades and the CRB's per-symbol factors carry.
  *
- * <p>R² is the systematic share — a utility at 0.7 is mostly a market
+ * <p>R² is the systematic share: a utility at 0.7 is mostly a market
  * proxy; a biotech at 0.05 is mostly its own story. All variances are
  * per-period (annualize with {@code ×periodsPerYear}, vols with the
- * square root — the record has helpers). Sample moments (n−1)
+ * square root; the record has helpers). Sample moments (n−1)
  * throughout. Static, deterministic, research lane; pairs with
  * {@code risk.RiskMetrics.beta} (same β, cross-checked in tests) and
  * {@code alpha.PortfolioConstruction}'s beta-neutralization.</p>

@@ -45,7 +45,7 @@ class AssetClassRoundTest {
 
     @Test
     void dv01IsAnnuityTimesTheParRateSensitivity() {
-        // Subtlety worth pinning: a 1bp bump to the CC ZERO curve moves
+        // Subtlety worth pinning: a 1bp bump to the CC zero curve moves
         // the SIMPLE par rate by e^z bp (d(e^z - 1)/dz), so the payer
         // DV01 on a flat 5% curve is annuity * e^0.05 * 1bp — the naive
         // "annuity * 1bp" is the sensitivity to the PAR rate, a

@@ -203,7 +203,7 @@ class AlphaBacktesterReportTest {
     private static AlphaContext zigzagPanel() {
         // Amplitudes descending; drift ranks are the permutation [4,8,2,6,1,5,3,7],
         // chosen so its Spearman correlation with the amplitude ranking is
-        // EXACTLY zero (Σd² = 84 over n = 8) — the h=2 ranking (pure drift)
+        // exactly zero (Σd² = 84 over n = 8) — the h=2 ranking (pure drift)
         // is rank-orthogonal to the h=1 ranking (amplitude).
         double[] amps = {0.08, 0.07, 0.06, 0.05, 0.04, 0.03, 0.02, 0.01};
         int[] driftRanks = {4, 8, 2, 6, 1, 5, 3, 7};

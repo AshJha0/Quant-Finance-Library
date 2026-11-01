@@ -1,10 +1,10 @@
 package com.quantfinlib.risk;
 
 /**
- * FRTB P&amp;L attribution test (PLAT) — the exam a risk model must pass
- * to keep internal-model approval: does the risk engine's theoretical
- * P&amp;L (RTPL — what the model's factors and pricers say the desk made)
- * actually track the desk's hypothetical P&amp;L (HPL — what revaluing
+ * FRTB P&amp;L attribution test (PLAT), the exam a risk model must pass
+ * to keep internal-model approval. Does the risk engine's theoretical
+ * P&amp;L (RTPL: what the model's factors and pricers say the desk made)
+ * actually track the desk's hypothetical P&amp;L (HPL: what revaluing
  * the real book on real prices says)? Two statistics, per MAR32:
  *
  * <ul>

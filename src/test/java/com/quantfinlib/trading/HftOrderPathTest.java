@@ -68,11 +68,11 @@ class HftOrderPathTest {
         assertEquals(HftRiskGate.OK, gate.check(0, Side.SELL, 200, 100));   // reducing is fine
         assertEquals(1_900, gate.position(0));
 
-        // The SHORT side of the cap: |position| is what the limit bounds.
-        // Dropping the abs() would leave selling UNBOUNDED and still pass
-        // every long-side assertion above — these pin the short side.
+        // The short side of the cap: |position| is what the limit bounds.
+        // Dropping the abs() would leave selling unbounded and still pass
+        // every long-side assertion above; these pin the short side.
         // (A single flip-through order is unreachable here: the quantity
-        // and notional gates fire first, by design — so build the short
+        // and notional gates fire first, by design. So build the short
         // through fills, which bypass order-level caps.)
         gate.onFill(0, Side.SELL, 3_800);                     // now short 1,900
         assertEquals(-1_900, gate.position(0));

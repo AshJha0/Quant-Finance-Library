@@ -4,11 +4,11 @@ import java.util.NavigableMap;
 import java.util.TreeMap;
 
 /**
- * Commodity futures curve — where the P&amp;L of a commodity position
- * mostly does not come from being right about the spot price. A futures
+ * Commodity futures curve. The P&amp;L of a commodity position mostly
+ * does not come from being right about the spot price. A futures
  * curve in contango (upward: deferred contracts above spot) charges a
- * long position negative roll yield every month — selling the expiring
- * cheap contract to buy the deferred rich one — while backwardation
+ * long position negative roll yield every month, selling the expiring
+ * cheap contract to buy the deferred rich one, while backwardation
  * (downward) pays the long for rolling. Over a decade this roll term has
  * dominated most commodity index returns, which is the single most
  * misunderstood fact about the asset class (the USO oil fund's 2020
@@ -32,10 +32,10 @@ import java.util.TreeMap;
  * </ul>
  *
  * <p>Linear interpolation between pillar prices, no extrapolation
- * (asking for a price beyond the pillars throws — a commodity curve's
+ * (asking for a price beyond the pillars throws: a commodity curve's
  * wings are opinions, not data). Seasonality (natural gas winters) makes
- * whole-curve shape tests false for seasonal commodities by design —
- * use pairwise roll yields there, stated. Research lane.</p>
+ * whole-curve shape tests false for seasonal commodities by design; use
+ * pairwise roll yields there. Research lane.</p>
  */
 public final class CommodityCurve {
 

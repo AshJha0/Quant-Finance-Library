@@ -3,16 +3,16 @@ package com.quantfinlib.pricing;
 import com.quantfinlib.volatility.VolatilityIndex;
 
 /**
- * Variance swap analytics — the cleanest pure-volatility trade there is:
- * at expiry the swap pays {@code notional × (realized variance − strike)},
+ * Variance swap analytics: the cleanest pure-volatility trade there is.
+ * At expiry the swap pays {@code notional × (realized variance − strike)},
  * no delta, no path-dependent barriers, no vega decay games. The
  * remarkable fact (Demeterfi-Derman-Kamal-Zou 1999) is that its fair
  * strike is model-free: a static portfolio of OTM options weighted
  * {@code 1/K²} replicates the log contract, so the strike is readable off
- * the option chain with no volatility model at all — the same integral a
- * VIX-style index computes. {@link #fairVariance} therefore delegates to
- * {@link VolatilityIndex} and squares it: a VIX of 20 IS a variance-swap
- * strike of 0.04. One number, two names.
+ * the option chain with no volatility model at all. It is the same
+ * integral a VIX-style index computes. {@link #fairVariance} therefore
+ * delegates to {@link VolatilityIndex} and squares it: a VIX of 20 is a
+ * variance-swap strike of 0.04. One number, two names.
  *
  * <p>The two quantities a desk actually books:</p>
  * <ul>
@@ -21,24 +21,24 @@ import com.quantfinlib.volatility.VolatilityIndex;
  *       {@code varianceNotional = vegaNotional / (2·K_vol)}, the
  *       linearization of variance in vol at the strike. Get this wrong
  *       and every P&amp;L number is off by a factor of 2·K_vol.</li>
- *   <li><b>Mark-to-market of a seasoned swap</b> — variance is additive
+ *   <li><b>Mark-to-market of a seasoned swap</b>: variance is additive
  *       in time, so a swap part-way through its life is just realized
  *       variance so far (locked in) blended with the fair strike for the
  *       remaining leg, discounted:
  *       {@code MTM = e^{-r·(T-t)} · [ (t/T)·realized + ((T-t)/T)·K_rem − K_0 ]}
- *       per unit of variance notional. No model here either — that is
+ *       per unit of variance notional. No model here either. That is
  *       why variance swaps mark cleanly and volatility swaps (square
  *       root of this payoff) do not.</li>
  * </ul>
  *
- * <p>Conventions, stated: variance in annualized decimal² (0.04 = 20
+ * <p>Conventions: variance in annualized decimal² (0.04 = 20
  * vol), time in years, realized variance supplied by the caller (use
- * {@code volatility.HarRv}/realized estimators — this class does not
+ * {@code volatility.HarRv}/realized estimators; this class does not
  * choose your sampling convention for you). The replication carries the
  * discretization bias documented on {@link VolatilityIndex} (~+5e-4 in
  * variance for a coarse chain) and, like all 1/K² replication, prices
- * continuous variance — jump risk is why dealers cap payoffs in
- * practice; the cap is not modeled here, stated. Research lane.</p>
+ * continuous variance. Jump risk is why dealers cap payoffs in
+ * practice; the cap is not modeled here. Research lane.</p>
  */
 public final class VarianceSwap {
 

@@ -22,7 +22,7 @@ class InformationCriteriaTest {
     @Test
     void betterLikelihoodWinsAtEqualComplexity() {
         // Same k (and n): the model with the higher log-likelihood must
-        // score LOWER on both criteria — lower is better.
+        // score lower on both criteria — lower is better.
         assertTrue(InformationCriteria.aic(-95, 4) < InformationCriteria.aic(-100, 4));
         assertTrue(InformationCriteria.bic(-95, 4, 250) < InformationCriteria.bic(-100, 4, 250));
     }

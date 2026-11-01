@@ -9,8 +9,8 @@ import java.util.Arrays;
 
 /**
  * Streaming per-LP execution quality: the taker-side answer to last look.
- * FX liquidity is quotes, not firm orders — a provider may hold your order
- * and reject it — so the practical measure of an LP is not its displayed
+ * FX liquidity is quotes, not firm orders (a provider may hold your order
+ * and reject it), so the practical measure of an LP is not its displayed
  * spread but its <em>all-in</em> behavior: how often it rejects, how long
  * it holds, what the market does right after a reject (the flow it declined
  * was the flow that was about to pay you), and the effective spread it
@@ -26,8 +26,8 @@ import java.util.Arrays;
  *
  * <p>Zero allocation, single writer (the execution/aggregation thread).
  * Pending markouts live in a small ring per LP ({@value #PENDING_RING}
- * slots): reject bursts — which happen precisely when the market runs and
- * markouts are largest — are sampled rather than overwritten, so the stat
+ * slots). Reject bursts, which happen precisely when the market runs and
+ * markouts are largest, are sampled rather than overwritten, so the stat
  * cannot be biased low for exactly the LPs it must expose. Only a burst
  * deeper than the ring within one horizon overwrites its oldest entry.</p>
  */

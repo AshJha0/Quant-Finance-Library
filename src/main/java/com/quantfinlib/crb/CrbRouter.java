@@ -9,15 +9,15 @@ package com.quantfinlib.crb;
  *       inventory costs zero bps and leaks nothing: the CRB itself is
  *       the firm's first and best dark pool. Capped at the crossable
  *       inventory the caller reports;</li>
- *   <li><b>Dark pools</b> — midpoint fills pay no spread, but a venue
- *       whose fills systematically fade is not free: each venue carries
+ *   <li><b>Dark pools</b>: midpoint fills pay no spread, but a venue
+ *       whose fills systematically fade is not free. Each venue carries
  *       an adverse-selection charge in bps (a post-fill markout
- *       estimate — {@code VenueScorecard} produces exactly this), and
+ *       estimate, which {@code VenueScorecard} produces), and
  *       expected liquidity is discounted by fill probability. A dark
  *       venue is only used while its charge undercuts the lit cost;</li>
- *   <li><b>Lit</b> — pays the half spread plus expected impact, but
+ *   <li><b>Lit</b>: pays the half spread plus expected impact, but
  *       fills. Whatever the dark legs are not expected to fill routes
- *       lit as well — hedges that might fill are not hedges.</li>
+ *       lit as well; hedges that might fill are not hedges.</li>
  * </ul>
  *
  * <p>Allocation is greedy by expected cost, deterministic, allocation

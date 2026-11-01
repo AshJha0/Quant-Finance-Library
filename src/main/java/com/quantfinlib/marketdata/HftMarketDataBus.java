@@ -6,9 +6,9 @@ import java.util.concurrent.atomic.AtomicReferenceArray;
 import java.util.concurrent.locks.LockSupport;
 
 /**
- * Ultra-low-latency market data bus. The hot path — {@link #publish} through
- * {@link TickListener#onTick} — performs <b>zero allocation, zero locking, and
- * zero map lookups</b>:
+ * Ultra-low-latency market data bus. The hot path ({@link #publish} through
+ * {@link TickListener#onTick}) performs <b>zero allocation, zero locking,
+ * and zero map lookups</b>:
  *
  * <ul>
  *   <li>Ticks travel through a preallocated primitive {@link TickRingBuffer}.</li>

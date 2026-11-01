@@ -2,9 +2,9 @@ package com.quantfinlib.microstructure;
 
 /**
  * Streaming order-flow signals for short-horizon execution decisions: the
- * three imbalances an execution engine reads before crossing a spread —
- * cross-asset (equity ticks or raw FX rates; see the two onQuote entry
- * points) —
+ * three imbalances an execution engine reads before crossing a spread.
+ * Cross-asset (equity ticks or raw FX rates; see the two onQuote entry
+ * points).
  *
  * <ul>
  *   <li><b>Order-flow imbalance (OFI)</b> — Cont/Kukanov/Stoikov best-level
@@ -73,11 +73,12 @@ public final class FlowSignals {
      *
      * <p>One-sided quotes (either size ≤ 0, e.g. an {@code Nbbo} sentinel
      * after the last venue on a side drops) and non-dealable prices (NaN,
-     * zero, negative, infinite — placeholder sentinels) are treated as a
-     * signal GAP: queue imbalance reads 0 and no OFI contribution is booked
-     * — a feed artifact must not look like an aggressive sweep. The next
-     * two-sided dealable quote re-seeds the OFI baseline. This is the same
-     * gate {@code SignalEngine} applies, so both classify identically.</p>
+     * zero, negative, infinite: placeholder sentinels) are treated as a
+     * signal gap. Queue imbalance reads 0 and no OFI contribution is
+     * booked, because a feed artifact must not look like an aggressive
+     * sweep. The next two-sided dealable quote re-seeds the OFI baseline.
+     * This is the same gate {@code SignalEngine} applies, so both classify
+     * identically.</p>
      */
     public void onQuote(int bidTick, long bidSz, int askTick, long askSz, long timestampNanos) {
         onQuote((double) bidTick, bidSz, (double) askTick, askSz, timestampNanos);

@@ -122,7 +122,7 @@ class SbeCodecTest {
                 trade.wrap(wire, 0).encode(eur, 1.0851, -4, 1_000_000, 0, 111L);
                 trade.wrap(wire, TradeFlyweight.ENCODED_LENGTH)
                         .encode(gbp, 1.2703, -4, 500_000, 0, 222L);
-                // Three deliberately misaligned chunks, including a split header.
+                // Three intentionally misaligned chunks, including a split header.
                 writeChunk(pipe, wire, 0, 5);
                 writeChunk(pipe, wire, 5, 40);
                 writeChunk(pipe, wire, 45, wire.capacity() - 45);

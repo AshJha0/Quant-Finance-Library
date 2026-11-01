@@ -66,11 +66,11 @@ public final class HigherOrderGreeks {
 
     /**
      * Cross-gamma of a Margrabe exchange option (the right to exchange
-     * asset 2 for asset 1) — the canonical two-asset second-order term:
+     * asset 2 for asset 1), the canonical two-asset second-order term:
      * {@code ∂²V/∂S₁∂S₂ = −φ(d₁)/(S₂·σ̂·√T)} where
      * {@code σ̂² = σ₁² + σ₂² − 2ρσ₁σ₂}. Negative: the exchange option
      * loses convexity when the two legs move together. For a generic
-     * basket, differentiate your pricer numerically instead — this is
+     * basket, differentiate your pricer numerically instead; this is
      * the closed form worth having, not a universal answer.
      */
     public static double exchangeCrossGamma(double spot1, double spot2, double vol1,

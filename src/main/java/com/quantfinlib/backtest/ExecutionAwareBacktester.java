@@ -17,9 +17,9 @@ import java.util.List;
  *
  * <p>Semantics (long-only, single instrument, like {@link Backtester}):</p>
  * <ul>
- *   <li>BUY signal while flat → entry parent sized to available cash; worked
+ *   <li>A buy signal while flat opens an entry parent sized to available cash, worked
  *       from the signal bar until filled or superseded.</li>
- *   <li>SELL signal → cancels any unfilled entry remainder and works an exit
+ *   <li>A sell signal cancels any unfilled entry remainder and works an exit
  *       parent for the whole position.</li>
  *   <li>Stop-loss / take-profit are evaluated intrabar against the
  *       <i>volume-weighted average entry price</i>; the triggered exit is

@@ -40,13 +40,13 @@ import java.util.Map;
  *       would join.</li>
  * </ul>
  *
- * <p>The plan for the worked example — Exchange A: 10,000 shares at 120µs,
- * Exchange B: 8,000 at 80µs (same price), Dark Pool: unknown — is exactly
+ * <p>The plan for the worked example (Exchange A: 10,000 shares at 120µs;
+ * Exchange B: 8,000 at 80µs, same price; Dark Pool: unknown) is exactly
  * the classic answer: B's 8,000 first (equal price, lower latency), the
  * remaining 2,000 to A, and a simultaneous dark probe. Probe legs are
  * <b>additive and contingent</b> ({@link RoutingDecision#probes}): the
  * executor sends them alongside the lit legs and, on dark fills, cancels
- * lit remainder — the router plans, the executor manages overfill.</p>
+ * lit remainder. The router plans; the executor manages overfill.</p>
  *
  * <p><b>Cross-asset</b>: prices are raw doubles, so the same router serves
  * equities (exchanges + dark pools) and FX (ECN/matching venues + mid-match

@@ -4,12 +4,12 @@ import com.quantfinlib.execution.BenchmarkExecutor.MarketState;
 import com.quantfinlib.util.MathUtils;
 
 /**
- * The opportunistic execution archetype — the counterpart to
+ * The opportunistic execution archetype, counterpart to
  * {@link BenchmarkExecutor}'s schedule-driven family. A schedule algo
  * asks "am I behind the curve?"; a liquidity seeker asks <b>"is the
  * market cheap right now?"</b> and trades in bursts when it is: spread
  * tighter than its time-of-day forecast, calm volatility regime, low
- * estimated impact. Between opportunities it sits still — which is why
+ * estimated impact. Between opportunities it sits still. That is why
  * it needs the one discipline every seek-style algo ships with: a
  * <b>completion floor</b> that ramps in over the final stretch of the
  * horizon, so patience can never become a missed parent.
@@ -24,12 +24,12 @@ import com.quantfinlib.util.MathUtils;
  * long due = seek.dueQuantity(f, marketState, spreadForecaster.forecast(bucket, now));
  * }</pre>
  *
- * <p>Decision per interval: score the moment — spread at-or-under
- * forecast, vol regime below the calm threshold, impact below the cap —
+ * <p>Decision per interval: score the moment (spread at-or-under
+ * forecast, vol regime below the calm threshold, impact below the cap),
  * and if all hold, take an aggressive clip ({@code maxDepthFraction ×
  * displayedDepth}). If not, send only the completion floor: 0 until
  * {@code forceCompleteFrom}, then the remaining quantity spread linearly
- * over what is left of the horizon (at f = 1 the floor IS the
+ * over what is left of the horizon (at f = 1 the floor is the
  * remainder). NaN inputs degrade safely: an unknown forecast means the
  * moment cannot be judged cheap (no opportunistic burst), but the floor
  * still guarantees completion. Zero allocation per decision, single
@@ -116,7 +116,7 @@ public final class LiquiditySeekingAlgo {
         }
 
         // The completion floor: from forceCompleteFrom, the remainder spread
-        // linearly over the horizon left; at f = 1 the floor IS the remainder.
+        // linearly over the horizon left; at f = 1 the floor is the remainder.
         if (f > config.forceCompleteFrom()) {
             double ramp = (f - config.forceCompleteFrom()) / (1 - config.forceCompleteFrom());
             long floor = f >= 1 ? remaining : (long) Math.ceil(remaining * ramp);

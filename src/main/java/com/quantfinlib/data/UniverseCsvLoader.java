@@ -44,15 +44,15 @@ import java.util.Locale;
  * </ul>
  *
  * <h2>Sourcing the data</h2>
- * <p>Free constituent lists — e.g.
- * <a href="https://github.com/datasets/s-and-p-500-companies">datasets/s-and-p-500-companies</a>
- * — publish <em>today's</em> members: loading one gives every symbol an
+ * <p>Free constituent lists (e.g.
+ * <a href="https://github.com/datasets/s-and-p-500-companies">datasets/s-and-p-500-companies</a>)
+ * publish <em>today's</em> members. Loading one gives every symbol an
  * open-ended membership from your chosen start date, which reproduces the
  * survivorship-biased universe (useful as a baseline to quantify the bias
  * against, and the format accepts it). Removing the bias requires
- * historical membership <em>changes</em> and delisting returns — CRSP,
- * Norgate, Sharadar, or hand-curated index change announcements — expressed
- * in this same format.</p>
+ * historical membership <em>changes</em> and delisting returns (CRSP,
+ * Norgate, Sharadar, or hand-curated index change announcements),
+ * expressed in this same format.</p>
  */
 public final class UniverseCsvLoader {
 

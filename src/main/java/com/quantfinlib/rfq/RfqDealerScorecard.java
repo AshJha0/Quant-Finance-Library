@@ -7,10 +7,10 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 /**
- * Streaming per-dealer RFQ quality — the structured-products sibling of
+ * Streaming per-dealer RFQ quality, the structured-products sibling of
  * {@code execution.VenueScorecard} and {@code fx.LpScorecard}: over many
  * auctions, which dealers actually show up, how fast, how competitively,
- * and how often they win. This is what decides tomorrow's panel — a
+ * and how often they win. This is what decides tomorrow's panel. A
  * dealer who quotes 95% of requests two ticks off fair beats one who
  * wins occasionally and declines the rest, because panel slots are
  * finite and a decline is information you paid for with a revealed
@@ -64,8 +64,8 @@ public final class RfqDealerScorecard {
 
     /**
      * Records a finished auction: every dealer on the panel is scored
-     * (quoted or declined), quoters add response time and — when the
-     * auction carried a fair-value anchor — spread to fair. The panel
+     * (quoted or declined), and quoters add response time and, when the
+     * auction carried a fair-value anchor, spread to fair. The panel
      * sizes must match; a mismatched auction throws rather than
      * misattributing dealers.
      */

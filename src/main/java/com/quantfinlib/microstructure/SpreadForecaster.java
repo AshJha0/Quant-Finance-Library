@@ -14,12 +14,12 @@ import java.util.Arrays;
  * you for free:
  *
  * <ol>
- *   <li><b>A time-of-day baseline</b> — spreads are wide at the open, tight
+ *   <li><b>A time-of-day baseline</b>: spreads are wide at the open, tight
  *       midday, wide into the close (and, in FX, wide across the rollover /
  *       thin liquidity hours). Each session accumulates a per-bucket mean;
  *       {@link #rollDay} folds it into the baseline with the {@code
- *       dayAlpha} day-over-day EWMA (the first session seeds it directly) —
- *       the spread analogue of {@link VolumeCurve};</li>
+ *       dayAlpha} day-over-day EWMA (the first session seeds it directly).
+ *       This is the spread analogue of {@link VolumeCurve};</li>
  *   <li><b>A fast mean-reverting deviation</b> — the current spread relative
  *       to its time-of-day baseline, blended per observation with
  *       {@link #DEVIATION_ALPHA} and decayed toward 0 with the configured
@@ -28,13 +28,13 @@ import java.util.Arrays;
  *       than either alone.</li>
  * </ol>
  *
- * <p>{@link #forecast} returns the predicted spread over the next moment —
+ * <p>{@link #forecast} returns the predicted spread over the next moment:
  * the {@code BenchmarkExecutor.MarketState.spread} input, projected rather
  * than merely observed, so the algo damps aggression <em>before</em> a
  * known-wide window (the close) instead of reacting after. Before the first
  * {@link #rollDay} there is no learned baseline yet, so the forecast
  * falls back to the last observed spread. Volatility is the
- * correlated cousin — a wide-spread forecast usually coincides with high
+ * correlated cousin. A wide-spread forecast usually coincides with high
  * {@code volPerSqrtSecond} from {@link SignalEngine}, and an algo should
  * treat both as timing-cost signals. Cross-asset, zero allocation, single
  * writer.</p>
@@ -115,7 +115,7 @@ public final class SpreadForecaster {
         todaySum[bucket] += spread;
         todayCount[bucket]++;
         if (daysLearned == 0 || baselineEwma[bucket] == 0) {
-            // No baseline yet — for the session OR for this bucket (never
+            // No baseline yet — for the session or for this bucket (never
             // observed on a prior day): deviating from 0 would inject the
             // whole spread as a "shock" into the shared deviation and
             // contaminate forecasts at every bucket.

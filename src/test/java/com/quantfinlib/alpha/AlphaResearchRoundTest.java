@@ -90,7 +90,7 @@ class AlphaResearchRoundTest {
     }
 
     // ------------------------------------------------------------------
-    // Calendar anomalies — the profile AND the significance
+    // Calendar anomalies — the profile and the significance
     // ------------------------------------------------------------------
 
     @Test
@@ -146,7 +146,7 @@ class AlphaResearchRoundTest {
     }
 
     // ------------------------------------------------------------------
-    // Block bootstrap — the Sharpe's sampling distribution, honestly
+    // Block bootstrap: the Sharpe's sampling distribution
     // ------------------------------------------------------------------
 
     @Test
@@ -166,7 +166,7 @@ class AlphaResearchRoundTest {
         assertArrayEquals(samples, BlockBootstrap.sharpeSamples(iid, 10, 500, 252, 7),
                 "deterministic per seed: replayable");
 
-        // THE point of blocks: on autocorrelated returns the honest
+        // Why blocks exist: on autocorrelated returns the correct
         // uncertainty is wider, and an iid resample (L = 1) understates
         // it — the classic route to false confidence.
         double[] ar = new double[n];
@@ -198,7 +198,7 @@ class AlphaResearchRoundTest {
         double sr = 0.1;                      // per period
         double n = SharpeValidation.minTrackRecordLength(sr, 0, -0.5, 4, 0.95);
         assertTrue(n > 100 && n < 1_000, "a plausible track record: " + n);
-        // The round trip: AT the computed length, PSR clears the bar...
+        // The round trip: at the computed length, PSR clears the bar...
         assertTrue(SharpeValidation.probabilisticSharpe(sr, 0,
                         (int) Math.ceil(n), -0.5, 4) >= 0.95 - 1e-3,
                 "PSR at n* clears the confidence");

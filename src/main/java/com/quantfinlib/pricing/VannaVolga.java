@@ -10,8 +10,8 @@ import com.quantfinlib.pricing.BlackScholes.OptionType;
  * <p>The idea: hedge the flat-vol Black-Scholes price's vega, vanna and
  * volga with a portfolio of the three pillars; the market cost of that
  * hedge is the smile adjustment. The classic log-strike weight form used
- * here makes the construction exact <em>at</em> the pillars — pricing a
- * pillar strike returns the pillar's own market vol — and interpolates
+ * here makes the construction exact <em>at</em> the pillars (pricing a
+ * pillar strike returns the pillar's own market vol) and interpolates
  * smoothly between and beyond them:</p>
  *
  * <pre>

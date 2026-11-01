@@ -18,31 +18,31 @@ import java.util.List;
  *
  * <p><b>Signal-bar handling</b>: when worked through
  * {@link ExecutionAwareBacktester}, the parent is created at the signal
- * bar's close — so on that first bar there is no hold window left to
+ * bar's close. On that first bar there is no hold window left to
  * observe, and filling at that bar's <i>open</i> would credit a price from
  * before the signal existed (intrabar time travel). The model therefore
- * holds on the parent's signal bar (no fill, no reject counted — it is
- * pure latency, the LP has seen nothing yet); the first real attempt is
- * the next bar, whose open is the price standing when the order actually
- * arrived. Direct calls without {@link #onParentOrder} keep the plain
- * arrives-at-the-open semantics.</p>
+ * holds on the parent's signal bar (no fill and no reject counted: it is
+ * pure latency, and the LP has seen nothing yet); the first real attempt
+ * is the next bar, whose open is the price standing when the order
+ * actually arrived. Direct calls without {@link #onParentOrder} keep the
+ * plain arrives-at-the-open semantics.</p>
  * <ul>
  *   <li>Move in the taker's favor beyond {@code rejectThresholdBps} (price
- *       rising on a buy — adverse to the LP who would sell) → <b>reject</b>;
+ *       rising on a buy, adverse to the LP who would sell): <b>reject</b>;
  *       the parent quantity carries to the next bar, exactly like real
  *       requote-and-chase.</li>
- *   <li>Otherwise → full fill at the open plus the taker pays
+ *   <li>Otherwise: full fill at the open plus the taker pays
  *       {@code spreadBps} half-spread (all-in price).</li>
  * </ul>
  *
  * <p>The asymmetry is intended, as a taker's worst-case model:
  * it simulates the adverse LP behavior the FX Global Code prohibits but a
- * taker must still budget for. The Code-compliant maker-side mechanism —
- * symmetric rejection in both directions — is
- * {@code com.quantfinlib.trading.LastLookGate}; when calibrating this
+ * taker must still budget for. The Code-compliant maker-side mechanism
+ * (symmetric rejection in both directions) is
+ * {@code com.quantfinlib.trading.LastLookGate}. When calibrating this
  * model's threshold from an LP's published (symmetric) disclosures, note
  * those statistics count rejects in both directions while this model
- * rejects only one. Rejection statistics are exposed for TCA — a live desk
+ * rejects only one. Rejection statistics are exposed for TCA; a live desk
  * watches its reject rate per LP for exactly this pattern.</p>
  */
 public final class LastLookExecution implements ExecutionModel {

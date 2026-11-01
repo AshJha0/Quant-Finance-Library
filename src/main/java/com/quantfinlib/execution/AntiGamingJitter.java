@@ -19,11 +19,11 @@ import java.util.Random;
  *       reorder) and end time never exceeded.</li>
  * </ul>
  *
- * <p>Deterministic per seed — replayable in backtests, auditable in
+ * <p>Deterministic per seed: replayable in backtests, auditable in
  * production (compliance can reconstruct exactly why each child fired
  * when it did). Research/warm lane. Relationship to
  * {@link TwapScheduler#scheduleRandomized}: that method jitters TWAP
- * slice sizes at construction; this class is the generic overlay — it
+ * slice sizes at construction. This class is the generic overlay; it
  * jitters any existing child plan (VWAP, benchmark-executor,
  * hand-built) and adds the time dimension the schedulers do not
  * randomize.</p>

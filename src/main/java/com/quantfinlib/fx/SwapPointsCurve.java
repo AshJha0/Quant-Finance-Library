@@ -9,11 +9,11 @@ import java.util.List;
  * FX forward (swap-points) curve: the market's quoted forward points per
  * tenor, turned into outright forwards for any settlement date.
  *
- * <p>Forward FX does not trade as outright prices — it trades as <em>points</em>
+ * <p>Forward FX does not trade as outright prices. It trades as <em>points</em>
  * (pips to add to spot) at standard tenors (ON, 1W, 1M, 3M, ...). This class
  * stores the pillar dates resolved through {@link CurrencyPair#tenorDate}
  * (so modified-following / end-end are already applied) and interpolates
- * points <b>linearly in actual days</b> between pillars — the interbank
+ * points <b>linearly in actual days</b> between pillars, the interbank
  * convention for broken dates. Beyond the last pillar it extrapolates the
  * slope of the final segment; before the first pillar it interpolates from
  * zero points at spot. Interpolating points linearly in days ignores the

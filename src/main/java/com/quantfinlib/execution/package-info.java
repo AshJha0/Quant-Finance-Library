@@ -22,7 +22,7 @@
  * benchmark algo: one stateful executor tracking VWAP / TWAP / Arrival /
  * Implementation Shortfall / Closing / Opening / Participation, re-deciding
  * each interval from live spread, depth, volatility, volume curve, alpha
- * and liquidity — cross-asset),
+ * and liquidity, cross-asset),
  * {@link com.quantfinlib.execution.LiquiditySeekingAlgo} (the
  * opportunistic archetype: burst when the spread is under its
  * time-of-day forecast in a calm regime, guaranteed by a completion
@@ -30,7 +30,7 @@
  * {@link com.quantfinlib.execution.PortfolioExecutor} (multi-symbol
  * portfolio-level scheduling over per-symbol BenchmarkExecutor children:
  * leg-balance band for two-sided transitions, per-interval notional budget
- * allocated risk-weighted — overlays only ever damp a child's own due, so
+ * allocated risk-weighted; overlays only ever damp a child's own due, so
  * per-symbol benchmark integrity holds),
  * {@link com.quantfinlib.execution.IcebergOrder} (display/reload state
  * machine), {@link com.quantfinlib.execution.DarkPoolSimulator}
@@ -41,12 +41,12 @@
  *
  * <p>The spread-and-microstructure layer:
  * {@link com.quantfinlib.execution.SpreadExecutionAlgo} (two-legged
- * pairs/basis execution — the illiquid lead leg worked patiently, the
+ * pairs/basis execution: the illiquid lead leg worked patiently, the
  * liquid hedge leg chasing at the ratio, and a hard legging-risk cap),
  * {@link com.quantfinlib.execution.OrderPlacementPolicy} (post-or-cross
  * as expected-cost arithmetic, with the post region in closed form),
  * {@link com.quantfinlib.execution.AntiGamingJitter} (seeded size/time
- * randomization — totals exact, monotonicity preserved, deterministic
+ * randomization; totals exact, monotonicity preserved, deterministic
  * per seed), {@link com.quantfinlib.execution.FuturesRollAlgo}
  * (roll on the liquidity-migration S-curve, executed as calendar
  * spreads) and {@link com.quantfinlib.execution.Ucb1Selector}
