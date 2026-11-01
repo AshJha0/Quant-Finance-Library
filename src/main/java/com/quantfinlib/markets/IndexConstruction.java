@@ -23,12 +23,12 @@ package com.quantfinlib.markets;
  * <p>The <b>divisor</b> is how a level series survives membership and
  * share changes: {@code level = sum(price * shares * float) / divisor}.
  * When a member is added, dropped or re-floated, the divisor is rescaled
- * so the level is continuous through the change —
- * {@code newDivisor = oldDivisor * newAggregate / oldAggregate} — so the
- * index only ever moves for price reasons (pinned by test: a member swap
- * leaves the level unchanged at the instant of the swap).
+ * so the level is continuous through the change:
+ * {@code newDivisor = oldDivisor * newAggregate / oldAggregate}. The
+ * index therefore only ever moves for price reasons (pinned by test: a
+ * member swap leaves the level unchanged at the instant of the swap).
  * {@code turnover(w1, w2) = 0.5 * sum |w1 - w2|} is the one-way fraction
- * of the portfolio that must trade between two weight vectors — the
+ * of the portfolio that must trade between two weight vectors, the
  * index-tracking cost driver. Research lane, deterministic.</p>
  */
 public final class IndexConstruction {
