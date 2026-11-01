@@ -15,7 +15,12 @@ connectivity stack; see [docs/STABILITY.md](docs/STABILITY.md).
 
 ## Status
 
-- Version 2.0.0. Requires Java 25 (LTS).
+- Version 2.1.0. Requires Java 25 (LTS).
+- Version 2.1 is additive over 2.0: multi-curve rates, the ISDA CDS model, exposure
+  simulation and SA-CCR, SVI/SSVI and local volatility, a factor risk model, FIX
+  session schedules, call auctions, a position ledger and versioned limits. Code
+  written for 2.0 compiles unchanged; [docs/MIGRATION_2.1.md](docs/MIGRATION_2.1.md)
+  lists the new APIs and the few behaviour notes.
 - Version 2.0 changes several APIs and default behaviours (next-open backtest fills,
   Acerbi-Tasche expected shortfall, the MAR33 stressed ES formula, SBE schema 2, the
   FIX session journal). Read [docs/MIGRATION_2.0.md](docs/MIGRATION_2.0.md) before
@@ -38,11 +43,11 @@ connectivity stack; see [docs/STABILITY.md](docs/STABILITY.md).
 <dependency>
   <groupId>com.github.AshJha0</groupId>
   <artifactId>Quant-Finance-Library</artifactId>
-  <version>v2.0.0</version>
+  <version>v2.1.0</version>
 </dependency>
 ```
 
-Gradle: `implementation("com.github.AshJha0:Quant-Finance-Library:v2.0.0")` with
+Gradle: `implementation("com.github.AshJha0:Quant-Finance-Library:v2.1.0")` with
 `maven("https://jitpack.io")` in `repositories`.
 
 The jars attached to each GitHub release can also be put on a classpath directly.
@@ -106,7 +111,7 @@ public class QuickStart {
 The same backtest runs without writing Java through the bundled command line:
 
 ```bash
-java -jar target/quant-finance-library-2.0.0.jar backtest \
+java -jar target/quant-finance-library-2.1.0.jar backtest \
     --csv bars.csv --symbol SPY --strategy sma --fast 10 --slow 30 --out report.html
 ```
 
@@ -121,14 +126,22 @@ with a summary; the javadoc is published at
   an implied-volatility solver on the normalised Black function, binomial trees,
   Heston, SABR (Hagan 2002, Levenberg-Marquardt calibration), barrier options (all
   eight Reiner-Rubinstein types with rebates), digitals, touches, Asian, quanto,
-  exchange (Margrabe) options, variance swaps, vanna-volga, autocallables, simple
-  structured notes, an equity volatility surface.
-- `rates`: yield curve (single curve), bond pricing on street conventions, day counts
+  exchange (Margrabe) options, variance swaps, exact vanna-volga and a vanna-volga one-touch,
+  autocallables, simple structured notes, an equity volatility surface; Heston by
+  the COS method with calibration; raw SVI and SSVI surfaces with arbitrage checks;
+  Dupire local volatility with Monte Carlo and PDE pricers; pay-at-hit and
+  double-barrier touches; seasoned Asians (Turnbull-Wakeman, Curran, Levy); American
+  options with discrete cash dividends on a tree.
+- `rates`: single yield curve and a multi-curve bootstrap (OIS discounting with
+  projection curves from deposits, FRAs, futures with convexity adjustment and swaps;
+  log-linear or monotone-convex interpolation) with bucketed and key-rate DV01; bond pricing on street conventions, day counts
   (including ACT/ACT ICMA and 30E/360), business calendars with stubs and end-of-month
   rules, swaps, swaptions and caps/floors (lognormal, shifted lognormal, normal),
   Nelson-Siegel and Svensson fits, short-rate models, key-rate durations.
 - `credit`: hazard-rate curve bootstrapped from CDS par spreads, CDS legs and par
-  spread, bond Z-spread, a unilateral CVA approximation.
+  spread, the ISDA CDS Standard Model (IMM dates, upfront and quoted-spread
+  conversion), bond Z-spread, Monte Carlo netting-set exposure (EE, PFE, EPE) with a
+  CSA, CVA, DVA and wrong-way CVA.
 - `fx`: currency pair conventions, swap points, FX swaps, NDFs, a delta-quoted FX
   volatility surface (forward or spot delta, premium adjustment, broker strangle
   butterflies), fixing risk, aggregated LP books and cross rates.
@@ -140,8 +153,9 @@ with a summary; the javadoc is published at
   historical, filtered historical, full revaluation), one shared empirical tail
   definition (`TailRisk`), extreme value theory, copulas, PCA, stress testing,
   component VaR, VaR backtests (Kupiec, Christoffersen, Acerbi-Szekely), FRTB-style ES
-  and P&L attribution, PSD repair and nearest correlation matrix, limits and
-  counterparty exposure. See [docs/MARKET_RISK.md](docs/MARKET_RISK.md).
+  and P&L attribution, PSD repair and nearest correlation matrix, limits,
+  counterparty exposure, SA-CCR (BCBS 279) and a market, sector and style factor
+  risk model with risk decomposition. See [docs/MARKET_RISK.md](docs/MARKET_RISK.md).
 - `crb`: a central risk book that nets equity and FX products onto one factor space,
   with internalisation, cost-aware hedging and routing. See
   [docs/CENTRAL_RISK_BOOK.md](docs/CENTRAL_RISK_BOOK.md).
@@ -155,10 +169,13 @@ with a summary; the javadoc is published at
   risk parity, Black-Litterman.
 - `alpha`: factor research (IC with Newey-West t-stats, Fama-MacBeth, quantile
   spreads, permutation tests), point-in-time fundamentals, portfolio construction and
-  an alpha backtester with financing and participation caps.
+  an alpha backtester with financing and participation caps, optional risk-model
+  construction by a turnover-aware optimiser, alpha combination, P&L attribution and
+  capacity curves.
 - `backtest`: bar, portfolio, tick-level and execution-algorithm backtesters, cost
   models, walk-forward analysis, purged k-fold, deflated Sharpe ratio, bootstrap
-  tools.
+  tools, and `StrategyRunner`, which runs one strategy on the bar, tick and
+  paper-trading engines.
 - `indicators`, `screener`, `dsl`, `ml`, `simulation`, `report`, `cli`: technical
   indicators (batch and streaming), a stock screener, a rule-based strategy builder,
   regime and volatility forecasting models, Monte Carlo simulation, HTML/PDF/XLSX/CSV
@@ -169,10 +186,13 @@ with a summary; the javadoc is published at
   benchmark algorithms (VWAP, TWAP, POV, implementation shortfall), smart order
   routing.
 - `marketdata`, `orderbook`, `trading`: single-producer ring buffers, a market-data
-  bus, a price-ladder matching engine, a pre-trade risk gate with a kill switch, an
+  bus, a price-ladder matching engine, opening and closing call auctions, a pre-trade
+  risk gate with a kill switch and versioned, audited limits, a position and P&L
+  ledger with drop-copy reconciliation, an
   order gateway with cancel/replace and an order state machine, quoting and auto
   hedging, a paper-trading venue. See [docs/ULTRA_LOW_LATENCY.md](docs/ULTRA_LOW_LATENCY.md).
-- `fix`, `sbe`, `feed`, `data`: a FIX 4.4 session with a CRC-checked journal, SBE-style
+- `fix`, `sbe`, `feed`, `data`: a FIX 4.4 session with a CRC-checked journal, session schedules and
+  NextExpectedMsgSeqNum, SBE-style
   binary codecs (schema 2), ITCH 5.0 decoding and MoldUDP64 framing, a WebSocket feed,
   tick capture and replay files.
 
@@ -180,19 +200,25 @@ with a summary; the javadoc is published at
 
 ## Not implemented
 
-These are common requirements that the library does not cover. Code that needs them
-should use a specialised library or add them.
+These are common requirements that the library does not cover, or covers only in
+part. Code that needs them should use a specialised library or add them.
 
-- Multi-curve (OIS discounting with separate projection curves) bootstrapping; the
-  yield curve and swap pricer are single-curve.
-- The ISDA CDS standard model and standard upfront conventions.
-- SA-CCR, SIMM, the FRTB standardised approach, NMRF capital and other regulatory
-  capital calculations beyond the FRTB-style ES pieces.
-- SVI/SSVI surface fitting and Dupire local volatility.
-- FIX session schedules (trading hours, daily logon/logout windows), FIX versions other
-  than 4.4, and FIX repeating-group dictionaries.
+- SIMM, the FRTB standardised approach, NMRF capital and other regulatory capital
+  beyond the FRTB-style ES pieces and SA-CCR. SA-CCR has no basis or volatility
+  hedging sets, one margin agreement per netting set, and no collateral haircuts.
+- The ISDA CDS model has not been checked against the Markit test grid (its legs are
+  checked against numerical quadrature), applies weekends only as holidays and has no
+  half-day accrual-on-default adjustment.
+- The exposure simulator prices single-curve swaps and one FX pair with a
+  deterministic foreign rate; DVA is unilateral.
+- `StrategyRunner`'s bar engine trades fractional shares, so it matches the tick and
+  paper engines exactly only when cash over price is a whole number.
+- `PositionLedger` is not wired to gateway fills automatically; the caller feeds it.
+- FIX versions other than 4.4, FIX repeating-group dictionaries, entitlements and
+  regulatory reporting.
 - Live broker or exchange connectivity, certification, and kernel-bypass networking.
 - Corporate actions beyond splits, cash dividends, delistings and mergers.
+- A smaller public API surface is planned for 3.0; 2.x keeps every 2.0 public type.
 
 ## Performance
 
@@ -205,6 +231,7 @@ Benchmark method, environment and results are in [docs/BENCHMARKS.md](docs/BENCH
 | [GETTING_STARTED.md](docs/GETTING_STARTED.md) | Build, first backtest, paper trading, benchmarks, troubleshooting |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Package map, data flow, design rules |
 | [STABILITY.md](docs/STABILITY.md) | Stable APIs, reference implementations, versioning policy |
+| [MIGRATION_2.1.md](docs/MIGRATION_2.1.md) | What 2.1 adds and how to adopt it |
 | [MIGRATION_2.0.md](docs/MIGRATION_2.0.md) | Breaking changes from 1.x |
 | [LEARN.md](docs/LEARN.md) | Tutorial from first principles, with exercises |
 | [COOKBOOK.md](docs/COOKBOOK.md) | Runnable recipes |

@@ -132,6 +132,12 @@ java -Xms512m -Xmx512m -XX:+AlwaysPreTouch -cp target/classes \
 `ShardScaleBenchmark` run the same way. `HftLatencyBenchmark` and `HftOrderBenchmark`
 take an optional open-loop rate in messages per second as their only argument.
 
+To repeat the four latency benchmarks used in [BENCHMARKS.md](BENCHMARKS.md) with
+the documented JVM flags, run `scripts/run-benchmarks.sh`. It runs each one three
+times (`RUNS=5` for more, or name one benchmark as the argument), prints the minimum,
+median and maximum of every reported figure, and keeps the raw logs in
+`target/bench-runs/`. Run it on an otherwise idle machine.
+
 JMH microbenchmarks live in the test sources:
 
 ```bash
@@ -149,6 +155,8 @@ Numbers from a laptop or a shared CI runner say little about tails. See
 | `./mvnw test` | The default set. Test classes run in parallel; each test has a 120-second timeout. |
 | `./mvnw -Pfull test` | Also the tests tagged `load` (soak and load tests) and `timing` (wall-clock assertions). They run serially. The nightly workflow uses this profile. |
 | `./mvnw -Panalysis verify` | Adds Error Prone and SpotBugs. Findings are reported as warnings. |
+| `scripts/fetch-api-baseline.sh && ./mvnw -Papi-compat -DskipTests verify` | The API compatibility check: japicmp compares the build with the released 2.0.0 jar and fails on a binary-incompatible change in a stable package. The script caches the baseline jar in `~/.m2/api-baseline/`. The report is `target/japicmp/api-all.html`. |
+| `./mvnw -Pmutation test-compile org.pitest:pitest-maven:mutationCoverage` | PIT mutation testing on `pricing`, `risk`, `rates` and `volatility`; the report is `target/pit-reports/index.html`. Narrow it with `-Dpit.targets=com.quantfinlib.volatility.*`; `python3 scripts/pit-summary.py target/pit-reports/mutations.xml` prints the per-package scores. The nightly workflow runs it. |
 | `./mvnw test -Dtest=VarEngineTest` | One test class (standard Surefire filter). |
 
 Tests tagged `socket` open loopback sockets and run in the default set. If a firewall
