@@ -10,10 +10,10 @@
  * futures sizing), {@link com.quantfinlib.hedging.FxHedger} (exposure
  * netting, forward carry), {@link com.quantfinlib.hedging.PairsHedger}
  * (spread construction, half-life),
- * {@link com.quantfinlib.hedging.CointegrationTest} (Engle-Granger — the
+ * {@link com.quantfinlib.hedging.CointegrationTest} (Engle-Granger, the
  * statistical gate before a pairs trade) and
  * {@link com.quantfinlib.hedging.WhalleyWilmott} (the optimal no-trade
- * band around delta — the width the band hedgers take as configuration
+ * band around delta; the width the band hedgers take as configuration
  * should come from here, with the hedge-to-nearest-edge policy).
  */
 package com.quantfinlib.hedging;
