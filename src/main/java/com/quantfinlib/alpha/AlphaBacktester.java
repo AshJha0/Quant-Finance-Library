@@ -566,8 +566,9 @@ public final class AlphaBacktester {
                 if (o.advTradeFraction() > 0 && cfg.capital() > 0) {
                     MarketImpactModel im = MarketImpactModel.estimate(c.series(i), index,
                             cfg.impactWindow());
-                    double lim = o.advTradeFraction() * im.adv() * c.series(i).close(index)
-                            / (cfg.capital() * equity);
+                    // no volume data: no liquidity to size against, so no new trading
+                    double lim = im == null ? 0 : o.advTradeFraction() * im.adv()
+                            * c.series(i).close(index) / (cfg.capital() * equity);
                     limits[i] = Math.max(lim, Math.abs(current[i]) - caps[i]);
                 }
             }
