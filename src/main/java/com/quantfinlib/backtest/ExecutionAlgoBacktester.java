@@ -7,7 +7,7 @@ import com.quantfinlib.execution.BenchmarkExecutor.MarketState;
 import com.quantfinlib.orderbook.Side;
 
 /**
- * Backtests the dynamic execution stack over bar data — the bridge
+ * Backtests the dynamic execution stack over bar data. It is the bridge
  * between {@code execution.BenchmarkExecutor} (built for live intervals)
  * and the backtest lane: replay a session's bars, let the executor
  * re-decide each bar exactly as it would live, fill against the bar with
@@ -15,22 +15,22 @@ import com.quantfinlib.orderbook.Side;
  * would (implementation shortfall vs arrival, slippage vs the session
  * VWAP). {@code ExecutionAwareBacktester} answers "how do fills change a
  * strategy's results?"; this answers the execution desk's own question:
- * <b>"which benchmark algorithm, and at what cost?"</b> — one parent
+ * <b>"which benchmark algorithm, and at what cost?"</b> One parent
  * order, N bars, a number per benchmark.
  *
  * <p><b>Simplifications</b>: fills
  * print at the bar close plus the cost model's bps (no intra-bar
- * microstructure); the per-bar liquidity cap is
- * {@code participationCap × bar volume} — and it is the only cap: the
+ * microstructure). The per-bar liquidity cap is
+ * {@code participationCap × bar volume}, and it is the only cap: the
  * executor is constructed with its internal depth fraction at 1 so the
- * two knobs cannot silently compound; the VWAP volume curve uses the
- * session's realized cumulative volume — an oracle curve, so the VWAP
- * benchmark result here is an upper bound on what a live volume-curve
- * forecast can achieve (live, use {@code microstructure.VolumeCurve});
- * and each bar's volume enters the POV target before that bar trades —
- * one bar of look-ahead versus a strictly reactive live POV, so POV
- * completion here is mildly optimistic. Deterministic: same bars, same
- * config, same numbers. Research lane.</p>
+ * two knobs cannot silently compound. The VWAP volume curve uses the
+ * session's realized cumulative volume. That is an oracle curve, so the
+ * VWAP benchmark result here is an upper bound on what a live
+ * volume-curve forecast can achieve (live, use
+ * {@code microstructure.VolumeCurve}). Each bar's volume enters the POV
+ * target before that bar trades: one bar of look-ahead versus a strictly
+ * reactive live POV, so POV completion here is mildly optimistic.
+ * Deterministic: same bars, same config, same numbers. Research lane.</p>
  */
 public final class ExecutionAlgoBacktester {
 

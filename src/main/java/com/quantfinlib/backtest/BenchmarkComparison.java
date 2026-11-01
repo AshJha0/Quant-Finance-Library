@@ -20,13 +20,13 @@ import com.quantfinlib.util.MathUtils;
  *   <li><b>information ratio</b> — annualized mean(a)/TE: alpha per unit of
  *       straying. The active-management analogue of Sharpe; sustained
  *       IR &gt; 0.5 is good, &gt; 1 is elite;</li>
- *   <li><b>up/down capture</b> — mean strategy return over periods when the
+ *   <li><b>up/down capture</b>: mean strategy return over periods when the
  *       benchmark rose (fell), divided by the benchmark's own mean in those
- *       periods. The dream profile is up &gt; 1, down &lt; 1. Arithmetic
- *       means of per-period returns, not compounded — stated, and the right
- *       choice at daily granularity where cross-terms are negligible.
- *       {@code NaN} when the benchmark had no up (down) periods: no
- *       evidence, not zero.</li>
+ *       periods. The ideal profile is up &gt; 1, down &lt; 1. These are
+ *       arithmetic means of per-period returns, not compounded, which is
+ *       the right choice at daily granularity where cross-terms are
+ *       negligible. {@code NaN} when the benchmark had no up (down)
+ *       periods: no evidence, not zero.</li>
  * </ul>
  *
  * <p>Both series must be the same length and aligned period-by-period —
