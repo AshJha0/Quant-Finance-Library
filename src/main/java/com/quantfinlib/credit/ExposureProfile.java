@@ -38,14 +38,14 @@ public final class ExposureProfile {
     private final double[] p0;
     private final double[][] discPos;
     private final double[][] expo;
-    private final double[] driverRates;
-    private final double[] driverFx;
+    private final double[][] driverRates;
+    private final double[][] driverFx;
     private final double[] dee;
     private final double[] dene;
     private final double[] stdErr;
 
     ExposureProfile(double[] times, double[] p0, double[][] discPos, double[][] discNeg,
-                    double[][] expo, double[] driverRates, double[] driverFx) {
+                    double[][] expo, double[][] driverRates, double[][] driverFx) {
         this.times = times;
         this.p0 = p0;
         this.discPos = discPos;
@@ -158,8 +158,12 @@ public final class ExposureProfile {
         return discPos[path][i];
     }
 
-    /** Standardised driver value (standard normal) on one path. */
-    double driver(int path, Factor f) {
-        return f == Factor.RATES ? driverRates[path] : driverFx[path];
+    /**
+     * Standardised driver (standard normal) for bucket i on one path: the
+     * factor Brownian level at t_i, or its increment over the margin
+     * period of risk ending at t_i when the set is collateralised.
+     */
+    double driver(int path, int i, Factor f) {
+        return f == Factor.RATES ? driverRates[path][i] : driverFx[path][i];
     }
 }

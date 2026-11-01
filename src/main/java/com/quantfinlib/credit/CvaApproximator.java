@@ -142,27 +142,47 @@ public final class CvaApproximator {
     }
 
     /**
-     * CVA with wrong-way risk through a Gaussian copula between the
-     * default time and a market factor (Li 2000; Gregory, The xVA
-     * Challenge, 3rd ed., 2015, ch. 17). Default before t happens when
-     * {@code Z <= Phi^{-1}(PD(t))} with
-     * {@code Z = -rho X + sqrt(1 - rho^2) eps}, X the path's standardised
-     * driver at the last exposure date and eps independent, so the
-     * marginal default curve is unchanged. Conditioning on X gives each
-     * bucket probability in closed form, with no extra sampling:
+     * CVA with wrong-way risk through a Gaussian copula between default
+     * and a market factor, applied bucket by bucket (Li 2000; Gregory,
+     * The xVA Challenge, 3rd ed., 2015, ch. 17; the per-bucket conditioning
+     * follows Hull and White, "CVA and wrong-way risk", Financial Analysts
+     * Journal 68(5), 2012, where default is tied to the market variable
+     * that drives the exposure at each date). For bucket i the latent
+     * credit variable is {@code Z_i = -rho X_i + sqrt(1 - rho^2) eps},
+     * eps independent of the market, and default falls in the bucket when
+     * {@code Phi^{-1}(PD_{i-1}) < Z_i <= Phi^{-1}(PD_i)}. X_i is a standard
+     * normal driver read path-wise from the simulation:
+     *
+     * <ul>
+     *   <li>uncollateralised set: {@code X_i = W(t_i) / sqrt(t_i)}, the
+     *   standardised factor Brownian at the bucket date;</li>
+     *   <li>set under a CSA with margin period of risk M:
+     *   {@code X_i = (W(t_i) - W(t_i - M)) / sqrt(M)}, the standardised
+     *   increment over the MPR ending at t_i, which is what drives the
+     *   collateralised exposure {@code max(V(t_i) - C(t_i - M), 0)}.</li>
+     * </ul>
+     *
+     * <p>Conditioning on X_i gives each bucket probability in closed form:</p>
      *
      * <pre>
-     *   P(t_{i-1} &lt; tau &lt;= t_i | X) = Phi((Phi^{-1}(PD_i) + rho X) / sqrt(1 - rho^2))
-     *                               - Phi((Phi^{-1}(PD_{i-1}) + rho X) / sqrt(1 - rho^2))
-     *   CVA = LGD * mean over paths of sum_i D(0,t_i) E(t_i) P(bucket i | X)
+     *   P(bucket i | X_i) = Phi((Phi^{-1}(PD_i) + rho X_i) / sqrt(1 - rho^2))
+     *                     - Phi((Phi^{-1}(PD_{i-1}) + rho X_i) / sqrt(1 - rho^2))
+     *   CVA = LGD * mean over paths of sum_i D(0,t_i) E(t_i) P(bucket i | X_i)
      * </pre>
      *
-     * <p>Positive rho makes default more likely when the driver is high:
-     * wrong-way for a payer swap with {@link ExposureProfile.Factor#RATES}
-     * and for buying foreign currency with {@link ExposureProfile.Factor#FX}.
-     * rho = 0 reproduces {@link #cva(ExposureProfile, CreditCurve, double)}.
-     * The single terminal driver is a simplification: exposure that peaks
-     * early correlates with it less than with the factor at its peak.</p>
+     * <p>Since X_i is standard normal, E[P(bucket i | X_i)] = PD_i - PD_{i-1}:
+     * the marginal default curve is unchanged, and rho = 0 reproduces
+     * {@link #cva(ExposureProfile, CreditCurve, double)}. Positive rho makes
+     * default more likely when the driver is high: wrong-way for a payer
+     * swap with {@link ExposureProfile.Factor#RATES} and for buying foreign
+     * currency with {@link ExposureProfile.Factor#FX}. Model limits: the
+     * bucket probabilities are a marginal construction (each bucket has its
+     * own driver, so there is no single joint default time across buckets),
+     * and under a CSA with a large threshold the exposure also depends on
+     * the factor level, which the increment driver ignores. Before 2.1 the
+     * driver was the single terminal factor value for every bucket; that
+     * understated wrong-way risk on collateralised sets, where it could
+     * even fall below the independent CVA.</p>
      *
      * @param profile      simulated exposure
      * @param counterparty counterparty credit curve
@@ -196,13 +216,12 @@ public final class CvaApproximator {
         double total = 0;
         int n = profile.paths();
         for (int p = 0; p < n; p++) {
-            double shift = rho * profile.driver(p, driver);
-            double prevCdf = 0;
             double sum = 0;
             for (int i = 0; i < m; i++) {
-                double cdf = conditionalCdf(thresholds[i], shift, scale);
-                sum += profile.discountedPositive(p, i) * (cdf - prevCdf);
-                prevCdf = cdf;
+                double shift = rho * profile.driver(p, i, driver);
+                double lo = i == 0 ? 0 : conditionalCdf(thresholds[i - 1], shift, scale);
+                double hi = conditionalCdf(thresholds[i], shift, scale);
+                sum += profile.discountedPositive(p, i) * (hi - lo);
             }
             total += sum;
         }
