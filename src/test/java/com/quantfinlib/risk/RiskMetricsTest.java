@@ -82,7 +82,7 @@ class RiskMetricsTest {
         assertTrue(report.annualizedVolatility() > 0);
         assertTrue(report.valueAtRisk() > 0);
         assertTrue(report.conditionalValueAtRisk() >= report.valueAtRisk());
-        assertEquals(1.0, report.correlationMatrix()[0][0], 1e-12);
+        assertEquals(1.0, report.correlationMatrix(0, 0), 1e-12);
     }
 
     @Test

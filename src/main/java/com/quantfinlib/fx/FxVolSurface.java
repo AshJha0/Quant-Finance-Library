@@ -85,7 +85,90 @@ public final class FxVolSurface {
     }
 
     /** One expiry's solved smile: absolute strikes and vols, low to high strike. */
-    public record SmilePillar(double expiryYears, double forward, double[] strikes, double[] vols) {
+    public static final class SmilePillar {
+        private final double expiryYears;
+        private final double forward;
+        private final double[] strikes;
+        private final double[] vols;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         */
+        public SmilePillar(double expiryYears, double forward, double[] strikes, double[] vols) {
+            this.expiryYears = expiryYears;
+            this.forward = forward;
+            this.strikes = strikes == null ? null : strikes.clone();
+            this.vols = vols == null ? null : vols.clone();
+        }
+
+        /** {@code expiryYears}. */
+        public double expiryYears() {
+            return expiryYears;
+        }
+
+        /** {@code forward}. */
+        public double forward() {
+            return forward;
+        }
+
+        /** Element {@code i} of {@code strikes}. */
+        public double strikes(int i) {
+            return strikes[i];
+        }
+
+        /** Length of {@code strikes}. */
+        public int strikesLength() {
+            return strikes.length;
+        }
+
+        /** A fresh copy of {@code strikes}. */
+        public double[] strikesCopy() {
+            return strikes == null ? null : strikes.clone();
+        }
+
+        /** Element {@code i} of {@code vols}. */
+        public double vols(int i) {
+            return vols[i];
+        }
+
+        /** Length of {@code vols}. */
+        public int volsLength() {
+            return vols.length;
+        }
+
+        /** A fresh copy of {@code vols}. */
+        public double[] volsCopy() {
+            return vols == null ? null : vols.clone();
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof SmilePillar o)) {
+                return false;
+            }
+            return Double.compare(expiryYears, o.expiryYears) == 0
+                    && Double.compare(forward, o.forward) == 0
+                    && java.util.Arrays.equals(strikes, o.strikes)
+                    && java.util.Arrays.equals(vols, o.vols);
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + Double.hashCode(expiryYears);
+            h = 31 * h + Double.hashCode(forward);
+            h = 31 * h + java.util.Arrays.hashCode(strikes);
+            h = 31 * h + java.util.Arrays.hashCode(vols);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "SmilePillar[" + "expiryYears=" + expiryYears + ", " + "forward=" + forward + ", " + "strikes=" + java.util.Arrays.toString(strikes) + ", " + "vols=" + java.util.Arrays.toString(vols) + "]";
+        }
     }
 
     private final double[] expiries;         // ascending

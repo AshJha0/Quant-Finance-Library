@@ -21,6 +21,9 @@ public final class SmartOrderRouter {
 
     public record RoutingPlan(List<RouteLeg> legs, long routedQty, long unroutedQty,
                               double expectedAvgAllInPrice) {
+        public RoutingPlan {
+            legs = List.copyOf(legs);
+        }
     }
 
     private record Candidate(VenueQuote quote, double price, double allInPrice, long size) {

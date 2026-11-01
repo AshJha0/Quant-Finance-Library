@@ -71,8 +71,8 @@ class AlphaBacktesterReportTest {
         AlphaBacktester.Result r = AlphaBacktester.run(ctx, Factors.momentum(20, 0), config);
 
         // Long winners / short losers on a drift panel: gross must profit.
-        double grossFinal = r.grossEquity()[r.grossEquity().length - 1];
-        double netFinal = r.netEquity()[r.netEquity().length - 1];
+        double grossFinal = r.grossEquity(r.grossEquityLength() - 1);
+        double netFinal = r.netEquity(r.netEquityLength() - 1);
         assertTrue(grossFinal > 1.0, "gross=" + grossFinal);
         // Every cost component was charged, and net < gross by construction.
         assertTrue(netFinal < grossFinal);
@@ -103,8 +103,8 @@ class AlphaBacktesterReportTest {
         assertTrue(bigBook.impactDrag() > 0);
         // Same signal, same flat costs — size alone degrades the net result:
         // the square-root law making "capacity" a number, not a slogan.
-        assertTrue(bigBook.netEquity()[bigBook.netEquity().length - 1]
-                < noImpact.netEquity()[noImpact.netEquity().length - 1]);
+        assertTrue(bigBook.netEquity(bigBook.netEquityLength() - 1)
+                < noImpact.netEquity(noImpact.netEquityLength() - 1));
         assertThrows(IllegalArgumentException.class,
                 () -> new AlphaBacktester.Config(-1, 21, 1, 2, 1, 0, 20, 252));
         assertThrows(IllegalArgumentException.class, () -> AlphaBacktester.run(
@@ -165,7 +165,7 @@ class AlphaBacktesterReportTest {
                     return PortfolioConstruction.inverseVolBudget(w,
                             PortfolioConstruction.trailingVols(c, index, 25), 1.0);
                 });
-        assertTrue(r.netEquity()[r.netEquity().length - 1] > 1.0);
+        assertTrue(r.netEquity(r.netEquityLength() - 1) > 1.0);
         // A misaligned builder is rejected, not silently truncated.
         assertThrows(IllegalArgumentException.class, () -> AlphaBacktester.run(
                 ctx, Factors.momentum(20, 0), config(30),
@@ -181,7 +181,7 @@ class AlphaBacktesterReportTest {
         // Persistent: drift panel momentum never decays → infinite half-life.
         AlphaReport.Decay persistent = AlphaReport.decayProfile(
                 panel(), Factors.momentum(20, 0), 30, new int[]{1, 2, 5, 10});
-        for (double ic : persistent.meanIcs()) {
+        for (double ic : persistent.meanIcsCopy()) {
             assertEquals(1.0, ic, 1e-9);
         }
         assertTrue(Double.isInfinite(persistent.halfLifeBars()));
@@ -192,8 +192,8 @@ class AlphaBacktesterReportTest {
         // and only the small random drift remains → IC collapses.
         AlphaReport.Decay fading = AlphaReport.decayProfile(
                 zigzagPanel(), Factors.meanReversion(2), 10, new int[]{1, 2});
-        assertTrue(fading.meanIcs()[0] > 0.9, "h=1 IC " + fading.meanIcs()[0]);
-        assertTrue(Math.abs(fading.meanIcs()[1]) < 0.5, "h=2 IC " + fading.meanIcs()[1]);
+        assertTrue(fading.meanIcs(0) > 0.9, "h=1 IC " + fading.meanIcs(0));
+        assertTrue(Math.abs(fading.meanIcs(1)) < 0.5, "h=2 IC " + fading.meanIcs(1));
         assertTrue(fading.halfLifeBars() > 1 && fading.halfLifeBars() < 2);
         assertThrows(IllegalArgumentException.class, () -> AlphaReport.decayProfile(
                 panel(), Factors.momentum(20, 0), 30, new int[]{5, 2}));
@@ -240,8 +240,8 @@ class AlphaBacktesterReportTest {
         AlphaReport.Attribution a = AlphaReport.attribute(
                 y, new double[][]{f1, f2}, List.of("MOM", "VAL"));
         assertEquals(0.0002, a.alphaPerBar(), 1e-12);
-        assertEquals(1.5, a.betas()[0], 1e-9);
-        assertEquals(-0.5, a.betas()[1], 1e-9);
+        assertEquals(1.5, a.betas(0), 1e-9);
+        assertEquals(-0.5, a.betas(1), 1e-9);
         assertEquals(1.0, a.rSquared(), 1e-9);
         assertTrue(a.format().contains("MOM"));
         assertThrows(IllegalArgumentException.class,

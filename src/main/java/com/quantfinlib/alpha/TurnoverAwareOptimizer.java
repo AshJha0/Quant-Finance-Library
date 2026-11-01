@@ -65,14 +65,104 @@ public final class TurnoverAwareOptimizer {
         }
     }
 
-    /**
-     * @param weights            optimal book
-     * @param turnover           {@code ½‖w − w₀‖₁}
-     * @param objective          {@code αᵀw − λwᵀΣw − κ‖w − w₀‖₁}
-     * @param equalityResidual   {@code max_k |(A w)_k|}
-     */
-    public record Result(double[] weights, double turnover, double objective,
-                         double equalityResidual, int iterations, boolean converged) {
+    public static final class Result {
+        private final double[] weights;
+        private final double turnover;
+        private final double objective;
+        private final double equalityResidual;
+        private final int iterations;
+        private final boolean converged;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         *
+         * @param weights optimal book
+         * @param turnover {@code ½‖w − w₀‖₁}
+         * @param objective {@code αᵀw − λwᵀΣw − κ‖w − w₀‖₁}
+         * @param equalityResidual {@code max_k |(A w)_k|}
+         */
+        public Result(double[] weights, double turnover, double objective, double equalityResidual,
+                int iterations, boolean converged) {
+            this.weights = weights == null ? null : weights.clone();
+            this.turnover = turnover;
+            this.objective = objective;
+            this.equalityResidual = equalityResidual;
+            this.iterations = iterations;
+            this.converged = converged;
+        }
+
+        /** Element {@code i} of {@code weights} (optimal book). */
+        public double weights(int i) {
+            return weights[i];
+        }
+
+        /** Length of {@code weights}. */
+        public int weightsLength() {
+            return weights.length;
+        }
+
+        /** A fresh copy of {@code weights}. */
+        public double[] weightsCopy() {
+            return weights == null ? null : weights.clone();
+        }
+
+        /** {@code turnover}. */
+        public double turnover() {
+            return turnover;
+        }
+
+        /** {@code objective}. */
+        public double objective() {
+            return objective;
+        }
+
+        /** {@code equalityResidual}. */
+        public double equalityResidual() {
+            return equalityResidual;
+        }
+
+        /** {@code iterations}. */
+        public int iterations() {
+            return iterations;
+        }
+
+        /** {@code converged}. */
+        public boolean converged() {
+            return converged;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Result o)) {
+                return false;
+            }
+            return java.util.Arrays.equals(weights, o.weights)
+                    && Double.compare(turnover, o.turnover) == 0
+                    && Double.compare(objective, o.objective) == 0
+                    && Double.compare(equalityResidual, o.equalityResidual) == 0
+                    && iterations == o.iterations
+                    && converged == o.converged;
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + java.util.Arrays.hashCode(weights);
+            h = 31 * h + Double.hashCode(turnover);
+            h = 31 * h + Double.hashCode(objective);
+            h = 31 * h + Double.hashCode(equalityResidual);
+            h = 31 * h + Integer.hashCode(iterations);
+            h = 31 * h + Boolean.hashCode(converged);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "Result[" + "weights=" + java.util.Arrays.toString(weights) + ", " + "turnover=" + turnover + ", " + "objective=" + objective + ", " + "equalityResidual=" + equalityResidual + ", " + "iterations=" + iterations + ", " + "converged=" + converged + "]";
+        }
     }
 
     private TurnoverAwareOptimizer() {

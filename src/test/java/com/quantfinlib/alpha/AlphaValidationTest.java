@@ -79,7 +79,7 @@ class AlphaValidationTest {
     void blockedCrossValidationShowsRegimeConsistency() {
         AlphaValidation.CrossValidationResult r = AlphaValidation.crossValidate(
                 panel(), Factors.momentum(20, 0), 5, 30, 4);
-        assertEquals(4, r.blockIcs().length);
+        assertEquals(4, r.blockIcsLength());
         // A stationary signal is consistent in every block.
         assertEquals(1.0, r.signConsistency(), 1e-12);
         assertEquals(1.0, r.meanIc(), 1e-9);
@@ -180,8 +180,8 @@ class AlphaValidationTest {
                 panel(), sweep, 5, 40);
         // On a stationary drift panel every lookback ranks identically:
         // the flattest possible plateau — the robust-signal signature.
-        assertEquals(4, r.meanIcs().length);
-        for (double ic : r.meanIcs()) {
+        assertEquals(4, r.meanIcsLength());
+        for (double ic : r.meanIcsCopy()) {
             assertEquals(1.0, ic, 1e-9);
         }
         assertEquals(0.0, r.worstNeighborDrop(), 1e-9);

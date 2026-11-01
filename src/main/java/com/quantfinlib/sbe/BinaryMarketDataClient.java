@@ -1,15 +1,17 @@
 package com.quantfinlib.sbe;
 
 import com.quantfinlib.marketdata.HftMarketDataBus;
+import com.quantfinlib.marketdata.StridedSequences;
+import com.quantfinlib.util.IdleStrategy;
+import com.quantfinlib.util.ThreadPlacement;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.ReadableByteChannel;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.locks.LockSupport;
 
 /**
  * Binary market-data adapter: decodes {@link TradeFlyweight} frames from a
@@ -39,12 +41,17 @@ public final class BinaryMarketDataClient implements AutoCloseable {
     private final ByteBuffer buffer;
     private final TradeFlyweight trade = new TradeFlyweight();
     private final int[] kind = new int[1];
-    private final Thread readerThread;
+    private Thread readerThread;
+    private ThreadFactory threadFactory = ThreadPlacement.daemon("binary-md-client");
+    // Back-pressure wait while the bus ring is full; reader thread only.
+    private final IdleStrategy retryIdle = IdleStrategy.backoff(100, 0, 10_000, 10_000);
     private final AtomicBoolean gap = new AtomicBoolean();
     private volatile boolean running = true;
-    private final AtomicLong messagesDecoded = new AtomicLong();
-    private final AtomicLong droppedTicks = new AtomicLong();
-    private final AtomicLong skippedMessages = new AtomicLong();
+    // Reader-thread counters: single writer, opaque increments on padded slots.
+    private static final int DECODED = 0;
+    private static final int DROPPED = 1;
+    private static final int SKIPPED = 2;
+    private final StridedSequences counters = new StridedSequences(3);
     private volatile String failureReason;
     private volatile long publishRetryNanos = TimeUnit.MILLISECONDS.toNanos(1);
 
@@ -57,8 +64,6 @@ public final class BinaryMarketDataClient implements AutoCloseable {
         this.channel = channel;
         this.bus = bus;
         this.buffer = ByteBuffer.allocateDirect(bufferBytes).order(ByteOrder.LITTLE_ENDIAN);
-        this.readerThread = new Thread(this::readLoop, "binary-md-client");
-        readerThread.setDaemon(true);
     }
 
     /** Retry budget for a publish into a full ring (set before {@link #start()}). */
@@ -67,22 +72,41 @@ public final class BinaryMarketDataClient implements AutoCloseable {
         return this;
     }
 
-    public void start() {
+    /**
+     * Replaces the factory that creates the reader thread (naming, CPU
+     * placement; see {@link ThreadPlacement}). Call before {@link #start()}.
+     *
+     * @param factory thread factory
+     * @return this client
+     */
+    public synchronized BinaryMarketDataClient threadFactory(ThreadFactory factory) {
+        if (factory == null) {
+            throw new IllegalArgumentException("factory is required");
+        }
+        this.threadFactory = factory;
+        return this;
+    }
+
+    public synchronized void start() {
+        if (readerThread != null) {
+            return;
+        }
+        readerThread = threadFactory.newThread(this::readLoop);
         readerThread.start();
     }
 
     public long messagesDecoded() {
-        return messagesDecoded.get();
+        return counters.getOpaque(DECODED);
     }
 
     /** Ticks dropped because the bus ring stayed full beyond the retry budget. */
     public long droppedTicks() {
-        return droppedTicks.get();
+        return counters.getOpaque(DROPPED);
     }
 
     /** Frames of templates this client does not consume, skipped by block length. */
     public long skippedMessages() {
-        return skippedMessages.get();
+        return counters.getOpaque(SKIPPED);
     }
 
     /** Returns and clears the gap flag raised by a dropped tick. */
@@ -138,7 +162,7 @@ public final class BinaryMarketDataClient implements AutoCloseable {
                         buffer.getDouble(position + SbeFrames.V1_TRADE_SIZE),
                         buffer.getLong(position + SbeFrames.V1_TRADE_TS));
             } else {
-                skippedMessages.incrementAndGet();
+                counters.incrementOpaque(SKIPPED);
             }
             buffer.position(position + length);
         }
@@ -146,22 +170,18 @@ public final class BinaryMarketDataClient implements AutoCloseable {
 
     private void publish(int symbolId, double price, double size, long ts) {
         if (!bus.publish(symbolId, price, size, ts) && !retry(symbolId, price, size, ts)) {
-            droppedTicks.incrementAndGet();
+            counters.incrementOpaque(DROPPED);
             gap.set(true);
             return;
         }
-        messagesDecoded.incrementAndGet();
+        counters.incrementOpaque(DECODED);
     }
 
     private boolean retry(int symbolId, double price, double size, long ts) {
         long deadline = System.nanoTime() + publishRetryNanos;
-        int spins = 0;
+        retryIdle.reset();
         while (System.nanoTime() - deadline < 0) {
-            if (++spins < 100) {
-                Thread.onSpinWait();
-            } else {
-                LockSupport.parkNanos(10_000);
-            }
+            retryIdle.idle();
             if (bus.publish(symbolId, price, size, ts)) {
                 return true;
             }

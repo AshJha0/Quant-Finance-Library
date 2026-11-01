@@ -1,5 +1,7 @@
 package com.quantfinlib.core;
 
+import com.quantfinlib.util.Immutable;
+
 import java.util.Arrays;
 import java.util.List;
 
@@ -7,9 +9,10 @@ import java.util.List;
  * Immutable, cache-friendly OHLCV time series backed by primitive arrays
  * (structure-of-arrays layout, no boxing) so indicators read primitive columns directly.
  *
- * <p>Array accessors ({@link #opens()}, {@link #closes()}, ...) return the
- * internal arrays without copying for zero-allocation hot paths. Callers must
- * treat them as read-only.</p>
+ * <p>The column arrays never leave the object. Indexed accessors such as
+ * {@link #close(int)} read one element without allocating; whole columns are
+ * available as copies ({@link #closesCopy()}, ...) or copied into a reusable
+ * caller buffer with {@link #copyClosesInto(double[], int, int)}.</p>
  *
  * <p>A bar can be flagged <em>synthetic</em>: a placeholder created by
  * alignment (for example {@code data.SeriesAligner.unionForwardFill} carrying
@@ -18,6 +21,7 @@ import java.util.List;
  * synthetic bars, since a flat zero-volume bar shrinks both. Series built
  * without the flag report every bar as real.</p>
  */
+@Immutable
 public final class BarSeries {
 
     private final String symbol;
@@ -85,13 +89,35 @@ public final class BarSeries {
         return synthetic != null;
     }
 
-    /** Zero-copy accessors: internal arrays, treat as read-only. */
-    public long[] timestamps()        { return timestamps; }
-    public double[] opens()           { return open; }
-    public double[] highs()           { return high; }
-    public double[] lows()            { return low; }
-    public double[] closes()          { return close; }
-    public double[] volumes()         { return volume; }
+    /*
+     * The column arrays never leave this object. Per-element reads use the
+     * indexed accessors above (no allocation); whole-column reads take a copy
+     * once, or copy a range into a caller-owned buffer that can be reused.
+     */
+
+    /** A fresh copy of the timestamp column. */
+    public long[] timestampsCopy()    { return Arrays.copyOf(timestamps, size); }
+    /** A fresh copy of the open column. */
+    public double[] opensCopy()       { return Arrays.copyOf(open, size); }
+    /** A fresh copy of the high column. */
+    public double[] highsCopy()       { return Arrays.copyOf(high, size); }
+    /** A fresh copy of the low column. */
+    public double[] lowsCopy()        { return Arrays.copyOf(low, size); }
+    /** A fresh copy of the close column. */
+    public double[] closesCopy()      { return Arrays.copyOf(close, size); }
+    /** A fresh copy of the volume column. */
+    public double[] volumesCopy()     { return Arrays.copyOf(volume, size); }
+
+    /**
+     * Copies closes {@code [from, from + len)} into {@code dst[0, len)} without allocating.
+     *
+     * @param dst  caller-owned destination, length at least {@code len}
+     * @param from first bar index
+     * @param len  number of bars
+     */
+    public void copyClosesInto(double[] dst, int from, int len) {
+        System.arraycopy(close, from, dst, 0, len);
+    }
 
     /** Copy of the bar range [from, toExclusive) as a new series (for train/test splits). */
     public BarSeries slice(int from, int toExclusive) {

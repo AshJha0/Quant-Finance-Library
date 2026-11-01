@@ -57,12 +57,12 @@ class PortfolioTimingTest {
         PortfolioBacktester.Result nextClose = PortfolioBacktester.run(allIn("A"), data,
                 base.withFillPolicy(FillPolicy.NEXT_CLOSE));
         // CLOSE: 10 shares at 100 -> 1200 at the end.
-        assertEquals(1_200, close.equityCurve()[3], 1e-9);
+        assertEquals(1_200, close.equityCurve(3), 1e-9);
         // NEXT_OPEN: 1000/104 shares bought at the open of bar 1.
-        assertEquals(1_000.0 / 104 * 120, open.equityCurve()[3], 1e-9);
-        assertEquals(1_000.0, open.equityCurve()[0], 1e-12);
+        assertEquals(1_000.0 / 104 * 120, open.equityCurve(3), 1e-9);
+        assertEquals(1_000.0, open.equityCurve(0), 1e-12);
         // NEXT_CLOSE: bought at close of bar 1 (110).
-        assertEquals(1_000.0 / 110 * 120, nextClose.equityCurve()[3], 1e-9);
+        assertEquals(1_000.0 / 110 * 120, nextClose.equityCurve(3), 1e-9);
     }
 
     @Test
@@ -75,8 +75,8 @@ class PortfolioTimingTest {
         PortfolioBacktester.Result r = PortfolioBacktester.run(allIn("B"), data,
                 new PortfolioBacktester.Config(1_000, 0, 1000, 252, null), u, Map.of());
         double shares = 1_000.0 / 100; // bought at the open of bar 1
-        assertEquals(shares * 120 * 0.5, r.equityCurve()[3], 1e-9);
-        assertEquals(shares * 120 * 0.5, r.equityCurve()[4], 1e-9);
+        assertEquals(shares * 120 * 0.5, r.equityCurve(3), 1e-9);
+        assertEquals(shares * 120 * 0.5, r.equityCurve(4), 1e-9);
         assertEquals(1, r.lifecycleEventsApplied());
     }
 
@@ -117,7 +117,7 @@ class PortfolioTimingTest {
             double charge = 1 + (cash < 0 ? -cash * 0.0504 / 252 : -cash * 0.0252 / 252);
             cash -= charge;
         }
-        assertEquals(10_000 + cash, r.equityCurve()[10], 1e-9);
+        assertEquals(10_000 + cash, r.equityCurve(10), 1e-9);
         assertEquals(-cash, r.financingCost(), 1e-9);
         assertTrue(-cash > 10, "margin interest on the borrowed fee");
     }

@@ -27,7 +27,71 @@ import com.quantfinlib.util.MathUtils;
 public final class QuadraticProgram {
 
     /** Solution, its objective value, and the active-set iterations used. */
-    public record Solution(double[] x, double objective, int iterations) {
+    public static final class Solution {
+        private final double[] x;
+        private final double objective;
+        private final int iterations;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         */
+        public Solution(double[] x, double objective, int iterations) {
+            this.x = x == null ? null : x.clone();
+            this.objective = objective;
+            this.iterations = iterations;
+        }
+
+        /** Element {@code i} of {@code x}. */
+        public double x(int i) {
+            return x[i];
+        }
+
+        /** Length of {@code x}. */
+        public int xLength() {
+            return x.length;
+        }
+
+        /** A fresh copy of {@code x}. */
+        public double[] xCopy() {
+            return x == null ? null : x.clone();
+        }
+
+        /** {@code objective}. */
+        public double objective() {
+            return objective;
+        }
+
+        /** {@code iterations}. */
+        public int iterations() {
+            return iterations;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Solution o)) {
+                return false;
+            }
+            return java.util.Arrays.equals(x, o.x)
+                    && Double.compare(objective, o.objective) == 0
+                    && iterations == o.iterations;
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + java.util.Arrays.hashCode(x);
+            h = 31 * h + Double.hashCode(objective);
+            h = 31 * h + Integer.hashCode(iterations);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "Solution[" + "x=" + java.util.Arrays.toString(x) + ", " + "objective=" + objective + ", " + "iterations=" + iterations + "]";
+        }
     }
 
     private QuadraticProgram() {

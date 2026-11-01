@@ -29,7 +29,80 @@ import java.util.List;
 public final class PortfolioOptimizer {
 
     /** An optimized allocation with its risk/return profile (same periodicity as the inputs). */
-    public record Allocation(double[] weights, double expectedReturn, double volatility, double sharpe) {
+    public static final class Allocation {
+        private final double[] weights;
+        private final double expectedReturn;
+        private final double volatility;
+        private final double sharpe;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         */
+        public Allocation(double[] weights, double expectedReturn, double volatility, double sharpe) {
+            this.weights = weights == null ? null : weights.clone();
+            this.expectedReturn = expectedReturn;
+            this.volatility = volatility;
+            this.sharpe = sharpe;
+        }
+
+        /** Element {@code i} of {@code weights}. */
+        public double weights(int i) {
+            return weights[i];
+        }
+
+        /** Length of {@code weights}. */
+        public int weightsLength() {
+            return weights.length;
+        }
+
+        /** A fresh copy of {@code weights}. */
+        public double[] weightsCopy() {
+            return weights == null ? null : weights.clone();
+        }
+
+        /** {@code expectedReturn}. */
+        public double expectedReturn() {
+            return expectedReturn;
+        }
+
+        /** {@code volatility}. */
+        public double volatility() {
+            return volatility;
+        }
+
+        /** {@code sharpe}. */
+        public double sharpe() {
+            return sharpe;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Allocation o)) {
+                return false;
+            }
+            return java.util.Arrays.equals(weights, o.weights)
+                    && Double.compare(expectedReturn, o.expectedReturn) == 0
+                    && Double.compare(volatility, o.volatility) == 0
+                    && Double.compare(sharpe, o.sharpe) == 0;
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + java.util.Arrays.hashCode(weights);
+            h = 31 * h + Double.hashCode(expectedReturn);
+            h = 31 * h + Double.hashCode(volatility);
+            h = 31 * h + Double.hashCode(sharpe);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "Allocation[" + "weights=" + java.util.Arrays.toString(weights) + ", " + "expectedReturn=" + expectedReturn + ", " + "volatility=" + volatility + ", " + "sharpe=" + sharpe + "]";
+        }
     }
 
     private final double[] expectedReturns;
@@ -81,12 +154,12 @@ public final class PortfolioOptimizer {
         QuadraticProgram.Solution s = QuadraticProgram.solve(scaled(2), new double[n],
                 new double[][]{excess}, new double[]{1}, negIdentity(n), new double[n], y0);
         double sum = 0;
-        for (double v : s.x()) {
+        for (double v : s.xCopy()) {
             sum += v;
         }
         double[] w = new double[n];
         for (int i = 0; i < n; i++) {
-            w[i] = Math.max(0, s.x()[i] / sum);
+            w[i] = Math.max(0, s.x(i) / sum);
         }
         return toAllocation(normalise(w), riskFreeRate);
     }
@@ -98,7 +171,7 @@ public final class PortfolioOptimizer {
         java.util.Arrays.fill(w0, 1.0 / n);
         QuadraticProgram.Solution s = QuadraticProgram.solve(scaled(2), new double[n],
                 new double[][]{ones(n)}, new double[]{1}, negIdentity(n), new double[n], w0);
-        return toAllocation(normalise(s.x()), 0);
+        return toAllocation(normalise(s.xCopy()), 0);
     }
 
     /**
@@ -144,7 +217,7 @@ public final class PortfolioOptimizer {
             w0[iHi] += theta;
             QuadraticProgram.Solution s = QuadraticProgram.solve(q, new double[n], a,
                     new double[]{1, target}, negIdentity(n), new double[n], w0);
-            frontier.add(toAllocation(normalise(s.x()), 0));
+            frontier.add(toAllocation(normalise(s.xCopy()), 0));
         }
         return frontier;
     }

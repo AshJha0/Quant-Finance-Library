@@ -82,7 +82,9 @@ public final class FixMarketDataView {
     /**
      * Parses one framed message in place. Returns {@code true} for 35=W or
      * 35=X; any other message type returns {@code false} immediately and
-     * leaves the getters undefined. Zero allocation.
+     * leaves the getters undefined. Zero allocation. The buffer is not
+     * copied: the caller keeps ownership and must not overwrite those bytes
+     * while reading through this view.
      */
     public boolean wrap(byte[] buffer, int offset, int length) {
         this.buf = buffer;

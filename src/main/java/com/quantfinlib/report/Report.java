@@ -19,6 +19,19 @@ public final class Report {
      */
     public record Section(String title, List<String> headers, List<List<String>> rows, String html) {
 
+        public Section {
+            headers = headers == null ? List.of() : List.copyOf(headers);
+            if (rows == null) {
+                rows = List.of();
+            } else {
+                List<List<String>> copy = new ArrayList<>(rows.size());
+                for (List<String> row : rows) {
+                    copy.add(List.copyOf(row));
+                }
+                rows = List.copyOf(copy);
+            }
+        }
+
         public Section(String title, List<String> headers, List<List<String>> rows) {
             this(title, headers, rows, null);
         }

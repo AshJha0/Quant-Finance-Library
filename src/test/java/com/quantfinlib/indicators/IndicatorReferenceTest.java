@@ -137,11 +137,11 @@ class IndicatorReferenceTest {
         for (int i = p; i < 2 * p; i++) {
             adx += dx[i] / p;
         }
-        assertEquals(adx, lib.adx()[2 * p - 1], 1e-10);
+        assertEquals(adx, lib.adx(2 * p - 1), 1e-10);
         for (int i = 2 * p; i < n; i++) {
             adx = (adx * (p - 1) + dx[i]) / p;
-            assertEquals(adx, lib.adx()[i], 1e-10);
-            assertEquals(pdi[i], lib.plusDi()[i], 1e-10);
+            assertEquals(adx, lib.adx(i), 1e-10);
+            assertEquals(pdi[i], lib.plusDi(i), 1e-10);
         }
     }
 

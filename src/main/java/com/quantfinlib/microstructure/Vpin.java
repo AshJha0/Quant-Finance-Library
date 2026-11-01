@@ -79,7 +79,9 @@ public final class Vpin {
         long toRecord = Math.min(full, imbalances.length);
         for (long i = 0; i < toRecord; i++) {
             imbalances[head] = 1.0;
-            head = (head + 1) % imbalances.length;
+            if (++head == imbalances.length) {
+                head = 0;
+            }
         }
         // Clamp full before adding: with bucketVolume == 1 a corrupt
         // Long.MAX_VALUE trade makes filled + full wrap negative.
@@ -97,7 +99,9 @@ public final class Vpin {
 
     private void completeBucket() {
         imbalances[head] = Math.abs(bucketBuy - bucketSell) / (double) bucketVolume;
-        head = (head + 1) % imbalances.length;
+        if (++head == imbalances.length) {
+                head = 0;
+            }
         if (filled < imbalances.length) {
             filled++;
         }

@@ -137,8 +137,7 @@ class FixParsingHardeningTest {
         FixOrderEncoder enc = new FixOrderEncoder("QFL", "VENUE", 4, 512).registerSymbol(0, "EURUSD");
         long ts = 1_800_000_000_000L;
         enc.encodeCancel(43, 2002L, 1001L, 0, Side.SELL, 500, ts);
-        FixMessage c = FixMessage.parse(Arrays.copyOfRange(enc.buffer(), enc.offset(),
-                enc.offset() + enc.length()));
+        FixMessage c = FixMessage.parse(enc.toByteArray());
         assertEquals("F", c.msgType());
         assertEquals("1001", c.getString(FixMessage.ORIG_CL_ORD_ID));
         assertEquals("2002", c.getString(FixMessage.CL_ORD_ID));
@@ -147,8 +146,7 @@ class FixParsingHardeningTest {
         assertEquals(43, c.getLong(FixMessage.MSG_SEQ_NUM));
 
         enc.encodeReplace(44, 2003L, 2002L, 0, Side.SELL, 400, 108_510L, 5, ts);
-        FixMessage r = FixMessage.parse(Arrays.copyOfRange(enc.buffer(), enc.offset(),
-                enc.offset() + enc.length()));
+        FixMessage r = FixMessage.parse(enc.toByteArray());
         assertEquals("G", r.msgType());
         assertEquals("1.08510", r.getString(FixMessage.PRICE));
         assertEquals(400, r.getLong(FixMessage.ORDER_QTY));

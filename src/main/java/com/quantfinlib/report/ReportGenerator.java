@@ -126,7 +126,7 @@ public final class ReportGenerator {
     /** Snapshot of key technical indicators on the last bar of the series. */
     public ReportGenerator addTechnicalSummary(BarSeries s) {
         int i = s.size() - 1;
-        double[] close = s.closes();
+        double[] close = s.closesCopy();
         Indicators.Macd macd = Indicators.macd(close, 12, 26, 9);
         Indicators.Bollinger boll = Indicators.bollinger(close, 20, 2);
         Map<String, String> kv = new LinkedHashMap<>();
@@ -134,10 +134,10 @@ public final class ReportGenerator {
         kv.put("RSI(14)", num(Indicators.rsi(close, 14)[i]));
         kv.put("SMA(50)", num(Indicators.sma(close, Math.min(50, s.size()))[i]));
         kv.put("EMA(20)", num(Indicators.ema(close, Math.min(20, s.size()))[i]));
-        kv.put("MACD", num(macd.line()[i]));
-        kv.put("MACD signal", num(macd.signal()[i]));
-        kv.put("Bollinger upper", num(boll.upper()[i]));
-        kv.put("Bollinger lower", num(boll.lower()[i]));
+        kv.put("MACD", num(macd.line(i)));
+        kv.put("MACD signal", num(macd.signal(i)));
+        kv.put("Bollinger upper", num(boll.upper(i)));
+        kv.put("Bollinger lower", num(boll.lower(i)));
         kv.put("ATR(14)", num(Indicators.atr(s, 14)[i]));
         builder.addKeyValueSection("Technical Analysis Summary: " + s.symbol(), kv);
         return this;

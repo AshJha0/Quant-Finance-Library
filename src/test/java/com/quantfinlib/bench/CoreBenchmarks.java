@@ -39,7 +39,8 @@ import java.util.concurrent.TimeUnit;
 @BenchmarkMode(Mode.AverageTime)
 @OutputTimeUnit(TimeUnit.NANOSECONDS)
 @State(Scope.Thread)
-@Fork(3)
+@Fork(value = 3, jvmArgsAppend = {"-Xms1g", "-Xmx1g", "-XX:+UseZGC", "-XX:+UseCompactObjectHeaders",
+        "-XX:+AlwaysPreTouch", "-XX:+PerfDisableSharedMem"})
 @Warmup(iterations = 5, time = 1)
 @Measurement(iterations = 10, time = 1)
 public class CoreBenchmarks {

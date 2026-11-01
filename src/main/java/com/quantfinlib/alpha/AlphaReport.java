@@ -45,7 +45,54 @@ public final class AlphaReport {
      * Mean IC per cumulative horizon, plus the horizon where it first falls
      * below half the shortest-horizon value.
      */
-    public record Decay(int[] horizons, double[] meanIcs, double halfLifeBars) {
+    public static final class Decay {
+        private final int[] horizons;
+        private final double[] meanIcs;
+        private final double halfLifeBars;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         */
+        public Decay(int[] horizons, double[] meanIcs, double halfLifeBars) {
+            this.horizons = horizons == null ? null : horizons.clone();
+            this.meanIcs = meanIcs == null ? null : meanIcs.clone();
+            this.halfLifeBars = halfLifeBars;
+        }
+
+        /** Element {@code i} of {@code horizons}. */
+        public int horizons(int i) {
+            return horizons[i];
+        }
+
+        /** Length of {@code horizons}. */
+        public int horizonsLength() {
+            return horizons.length;
+        }
+
+        /** A fresh copy of {@code horizons}. */
+        public int[] horizonsCopy() {
+            return horizons == null ? null : horizons.clone();
+        }
+
+        /** Element {@code i} of {@code meanIcs}. */
+        public double meanIcs(int i) {
+            return meanIcs[i];
+        }
+
+        /** Length of {@code meanIcs}. */
+        public int meanIcsLength() {
+            return meanIcs.length;
+        }
+
+        /** A fresh copy of {@code meanIcs}. */
+        public double[] meanIcsCopy() {
+            return meanIcs == null ? null : meanIcs.clone();
+        }
+
+        /** {@code halfLifeBars}. */
+        public double halfLifeBars() {
+            return halfLifeBars;
+        }
 
         public String format() {
             StringBuilder sb = new StringBuilder("holding-period IC:");
@@ -54,6 +101,33 @@ public final class AlphaReport {
             }
             return sb.append(String.format(Locale.ROOT, " | half-crossing=%.1f bars", halfLifeBars))
                     .toString();
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Decay o)) {
+                return false;
+            }
+            return java.util.Arrays.equals(horizons, o.horizons)
+                    && java.util.Arrays.equals(meanIcs, o.meanIcs)
+                    && Double.compare(halfLifeBars, o.halfLifeBars) == 0;
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + java.util.Arrays.hashCode(horizons);
+            h = 31 * h + java.util.Arrays.hashCode(meanIcs);
+            h = 31 * h + Double.hashCode(halfLifeBars);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "Decay[" + "horizons=" + java.util.Arrays.toString(horizons) + ", " + "meanIcs=" + java.util.Arrays.toString(meanIcs) + ", " + "halfLifeBars=" + halfLifeBars + "]";
         }
     }
 
@@ -98,17 +172,86 @@ public final class AlphaReport {
 
     /**
      * Lagged-return IC profile with its exponential fit.
-     *
-     * @param lags              1..maxLag
-     * @param meanIcs           mean IC of scores(t) vs return over (t+h−1, t+h]
-     * @param signalAutocorrelation mean cross-sectional rank correlation of
-     *                          scores(t) with scores(t+h)
-     * @param ic0               fitted IC at lag 1
-     * @param tauBars           fitted e-folding time in bars ({@code +∞} when the
-     *                          profile does not decay; NaN when it cannot be fitted)
      */
-    public record LagDecay(int[] lags, double[] meanIcs, double[] signalAutocorrelation,
-                           double ic0, double tauBars) {
+    public static final class LagDecay {
+        private final int[] lags;
+        private final double[] meanIcs;
+        private final double[] signalAutocorrelation;
+        private final double ic0;
+        private final double tauBars;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         *
+         * @param lags 1..maxLag
+         * @param meanIcs mean IC of scores(t) vs return over (t+h−1, t+h]
+         * @param signalAutocorrelation mean cross-sectional rank correlation of scores(t) with scores(t+h)
+         * @param ic0 fitted IC at lag 1
+         * @param tauBars fitted e-folding time in bars ({@code +∞} when the profile does not decay; NaN when it cannot be fitted)
+         */
+        public LagDecay(int[] lags, double[] meanIcs, double[] signalAutocorrelation, double ic0,
+                double tauBars) {
+            this.lags = lags == null ? null : lags.clone();
+            this.meanIcs = meanIcs == null ? null : meanIcs.clone();
+            this.signalAutocorrelation = signalAutocorrelation == null ? null : signalAutocorrelation.clone();
+            this.ic0 = ic0;
+            this.tauBars = tauBars;
+        }
+
+        /** Element {@code i} of {@code lags} (1..maxLag). */
+        public int lags(int i) {
+            return lags[i];
+        }
+
+        /** Length of {@code lags}. */
+        public int lagsLength() {
+            return lags.length;
+        }
+
+        /** A fresh copy of {@code lags}. */
+        public int[] lagsCopy() {
+            return lags == null ? null : lags.clone();
+        }
+
+        /** Element {@code i} of {@code meanIcs} (mean IC of scores(t) vs return over (t+h−1, t+h]). */
+        public double meanIcs(int i) {
+            return meanIcs[i];
+        }
+
+        /** Length of {@code meanIcs}. */
+        public int meanIcsLength() {
+            return meanIcs.length;
+        }
+
+        /** A fresh copy of {@code meanIcs}. */
+        public double[] meanIcsCopy() {
+            return meanIcs == null ? null : meanIcs.clone();
+        }
+
+        /** Element {@code i} of {@code signalAutocorrelation} (mean cross-sectional rank correlation of scores(t) with scores(t+h)). */
+        public double signalAutocorrelation(int i) {
+            return signalAutocorrelation[i];
+        }
+
+        /** Length of {@code signalAutocorrelation}. */
+        public int signalAutocorrelationLength() {
+            return signalAutocorrelation.length;
+        }
+
+        /** A fresh copy of {@code signalAutocorrelation}. */
+        public double[] signalAutocorrelationCopy() {
+            return signalAutocorrelation == null ? null : signalAutocorrelation.clone();
+        }
+
+        /** {@code ic0} (fitted IC at lag 1). */
+        public double ic0() {
+            return ic0;
+        }
+
+        /** {@code tauBars}. */
+        public double tauBars() {
+            return tauBars;
+        }
 
         /** {@code τ·ln 2}: bars until the fitted IC halves. */
         public double halfLifeBars() {
@@ -122,6 +265,37 @@ public final class AlphaReport {
             }
             return sb.append(String.format(Locale.ROOT, " | IC0=%.4f tau=%.1f half-life=%.1f bars",
                     ic0, tauBars, halfLifeBars())).toString();
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof LagDecay o)) {
+                return false;
+            }
+            return java.util.Arrays.equals(lags, o.lags)
+                    && java.util.Arrays.equals(meanIcs, o.meanIcs)
+                    && java.util.Arrays.equals(signalAutocorrelation, o.signalAutocorrelation)
+                    && Double.compare(ic0, o.ic0) == 0
+                    && Double.compare(tauBars, o.tauBars) == 0;
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + java.util.Arrays.hashCode(lags);
+            h = 31 * h + java.util.Arrays.hashCode(meanIcs);
+            h = 31 * h + java.util.Arrays.hashCode(signalAutocorrelation);
+            h = 31 * h + Double.hashCode(ic0);
+            h = 31 * h + Double.hashCode(tauBars);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "LagDecay[" + "lags=" + java.util.Arrays.toString(lags) + ", " + "meanIcs=" + java.util.Arrays.toString(meanIcs) + ", " + "signalAutocorrelation=" + java.util.Arrays.toString(signalAutocorrelation) + ", " + "ic0=" + ic0 + ", " + "tauBars=" + tauBars + "]";
         }
     }
 
@@ -246,16 +420,115 @@ public final class AlphaReport {
 
     /**
      * OLS attribution with standard errors.
-     *
-     * @param alphaPerBar         intercept: return per bar not explained by the factors
-     * @param alphaStdError       its classical standard error
-     * @param alphaHacStdError    its Newey-West standard error at {@code hacLag}
-     * @param betaStdErrors       classical standard errors of the betas
-     * @param betaHacStdErrors    Newey-West standard errors of the betas
      */
-    public record Attribution(double alphaPerBar, double[] betas, List<String> factorNames,
-                              double rSquared, double alphaStdError, double alphaHacStdError,
-                              double[] betaStdErrors, double[] betaHacStdErrors, int hacLag) {
+    public static final class Attribution {
+        private final double alphaPerBar;
+        private final double[] betas;
+        private final List<String> factorNames;
+        private final double rSquared;
+        private final double alphaStdError;
+        private final double alphaHacStdError;
+        private final double[] betaStdErrors;
+        private final double[] betaHacStdErrors;
+        private final int hacLag;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         *
+         * @param alphaPerBar intercept: return per bar not explained by the factors
+         * @param alphaStdError its classical standard error
+         * @param alphaHacStdError its Newey-West standard error at {@code hacLag}
+         * @param betaStdErrors classical standard errors of the betas
+         * @param betaHacStdErrors Newey-West standard errors of the betas
+         */
+        public Attribution(double alphaPerBar, double[] betas, List<String> factorNames, double rSquared,
+                double alphaStdError, double alphaHacStdError, double[] betaStdErrors,
+                double[] betaHacStdErrors, int hacLag) {
+            this.alphaPerBar = alphaPerBar;
+            this.betas = betas == null ? null : betas.clone();
+            this.factorNames = List.copyOf(factorNames);
+            this.rSquared = rSquared;
+            this.alphaStdError = alphaStdError;
+            this.alphaHacStdError = alphaHacStdError;
+            this.betaStdErrors = betaStdErrors == null ? null : betaStdErrors.clone();
+            this.betaHacStdErrors = betaHacStdErrors == null ? null : betaHacStdErrors.clone();
+            this.hacLag = hacLag;
+        }
+
+        /** {@code alphaPerBar} (intercept: return per bar not explained by the factors). */
+        public double alphaPerBar() {
+            return alphaPerBar;
+        }
+
+        /** Element {@code i} of {@code betas}. */
+        public double betas(int i) {
+            return betas[i];
+        }
+
+        /** Length of {@code betas}. */
+        public int betasLength() {
+            return betas.length;
+        }
+
+        /** A fresh copy of {@code betas}. */
+        public double[] betasCopy() {
+            return betas == null ? null : betas.clone();
+        }
+
+        /** {@code factorNames}. */
+        public List<String> factorNames() {
+            return factorNames;
+        }
+
+        /** {@code rSquared}. */
+        public double rSquared() {
+            return rSquared;
+        }
+
+        /** {@code alphaStdError} (its classical standard error). */
+        public double alphaStdError() {
+            return alphaStdError;
+        }
+
+        /** {@code alphaHacStdError}. */
+        public double alphaHacStdError() {
+            return alphaHacStdError;
+        }
+
+        /** Element {@code i} of {@code betaStdErrors} (classical standard errors of the betas). */
+        public double betaStdErrors(int i) {
+            return betaStdErrors[i];
+        }
+
+        /** Length of {@code betaStdErrors}. */
+        public int betaStdErrorsLength() {
+            return betaStdErrors.length;
+        }
+
+        /** A fresh copy of {@code betaStdErrors}. */
+        public double[] betaStdErrorsCopy() {
+            return betaStdErrors == null ? null : betaStdErrors.clone();
+        }
+
+        /** Element {@code i} of {@code betaHacStdErrors} (Newey-West standard errors of the betas). */
+        public double betaHacStdErrors(int i) {
+            return betaHacStdErrors[i];
+        }
+
+        /** Length of {@code betaHacStdErrors}. */
+        public int betaHacStdErrorsLength() {
+            return betaHacStdErrors.length;
+        }
+
+        /** A fresh copy of {@code betaHacStdErrors}. */
+        public double[] betaHacStdErrorsCopy() {
+            return betaHacStdErrors == null ? null : betaHacStdErrors.clone();
+        }
+
+        /** {@code hacLag}. */
+        public int hacLag() {
+            return hacLag;
+        }
 
         /** Newey-West t-stat of the intercept. */
         public double alphaTStat() {
@@ -270,6 +543,45 @@ public final class AlphaReport {
                 sb.append(String.format(Locale.ROOT, " %s=%.3f", factorNames.get(i), betas[i]));
             }
             return sb.append(String.format(Locale.ROOT, " R2=%.3f", rSquared)).toString();
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Attribution o)) {
+                return false;
+            }
+            return Double.compare(alphaPerBar, o.alphaPerBar) == 0
+                    && java.util.Arrays.equals(betas, o.betas)
+                    && java.util.Objects.equals(factorNames, o.factorNames)
+                    && Double.compare(rSquared, o.rSquared) == 0
+                    && Double.compare(alphaStdError, o.alphaStdError) == 0
+                    && Double.compare(alphaHacStdError, o.alphaHacStdError) == 0
+                    && java.util.Arrays.equals(betaStdErrors, o.betaStdErrors)
+                    && java.util.Arrays.equals(betaHacStdErrors, o.betaHacStdErrors)
+                    && hacLag == o.hacLag;
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + Double.hashCode(alphaPerBar);
+            h = 31 * h + java.util.Arrays.hashCode(betas);
+            h = 31 * h + java.util.Objects.hashCode(factorNames);
+            h = 31 * h + Double.hashCode(rSquared);
+            h = 31 * h + Double.hashCode(alphaStdError);
+            h = 31 * h + Double.hashCode(alphaHacStdError);
+            h = 31 * h + java.util.Arrays.hashCode(betaStdErrors);
+            h = 31 * h + java.util.Arrays.hashCode(betaHacStdErrors);
+            h = 31 * h + Integer.hashCode(hacLag);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "Attribution[" + "alphaPerBar=" + alphaPerBar + ", " + "betas=" + java.util.Arrays.toString(betas) + ", " + "factorNames=" + factorNames + ", " + "rSquared=" + rSquared + ", " + "alphaStdError=" + alphaStdError + ", " + "alphaHacStdError=" + alphaHacStdError + ", " + "betaStdErrors=" + java.util.Arrays.toString(betaStdErrors) + ", " + "betaHacStdErrors=" + java.util.Arrays.toString(betaHacStdErrors) + ", " + "hacLag=" + hacLag + "]";
         }
     }
 
@@ -330,11 +642,11 @@ public final class AlphaReport {
         double[] betas = new double[k];
         double[] se = new double[k];
         double[] hac = new double[k];
-        System.arraycopy(fit.coefficients(), 1, betas, 0, k);
-        System.arraycopy(fit.standardErrors(), 1, se, 0, k);
-        System.arraycopy(fit.hacStandardErrors(), 1, hac, 0, k);
-        return new Attribution(fit.coefficients()[0], betas, List.copyOf(factorNames),
-                fit.rSquared(), fit.standardErrors()[0], fit.hacStandardErrors()[0],
+        System.arraycopy(fit.coefficientsCopy(), 1, betas, 0, k);
+        System.arraycopy(fit.standardErrorsCopy(), 1, se, 0, k);
+        System.arraycopy(fit.hacStandardErrorsCopy(), 1, hac, 0, k);
+        return new Attribution(fit.coefficients(0), betas, List.copyOf(factorNames),
+                fit.rSquared(), fit.standardErrors(0), fit.hacStandardErrors(0),
                 se, hac, fit.hacLag());
     }
 

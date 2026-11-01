@@ -32,13 +32,85 @@ public final class PortfolioConstruction {
 
     /**
      * A constructed book with what it actually achieved.
-     *
-     * @param gross          achieved {@code Σ|w|}
-     * @param net            achieved {@code Σw}
-     * @param grossShortfall true when gross fell below 90% of the target
-     *                       (too few names for the cap, or too few scored names)
      */
-    public record Book(double[] weights, double gross, double net, boolean grossShortfall) {
+    public static final class Book {
+        private final double[] weights;
+        private final double gross;
+        private final double net;
+        private final boolean grossShortfall;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         *
+         * @param gross achieved {@code Σ|w|}
+         * @param net achieved {@code Σw}
+         * @param grossShortfall true when gross fell below 90% of the target (too few names for the cap, or too few scored names)
+         */
+        public Book(double[] weights, double gross, double net, boolean grossShortfall) {
+            this.weights = weights == null ? null : weights.clone();
+            this.gross = gross;
+            this.net = net;
+            this.grossShortfall = grossShortfall;
+        }
+
+        /** Element {@code i} of {@code weights}. */
+        public double weights(int i) {
+            return weights[i];
+        }
+
+        /** Length of {@code weights}. */
+        public int weightsLength() {
+            return weights.length;
+        }
+
+        /** A fresh copy of {@code weights}. */
+        public double[] weightsCopy() {
+            return weights == null ? null : weights.clone();
+        }
+
+        /** {@code gross}. */
+        public double gross() {
+            return gross;
+        }
+
+        /** {@code net}. */
+        public double net() {
+            return net;
+        }
+
+        /** {@code grossShortfall} (true when gross fell below 90% of the target (too few names for the cap, or too few scored names)). */
+        public boolean grossShortfall() {
+            return grossShortfall;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Book o)) {
+                return false;
+            }
+            return java.util.Arrays.equals(weights, o.weights)
+                    && Double.compare(gross, o.gross) == 0
+                    && Double.compare(net, o.net) == 0
+                    && grossShortfall == o.grossShortfall;
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + java.util.Arrays.hashCode(weights);
+            h = 31 * h + Double.hashCode(gross);
+            h = 31 * h + Double.hashCode(net);
+            h = 31 * h + Boolean.hashCode(grossShortfall);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "Book[" + "weights=" + java.util.Arrays.toString(weights) + ", " + "gross=" + gross + ", " + "net=" + net + ", " + "grossShortfall=" + grossShortfall + "]";
+        }
     }
 
     /** {@link #zScoreWeights(double[], double, double)} without a per-name cap. */
@@ -48,7 +120,7 @@ public final class PortfolioConstruction {
 
     /** The weights of {@link #zScoreBook}. */
     public static double[] zScoreWeights(double[] scores, double grossTarget, double maxWeight) {
-        return zScoreBook(scores, grossTarget, maxWeight).weights();
+        return zScoreBook(scores, grossTarget, maxWeight).weightsCopy();
     }
 
     /**

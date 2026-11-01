@@ -55,7 +55,7 @@ class ValidationTest {
 
         // (1000 - 300) / 100 = 7 folds.
         assertEquals(7, result.folds().size());
-        assertEquals(7 * 100, result.outOfSampleEquity().length);
+        assertEquals(7 * 100, result.outOfSampleEquityLength());
         // Capital carries across folds: each fold starts where the last ended.
         WalkForwardAnalyzer.Fold first = result.folds().getFirst();
         assertEquals(0, first.trainFrom());

@@ -4,8 +4,14 @@ import com.quantfinlib.pricing.BlackScholes;
 import com.quantfinlib.pricing.BlackScholes.OptionType;
 import com.quantfinlib.risk.VarEngine;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.TreeMap;
+import java.util.SortedSet;
+import java.util.TreeSet;
 
 /**
  * The central risk book — one netted view of the firm's market risk
@@ -51,10 +57,146 @@ public final class CentralRiskBook {
     private final FactorRegistry registry = new FactorRegistry();
     private double[] net = new double[16];
     private double[] gross = new double[16];
-    private final Map<String, double[]> deskNet = new TreeMap<>();
-    // TreeMap: deterministic serialization order in writeState.
-    private final Map<String, Double> pendingFixings = new TreeMap<>();
     private long flowsBooked;
+
+    // Dense ids. Desks, equity symbols and FX pairs are resolved to ints once
+    // (HashMap lookup on an interned key, no allocation), and factor ids per
+    // handle are resolved on first booking, so a booking after warm-up does
+    // no string building and no boxing. Factor registration order is the
+    // order of first booking, as before (it fixes the covariance layout).
+    private final Map<String, Integer> deskIds = new HashMap<>();
+    private final List<String> deskNames = new ArrayList<>();
+    private double[][] deskVec = new double[4][];          // null until the desk books
+
+    private static final int EQ = 0;
+    private static final int EQGAMMA = 1;
+    private static final int EQVEGA = 2;
+    private static final String[] EQ_PREFIX = {"EQ:", "EQGAMMA:", "EQVEGA:"};
+    private final Map<String, Integer> equityHandles = new HashMap<>();
+    private final List<String> equitySymbols = new ArrayList<>();
+    private int[] equityFactors = filled(3 * 8);
+
+    private static final int CCY_BASE = 0;
+    private static final int CCY_QUOTE = 1;
+    private static final int FXPOINTS = 2;
+    private static final int FXGAMMA = 3;
+    private static final int FXVEGA = 4;
+    private final Map<String, Integer> pairHandles = new HashMap<>();
+    private final List<String> pairNames = new ArrayList<>();
+    private int[] pairFactors = filled(5 * 8);
+    private double[] pendingByPair = new double[8];
+    private boolean[] pendingPresent = new boolean[8];
+
+    private static int[] filled(int n) {
+        int[] a = new int[n];
+        Arrays.fill(a, -1);
+        return a;
+    }
+
+    // ------------------------------------------------------------------
+    // Dense-id handles (setup; the int-keyed booking methods use them)
+    // ------------------------------------------------------------------
+
+    /**
+     * Dense id of a desk, registered on first sight. The desk appears in
+     * {@link #desks()} once it books a flow.
+     *
+     * @param desk desk name, non-blank
+     * @return the desk id
+     */
+    public int deskId(String desk) {
+        requireDesk(desk);
+        Integer id = deskIds.get(desk);
+        if (id != null) {
+            return id;
+        }
+        int d = deskNames.size();
+        deskNames.add(desk);
+        deskIds.put(desk, d);
+        if (d >= deskVec.length) {
+            deskVec = Arrays.copyOf(deskVec, deskVec.length * 2);
+        }
+        return d;
+    }
+
+    /**
+     * Handle of an equity symbol for the int-keyed equity booking methods.
+     * Registers no risk factor until the first booking.
+     *
+     * @param symbol equity symbol
+     * @return the handle
+     */
+    public int equityHandle(String symbol) {
+        Integer h = equityHandles.get(symbol);
+        if (h != null) {
+            return h;
+        }
+        int k = equitySymbols.size();
+        equitySymbols.add(symbol);
+        equityHandles.put(symbol, k);
+        if (3 * k + 3 > equityFactors.length) {
+            int old = equityFactors.length;
+            equityFactors = Arrays.copyOf(equityFactors, old * 2);
+            Arrays.fill(equityFactors, old, equityFactors.length, -1);
+        }
+        return k;
+    }
+
+    /**
+     * Handle of an FX pair ("EURUSD") for the int-keyed FX booking methods.
+     * Registers no risk factor until the first booking.
+     *
+     * @param pair six-letter pair
+     * @return the handle
+     */
+    public int fxPairHandle(String pair) {
+        Integer h = pairHandles.get(pair);
+        if (h != null) {
+            return h;
+        }
+        requirePair(pair);
+        int k = pairNames.size();
+        pairNames.add(pair);
+        pairHandles.put(pair, k);
+        if (5 * k + 5 > pairFactors.length) {
+            int old = pairFactors.length;
+            pairFactors = Arrays.copyOf(pairFactors, old * 2);
+            Arrays.fill(pairFactors, old, pairFactors.length, -1);
+        }
+        if (k >= pendingByPair.length) {
+            pendingByPair = Arrays.copyOf(pendingByPair, pendingByPair.length * 2);
+            pendingPresent = Arrays.copyOf(pendingPresent, pendingByPair.length);
+        }
+        return k;
+    }
+
+    private int equityFactor(int handle, int leg) {
+        int i = 3 * handle + leg;
+        int id = equityFactors[i];
+        if (id < 0) {
+            id = registry.id(EQ_PREFIX[leg] + equitySymbols.get(handle));   // first booking only
+            equityFactors[i] = id;
+        }
+        return id;
+    }
+
+    private int pairFactor(int handle, int leg) {
+        int i = 5 * handle + leg;
+        int id = pairFactors[i];
+        if (id < 0) {
+            String pair = pairNames.get(handle);
+            String name = switch (leg) {
+                case CCY_BASE -> "CCY:" + pair.substring(0, 3);
+                case CCY_QUOTE -> "CCY:" + pair.substring(3, 6);
+                case FXPOINTS -> "FXPOINTS:" + pair;
+                case FXGAMMA -> "FXGAMMA:" + pair;
+                default -> "FXVEGA:" + pair;
+            };
+            id = registry.id(name);                                         // first booking only
+            pairFactors[i] = id;
+        }
+        return id;
+    }
 
     // ------------------------------------------------------------------
     // Booking — equities
@@ -62,10 +204,23 @@ public final class CentralRiskBook {
 
     /** Cash equity: {@code qty} shares (signed) at {@code price}. */
     public void bookCashEquity(String desk, String symbol, double qty, double price) {
-        requireDesk(desk);
+        bookCashEquity(deskId(desk), equityHandle(symbol), qty, price);
+    }
+
+    /**
+     * As {@link #bookCashEquity(String, String, double, double)} with dense ids
+     * from {@link #deskId} and {@link #equityHandle}. No allocation after the
+     * first booking on the handle.
+     *
+     * @param desk   desk id
+     * @param equity equity handle
+     * @param qty    signed shares
+     * @param price  price per share
+     */
+    public void bookCashEquity(int desk, int equity, double qty, double price) {
         requireFinite(qty, "qty");
         requirePositive(price, "price");
-        add(desk, "EQ:" + symbol, qty * price);
+        add(desk, equityFactor(equity, EQ), qty * price);
         flowsBooked++;
     }
 
@@ -79,7 +234,30 @@ public final class CentralRiskBook {
                                  double contracts, double multiplier,
                                  double spot, double strike, double rate, double carry,
                                  double vol, double timeYears) {
-        requireDesk(desk);
+        bookEquityOption(deskId(desk), equityHandle(symbol), type, contracts, multiplier, spot,
+                strike, rate, carry, vol, timeYears);
+    }
+
+    /**
+     * As the String-keyed overload with dense ids from {@link #deskId} and
+     * {@link #equityHandle}.
+     *
+     * @param desk       desk id
+     * @param equity     equity handle
+     * @param type       call or put
+     * @param contracts  signed contracts
+     * @param multiplier shares per contract
+     * @param spot       underlying price
+     * @param strike     strike
+     * @param rate       risk-free rate
+     * @param carry      dividend yield
+     * @param vol        volatility
+     * @param timeYears  time to expiry in years
+     */
+    public void bookEquityOption(int desk, int equity, OptionType type,
+                                 double contracts, double multiplier,
+                                 double spot, double strike, double rate, double carry,
+                                 double vol, double timeYears) {
         requireFinite(contracts, "contracts");
         requireFinite(rate, "rate");
         requireFinite(carry, "carry");
@@ -101,9 +279,9 @@ public final class CentralRiskBook {
         requireFinite(deltaLeg, "delta leg");
         requireFinite(gammaLeg, "gamma leg");
         requireFinite(vegaLeg, "vega leg");
-        add(desk, "EQ:" + symbol, deltaLeg);
-        add(desk, "EQGAMMA:" + symbol, gammaLeg);
-        add(desk, "EQVEGA:" + symbol, vegaLeg);
+        add(desk, equityFactor(equity, EQ), deltaLeg);
+        add(desk, equityFactor(equity, EQGAMMA), gammaLeg);
+        add(desk, equityFactor(equity, EQVEGA), vegaLeg);
         flowsBooked++;
     }
 
@@ -117,14 +295,25 @@ public final class CentralRiskBook {
      * currency legs so it nets against every other product's FX delta.
      */
     public void bookFxSpot(String desk, String pair, double baseNotional, double rate) {
-        requireDesk(desk);
-        requirePair(pair);
+        bookFxSpot(deskId(desk), fxPairHandle(pair), baseNotional, rate);
+    }
+
+    /**
+     * As the String-keyed overload with dense ids from {@link #deskId} and
+     * {@link #fxPairHandle}. No allocation after the first booking on the handle.
+     *
+     * @param desk desk id
+     * @param pair pair handle
+     * @param baseNotional signed base-currency notional
+     * @param rate spot rate
+     */
+    public void bookFxSpot(int desk, int pair, double baseNotional, double rate) {
         requireFinite(baseNotional, "baseNotional");
         requirePositive(rate, "rate");
         double quoteLeg = -baseNotional * rate;
         requireFinite(quoteLeg, "quote leg");
-        add(desk, "CCY:" + pair.substring(0, 3), baseNotional);
-        add(desk, "CCY:" + pair.substring(3, 6), quoteLeg);
+        add(desk, pairFactor(pair, CCY_BASE), baseNotional);
+        add(desk, pairFactor(pair, CCY_QUOTE), quoteLeg);
         flowsBooked++;
     }
 
@@ -145,15 +334,28 @@ public final class CentralRiskBook {
      */
     public void bookFxSwap(String desk, String pair, double baseNotional,
                            double nearRate, double farRate) {
-        requireDesk(desk);
-        requirePair(pair);
+        bookFxSwap(deskId(desk), fxPairHandle(pair), baseNotional, nearRate, farRate);
+    }
+
+    /**
+     * As the String-keyed overload with dense ids from {@link #deskId} and
+     * {@link #fxPairHandle}. No allocation after the first booking on the handle.
+     *
+     * @param desk desk id
+     * @param pair pair handle
+     * @param baseNotional signed base notional of the far leg
+     * @param nearRate near all-in rate
+     * @param farRate far all-in rate
+     */
+    public void bookFxSwap(int desk, int pair, double baseNotional,
+                           double nearRate, double farRate) {
         requireFinite(baseNotional, "baseNotional");
         requirePositive(nearRate, "nearRate");
         requirePositive(farRate, "farRate");
         double quoteImbalance = baseNotional * (farRate - nearRate);
         requireFinite(quoteImbalance, "quote-leg imbalance");
-        add(desk, "CCY:" + pair.substring(3, 6), quoteImbalance);
-        add(desk, "FXPOINTS:" + pair, -baseNotional);
+        add(desk, pairFactor(pair, CCY_QUOTE), quoteImbalance);
+        add(desk, pairFactor(pair, FXPOINTS), -baseNotional);
         flowsBooked++;
     }
 
@@ -167,15 +369,27 @@ public final class CentralRiskBook {
      * {@link #bookFxSwap} for what that means for the report.
      */
     public void bookNdf(String desk, String pair, double baseNotional, double fwdRate) {
-        requireDesk(desk);
-        requirePair(pair);
+        bookNdf(deskId(desk), fxPairHandle(pair), baseNotional, fwdRate);
+    }
+
+    /**
+     * As the String-keyed overload with dense ids from {@link #deskId} and
+     * {@link #fxPairHandle}. No allocation after the first booking on the handle.
+     *
+     * @param desk desk id
+     * @param pair pair handle
+     * @param baseNotional signed base notional
+     * @param fwdRate contracted forward rate
+     */
+    public void bookNdf(int desk, int pair, double baseNotional, double fwdRate) {
         requireFinite(baseNotional, "baseNotional");
         requirePositive(fwdRate, "fwdRate");
         double quoteLeg = -baseNotional * fwdRate;
         requireFinite(quoteLeg, "quote leg");
-        add(desk, "CCY:" + pair.substring(0, 3), baseNotional);
-        add(desk, "CCY:" + pair.substring(3, 6), quoteLeg);
-        pendingFixings.merge(pair, Math.abs(baseNotional), Double::sum);
+        add(desk, pairFactor(pair, CCY_BASE), baseNotional);
+        add(desk, pairFactor(pair, CCY_QUOTE), quoteLeg);
+        pendingByPair[pair] += Math.abs(baseNotional);
+        pendingPresent[pair] = true;
         flowsBooked++;
     }
 
@@ -188,8 +402,28 @@ public final class CentralRiskBook {
     public void bookFxOption(String desk, String pair, OptionType type, double baseNotional,
                              double spotRate, double strike, double domesticRate,
                              double foreignRate, double vol, double timeYears) {
-        requireDesk(desk);
-        requirePair(pair);
+        bookFxOption(deskId(desk), fxPairHandle(pair), type, baseNotional, spotRate, strike,
+                domesticRate, foreignRate, vol, timeYears);
+    }
+
+    /**
+     * As the String-keyed overload with dense ids from {@link #deskId} and
+     * {@link #fxPairHandle}. No allocation after the first booking on the handle.
+     *
+     * @param desk desk id
+     * @param pair pair handle
+     * @param type call or put on the base currency
+     * @param baseNotional signed base notional
+     * @param spotRate spot rate
+     * @param strike strike
+     * @param domesticRate quote-currency rate
+     * @param foreignRate base-currency rate
+     * @param vol volatility
+     * @param timeYears time to expiry in years
+     */
+    public void bookFxOption(int desk, int pair, OptionType type, double baseNotional,
+                             double spotRate, double strike, double domesticRate,
+                             double foreignRate, double vol, double timeYears) {
         requireFinite(baseNotional, "baseNotional");
         requireFinite(domesticRate, "domesticRate");
         requireFinite(foreignRate, "foreignRate");
@@ -212,10 +446,10 @@ public final class CentralRiskBook {
         requireFinite(quoteLeg, "quote leg");
         requireFinite(gammaLeg, "gamma leg");
         requireFinite(vegaLeg, "vega leg");
-        add(desk, "CCY:" + pair.substring(0, 3), deltaBase);
-        add(desk, "CCY:" + pair.substring(3, 6), quoteLeg);
-        add(desk, "FXGAMMA:" + pair, gammaLeg);
-        add(desk, "FXVEGA:" + pair, vegaLeg);
+        add(desk, pairFactor(pair, CCY_BASE), deltaBase);
+        add(desk, pairFactor(pair, CCY_QUOTE), quoteLeg);
+        add(desk, pairFactor(pair, FXGAMMA), gammaLeg);
+        add(desk, pairFactor(pair, FXVEGA), vegaLeg);
         flowsBooked++;
     }
 
@@ -239,7 +473,8 @@ public final class CentralRiskBook {
 
     /** One desk's net contribution to a factor. */
     public double deskExposure(String desk, String factor) {
-        double[] d = deskNet.get(desk);
+        Integer k = deskIds.get(desk);
+        double[] d = k == null ? null : deskVec[k];
         if (d == null) {
             return 0;
         }
@@ -274,7 +509,8 @@ public final class CentralRiskBook {
 
     /** Non-deliverable notional still awaiting its fixing, per pair. */
     public double pendingFixing(String pair) {
-        return pendingFixings.getOrDefault(pair, 0.0);
+        Integer h = pairHandles.get(pair);
+        return h == null || !pendingPresent[h] ? 0.0 : pendingByPair[h];
     }
 
     /**
@@ -290,16 +526,18 @@ public final class CentralRiskBook {
     public void settleFixing(String pair, double notional) {
         requirePair(pair);
         requirePositive(notional, "notional");
-        double pending = pendingFixings.getOrDefault(pair, 0.0);
+        double pending = pendingFixing(pair);
         if (notional > pending + 1e-9) {
             throw new IllegalArgumentException("settling " + notional
                     + " but only " + pending + " is pending on " + pair);
         }
         double remaining = pending - notional;
+        int h = fxPairHandle(pair);
         if (remaining <= 1e-9) {
-            pendingFixings.remove(pair);
+            pendingPresent[h] = false;
+            pendingByPair[h] = 0;
         } else {
-            pendingFixings.put(pair, remaining);
+            pendingByPair[h] = remaining;
         }
     }
 
@@ -312,7 +550,13 @@ public final class CentralRiskBook {
     }
 
     public java.util.Set<String> desks() {
-        return java.util.Collections.unmodifiableSet(deskNet.keySet());
+        SortedSet<String> out = new TreeSet<>();
+        for (int k = 0; k < deskNames.size(); k++) {
+            if (deskVec[k] != null) {
+                out.add(deskNames.get(k));
+            }
+        }
+        return Collections.unmodifiableSortedSet(out);
     }
 
     // ------------------------------------------------------------------
@@ -360,7 +604,8 @@ public final class CentralRiskBook {
         double bookVar = VarEngine.deltaGammaVar(linear, gammaMap, covariance, confidence);
         double bookEs = VarEngine.deltaGammaEs(linear, gammaMap, covariance, confidence);
         double standalone = 0;
-        for (double[] d : deskNet.values()) {
+        for (int k : bookedDesksByName()) {
+            double[] d = deskVec[k];
             double[] full = new double[n];
             System.arraycopy(d, 0, full, 0, Math.min(d.length, n));
             double[][] g = new double[n][n];
@@ -453,18 +698,25 @@ public final class CentralRiskBook {
             out.writeDouble(i < net.length ? net[i] : 0);
             out.writeDouble(i < gross.length ? gross[i] : 0);
         }
-        out.writeInt(deskNet.size());
-        for (Map.Entry<String, double[]> e : deskNet.entrySet()) {
-            out.writeUTF(e.getKey());
-            double[] d = e.getValue();
+        int[] desks = bookedDesksByName();
+        out.writeInt(desks.length);
+        for (int k : desks) {
+            out.writeUTF(deskNames.get(k));
+            double[] d = deskVec[k];
             for (int i = 0; i < n; i++) {
                 out.writeDouble(i < d.length ? d[i] : 0);
             }
         }
-        out.writeInt(pendingFixings.size());
-        for (Map.Entry<String, Double> e : pendingFixings.entrySet()) {
-            out.writeUTF(e.getKey());
-            out.writeDouble(e.getValue());
+        TreeSet<String> pending = new TreeSet<>();
+        for (int h = 0; h < pairNames.size(); h++) {
+            if (pendingPresent[h]) {
+                pending.add(pairNames.get(h));
+            }
+        }
+        out.writeInt(pending.size());
+        for (String pair : pending) {
+            out.writeUTF(pair);
+            out.writeDouble(pendingFixing(pair));
         }
         out.writeLong(flowsBooked);
     }
@@ -493,35 +745,55 @@ public final class CentralRiskBook {
             for (int i = 0; i < n; i++) {
                 d[i] = in.readDouble();
             }
-            deskNet.put(desk, d);
+            deskVec[deskId(desk)] = d;
         }
         int fixings = in.readInt();
         for (int k = 0; k < fixings; k++) {
             String pair = in.readUTF();
-            pendingFixings.put(pair, in.readDouble());
+            int h = fxPairHandle(pair);
+            pendingByPair[h] = in.readDouble();
+            pendingPresent[h] = true;
         }
         flowsBooked = in.readLong();
     }
 
     // ------------------------------------------------------------------
 
-    private void add(String desk, String factor, double amount) {
+    private void add(int desk, int id, double amount) {
         if (!Double.isFinite(amount)) {
-            throw new IllegalArgumentException("non-finite exposure for " + factor);
+            throw new IllegalArgumentException("non-finite exposure for " + registry.name(id));
         }
-        int id = registry.id(factor);
         if (id >= net.length) {
-            net = java.util.Arrays.copyOf(net, Math.max(net.length * 2, id + 1));
-            gross = java.util.Arrays.copyOf(gross, net.length);
+            net = Arrays.copyOf(net, Math.max(net.length * 2, id + 1));
+            gross = Arrays.copyOf(gross, net.length);
         }
         net[id] += amount;
         gross[id] += Math.abs(amount);
-        double[] d = deskNet.computeIfAbsent(desk, k -> new double[net.length]);
-        if (id >= d.length) {
-            d = java.util.Arrays.copyOf(d, net.length);
-            deskNet.put(desk, d);
+        double[] d = deskVec[desk];
+        if (d == null) {
+            d = new double[net.length];          // first flow of this desk
+            deskVec[desk] = d;
+        } else if (id >= d.length) {
+            d = Arrays.copyOf(d, net.length);
+            deskVec[desk] = d;
         }
         d[id] += amount;
+    }
+
+    /** Ids of desks that have booked, in name order (deterministic output). */
+    private int[] bookedDesksByName() {
+        TreeSet<String> names = new TreeSet<>();
+        for (int k = 0; k < deskNames.size(); k++) {
+            if (deskVec[k] != null) {
+                names.add(deskNames.get(k));
+            }
+        }
+        int[] out = new int[names.size()];
+        int i = 0;
+        for (String n : names) {
+            out[i++] = deskIds.get(n);
+        }
+        return out;
     }
 
     private static void requireDesk(String desk) {

@@ -116,7 +116,7 @@ class HarAndEwmaTest {
             rv[t + 1] = Math.exp(lrv[t + 1]);
         }
         HarRv.Fit f = HarRv.fitLog(rv);
-        double[] se = f.hacStandardErrors();
+        double[] se = f.hacStandardErrorsCopy();
         assertEquals(0.35, f.params().betaDaily(), 3 * se[1]);
         assertEquals(0.35, f.params().betaWeekly(), 3 * se[2]);
         assertEquals(0.2, f.params().betaMonthly(), 3 * se[3]);

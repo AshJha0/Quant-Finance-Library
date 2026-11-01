@@ -232,9 +232,9 @@ class CrbExecutionTest {
                 new CrbRouter.DarkVenue[]{toxic, clean}, 5, 3);
 
         assertEquals(3_000_000, a.internal(), 1e-9, "the book itself fills first, free");
-        assertEquals(0, a.dark()[0], 1e-9,
+        assertEquals(0, a.dark(0), 1e-9,
                 "20bps adverse selection >= 8bps lit cost: the toxic pool gets NOTHING");
-        assertEquals(2_000_000, a.dark()[1], 1e-9,
+        assertEquals(2_000_000, a.dark(1), 1e-9,
                 "clean pool: 4M liquidity x 0.5 fill probability");
         assertEquals(5_000_000, a.lit(), 1e-9, "the remainder pays the spread but fills");
         // Blended: (3M*0 + 2M*2 + 5M*8) / 10M = 4.4 bps.
@@ -313,8 +313,8 @@ class CrbExecutionTest {
                 1_000_000, new CrbRouter.DarkVenue[]{
                         new CrbRouter.DarkVenue("MID", 2_000_000, 0.8, 1.5)}, 4, 2);
         assertEquals(1_000_000, alloc.internal(), 1e-9);
-        assertTrue(alloc.dark()[0] > 0, "cheap dark used before lit");
-        assertEquals(Math.abs(orders[0].notional()) - 1_000_000 - alloc.dark()[0],
+        assertTrue(alloc.dark(0) > 0, "cheap dark used before lit");
+        assertEquals(Math.abs(orders[0].notional()) - 1_000_000 - alloc.dark(0),
                 alloc.lit(), 1e-6, "conservation: every unit lands somewhere");
 
         // And the report prices the whole arrangement coherently.

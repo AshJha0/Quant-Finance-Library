@@ -43,11 +43,11 @@ class AlphaResearchRoundTest {
 
         FamaMacBeth.Result fm = FamaMacBeth.fit(x, r);
         assertEquals(60, fm.periodsUsed());
-        assertEquals(0.01, fm.premia()[0], 0.001,
-                "the planted premium, in return units: " + fm.premia()[0]);
-        assertTrue(fm.tStats()[0] > 5, "and it is unambiguous: t = " + fm.tStats()[0]);
-        assertEquals(0.0, fm.premia()[1], 0.001, "the dud earns nothing");
-        assertTrue(Math.abs(fm.tStats()[1]) < 2.5, "and knows it: " + fm.tStats()[1]);
+        assertEquals(0.01, fm.premia(0), 0.001,
+                "the planted premium, in return units: " + fm.premia(0));
+        assertTrue(fm.tStats(0) > 5, "and it is unambiguous: t = " + fm.tStats(0));
+        assertEquals(0.0, fm.premia(1), 0.001, "the dud earns nothing");
+        assertTrue(Math.abs(fm.tStats(1)) < 2.5, "and knows it: " + fm.tStats(1));
         assertTrue(Math.abs(fm.interceptTStat()) < 2.5,
                 "no unexplained returns left: intercept t = " + fm.interceptTStat());
 
@@ -63,7 +63,7 @@ class AlphaResearchRoundTest {
         }
         FamaMacBeth.Result skipped = FamaMacBeth.fit(x, r);
         assertEquals(59, skipped.periodsUsed(), "the singular period is skipped");
-        assertEquals(0.01, skipped.premia()[0], 0.001, "and the premium survives");
+        assertEquals(0.01, skipped.premia(0), 0.001, "and the premium survives");
 
         // Infinity is a data error, not a missing name: fail fast.
         double[][] rBad = new double[periods][assets];
@@ -115,12 +115,12 @@ class AlphaResearchRoundTest {
         }
         CalendarAnomalies.DayOfWeekProfile profile =
                 CalendarAnomalies.dayOfWeek(returns, stamps);
-        assertEquals(80, profile.count()[0], "80 full weeks of Mondays");
-        assertEquals(-0.002, profile.meanReturn()[0], 1e-12, "the planted Monday effect");
-        assertTrue(profile.tStat()[0] < -5, "and it is significant: " + profile.tStat()[0]);
-        assertEquals(0.0005, profile.meanReturn()[2], 1e-12, "Wednesdays are ordinary");
-        assertEquals(0, profile.count()[5], "no Saturdays in the data");
-        assertTrue(Double.isNaN(profile.meanReturn()[6]), "empty day reports NaN, not 0");
+        assertEquals(80, profile.count(0), "80 full weeks of Mondays");
+        assertEquals(-0.002, profile.meanReturn(0), 1e-12, "the planted Monday effect");
+        assertTrue(profile.tStat(0) < -5, "and it is significant: " + profile.tStat(0));
+        assertEquals(0.0005, profile.meanReturn(2), 1e-12, "Wednesdays are ordinary");
+        assertEquals(0, profile.count(5), "no Saturdays in the data");
+        assertTrue(Double.isNaN(profile.meanReturn(6)), "empty day reports NaN, not 0");
 
         // Turn of month: plant +0.3% inside the (1 before, 3 after)
         // window, +0.01% outside — the split and the Welch t find it.

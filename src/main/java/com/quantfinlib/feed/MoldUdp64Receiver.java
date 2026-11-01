@@ -213,8 +213,15 @@ public final class MoldUdp64Receiver {
     /** Encodes a MoldUDP64 request packet (session, sequence, count); returns 20. */
     public static int encodeRequest(byte[] buf, int offset, String session, long fromSequence,
                                     int count) {
-        byte[] s = String.format("%-10s", session).getBytes(StandardCharsets.US_ASCII);
-        System.arraycopy(s, 0, buf, offset, 10);
+        // Space-padded ASCII, written in place: no String.format, no byte[]
+        // per packet on the publish path.
+        int n = session.length();
+        if (n > 10) {
+            throw new IllegalArgumentException("session longer than 10 characters");
+        }
+        for (int i = 0; i < 10; i++) {
+            buf[offset + i] = i < n ? (byte) session.charAt(i) : (byte) ' ';
+        }
         p64(buf, offset + 10, fromSequence);
         buf[offset + 18] = (byte) (count >>> 8);
         buf[offset + 19] = (byte) count;

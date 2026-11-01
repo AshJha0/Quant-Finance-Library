@@ -88,7 +88,7 @@ public final class CrossSectionalMomentum implements PortfolioStrategy {
 
     @Override
     public void init(Map<String, BarSeries> data) {
-        this.data = data;
+        this.data = new java.util.LinkedHashMap<>(data);
         this.symbols = new ArrayList<>(data.keySet());
         this.clock = data.values().iterator().next();
     }

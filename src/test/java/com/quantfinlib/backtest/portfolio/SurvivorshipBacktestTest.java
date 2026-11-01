@@ -76,11 +76,11 @@ class SurvivorshipBacktestTest {
         PortfolioBacktester.Result naive = PortfolioBacktester.run(strategy, data, config());
 
         // Naive: flat prices, no loss — the survivorship illusion.
-        assertEquals(1_000_000, naive.equityCurve()[BARS - 1], 1e-6);
+        assertEquals(1_000_000, naive.equityCurve(BARS - 1), 1e-6);
         // Unbiased: the DOOM half is gone; equity ends at 500k.
-        assertEquals(500_000, unbiased.equityCurve()[BARS - 1], 1e-6);
+        assertEquals(500_000, unbiased.equityCurve(BARS - 1), 1e-6);
         // The bias, quantified: the naive run overstates final equity by 2x.
-        assertTrue(naive.equityCurve()[BARS - 1] > unbiased.equityCurve()[BARS - 1]);
+        assertTrue(naive.equityCurve(BARS - 1) > unbiased.equityCurve(BARS - 1));
         assertEquals(1, unbiased.lifecycleEventsApplied());
         // The dead position is truly gone, not forward-filled.
         assertFalse(unbiased.finalPositions().containsKey("DOOM"));
@@ -91,7 +91,7 @@ class SurvivorshipBacktestTest {
                 .recordDelisting("DOOM", 5,
                         PointInTimeUniverse.DEFAULT_INVOLUNTARY_DELISTING_RETURN);
         double withHaircut = PortfolioBacktester.run(
-                strategy, data, config(), haircut, Map.of()).equityCurve()[BARS - 1];
+                strategy, data, config(), haircut, Map.of()).equityCurve(BARS - 1);
         assertEquals(1_000_000 - 500_000 * 0.30, withHaircut, 1e-6);
     }
 
@@ -106,7 +106,7 @@ class SurvivorshipBacktestTest {
         PortfolioBacktester.Result r = PortfolioBacktester.run(
                 strategy, data, config(), universe, Map.of());
         // Sold at the t=4 close: flat prices → full capital back, no position.
-        assertEquals(1_000_000, r.equityCurve()[BARS - 1], 1e-6);
+        assertEquals(1_000_000, r.equityCurve(BARS - 1), 1e-6);
         assertTrue(r.finalPositions().isEmpty());
         assertEquals(0, r.lifecycleEventsApplied()); // a drop is not a death
         // Turnover shows both the entry and the forced exit.
@@ -132,7 +132,7 @@ class SurvivorshipBacktestTest {
         assertEquals(tgtShares * 0.5, r.finalPositions().get("ACQ"), 1e-6);
         // Final equity: cash component + acquirer stake at 100.
         assertEquals(tgtShares * 10 + tgtShares * 0.5 * 100,
-                r.equityCurve()[BARS - 1], 1e-6);
+                r.equityCurve(BARS - 1), 1e-6);
         assertEquals(1, r.lifecycleEventsApplied());
 
         // A stock-paying merger whose acquirer is not in the backtest must
@@ -157,13 +157,13 @@ class SurvivorshipBacktestTest {
         double shares = 1_000_000.0 / 100;
         // $2/share on 10k shares (the t=0 dividend paid to a flat book: 0).
         assertEquals(shares * 2, longRun.dividendCashCredited(), 1e-6);
-        assertEquals(1_000_000 + shares * 2, longRun.equityCurve()[BARS - 1], 1e-6);
+        assertEquals(1_000_000 + shares * 2, longRun.equityCurve(BARS - 1), 1e-6);
 
         // The short pays the dividend — the cost adjusted prices can't show.
         PortfolioBacktester.Result shortRun = PortfolioBacktester.run(
                 buyAndHold(Map.of("DIV", -1.0)), data, config(), null, Map.of("DIV", divs));
         assertEquals(-shares * 2, shortRun.dividendCashCredited(), 1e-6);
-        assertEquals(1_000_000 - shares * 2, shortRun.equityCurve()[BARS - 1], 1e-6);
+        assertEquals(1_000_000 - shares * 2, shortRun.equityCurve(BARS - 1), 1e-6);
     }
 
     @Test
@@ -184,7 +184,7 @@ class SurvivorshipBacktestTest {
         double tgtShares = 1_000_000.0 / 40;
         // Cash leg + converted shares paid out at ACQ's last close (100).
         assertEquals(tgtShares * 10 + tgtShares * 0.5 * 100,
-                r.equityCurve()[BARS - 1], 1e-6);
+                r.equityCurve(BARS - 1), 1e-6);
         assertEquals(2, r.lifecycleEventsApplied());
         assertTrue(r.finalPositions().isEmpty());
     }
@@ -205,7 +205,7 @@ class SurvivorshipBacktestTest {
         double shares = 1_000_000.0 / 50;
         // The dividend lands; the position is then wiped by the delisting.
         assertEquals(shares * 2, r.dividendCashCredited(), 1e-6);
-        assertEquals(shares * 2, r.equityCurve()[BARS - 1], 1e-6);
+        assertEquals(shares * 2, r.equityCurve(BARS - 1), 1e-6);
         assertEquals(1, r.lifecycleEventsApplied());
     }
 
@@ -216,6 +216,6 @@ class SurvivorshipBacktestTest {
                 buyAndHold(Map.of("X", 1.0)), data, config());
         assertEquals(0, r.dividendCashCredited());
         assertEquals(0, r.lifecycleEventsApplied());
-        assertEquals(1_000_000, r.equityCurve()[BARS - 1], 1e-6);
+        assertEquals(1_000_000, r.equityCurve(BARS - 1), 1e-6);
     }
 }

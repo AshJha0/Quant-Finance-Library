@@ -175,9 +175,9 @@ class TickBacktesterTest {
         assertEquals(1_000_000 + 100 * 10, result.finalEquity(), 1e-6);
         assertTrue(result.metrics().totalReturn() > 0);
         // Samples: initial + every 2 ticks (2) + final.
-        assertEquals(1_000_000, result.sampledEquity()[0], 1e-9);
+        assertEquals(1_000_000, result.sampledEquity(0), 1e-9);
         assertEquals(result.finalEquity(),
-                result.sampledEquity()[result.sampledEquity().length - 1], 1e-9);
+                result.sampledEquity(result.sampledEquityLength() - 1), 1e-9);
     }
 
     @Test

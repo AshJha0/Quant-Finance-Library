@@ -332,7 +332,7 @@ class MarketRiskTest {
         double[][] cov = {{4e-4, 1e-4}, {1e-4, 2.25e-4}};
         double[] expo2 = {1_000_000, -500_000};
         var reverse = StressTester.reverseStress(expo2, cov, 50_000);
-        assertEquals(-50_000, StressTester.scenarioPnl(expo2, reverse.shocks()), 1e-6,
+        assertEquals(-50_000, StressTester.scenarioPnl(expo2, reverse.shocksCopy()), 1e-6,
                 "the breaking scenario breaks by exactly the asked amount");
         assertEquals(50_000 / VarEngine.portfolioStdev(expo2, cov),
                 reverse.mahalanobisSigmas(), 1e-9, "and reports its own implausibility");
