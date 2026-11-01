@@ -22,7 +22,7 @@ numbers for losses.
 | Equity, FX and commodity bars | `data.CsvBarLoader`, `data.HttpBarFetcher`, `core.BarSeries` |
 | Live streams | `feed.WebSocketFeed`, `marketdata.HftMarketDataBus`, `fix.FixMarketDataView` (35=W/X) |
 | Tick history | `data.TickFileWriter`/`TickFileReader` (QFLT), `data.TickCapture` |
-| Yield curves | `rates.YieldCurve` (zero rates; `bootstrapAnnualParSwaps` from annual par swaps, single curve) |
+| Yield curves | `rates.YieldCurve` (zero rates; `bootstrapAnnualParSwaps` from annual par swaps, single curve); `rates.MultiCurveBootstrap` (OIS discount and projection curves) with `rates.MultiCurveRisk` for bucketed, key-rate and parallel DV01 |
 | Implied volatility | `pricing.VolSurface`, `fx.FxVolSurface` (delta-quoted) |
 | FX forwards and swap points | `fx.SwapPointsCurve`, `pricing.ForwardCurve` |
 
@@ -211,10 +211,13 @@ library.
 - FRTB standardised approach (sensitivities-based method, default risk charge,
   residual risk add-on).
 - Non-modellable risk factor capital and the risk-factor eligibility test.
-- SA-CCR, SIMM, CVA capital, and xVA beyond the unilateral `credit.CvaApproximator`.
-- Multi-curve rate risk (OIS discounting with separate projection curves).
-- SVI/SSVI and local-volatility surfaces; smile risk uses SABR, vanna-volga or the
-  pillar-smile `VolSurface`.
+- SIMM and CVA capital. SA-CCR (`risk.SaCcr`) has no basis or volatility hedging
+  sets, one margin agreement per netting set and no collateral haircuts.
+- xVA beyond CVA, unilateral DVA and wrong-way CVA in `credit.CvaApproximator`. The
+  exposure simulator (`credit.ExposureSimulator`) prices single-curve swaps and one FX
+  pair with a deterministic foreign rate.
+- Smile risk on the SVI, SSVI and local-volatility surfaces is not wired into the VaR
+  engines; scenario revaluation on them is left to the caller.
 - A scenario or market-data store; scenarios are arrays supplied by the caller.
 
 ## Reading order
