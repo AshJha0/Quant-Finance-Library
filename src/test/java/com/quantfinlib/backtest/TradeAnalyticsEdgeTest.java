@@ -28,8 +28,8 @@ class TradeAnalyticsEdgeTest {
     void allScratchTradesProduceTheDocumentedNoLoserDegeneracy() {
         // Every trade breaks even: no wins, no losses. Pinning CURRENT
         // behavior: avgLoss == 0 takes the documented "no losers" branch,
-        // so payoff is +inf and Kelly clamps to 1 even though there are no
-        // winners either — the same over-fit tell as a loss-free record.
+        // so payoff is +inf; Kelly is 0 because the record has no positive
+        // mean return to size (the old fixed-odds formula returned 1).
         TradeAnalytics.Result r = TradeAnalytics.analyze(
                 List.of(trade(0, 1), trade(0, 2), trade(0, 3)));
         assertEquals(3, r.count());
@@ -38,7 +38,7 @@ class TradeAnalyticsEdgeTest {
         assertEquals(0.0, r.avgLoss(), 0.0);
         assertEquals(0.0, r.expectancy(), 0.0);
         assertEquals(Double.POSITIVE_INFINITY, r.payoffRatio());
-        assertEquals(1.0, r.kellyFraction(), 0.0);
+        assertEquals(0.0, r.kellyFraction(), 0.0);
         // Scratches break streaks and belong to neither leg.
         assertEquals(0, r.maxWinStreak());
         assertEquals(0, r.maxLossStreak());
@@ -95,19 +95,20 @@ class TradeAnalyticsEdgeTest {
 
     @Test
     void identicalTradePnlsCollapseTheDistributionToASinglePoint() {
-        // Ten identical -5 trades: every permutation is the SAME path, so
-        // all drawdown percentiles equal the actual drawdown (50), every
-        // shuffle ends at -50, and the loss probability is 1.
+        // Ten identical -5% trades: every permutation is the same path, so
+        // all drawdown percentiles equal the actual drawdown 1 - 0.95^10,
+        // every shuffle ends at 0.95^10 - 1, and the loss probability is 1.
         List<Trade> trades = new ArrayList<>();
         for (int i = 0; i < 10; i++) {
             trades.add(trade(-5, 1));
         }
         MonteCarloTradeShuffle.Result r = MonteCarloTradeShuffle.analyze(trades, 200, 9);
-        assertEquals(50.0, r.actualMaxDrawdown(), 1e-12);
-        assertEquals(50.0, r.medianMaxDrawdown(), 1e-12);
-        assertEquals(50.0, r.p95MaxDrawdown(), 1e-12);
-        assertEquals(50.0, r.p99MaxDrawdown(), 1e-12);
-        assertEquals(-50.0, r.medianTerminalPnl(), 1e-12);
+        double dd = 1 - Math.pow(0.95, 10);
+        assertEquals(dd, r.actualMaxDrawdown(), 1e-12);
+        assertEquals(dd, r.medianMaxDrawdown(), 1e-12);
+        assertEquals(dd, r.p95MaxDrawdown(), 1e-12);
+        assertEquals(dd, r.p99MaxDrawdown(), 1e-12);
+        assertEquals(-dd, r.medianTerminalPnl(), 1e-12);
         assertEquals(1.0, r.probLoss(), 0.0);
         assertEquals(1.0, r.actualDrawdownPct(), 0.0,
                 "every shuffle draws down exactly as much as the actual path");

@@ -170,4 +170,22 @@ class FillTimingTest {
         assertEquals(0.0003, d.slippageRate(), 0);
         assertEquals(FillPolicy.NEXT_OPEN, d.fillPolicy());
     }
+    @Test
+    void effectiveTrialsCollapseForNearDuplicateGridPoints() {
+        double[] closes = new double[300];
+        for (int i = 0; i < closes.length; i++) {
+            closes[i] = 100 + 10 * Math.sin(i / 9.0) + i * 0.05;
+        }
+        BarSeries s = BarSeries.of("S", closes);
+        com.quantfinlib.backtest.validation.ParameterGrid grid =
+                new com.quantfinlib.backtest.validation.ParameterGrid()
+                        .add("fast", 5, 5, 5, 5).add("slow", 20);
+        var ranked = com.quantfinlib.backtest.validation.GridSearchOptimizer.search(grid,
+                p -> new com.quantfinlib.backtest.strategies.SmaCrossStrategy(
+                        p.get("fast").intValue(), p.get("slow").intValue()),
+                s, BacktestConfig.defaults(), PerformanceMetrics::sharpeRatio);
+        // Four identical trials are one trial.
+        assertEquals(1.0, com.quantfinlib.backtest.validation.GridSearchOptimizer
+                .effectiveTrials(ranked), 1e-9);
+    }
 }
