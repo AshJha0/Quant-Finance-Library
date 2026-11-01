@@ -82,6 +82,50 @@ is the same logic rebuilt for speed (Part II explains how), with
 random orders and demands identical books, so the readable one is the
 executable specification of the fast one.
 
+### 2b. Call auctions: one price for everyone
+
+Continuous trading matches each order the moment it arrives. At the open,
+at the close and after a halt, venues do something different: they
+collect orders for a while without matching any of them (the call), then
+match everything at once at a single price (the uncross). Everyone who
+trades in the uncross gets the same price, which is why closing auctions
+set the official close that index funds and benchmarks use.
+
+During the call the venue publishes an indicative price, volume and
+imbalance so participants can react before the book freezes. At the
+uncross it picks the price that trades the most shares.
+
+Formally, let `D(p)` be the buy quantity willing to pay at least `p` and
+`S(p)` the sell quantity willing to accept at most `p`. Market orders
+count at every price. The executable volume is `V(p) = min(D(p), S(p))`.
+The uncross price is chosen by three rules in order: maximise `V(p)`;
+among ties, minimise the imbalance `|D(p) - S(p)|`; among remaining ties,
+take the price nearest the reference price. Tied prices form one
+contiguous range, so the result is unique. This is the standard
+maximum-executable-volume rule; Xetra and Euronext add a market-pressure
+step between the second and third rules, which the library leaves out
+(Deutsche Börse, Xetra market model for auctions; Euronext, Trading
+Manual, auction section).
+
+Worked example. Buys: 100 at 10, 200 at 9. Sells: 150 at 8, 100 at 9.
+
+| p  | D(p) | S(p) | V(p) |
+|----|------|------|------|
+| 8  | 300  | 150  | 150  |
+| 9  | 300  | 250  | 250  |
+| 10 | 100  | 250  | 100  |
+
+The uncross price is 9 with volume 250 and a buy imbalance of 50. Orders
+fill in price-time priority at the single price 9: the 100 bid at 10
+fills first, then 150 of the 200 bid at 9, leaving 50 on the bid.
+
+*In this library:* `orderbook/AuctionBook.java` (`openCall`,
+`submitLimit`, `submitMarket`, `publishIndicative`, `uncross`, and
+`transferResidual`, which moves the unfilled orders into an
+`HftOrderBook` when continuous trading starts). Prices are integer ticks,
+as in `HftOrderBook`. The older `microstructure/Auction.java` is the
+simple analytics version. See COOKBOOK recipe 330.
+
 ### 3. Market data: L1, L2, L3
 
 Exchanges broadcast what's happening in the book. The levels of detail have
@@ -532,6 +576,170 @@ execution to optimize -- the pipeline ends at selection, and the tooling
 (`markets.PrivateMarketAnalytics`, section 10c) is built for exactly
 that truncation.
 
+### 8d. Factor risk models: covariance for thousands of stocks
+
+A sample covariance matrix of 3,000 stocks has about 4.5 million entries
+and is estimated from a few hundred days of returns, so most of it is
+noise and an optimiser will find and exploit that noise. A factor model
+replaces it with a small structure: each stock's return is explained by a
+market factor, its industry, and a handful of styles (size, momentum,
+volatility), plus a part specific to the stock. Risk is then exposures
+times a small factor covariance plus a diagonal of specific variances.
+
+Formally, for stock `i` on day `t`:
+
+```
+r_it = f_mkt,t + f_sector(i),t + sum_k x_ik,t f_k,t + u_it
+V    = X F X' + D
+```
+
+`X` holds the exposures, `F` the factor covariance and `D` the specific
+variances. The construction follows the Barra USE4 methodology (Menchero,
+Orr and Wang 2011):
+
+- Styles are standardised each day to a cap-weighted mean of 0 and an
+  equal-weighted standard deviation of 1, clipped at plus or minus 3 and
+  re-standardised (USE4 section 3).
+- Factor returns come from a weighted least-squares regression with
+  weights `sqrt(cap)`. The sector dummies sum to the market column, so the
+  regression imposes `sum_s c_s f_s = 0`, with `c_s` the sector's cap
+  share, and solves it exactly by substitution (Menchero 2010).
+- `F` is a zero-mean EWMA covariance with a Newey-West (1987) correction
+  for serial correlation, `F = C0 + sum_l (1 - l/(L+1)) (C_l + C_l')`, then
+  scaled by a volatility regime adjustment `lambda_F^2`, an EWMA of
+  `B_t^2 = mean_k (f_kt / sigma_k,t-1)^2` (USE4 section 4.3).
+- Specific variances are EWMA residual variances shrunk toward the mean of
+  their size bucket, `sigma_SH = v mean_n + (1 - v) sigma` with
+  `v = q |sigma - mean_n| / (Delta_n + q |sigma - mean_n|)` (USE4 section
+  5.3).
+
+The decomposition of a portfolio `w` with risk `sigma = sqrt(w'Vw)` gives
+the marginal contribution `(Vw)_i / sigma`, the percent contribution
+`w_i (Vw)_i / sigma^2` (these sum to 1), and the factor contribution
+`x_k (F x)_k / sigma^2` for portfolio exposure `x = X'w`, which with the
+specific share also sums to 1. This is Euler allocation (Litterman 1996).
+
+Worked example. A portfolio has exposure 1.2 to a single factor with 15%
+volatility and specific variance 0.0004 (2% specific risk). Factor
+variance is `1.2^2 x 0.0225 = 0.0324`, total variance 0.0328, total risk
+18.1%. The factor's share is `0.0324 / 0.0328 = 98.8%`: diversifying names
+does almost nothing for this book, cutting the factor exposure does.
+
+*In this library:* `risk/FactorRiskModel.java` (`estimate`,
+`decompose`, `Settings.defaults()` and `Settings.plain()`, which drops the
+Newey-West, regime and shrinkage steps), and `alpha/AlphaRiskModels.java`,
+which builds the inputs from a price panel, using log market cap for size
+or trailing dollar volume when there are no fundamentals. Recipe 318.
+
+### 8e. Turning a forecast into a portfolio with a risk model
+
+A z-score says which names look good; it does not say how much to hold.
+The Grinold rule converts scores to expected returns, and an optimiser
+with the factor model's covariance turns expected returns into weights
+that respect risk, trading cost and liquidity.
+
+Formally, `alpha_i = IC x sigma_i x sqrt(H) x z_i` (Grinold 1994,
+"Alpha is volatility times IC times score"), with `IC` the information
+coefficient, `sigma_i` the name's volatility and `H` the holding horizon.
+Each rebalance then solves
+
+```
+maximise  alpha'w - lambda w'(H V)w - kappa |w - w0|_1
+```
+
+with `kappa` the flat one-way cost and each trade capped at
+`advTradeFraction x ADV x price / (capital x equity)` of the portfolio.
+
+*In this library:* `alpha/AlphaBacktester.java`,
+`run(ctx, factor, config, RiskOptions)` and `runTraced`, which returns
+per-bar weights, P&L per name, cost and financing that sum to the net
+return exactly. For bar-level portfolio strategies,
+`backtest/portfolio/PortfolioBacktester.Participation` caps each symbol at
+a fraction of its average volume and carries the unfilled target forward.
+Recipes 319 and 323.
+
+### 8f. Combining signals without double counting
+
+Two momentum signals with slightly different lookbacks are mostly the
+same bet. Adding them with equal weight counts that bet twice. A
+combination should credit each signal only for what the earlier ones do
+not already say, and weight it by how well it forecasts at the horizon
+you actually hold.
+
+Formally, on each date the factor z-scores are orthogonalised in the
+order given (Gram-Schmidt), so `z'_k` is the part of factor `k` not
+explained by factors `1..k-1`. The horizon-matched information
+coefficient is
+
+```
+IC_k(t) = (1/H) sum_{l=0}^{H-1} corr(z'_k(t), r_{t+l -> t+l+1})
+```
+
+averaged over dates with exponential weights. A fast-decaying signal
+loses weight as `H` grows (Grinold and Kahn 2000, ch. 13). Weights are
+`w_k = (1 - delta) IC_k / sum_j |IC_j| + delta / K`, the IC-proportional
+combination shrunk toward equal weights (Grinold and Kahn 2000, ch. 10).
+
+Worked example. Orthogonalised ICs of 0.04, 0.02 and 0.01 give raw
+weights 0.571, 0.286 and 0.143. With `delta = 0.3` the weights are
+`0.7 x 0.571 + 0.1 = 0.5`, then 0.3 and 0.2.
+
+*In this library:* `alpha/AlphaCombiner.java` (`fit` reads data only up
+to `toIndex`, so later dates stay out of sample; the result is an
+`AlphaFactor`). `alpha/AlphaReport.icTable` prints mean IC per factor per
+horizon. Recipe 320.
+
+### 8g. Where the P&L came from
+
+A strategy that makes money may be making it for the wrong reason, for
+example a value strategy that is mostly long momentum. Attribution splits
+each day's P&L into the part explained by factor returns, the part from
+stock-specific moves, the part from trading during the day, and costs.
+
+Formally, with dollar holdings `h_i`, exposures `X_ik`, factor returns
+`f_k` and specific returns `u_i`:
+
+```
+factor_k = (sum_i h_i X_ik) f_k
+specific = sum_i h_i u_i
+trading  = sum_i pnl_i - sum_k factor_k - specific
+net      = sum_k factor_k + specific + trading + cost + financing
+```
+
+The last line holds exactly by construction. The same split is reported
+for the long and short legs and by sector.
+
+Worked example. Hold $600k of A with momentum exposure 1.0 and short
+$400k of B with exposure -0.5. The book's momentum exposure is
+`600k x 1.0 + (-400k) x (-0.5) = 800k`. A day with a 0.1% momentum factor
+return books $800 to momentum, whatever the two stocks did on their own.
+
+*In this library:* `alpha/BacktestAttribution.java` (`attribute`,
+`cumulativeFactor`, `cumulativeSector`, `format`), fed by
+`AlphaBacktester.runTraced`. Recipe 321.
+
+### 8h. Capacity: how much money a strategy can take
+
+A strategy's gross return does not depend on its size, but its impact
+cost does. Trading twice as much moves prices more, so at some capital
+the cost eats the edge.
+
+Formally, under square-root impact the cost per dollar traded is
+proportional to `sqrt(participation)`, and participation is proportional
+to capital, so the drag on return grows as `sqrt(C)`. Net Sharpe falls
+roughly as `(mu - k sqrt(C)) / sigma`. The capacity at a Sharpe floor is
+the capital where the net Sharpe curve crosses the floor (Ratcliffe,
+Miranda and Ang 2017).
+
+Worked example. If impact costs 0.3 of Sharpe at $100m, it costs 0.6 at
+$400m and 1.2 at $1.6bn. A strategy with gross Sharpe 1.5 has net Sharpe
+1.2, 0.9 and 0.3 at those sizes, so its capacity at a Sharpe of 1 lies
+between $100m and $400m.
+
+*In this library:* `alpha/CapacityCurve.java` runs the same backtest at
+each capital level; `capacityAt(floor)` interpolates in log capital and
+returns NaN when even the smallest capital misses the floor. Recipe 322.
+
 ### 9. Risk: the systems that say no
 
 Every order passes a **pre-trade risk gate** before it can leave the
@@ -623,6 +831,72 @@ window. Impact that decays is the footprint of pressure, not
 information. Notice this is §5's markout logic wearing a compliance
 badge: the same physics that tells a maker it was run over tells a
 surveillance officer who did the running.
+
+### 9c. Positions, P&L and the drop copy
+
+Every fill changes a position and, when it closes part of one, books
+realised P&L. How much is realised depends on which earlier purchase you
+say you sold: average cost pools all open lots at one price, FIFO closes
+the oldest lot first. The total P&L, realised plus unrealised, is the same
+either way; only the split differs, and the split matters for tax,
+accounting and trader pay.
+
+A firm also needs an independent check that its own record of fills is
+complete. The venue or broker sends a drop copy, a second stream of the
+same executions. Reconciling the two at the end of the day (or during it)
+finds fills one side has and the other does not.
+
+Formally, for a book with position `n`, average cost `a` and contract
+multiplier `m`, a fill of `q` at price `p` that adds to the position
+updates `a' = (n a + q p) / (n + q)`; a fill that closes `q` realises
+`q (p - a) sgn(n) m`. Under FIFO the realised P&L of a close is
+`sum_k q_k (p - p_k) sgn(n) m` over the lots it consumes. Both satisfy
+the cash-flow identity
+
+```
+realised + unrealised = m (n M - sum_i s_i q_i p_i)
+```
+
+with mark `M` and signed fills `s_i q_i` at `p_i` (IAS 2, para. 25, for
+the FIFO and weighted-average cost formulas).
+
+Worked example. Buy 100 at 10, buy 100 at 12, sell 150 at 11. Average
+cost is 11, so the sale realises 0. FIFO closes 100 at 10 (+100) and 50 at
+12 (-50), realising 50. Marked at 13 with 50 shares left, average cost
+has unrealised 100 and FIFO unrealised 50; both totals are 100.
+
+*In this library:* `trading/PositionLedger.java` keeps positions per
+(account, strategy, symbol) with `onFill`, `realised`,
+`unrealised` and `totalPnl` taking a `CostMethod` and a `PriceSource`
+of marks, and `ANY` as a wildcard to aggregate.
+`trading/DropCopyReconciler.java` matches fills by execution id and
+reports four break types: MISSING (on the drop copy, not booked), EXTRA
+(booked, not on the drop copy), MISMATCH (same id, different symbol, side,
+quantity or price beyond tolerance) and DUPLICATE. Recipes 327 and 328.
+
+### 9d. Limits that change during the day
+
+Pre-trade limits (maximum order size, position, daily loss) are set each
+morning, tightened when something goes wrong, and loosened again when it
+is over. Each change is a risk event in its own right: a typo can turn a
+limit off, and a regulator will ask who changed what and when.
+MiFID II RTS 6 (Commission Delegated Regulation 2017/589, Article 15)
+requires investment firms to have pre-trade controls and to be able to
+change them under control.
+
+Two properties matter. A change must be atomic: an order check sees
+either the old set of limits or the new one, never half of each. And
+every version must be kept, with author, time and reason, so that any
+version can be restored and the history audited.
+
+*In this library:* `trading/LimitsConfig.java` parses a desk file in
+`key = value` form; all nine keys are required (`unlimited` is allowed)
+so a missing key is an error rather than a silent default.
+`trading/LimitsManager.java` applies a new config to a list of
+`HftRiskGate`s (`apply`), restores an earlier version (`rollback`) and
+keeps the `auditTrail()`. `HftRiskGate.limits(config)` swaps one immutable
+limits object, and each check reads it once, which is what makes the
+change atomic. Recipe 329.
 
 ### 10. Derivatives in five minutes
 
@@ -881,6 +1155,451 @@ autocorrelation) and the underlying volatility comes back near public-market
 levels -- the diversification was an artifact of the appraisal lag, and
 the allocation decision changes accordingly.
 
+### 10d. Two curves: OIS discounting and term projection
+
+Before 2008 a bank discounted swap cash flows and projected the floating
+rate off the same curve. The crisis opened a gap between term rates such
+as 3-month LIBOR or EURIBOR, which carry bank credit and liquidity risk,
+and overnight rates. Collateralised trades earn the overnight rate on
+their collateral, so their cash flows are discounted at the OIS rate,
+while the floating leg still fixes on the term index. That needs two
+curves: an OIS discount curve and a projection curve per index tenor
+(Bianchetti 2010; Ametrano and Bianchetti 2013).
+
+The OIS curve is built first from overnight deposits and OIS swaps. The
+projection curve is then built from deposits, FRAs, futures and swaps on
+the index, with every cash flow discounted on the OIS curve already
+fixed.
+
+Formally, an OIS's compounded overnight leg telescopes, so its par rate is
+
+```
+K_OIS = (P(s) - P(e)) / sum_i tau_i P(t_i)
+```
+
+A term swap's par rate uses forwards from the projection curve `P_3m`
+and discount factors from the OIS curve:
+
+```
+K_IRS = sum_j tau_j F_j P_ois(t_j) / sum_i tau_i P_ois(t_i)
+F_j   = (P_3m(t_{j-1}) / P_3m(t_j) - 1) / tau_j
+```
+
+Futures are margined daily, so a futures rate sits above the forward by a
+convexity adjustment. In Hull-White with mean reversion `a` and
+volatility `sigma` (Hull, *Options, Futures and Other Derivatives*,
+Technical Note 1; Kirikos and Novak 1997):
+
+```
+CA = B(t1,t2)/(t2 - t1) [B(t1,t2)(1 - e^{-2a t1}) + 2a B(0,t1)^2] sigma^2/(4a)
+```
+
+with Ho-Lee limit `sigma^2 t1 t2 / 2` as `a` goes to 0.
+
+Between pillars the curve is interpolated on `-ln P`. Log-linear gives
+piecewise-flat forwards, which jump at every pillar. Monotone-convex
+(Hagan and West 2006) gives continuous forwards, keeps each interval's
+average forward equal to the bootstrapped one, and keeps monotone
+discrete forwards monotone. The library applies no positivity amendment,
+so negative rates are allowed.
+
+Worked example. A one-period OIS from spot to one year at 3.6% with
+accrual `tau = 365/360` gives `P(e) / P(s) = 1 / (1 + 0.036 x 1.01389) =
+0.96479`. For the convexity adjustment on a 9x12 future with `sigma` =
+1%, the Ho-Lee value is `0.0001 x 0.75 x 1 / 2`, 0.375bp; Hull-White with
+`a` = 3% gives about 0.365bp.
+
+Risk on a two-curve book is the sensitivity to each quote with both
+curves rebuilt. With log-linear interpolation the bucketed DV01s add to
+the parallel DV01 to about 1e-7. With monotone-convex they agree only to a
+few percent at a 1bp bump, because that interpolator is not
+differentiable in its inputs where an interval changes zone.
+
+*In this library:* `rates/MultiCurveBootstrap.java` (`bootstrap` for
+OIS, `bootstrapProjection` for an index curve), the instruments
+`Deposit`, `OisSwap`, `Fra`, `RateFuture` (with `hullWhiteConvexity`)
+and `InterestRateSwap`, all implementing `CurveInstrument`;
+`rates/CurveInterpolation.java` (`LOG_LINEAR_DISCOUNT`,
+`MONOTONE_CONVEX`); `rates/MultiCurveRisk.java` (`buildCurves`,
+`bucketedDv01`, `keyRateDv01` with Ho 1992 hat weights, `parallelDv01`);
+two-curve overloads in `SwapPricer` and `RatesOptions.swaption` and
+`capFloor`. The single-curve methods are unchanged. Recipes 301 and 302.
+
+### 10e. The ISDA standard CDS model
+
+Since the 2009 "Big Bang", single-name CDS trade on a fixed coupon (100bp
+or 500bp in North America) plus an upfront payment, rather than at a par
+spread. Fixed coupons make contracts fungible, so offsetting trades net.
+The market still quotes a spread; the ISDA standard model is the agreed
+way to turn the quoted spread into the upfront.
+
+The contract terms are standardised too. Maturities fall on IMM dates (20
+March, June, September, December) with a semi-annual roll, so new 5-year
+contracts mature on 20 June or 20 December. Protection steps in at T+1,
+the upfront settles at T+3 business days, and the first coupon accrues
+from the previous IMM date.
+
+Formally, on each segment where the hazard `lambda` and the forward rate
+`f` are constant, with `k = lambda + f` and `Q0 P0` the survival and
+discount factor at the segment start, the protection leg contributes
+`lambda Q0 P0 (1 - e^{-k dt}) / k`. Accrual on default adds
+`lambda Q0 P0 [a (t0 - tS)(1 - e^{-k dt}) / k + a (1 - e^{-k dt}(1 + k dt)) / k^2]`
+with `a` the accrual rate and `tS` the accrual start. These are the ISDA
+CDS Standard Model v1.8.2 routines (`JpmcdsCdsContingentLegPV`,
+`JpmcdsFeeLegPV`) with the 2009 Markit numerical fix for small `k`
+(O'Kane 2008, ch. 6). The quoted spread converts to the upfront through a
+flat hazard rate that reprices a par CDS at that spread.
+
+Worked example. A 5-year contract traded 2 November 2026 matures 20
+December 2031 and accrues from 21 September 2026. Quoted at 300bp on a
+100bp coupon with 40% recovery and a flat 3.5% discount rate, the flat
+hazard is 5.05% (the credit triangle `S / (1 - R)` gives 5.0%) and the
+upfront is 8.39% of notional, paid by the protection buyer.
+
+*In this library:* `credit/IsdaCdsModel.java` (`standardContract`,
+`standardMaturity`, `schedule`, `protectionLeg`, `riskyAnnuityClean`,
+`parSpread`, `quotedSpreadToUpfront`, `upfrontToQuotedSpread`,
+`bootstrap`) and `credit/IsdaCurve.java`. Not implemented: the Markit
+test grid is not reproduced (the legs are checked against quadrature to
+1e-10 instead); holiday calendars (weekends only); the half-day
+accrual-on-default adjustment. Recipes 303 and 304.
+
+### 10f. Counterparty exposure, CVA, DVA and wrong-way risk
+
+A swap worth zero today can be worth a lot to you in two years, and if
+the counterparty defaults then you lose that value. Exposure is the
+positive part of the future value, and since the future is uncertain it
+is a distribution at each date. CVA is the price of the counterparty's
+default risk: expected exposure times the chance of default in each
+period times the loss given default, summed and discounted.
+
+The profile measures are expected exposure EE (mean of the positive
+part), expected negative exposure ENE (what you owe them), potential
+future exposure PFE (a high quantile, say 97.5%) and expected positive
+exposure EPE (the time average of EE). The discounted EE of a swap at a
+reset date equals the price of a swaption on the remaining swap, which is
+why EE profiles rise and then fall as cash flows run off. A CSA reduces
+exposure, but a threshold, a minimum transfer amount and the margin
+period of risk (the days between the last good margin call and closing
+out a defaulted counterparty) leave a residual.
+
+Formally, the simulator uses a one-factor Hull-White short rate with the
+bond price (Brigo and Mercurio 2006, eq. 3.39)
+
+```
+P(t,T) = P(0,T)/P(0,t) exp((V(t,T) - V(0,T) + V(0,t))/2 - B(t,T) x(t))
+D(0,t) = P(0,t) exp(-V(0,t)/2 - I(t))
+```
+
+and for FX `S(t) = S0 P_f(0,t)/D(0,t) exp(-sigma^2 t/2 + sigma W(t))`.
+CVA is `LGD sum_i E[D(0,t_i) E(t_i)] (PD(t_i) - PD(t_{i-1}))`. Wrong-way
+risk, when default is more likely exactly when exposure is high, is
+modelled with a Gaussian copula on a standardised market driver `X`
+(Gregory 2015, ch. 17):
+
+```
+P(bucket i | X) = Phi((Phi^-1(PD_i) + rho X) / sqrt(1 - rho^2))
+                - Phi((Phi^-1(PD_{i-1}) + rho X) / sqrt(1 - rho^2))
+```
+
+Positive `rho` with the rates driver is wrong-way for a payer swap.
+
+Worked example. A 5-year payer swap on 100 notional at 3.2%, Hull-White
+mean reversion 5% and volatility 1%, 10,000 paths. Uncollateralised, EE
+at two years is about 1.67 and EPE about 1.30. A counterparty curve at
+100 to 150bp with LGD 60% gives CVA of about 0.083; with `rho` = 0.5 the
+wrong-way CVA is about 0.146. Under a zero-threshold CSA with a 10-day
+margin period, EPE falls to about 0.23 and CVA to about 0.015.
+
+*In this library:* `credit/ExposureSimulator.java` (`simulate` over
+`Swap`s and `FxForward`s with an optional `Csa`), `credit/ExposureProfile.java`
+(`expectedExposure`, `expectedNegativeExposure`, `pfe`, `epe`), and
+`credit/CvaApproximator.java` (`cva`, `dva`, `cvaWrongWay`). Not
+implemented: multi-curve swaps (exposure swaps are single-curve), more
+than one FX pair, stochastic foreign rates, bilateral DVA with
+first-to-default, and a path-wise driver for wrong-way risk (the driver
+is the terminal factor, which tracks a collateralised residual poorly).
+Recipes 305 and 306.
+
+### 10g. SA-CCR: the regulatory exposure
+
+Banks must hold capital against counterparty exposure. SA-CCR is the
+Basel standardised formula for exposure at default (EAD) of a netting
+set: replacement cost today plus a formula add-on for how much exposure
+could grow, scaled by 1.4.
+
+Formally (BCBS 279, March 2014, Annex 4):
+
+```
+EAD        = 1.4 (RC + PFE)
+RC         = max(V - C, 0)                   unmargined
+RC         = max(V - C, TH + MTA - NICA, 0)  margined
+PFE        = multiplier x AddOn
+multiplier = min(1, 0.05 + 0.95 exp((V - C) / (2 x 0.95 x AddOn)))
+```
+
+For interest rates, each trade's adjusted notional is notional times the
+supervisory duration `SD = (e^{-0.05 S} - e^{-0.05 E}) / 0.05`, times its
+delta and maturity factor. Trades are bucketed by end date (under 1y, 1
+to 5y, over 5y) within each currency, and the effective notional is
+`sqrt(D1^2 + D2^2 + D3^2 + 1.4 D1 D2 + 1.4 D2 D3 + 0.6 D1 D3)`, times the
+0.5% supervisory factor. Credit, equity and commodities aggregate with a
+systematic plus idiosyncratic formula,
+`sqrt((sum rho_k A_k)^2 + sum (1 - rho_k^2) A_k^2)`.
+
+Worked example (BCBS 279 Annex 4a, Example 1). A USD 10-year payer and
+4-year receiver on 10,000 each and a EUR swaption on 5,000 from year 1 to
+11, with values 30, -20 and 50. RC is 60. `SD(0, 10)` is 7.87. The
+interest-rate add-on is 346.8, the multiplier is 1 because the set is in
+the money, and `EAD = 1.4 x (60 + 346.8) = 569`.
+
+*In this library:* `risk/SaCcr.java` (`unmargined`, `margined`,
+`supervisoryDuration`, `optionDelta`, `maturityFactor`) and
+`risk/SaCcrTrade.java` (`interestRate`, `fx`, `credit`, `equity`,
+`commodity`). The tests reproduce Annex 4a Examples 1 to 5. Not
+implemented: basis and volatility hedging sets, several margin agreements
+per netting set, and collateral haircuts (pass collateral already
+haircut). Recipes 307 and 308.
+
+### 10h. Smiles without arbitrage: SVI and SSVI
+
+A volatility smile fitted point by point can imply negative
+probabilities: a butterfly spread with a negative price, or a calendar
+spread where the longer option is cheaper. SVI is a five-parameter shape
+for one expiry's total variance that fits equity smiles well; SSVI
+extends it to a whole surface with conditions that rule out both kinds of
+arbitrage.
+
+Formally, with log-moneyness `k = ln(K/F)` and total variance
+`w = sigma_BS^2 T`, raw SVI is (Gatheral 2004; Gatheral and Jacquier
+2014, eq. 3.1)
+
+```
+w(k) = a + b (rho (k - m) + sqrt((k - m)^2 + sigma^2))
+```
+
+A slice is free of butterfly arbitrage if and only if (Gatheral and
+Jacquier 2014, Lemma 2.2)
+
+```
+g(k) = (1 - k w'/(2w))^2 - (w'^2/4)(1/w + 1/4) + w''/2 >= 0
+```
+
+SSVI writes the surface through the ATM total variance `theta_t`:
+
+```
+w(k, theta) = theta/2 (1 + rho phi k + sqrt((phi k + rho)^2 + 1 - rho^2))
+phi(theta)  = eta / (theta^gamma (1 + theta)^(1 - gamma))
+```
+
+With `gamma` in [0, 1/2], `eta (1 + |rho|) <= 2` and `theta_t`
+non-decreasing, the surface is free of static arbitrage (Gatheral and
+Jacquier 2014, Theorems 4.1 and 4.2, Remark 4.4). Each SSVI slice is a raw
+SVI slice with `a = theta (1 - rho^2)/2`, `b = theta phi / 2`,
+`m = -rho / phi` and `sigma = sqrt(1 - rho^2) / phi`.
+
+Worked example. Vogt's parameters `a = -0.0410`, `b = 0.1331`,
+`rho = 0.3060`, `m = 0.3586`, `sigma = 0.4153` form a valid SVI curve
+(positive total variance everywhere) yet `g` dips to about -0.033, so the
+slice has butterfly arbitrage. For SSVI with `theta = 0.04`,
+`rho = -0.3`, `eta = 1`, `gamma = 0.5`: `phi = 4.90`, and the raw slice
+is `a = 0.0182`, `b = 0.0981`, `m = 0.0612`, `sigma = 0.1946`, which
+gives back `w(0) = 0.0400`.
+
+*In this library:* `pricing/SviSlice.java` (`calibrate`, with an
+optional butterfly penalty; `densityFactor`, `minDensityFactor`),
+`pricing/SviSurface.java`, `pricing/SsviSurface.java` (`calibrate`,
+`slice`, `totalVariance`) and the interface
+`pricing/TotalVarianceSurface.java` (`impliedVol`, `price`). Recipes 309
+and 310.
+
+### 10i. Dupire local volatility
+
+Given an arbitrage-free surface of vanilla prices, there is exactly one
+diffusion `dS = (r - q) S dt + sigma_loc(S, t) S dW` that reprices all of
+them. Its volatility depends on spot and time and is read off the surface
+(Dupire 1994). Local vol is used to price path-dependent products
+consistently with today's vanillas; its weakness is that its implied
+smile dynamics (how the smile moves when spot moves) are poor.
+
+Formally, in total variance with `y = ln(K/F)` (Gatheral 2006, eq. 1.10):
+
+```
+sigma_loc^2(y, T) = (dw/dT) / g(y)
+```
+
+The denominator is the SVI butterfly factor `g` of section 10h and the
+numerator is the calendar condition, so the two no-arbitrage conditions
+are exactly what keeps the local variance positive and finite.
+
+Worked example. On a flat surface `w = sigma^2 T`, `dw/dT = sigma^2` and
+`g = 1`, so local vol equals `sigma` everywhere, which the tests check to
+1e-8.
+
+*In this library:* `pricing/DupireLocalVol.java` (`localVol`,
+`localVolAtMoneyness`) on any `TotalVarianceSurface`;
+`pricing/LocalVolPde.java` (Crank-Nicolson in log spot with a Rannacher start) and
+`pricing/LocalVolMonteCarlo.java` (`price` returns price and standard
+error). The tests pin the PDE within 2e-3 in implied vol of the SSVI
+vanillas on a 601 by 400 grid, and the Monte Carlo within four standard
+errors plus 0.5% of price. Recipe 311.
+
+### 10j. Exact vanna-volga
+
+FX desks see three liquid quotes per expiry: ATM, the 25-delta risk
+reversal and the 25-delta butterfly, which give three pillar strikes.
+Vanna-volga prices any other option as its flat-vol value plus the cost
+of the pillar options needed to hedge its vega, vanna and volga.
+
+Formally, solve the 3 by 3 system for weights `x_i` on the pillar
+options so that the hedge matches the target's vega, vanna and volga.
+The price is
+
+```
+V = V_BS(sigma_ATM) + sum_i x_i (C_mkt,i - C_BS,i(sigma_ATM))
+```
+
+(Castagna and Mercurio 2007). For vanillas the exact solve gives the same
+weights as the closed-form log-strike formula. For a one-touch the smile
+cost is scaled by the survival probability, `TV + p_survival sum_i x_i
+cost_i` (Wystup 2006).
+
+Worked example. Six-month pillars at 1.05, 1.10 and 1.15 with vols 10.5%,
+9.5% and 10.0%, spot 1.10, rates 3% and 2%. A 1.12 call prices at 0.022874
+by both the exact and the closed-form method. A 1.20 one-touch on 1m is
+172,605 with the smile cost against 202,659 at the flat ATM vol.
+
+*In this library:* `pricing/VannaVolga.java` (`priceExact`,
+`exactWeights`, `weightsFor`, `price` for the closed form) and
+`fx/VannaVolgaTouch.java` (`oneTouch`, `smileCost`). Recipe 312.
+
+### 10k. Heston by the COS method
+
+Heston prices need an integral of the characteristic function. The COS
+method of Fang and Oosterlee (2008) replaces the density with a cosine
+series on a finite interval. The coefficients come straight from the
+characteristic function, so a price is one sum of `N` terms. It is fast
+enough to sit inside a calibration loop.
+
+Formally (Fang and Oosterlee 2008, eqs. 30 to 33), with `x = ln(S/K)` and
+interval `[a, b] = [x + c1 - L sqrt(c2), x + c1 + L sqrt(c2)]` from the
+first two cumulants (their Table 11):
+
+```
+V = K e^{-rT} sum'_{k=0}^{N-1} Re{ phi(k pi/(b-a)) e^{i k pi (x - a)/(b-a)} } U_k
+```
+
+where the prime halves the first term and `U_k` are the payoff's cosine
+coefficients. The put is priced and the call follows by parity. The
+characteristic function is the "little Heston trap" form (Albrecher et
+al. 2007), which needs no branch tracking.
+
+Worked example. `S = K = 100`, `r = q = 0`, `T = 1`, `kappa = 1.5768`,
+`theta = 0.0398`, `sigma_v = 0.5751`, `rho = -0.5711`, `v0 = 0.0175` (the
+paper's test case). With the defaults `N = 1024` and `L = 32` the call is
+5.7851554344, 1.6e-8 from the paper's printed 5.785155450 and 2e-9 from
+the library's Simpson-rule Heston pricer. The paper's `L = 12` leaves an
+error of 4.5e-5 here, because the parameters are far from the Feller
+condition and the left tail is fat.
+
+*In this library:* `pricing/HestonCos.java` (`price`, `delta`, `gamma`,
+`vegaV0`, `parameterGradient`, all exact derivatives of the truncated
+series with the interval held fixed) and `pricing/HestonCalibrator.java`
+(Levenberg-Marquardt on vega-weighted price residuals with an analytic
+Jacobian and box bounds; Feller is not imposed). Recipes 313 and 314.
+
+### 10l. Touch options paid at hit, and double touches
+
+A one-touch pays a fixed amount if spot touches a barrier before
+expiry. If the payment is made at expiry, its value is the discounted hit
+probability. If it is paid at the moment of the hit, you receive it
+earlier, so it is worth more by the discounting from the hit time to
+expiry. A double no-touch pays if spot stays between two barriers; a
+double one-touch pays if it touches either.
+
+Formally, the pay-at-hit value is `payout x E[e^{-r tau} 1{tau <= T}]`,
+the Laplace transform of the first hitting time `tau`. With carry
+`b = r - q`, `mu = (b - sigma^2/2)/sigma^2`,
+`lambda = sqrt(mu^2 + 2r/sigma^2)` and
+`z = ln(H/S)/(sigma sqrt T) + lambda sigma sqrt T`, it is
+
+```
+payout [ (H/S)^{mu+lambda} N(eta z) + (H/S)^{mu-lambda} N(eta z - 2 eta lambda sigma sqrt T) ]
+```
+
+with `eta = 1` for a down barrier and -1 for an up barrier (Reiner and
+Rubinstein 1991; Haug 2007, section 4.17.3). The double-barrier survival
+probability is the Ikeda-Kunitomo (1992) image series, a sum over
+reflections in both barriers, truncated at `n = -50..50`; the tail is
+negligible once `ln(U/L)/(sigma sqrt T) >= 0.1`. A double no-touch plus a
+double one-touch is a zero-coupon bond.
+
+Worked example. EURUSD 1.10, barrier 1.20, six months, 12% vol, USD rate
+3%, EUR rate 4.5%, 1m payout. Paid at expiry the one-touch is 261,679;
+paid at hit it is 263,521. A double no-touch on 1.05 and 1.15 is 17,012
+and the double one-touch 968,100, which add to `1m x e^{-0.015} =
+985,112`.
+
+*In this library:* `pricing/TouchOption.java` (`oneTouch`, `noTouch`,
+`oneTouchPayAtHit`, `doubleNoTouch`, `doubleOneTouch`,
+`doubleNoTouchProbability`). For FX, `rate` is the domestic rate and
+`carry` the foreign rate. Recipe 315.
+
+### 10m. Seasoned Asian options
+
+An Asian option pays on the average of fixings. Once some fixings have
+set, part of the average is known, and the option is equivalent to a
+smaller option on the remaining fixings with an adjusted strike.
+
+Formally, with `n` fixings in total, `m` remaining and observed sum
+`A_obs`, the adjusted strike is `K* = (n K - A_obs) / m` and the price is
+`(m/n)` times an option on the average of the remaining fixings struck at
+`K*` (Haug 2007, section 4.20.1). If `K* <= 0` the call is certain to
+finish in the money and is worth its discounted forward; the put is worth
+zero. The remaining-average option is priced by Turnbull-Wakeman moment
+matching or by Curran (1994), which conditions on the geometric average
+and is accurate to well under 0.2% at 30% vol against a geometric
+control-variate Monte Carlo. Levy's formula is the continuous-average
+version (Haug 2007, section 4.20.2).
+
+Worked example. A one-year call struck at 100 on six fixings, three set
+at 102, 99 and 101 (sum 302) and three left at 0.5, 0.75 and 1 year.
+`K* = (600 - 302) / 3 = 99.33`. With spot 100, 3% rate and 30% vol,
+Curran gives 5.418 and Turnbull-Wakeman 5.426.
+
+*In this library:* `pricing/AsianOption.java` (`turnbullWakemanSeasoned`,
+`curranPrice`, `levyPrice`, plus `geometricPrice` and `arithmeticPrice`
+for new options). Recipe 316.
+
+### 10n. Discrete dividends on a tree
+
+A cash dividend drops the stock by a known amount on the ex-date. A
+standard binomial tree assumes a continuous yield, and the common
+workaround (a tree on the stock less the present value of dividends)
+misprices American calls, whose early-exercise decision sits right
+before the ex-date.
+
+Formally, the Vellekoop and Nieuwenhuis (2006) method keeps a recombining
+CRR lattice of stock levels. At an ex-date the value just before the drop
+is
+
+```
+V_cum(S) = max(exercise(S), V_ex(S - D))
+```
+
+with `V_ex` interpolated linearly in `S` on the lattice. Ex-dates snap to
+the nearest step, so the timing error is at most half a step.
+
+Worked example. Spot 100, strike 90, 5% rate, 25% vol, six months, a
+dividend of 6 at three months, 2,000 steps. The American call is 12.521
+and the European 10.232; the difference is the value of exercising just
+before the ex-date.
+
+*In this library:* `pricing/DividendTree.java` (`price`) with
+`pricing/DividendSchedule.java`. The tests check it equals
+`BinomialTree` with no dividends and matches the exact one-dividend
+integral for European and American calls. Recipe 317.
+
 ### 11. Backtesting without fooling yourself
 
 A **backtest** replays history against your strategy. The ways it lies to
@@ -942,6 +1661,30 @@ process that selected it still rotten. Four more defenses:
   every peak-to-recovery episode (depth, duration, time under water)
   and surfaces a drawdown still open at series end instead of hiding
   it, because that is often the current state of the strategy.
+
+### 11b. One strategy, three engines
+
+A strategy usually runs on several engines over its life: a bar
+backtester for research, a tick replay for execution detail, and a paper
+gateway before going live. If the three disagree on the same data, you
+need to know whether the strategy or an engine is at fault. The way to
+find out is to fix one contract that every engine honours and compare the
+fills.
+
+The contract here is narrow: the strategy is asked once per
+bar after the close, a buy while flat spends all cash and a sell while
+long sells everything, both at the close, with no costs. That is the only
+setting in which the three fill models coincide. The bar engine buys
+`cash/price` shares, possibly fractional; the tick and paper engines buy
+`floor(cash/price)` whole shares. So tick and paper always agree with
+each other, and all three agree exactly when `cash/price` is whole at
+every entry. Costs, spreads, limit orders and queue models differ by
+engine and are outside the contract.
+
+*In this library:* `backtest/StrategyRunner.java` (`run(Engine,
+strategy, tape, capital, workDir)` with `Engine.BAR_BACKTESTER`,
+`TICK_BACKTESTER` and `PAPER_GATEWAY`; `writeTape` writes the bars as a
+tick file with one print per bar at the close). Recipe 324.
 
 ### The desk playbooks: pairs, toxicity, the central risk book, rolls
 
@@ -1376,6 +2119,48 @@ the kernel takes over. Measured costs per stage are in
 lock, no syscall until the very last step. Every section of Part II
 was about removing exactly those.
 
+### 17b. FIX session schedules and tag 789
+
+A FIX session is not one endless connection. It has a schedule, usually
+daily (an FX venue might roll at 17:00 New York) or weekly (Sunday
+evening to Friday evening). At each new session period both sides reset
+their sequence numbers to 1 and discard the old message history; inside
+a period a reconnect resumes where it left off and gaps are filled by
+resend. Getting the period boundary wrong makes one side resend
+yesterday's orders or reject today's Logon.
+
+The second problem is the Logon handshake after a drop. Classic FIX
+learns about a gap only when the next message arrives with a higher
+sequence number than expected, then asks for a resend. Tag 789,
+NextExpectedMsgSeqNum, puts that number in the Logon itself, so each
+side knows immediately what the other has missed.
+
+Formally, a period starts at each occurrence of the start time in the
+schedule's time zone and ends at the next occurrence of the end time.
+Equal start and end mean the session is always open and only rolls. The
+store rolls (both counters to 1, history discarded) when the session is
+created, logs on or ticks in a new period, and the period is saved with
+the store so a process restarted the next morning resets instead of
+resuming. With 789 on the Logon: if the peer's 789 is above our next
+outgoing number, the peer claims to expect messages we never sent, which
+is fatal, so we log out. If it is below, we replay the gap right after
+the Logon exchange, as for a ResendRequest (FIX 4.4 errata on Logon tag
+789; FIXT 1.1 session protocol, NextExpectedMsgSeqNum).
+
+Worked example. A daily schedule from 17:00 to 17:00 America/New_York
+rolls at 21:00 UTC in summer and 22:00 UTC in winter. US daylight saving
+ends on 1 November 2026, so the period that opens at 17:00 on 31 October
+runs from 21:00Z to 22:00Z the next day: 25 hours.
+
+*In this library:* `fix/FixSessionSchedule.java` (`daily`, `weekly`,
+`sessionStartMillis`, `sessionEndMillis`, `isInSession`),
+`fix/FixSessionOptions.java` (`withSchedule`,
+`withNextExpectedMsgSeqNum`), passed to
+`FixSession.overStream(config, listener, acceptor, store, out, clock, options)`.
+`fix/FileSessionStore.java` keeps the period in its `session.period`
+file. A Logon outside the window is refused, and an established session
+logs out when the window closes. Recipes 325 and 326.
+
 ### 18. Scaling out and staying safe
 
 One core, one engine has a throughput ceiling. The scaling answer here is
@@ -1551,7 +2336,10 @@ execution algorithms, FX and equities market structure, hedging, market
 risk and alpha research. From Q501 the questions change from concept to
 workday: each is a scenario such as a morning data incident, a FIX
 session dispute, a desk decision or a post-trade review, worked end to
-end with this library's classes. All class paths are relative to
+end with this library's classes. Q1001-Q1058 cover the newer areas:
+two-curve rates and standard CDS, counterparty exposure and SA-CCR,
+arbitrage-free smiles, exotics and numerics, factor risk and alpha
+construction, and trading operations. All class paths are relative to
 `src/main/java/com/quantfinlib/`.
 
 ---
@@ -2822,11 +3610,12 @@ them. Since LIBOR's 2021-23 cessation, the projection side has largely
 collapsed onto compounded SOFR/ESTR, but the discounting lesson
 (collateral rate, not index rate) is permanent.
 
-*In this library:* `rates/YieldCurve.java` -- the single-curve bootstrap
-(`bootstrapAnnualParSwaps`), which is the textbook
-pre-2008 setup; rebuilding it as two curves (OIS discounting, separate
-projection) is the natural exercise on top, and the javadoc's
-discount-factor framing is the piece that carries over unchanged.
+*In this library:* `rates/MultiCurveBootstrap.java` builds the OIS curve
+(`bootstrap`) and then the projection curve discounted on it
+(`bootstrapProjection`); `rates/MultiCurveRisk.buildCurves` returns both
+as a `CurvePair`. `rates/YieldCurve.java` keeps the single-curve
+bootstrap (`bootstrapAnnualParSwaps`), the pre-2008 setup. See Part I
+section 10d.
 
 ### 57. "Eurodollar futures imply 3.20%, the FRA for the same period quotes 3.14%. Free money?"
 
@@ -3576,8 +4365,9 @@ If higher, price it or decline it.
 *In this library:* `risk/CounterpartyExposureTracker.java` (the
 exposure leg -- what the dependence multiplies),
 `risk/GaussianCopula.java` and `risk/Dependence.java` (the joint-
-tail machinery a correlated exposure-default model is built from);
-the wrong-way overlay is the natural exercise combining them.
+tail machinery), and `credit/CvaApproximator.cvaWrongWay`, which prices
+the wrong-way overlay with a Gaussian copula on the exposure simulated by
+`credit/ExposureSimulator.java` (Part I section 10f).
 
 ### 81. "Explain a margin spiral to me like I'm the CFO -- then tell me why prudent risk management at each firm made it worse."
 
@@ -24963,15 +25753,16 @@ fall, a positive correlation between the payoff and the reinvestment rate
 that is worth money to the long-rate-risk side. To offset that advantage the
 futures price sits lower (the futures rate higher) than the forward by a
 convexity adjustment, roughly `0.5 * sigma^2 * t1 * t2` in a Gaussian model.
-Not implemented: a dedicated futures-convexity function. But the same Gaussian second-moment machinery already appears
-in the Hull-White bond's convexity term, `sigma^2 * B^2 * (1 - e^{-2at}) /
-(4a)` (the natural place to extend for a production adjustment) and
-naming a method that does not exist would break the codebase's own
-rule against citing code that is not there.
+The library adjusts for it. `RateFuture.hullWhiteConvexity` gives the
+Hull-White adjustment
+`B(t1,t2)/(t2-t1) [B(t1,t2)(1 - e^{-2a t1}) + 2a B(0,t1)^2] sigma^2/(4a)`,
+which tends to the Ho-Lee value as the mean reversion goes to zero, and
+the multi-curve bootstrap adds it to the curve forward when it matches a
+futures quote. With 1% vol on a 9x12 future it is about 0.37bp.
 
-*In this library:* `rates/ShortRateModels.java` -- the Gaussian convexity
-term inside `hullWhiteBond` is the closest existing machinery; there is no
-standalone futures-forward convexity method, stated plainly.
+*In this library:* `rates/RateFuture.java` (`hullWhiteConvexity`,
+`convexityAdjustment`, `ofPrice`), used by
+`rates/MultiCurveBootstrap.bootstrapProjection`; Part I section 10d.
 
 ### 937. "Rates went negative. What breaks in your vol quoting, and how does the market fix it?"
 
@@ -25985,8 +26776,10 @@ You make the documentation executable, so a stale doc fails the build like stale
 code fails a test. The aim is compile-and-run: every Part IV answer points at
 a class you can open and a number you can re-derive, and a review fact-checks
 by compiling and running, not by reading. This library only partly meets that
-aim. Not implemented: the build does not compile the `docs/COOKBOOK.md`
-recipes, so they are checked by review when signatures change. A prose claim
+aim: CI compiles every `docs/COOKBOOK.md` recipe against the current
+build (`scripts/check-cookbook.py`), so a renamed method fails the build,
+but the recipes are compiled, not run, and the prose around them is still
+checked by review. A prose claim
 with no runnable anchor is exactly the thing that rots -- so every claim has one:
 "delta-gamma reduces to delta-normal when gamma is zero" is not a sentence, it
 is an assertion in `risk/VarEngine.java`'s test; "a FOK either fills entirely or
@@ -26337,6 +27130,742 @@ number matters more than a nanosecond.
 
 ---
 
+## Two-curve rates and standard CDS (Q1001-Q1006)
+
+### 1001. "Why can't one curve both project 3M forwards and discount a collateralised swap?"
+
+Because since 2008 the two rates differ. The 3-month index carries bank
+credit and term liquidity risk; a collateralised swap's collateral earns
+the overnight rate, so its cash flows are funded, and therefore
+discounted, at OIS. One curve fitted to 3M swaps would discount at a rate
+that is too high, and one fitted to OIS would project forwards that are
+too low. The fix is a curve per role: OIS for discounting, then a
+projection curve per index tenor, built with its swaps discounted on the
+OIS curve already fixed. A par 3M swap then reprices to zero on the pair,
+and the old single-curve setup is the special case where the curves
+coincide.
+
+*In this library:* `rates/MultiCurveBootstrap.java` (`bootstrap`,
+`bootstrapProjection`), `rates/MultiCurveRisk.buildCurves` returning a
+`CurvePair`, and the two-curve `SwapPricer.parRate` and `payerPv`.
+
+### 1002. "Log-linear or monotone-convex: which interpolation, and what does each cost you?"
+
+Log-linear on discount factors gives piecewise-flat forwards. It is
+local, cheap and its bucket risks add up to the parallel DV01 almost
+exactly (about 1e-7 at 1bp), but the forward curve jumps at every
+pillar, which hurts anything that depends on forwards between pillars.
+Monotone-convex (Hagan and West 2006) gives continuous forwards, keeps
+each interval's average forward, and keeps monotone inputs monotone. The
+cost is that it is not differentiable in its inputs where an interval
+changes zone, so bucketed DV01s sum to the parallel figure only to a few
+percent at a 1bp bump. Use monotone-convex for pricing that reads
+forwards, and know that its bucket report is not exactly additive.
+
+*In this library:* `rates/CurveInterpolation.java` (`LOG_LINEAR_DISCOUNT`,
+`MONOTONE_CONVEX`), `rates/MultiCurveRisk.bucketedDv01` and
+`parallelDv01`; `MultiCurveTest` pins both properties.
+
+### 1003. "A 9x12 future implies a rate 0.4bp above the FRA. Is that an arbitrage?"
+
+Not by itself. A futures contract is margined daily, and the margin flow
+is positively correlated with the rate used to reinvest it, which is
+worth something to the short-futures (long-rate) side. The futures rate
+therefore sits above the forward by a convexity adjustment. In Ho-Lee it
+is `sigma^2 t1 t2 / 2`: with 1% rate vol, `0.0001 x 0.75 x 1 / 2`, or
+0.375bp. Hull-White with 3% mean reversion gives about 0.365bp. A gap of
+that size is the adjustment, not free money. Strip it before feeding a
+future into a curve as if it were a FRA.
+
+*In this library:* `rates/RateFuture.java` (`hullWhiteConvexity`,
+`convexityAdjustment`, and `ofPrice`, which takes the mean reversion and
+volatility used for it).
+
+### 1004. "Why do CDS trade on a 100bp coupon plus upfront instead of at par spread?"
+
+Fixed coupons make contracts fungible. Two trades on the same name and
+maturity at different par spreads cannot be netted; two trades on the
+same 100bp coupon differ only in the upfront and can be compressed and
+cleared. The market still quotes a spread for readability, and the ISDA
+standard model, applied with a flat hazard, is the agreed conversion
+between the quoted spread and the upfront. A 300bp quote on a 100bp
+coupon means the buyer pays roughly `(300 - 100)bp x risky annuity`
+upfront; the model gives 8.39% for a 5-year contract at 40% recovery
+and 3.5% rates.
+
+*In this library:* `credit/IsdaCdsModel.java` (`standardContract`,
+`quotedSpreadToUpfront`, `upfrontToQuotedSpread`, `COUPON_100BP`,
+`COUPON_500BP`).
+
+### 1005. "A 5-year CDS traded today: what is its maturity date and when does the first coupon accrue from?"
+
+Standard CDS mature on IMM dates with a semi-annual roll: contracts
+traded from 20 September to 19 March roll to the December maturity, and
+from 20 March to 19 September to the June maturity. A 5-year trade on 2
+November 2026 matures on 20 December 2031. The first coupon accrues from
+the previous IMM date (20 September 2026, adjusted to Monday 21
+September), not from the trade date. The buyer pays a full first coupon,
+so the cash settlement includes the accrued amount in the buyer's favour. Protection steps in at T+1 and the
+upfront settles at T+3 business days.
+
+*In this library:* `credit/IsdaCdsModel.java` (`standardMaturity`,
+`nextImmDate`, `previousImmDate`, `accrualStartDate`, `schedule`).
+Holidays are not applied: the calendar is weekends only.
+
+### 1006. "How do you check a CDS pricer without the vendor's test grid?"
+
+Check each leg against an independent calculation. On every segment of
+the schedule with constant hazard and forward the ISDA legs have a
+closed form, so numerical quadrature of the same integrals is an
+independent reference: the library's legs agree with it to 1e-10. Then
+check round trips (a bootstrapped curve reprices every input at par;
+`upfrontToQuotedSpread` inverts `quotedSpreadToUpfront`) and the credit
+triangle as a rough sense check, `lambda ~ S / (1 - R)`. What this does
+not prove is agreement with the Markit grid to the cent, which needs the
+published grid and holiday calendars, so that claim is not made.
+
+*In this library:* `credit/IsdaCdsModel.java` (`protectionLeg`,
+`riskyAnnuityDirty`, `bootstrap`, `flatHazardForParSpread`) and its tests.
+
+---
+
+## Counterparty exposure and capital (Q1007-Q1013)
+
+### 1007. "Draw the EE profile of a 5-year payer swap and of an FX forward. Why are they different shapes?"
+
+The swap's exposure starts at zero, rises as rates diffuse, and falls as
+coupons are paid and fewer cash flows remain: a hump peaking around a
+third of the way in. Each point is a swaption on the remaining swap,
+which is why the discounted EE at a reset date equals a swaption price.
+The FX forward exchanges one large amount at maturity, so nothing runs
+off and its exposure grows like `sqrt(t)` all the way to maturity. With
+the library's example (100 notional, 3.2% fixed, 1% rate vol), EE at two
+years is about 1.67 and EPE over five years about 1.30.
+
+*In this library:* `credit/ExposureSimulator.java` (`Swap`, `FxForward`,
+`simulate`), `credit/ExposureProfile.java` (`expectedExposure`,
+`discountedExpectedExposure`, `pfe`, `epe`).
+
+### 1008. "You have a zero-threshold daily CSA. Why is your exposure not zero?"
+
+Because collateral lags. When the counterparty defaults, the last margin
+call they met was some days earlier, and closing out the trades takes
+more days. Over that margin period of risk the value can move against
+you with no further collateral. A threshold and a minimum transfer
+amount add a fixed slice on top. In the library example a 10-day margin
+period cuts EPE from about 1.30 to about 0.23 and CVA from about 0.083
+to about 0.015: much smaller, but not zero.
+
+*In this library:* `ExposureSimulator.Csa(threshold, minimumTransfer,
+marginPeriodYears)`; the simulator lags the collateral by the margin
+period on each path.
+
+### 1009. "What is wrong-way risk on a payer swap, and how does the library price it?"
+
+A payer swap is worth most when rates are high. If the counterparty is
+more likely to default when rates are high, for example a borrower with
+floating-rate debt, then default and exposure come together and the
+independent CVA understates the loss. The library links default to the
+terminal rate factor with a Gaussian copula: each bucket's default
+probability is conditioned on the driver `X`, so paths with large
+exposure get more default weight while the marginal default curve stays
+the same. With `rho = 0.5` the uncollateralised example's CVA rises from
+about 0.083 to about 0.146.
+
+*In this library:* `CvaApproximator.cvaWrongWay(profile, cpty, lgd, rho,
+ExposureProfile.Factor.RATES)`; `rho = 0` gives back `cva`.
+
+### 1010. "Your wrong-way CVA on a collateralised swap came out below the independent CVA. Bug?"
+
+Not a bug in the arithmetic, a limit of the model. The copula uses the
+terminal value of the rate factor as the driver. Uncollateralised, large
+exposure goes with high terminal rates, so the overlay adds charge. Under
+a CSA the residual exposure comes from moves over the 10-day margin
+period, which hardly correlate with the terminal level; conditioning on
+that level then shifts default weight to dates and paths where the
+residual is not large. Recognise when the driver does not track the
+exposure you are charging for. A path-wise driver would fix it and is not
+implemented.
+
+*In this library:* `credit/CvaApproximator.java` (the javadoc states the
+terminal-driver simplification); compare recipes 305 and 306.
+
+### 1011. "Walk me through SA-CCR for one netting set."
+
+Start with replacement cost: the positive net value less collateral, or
+for a margined set the larger of that and threshold plus MTA less net
+independent collateral. Then the add-on. Each trade gets an adjusted
+notional (for rates, notional times supervisory duration), a supervisory
+delta and a maturity factor; trades net within hedging sets (a currency
+for rates, with three maturity buckets aggregated with 1.4 and 0.6 cross
+terms), times a supervisory factor (0.5% for rates). The multiplier lets
+over-collateralisation reduce the add-on, floored at 5%. Finally
+`EAD = 1.4 x (RC + multiplier x AddOn)`.
+
+*In this library:* `risk/SaCcr.java` (`unmargined`, `margined`,
+`supervisoryDuration`, `maturityFactor`, `multiplier`) and
+`risk/SaCcrTrade.java`.
+
+### 1012. "Reproduce BCBS 279 Example 1. Where do the numbers come from?"
+
+Three trades: a USD 10-year payer and a 4-year receiver on 10,000 each,
+and a EUR swaption on a 1-to-11-year swap on 5,000, valued 30, -20 and
+50. RC is 60. The supervisory duration of the 10-year swap is
+`(1 - e^{-0.5}) / 0.05 = 7.87`. The USD trades sit in different maturity
+buckets, so the 1.4 cross term applies to their opposite-sign effective
+notionals; the swaption's delta comes from the supervisory formula with
+50% vol. The interest-rate add-on is 346.8, the multiplier is 1 because
+the set is in the money, and `EAD = 1.4 x (60 + 346.8) = 569`.
+
+*In this library:* `risk/SaCcrTest.java` reproduces Annex 4a Examples 1
+to 5; `SaCcr.optionDelta` gives the swaption delta.
+
+### 1013. "What does the library's SA-CCR leave out?"
+
+Basis and volatility hedging sets (paras 162-163), netting sets covered
+by several margin agreements (paras 185-187) and collateral haircuts,
+which the caller applies before passing `C`. It also takes year
+fractions the caller computes rather than dates. Those gaps matter for a
+bank's full calculation; they do not change the mechanics a reader needs
+to follow the standard.
+
+*In this library:* `risk/SaCcr.java` class javadoc, "Out of scope".
+
+---
+
+## Arbitrage-free smiles (Q1014-Q1022)
+
+### 1014. "Your SVI fit has positive total variance everywhere. Can it still be arbitrageable?"
+
+Yes. Positive total variance only says every implied vol is real. The
+condition for no butterfly arbitrage is that the implied density is
+non-negative, which for a slice is `g(k) >= 0` (Gatheral and Jacquier
+2014, Lemma 2.2). Vogt's parameters are the standard counterexample:
+`a = -0.0410`, `b = 0.1331`, `rho = 0.3060`, `m = 0.3586`,
+`sigma = 0.4153` give positive variance but `g` reaches about -0.033, so
+some butterfly has a negative price.
+
+*In this library:* `pricing/SviSlice.java` (`densityFactor`,
+`minDensityFactor`, and `calibrate(k, w, weights, true)` with a
+butterfly penalty).
+
+### 1015. "What does SSVI buy you over fitting SVI slice by slice?"
+
+Arbitrage-freedom across expiries by construction. Independent slices
+can cross, which is calendar arbitrage. SSVI writes the whole surface
+through the ATM total variance `theta_t` and three global parameters,
+and with `gamma` in [0, 1/2], `eta (1 + |rho|) <= 2` and non-decreasing
+`theta_t` it is free of static arbitrage (Gatheral and Jacquier 2014,
+Theorems 4.1, 4.2). The cost is flexibility: three parameters for every
+expiry's shape, which fits index smiles well and short-dated single
+names less well. Each slice is still a raw SVI slice, so the slice tools
+apply.
+
+*In this library:* `pricing/SsviSurface.java` (the constructor rejects
+parameters outside the region; `calibrate`, `slice`).
+
+### 1016. "Convert an SSVI slice to raw SVI."
+
+`a = theta (1 - rho^2) / 2`, `b = theta phi / 2`, `m = -rho / phi`,
+`sigma = sqrt(1 - rho^2) / phi`, with `rho` the same. Example: `theta =
+0.04`, `rho = -0.3`, `eta = 1`, `gamma = 0.5` give `phi = 4.90`, then
+`a = 0.0182`, `b = 0.0981`, `m = 0.0612`, `sigma = 0.1946`. Check: raw
+SVI at `k = 0` gives 0.0400, the ATM total variance.
+
+*In this library:* `SsviSurface.slice(t)` returns the `SviSlice`.
+
+### 1017. "Write the Dupire formula in total variance. Where does arbitrage show up?"
+
+`sigma_loc^2(y, T) = (dw/dT) / g(y)` with `y = ln(K/F)` (Gatheral 2006,
+eq. 1.10). The numerator is non-negative exactly when there is no
+calendar arbitrage, and the denominator is the butterfly factor `g`, so
+an arbitrageable surface gives a negative or infinite local variance.
+That is why local vol is built on a surface that is arbitrage-free by
+construction, such as SSVI, and not on raw interpolated quotes.
+
+*In this library:* `pricing/DupireLocalVol.java` on any
+`TotalVarianceSurface`.
+
+### 1018. "How do you know your local vol implementation is right?"
+
+Three checks. A flat surface must return the flat vol (the tests pin
+1e-8). The local-vol model must reprice the vanillas it was built from,
+by two independent methods: a PDE (within 2e-3 implied vol on a 601 by
+400 Crank-Nicolson grid) and a Monte Carlo (within four standard errors
+plus 0.5% of price, 20,000 antithetic pairs). And the two methods must
+agree with each other on a path-independent payoff before you trust
+either on a path-dependent one.
+
+*In this library:* `pricing/LocalVolPde.java`,
+`pricing/LocalVolMonteCarlo.java`, `pricing/DupireLocalVol.java`.
+
+### 1019. "Local vol reprices every vanilla. Why do desks still not trust it for barriers?"
+
+Because it gets today's smile right and tomorrow's wrong. Local vol
+predicts that the smile shifts in the opposite direction to spot (Hagan,
+Kumar, Lesniewski and Woodward 2002), while observed smiles move with
+spot. Barrier and forward-start values depend on future smiles, so a
+model calibrated only to today's vanillas misprices them. Stochastic
+vol (Heston) or stochastic-local vol is the usual answer; local vol stays
+as the consistency check.
+
+*In this library:* `pricing/DupireLocalVol.java` and
+`pricing/HestonCos.java` for the comparison.
+
+### 1020. "What does 'exact' vanna-volga mean?"
+
+Solving for the hedge weights instead of using a formula. Pick weights
+`x_i` on the three pillar options so the hedge matches the target's
+vega, vanna and volga (a 3 by 3 linear solve), then add the market cost
+of that hedge over its flat-vol value. For vanillas the solve gives the
+same weights as the closed-form log-strike formula; the tests check
+this, and in the library example a 1.12 call is 0.022874 both ways. The
+exact form is what extends to products with no closed-form weights.
+
+*In this library:* `pricing/VannaVolga.java` (`exactWeights`,
+`weightsFor`, `priceExact`, `price`).
+
+### 1021. "How is vanna-volga applied to a one-touch?"
+
+Value the touch at the flat ATM vol, compute the smile cost of the
+vega-vanna-volga hedge, and multiply that cost by the survival
+probability, on the argument that the hedge is unwound if the barrier is
+hit (Wystup 2006). In the library example a 1.20 one-touch on 1m with
+spot 1.10 is 172,605 with the smile cost against 202,659 at the flat
+ATM vol.
+
+*In this library:* `fx/VannaVolgaTouch.java` (`oneTouch`, `smileCost`).
+
+### 1022. "Where does vanna-volga break?"
+
+Far outside the pillars and for strongly path-dependent products. The
+method has no dynamics and no no-arbitrage guarantee; it reproduces the
+three pillars exactly and interpolates between them, and the survival
+weighting for touches is a market convention rather than a derivation.
+For double barriers or long-dated exotics, desks move to a stochastic or
+local-stochastic vol model.
+
+*In this library:* `pricing/VannaVolga.java` javadoc; compare
+`pricing/TouchOption.java` and `pricing/HestonCos.java`.
+
+---
+
+## Exotics and numerics (Q1023-Q1034)
+
+### 1023. "Explain the COS method in three sentences."
+
+Write the density of the log price on a finite interval as a cosine
+series. The series coefficients are the real parts of the characteristic
+function at `k pi / (b - a)`, so they come for free in Heston. The price
+is then a sum of `N` terms of coefficient times the payoff's cosine
+coefficient, which is analytic for calls and puts (Fang and Oosterlee
+2008).
+
+*In this library:* `pricing/HestonCos.java` (`price` with defaults
+`N = 1024`, `L = 32`, or explicit `terms` and `truncation`).
+
+### 1024. "The paper uses L = 12. Why does the library default to 32?"
+
+Because on the paper's own Heston test case `L = 12` leaves an error of
+about 4.5e-5. That parameter set is far from the Feller condition, the
+variance spends time near zero, and the log-price density has a fat left
+tail that a 12-standard-deviation interval cuts off. With `L = 32` and
+`N = 1024` the price is 5.7851554344, 1.6e-8 from the printed value and
+2e-9 from an independent Simpson-rule integration.
+
+*In this library:* `HestonCos.DEFAULT_TRUNCATION`; the cross-check
+against `pricing/Heston.java` is in the tests.
+
+### 1025. "How do you get exact Greeks out of COS for calibration?"
+
+Differentiate the truncated series itself. With the interval held fixed,
+the price is an explicit function of spot and the five parameters, so
+forward-mode dual numbers carried through the characteristic function
+give exact derivatives of the series, not finite differences. The
+calibrator uses these derivatives for an analytic Jacobian in
+Levenberg-Marquardt, so no bump size has to be tuned.
+
+*In this library:* `HestonCos.delta`, `gamma`, `vegaV0`,
+`parameterGradient`; `pricing/HestonCalibrator.java`.
+
+### 1026. "Pay-at-hit versus pay-at-expiry one-touch: which is worth more and by how much?"
+
+Pay-at-hit, by the discounting from the hit time to expiry. Its value is
+`E[e^{-r tau} 1{tau <= T}]`, against `e^{-rT} P(tau <= T)` paid at
+expiry; the two agree when the rate is zero. EURUSD 1.10, barrier 1.20,
+six months, 12% vol, rates 3% and 4.5%: 263,521 paid at hit against
+261,679 at expiry per 1m.
+
+*In this library:* `TouchOption.oneTouchPayAtHit` and `oneTouch`.
+
+### 1027. "Price a double no-touch and check it."
+
+The double no-touch is the discounted probability of staying inside both
+barriers, from the Ikeda-Kunitomo image series (reflections in both
+barriers, `n = -50..50` in the library). The check: a double no-touch
+plus a double one-touch on the same barriers is a zero-coupon bond. With
+barriers 1.05 and 1.15 on spot 1.10: 17,012 plus 968,100 equals
+`1m x e^{-0.015} = 985,112`. The tests also cross-check against the
+eigenfunction series to 1e-10.
+
+*In this library:* `TouchOption.doubleNoTouch`, `doubleOneTouch`,
+`doubleNoTouchProbability`, `DOUBLE_TOUCH_SERIES_TERMS`.
+
+### 1028. "When does the double-touch series need more terms?"
+
+When the barriers are close relative to the volatility over the life of
+the trade. The tail of the image series is negligible for
+`ln(U/L) / (sigma sqrt T) >= 0.1`; tighter than that, more reflections
+matter. The library fixes the range at `n = -50..50`, and the tests
+compare the result with an eigenfunction expansion to 1e-10.
+
+*In this library:* `pricing/TouchOption.java` javadoc.
+
+### 1029. "Half the fixings of an Asian have set. How do you price what is left?"
+
+Fold the known part into the strike. With `n` fixings, `m` left and
+observed sum `A_obs`, the payoff `max(A - K, 0)` equals
+`(m/n) max(A_rem - K*, 0)` with `K* = (n K - A_obs) / m`. Price an Asian
+on the remaining fixings at `K*` and scale. Example: six fixings, three
+set at 102, 99 and 101, strike 100: `K* = (600 - 302) / 3 = 99.33`, and
+Curran gives 5.418 for the one-year call at 30% vol.
+
+*In this library:* `AsianOption.curranPrice`, `turnbullWakemanSeasoned`.
+
+### 1030. "What if the adjusted strike is negative?"
+
+Then the average is certain to finish above the strike: the call has no
+optionality left and is worth `(m/n) e^{-rT} (E[A_rem] - K*)`, a
+discounted forward; the put is worth zero. Any pricer that feeds a
+negative strike into a lognormal formula returns nonsense, so the case
+is handled before the formula.
+
+*In this library:* `pricing/AsianOption.java` (the `kStar <= 0` branch).
+
+### 1031. "Curran or Turnbull-Wakeman?"
+
+Curran (1994) conditions on the geometric average, which is lognormal,
+and approximates the arithmetic average given it; Turnbull-Wakeman
+matches the first two moments of the arithmetic average to a lognormal.
+In the tests Curran stays well under 0.2% from a geometric
+control-variate Monte Carlo at 30% vol. In the seasoned example the two differ by less than 0.01. Levy
+is the continuous-average limit of Turnbull-Wakeman.
+
+*In this library:* `AsianOption.curranPrice`, `turnbullWakemanSeasoned`,
+`levyPrice`.
+
+### 1032. "Why can't you price an American call with a discrete dividend on a plain binomial tree?"
+
+The early-exercise decision happens just before the ex-date, so the
+dividend's exact size and timing drive the value. A tree with a
+continuous yield smears the dividend over the life; a tree on the stock
+less the PV of dividends gets the drop right but distorts the volatility
+of the part that drops. Carrying actual stock levels and applying the
+drop at the ex-date avoids both, at the cost of interpolating because
+`S - D` is not a lattice node.
+
+*In this library:* `pricing/DividendTree.java`; Vellekoop and
+Nieuwenhuis (2006).
+
+### 1033. "What exactly happens at the ex-date node?"
+
+`V_cum(S) = max(exercise(S), V_ex(S - D))`: the holder compares
+exercising cum-dividend with holding through the drop, where the
+continuation value at `S - D` is linearly interpolated from the ex-date
+lattice. Example: spot 100, strike 90, 25% vol, six months, a dividend
+of 6 at three months: the American call is 12.521 and the European
+10.232.
+
+*In this library:* `DividendTree.price(type, style, spot, strike, rate,
+borrow, vol, timeYears, dividends, steps)`.
+
+### 1034. "How is the dividend tree tested?"
+
+Three ways. With no dividends it must equal `BinomialTree`. With one
+dividend there is an exact integral for European and American calls, and
+the tree matches it within 6e-3 at 2,000 steps. And the American call
+must exercise early just before a large ex-date. Ex-dates snap to the
+nearest step, so the timing error is at most half a step.
+
+*In this library:* `pricing/DividendTree.java` and its tests.
+
+---
+
+## Factor risk and alpha construction (Q1035-Q1046)
+
+### 1035. "Why does a factor model beat the sample covariance for 3,000 stocks?"
+
+Parameter count. The sample covariance has about 4.5 million free
+entries from a few hundred observations per name, so it is noisy and
+singular, and an optimiser will lever up on the noise. A factor model
+needs a factor covariance of a few dozen factors plus one specific
+variance per name, estimated from cross-sectional regressions that use
+every stock every day. The structure is an assumption, but it is a much
+smaller error than the noise it removes.
+
+*In this library:* `risk/FactorRiskModel.java` (`estimate`,
+`covariance`, `decompose`).
+
+### 1036. "Why is there a constraint in the factor regression?"
+
+Because the sector dummies sum to the market column, so the regression
+is singular without one. The USE4 convention imposes that the
+cap-weighted sector returns sum to zero, `sum_s c_s f_s = 0`. The market
+factor is then the cap-weighted market and each sector factor is that
+sector's return relative to it. The library solves it exactly by
+substitution rather than with a penalty (Menchero 2010).
+
+*In this library:* `FactorRiskModel.estimate`, WLS with `sqrt(cap)`
+weights.
+
+### 1037. "Name the three adjustments between raw EWMA factor covariance and the forecast."
+
+Newey-West, for serial correlation in daily factor returns:
+`F = C0 + sum_l (1 - l/(L+1)) (C_l + C_l')`. The volatility regime
+adjustment, which scales `F` by an EWMA of the squared standardised
+factor returns, so a model that under-forecast last month catches up.
+And, on the specific side, Bayesian shrinkage of each name's specific
+vol toward its size bucket's mean (USE4 sections 4.3 and 5.3).
+`Settings.plain()` turns all three off so you can see what each adds.
+
+*In this library:* `FactorRiskModel.Settings` (`defaults`, `plain`).
+
+### 1038. "Two momentum signals and a value signal: how do you weight them?"
+
+Orthogonalise first, then weight by forecasting power at your horizon.
+Gram-Schmidt in a chosen order credits the second momentum signal only
+for what the first does not say. The weight of each is its
+horizon-matched IC over the sum of absolute ICs, shrunk toward equal
+weights to allow for estimation error. ICs of 0.04, 0.02 and 0.01 with
+30% shrinkage give weights of 0.5, 0.3 and 0.2.
+
+*In this library:* `alpha/AlphaCombiner.java` (`fit`,
+`Settings.of(h).withShrinkToEqual(0.3)`).
+
+### 1039. "What does 'horizon-matched IC' mean and why does it matter?"
+
+The IC is averaged over the bars you actually hold, not just the next
+bar: `IC_k(t) = (1/H) sum_{l<H} corr(z'_k(t), r_{t+l -> t+l+1})`. A
+signal that predicts tomorrow well but decays within a week has a high
+one-day IC and a low 21-day IC. Weighting by the one-day IC on a monthly
+rebalance overweights it (Grinold and Kahn 2000, ch. 13).
+
+*In this library:* `AlphaCombiner.Settings.of(horizon)`;
+`AlphaReport.icTable` prints IC per factor per horizon.
+
+### 1040. "Does the order of factors in the combiner matter?"
+
+Yes, by design of Gram-Schmidt. The first factor keeps its full score;
+each later factor keeps only its residual against the earlier ones, so
+it is credited only for new information. Put the factor you trust most,
+or the one you want credited for shared variation, first. With
+`withOrthogonalize(false)` the raw scores are used.
+
+*In this library:* `AlphaCombiner.Settings.withOrthogonalize`.
+
+### 1041. "Your value strategy made money. How do you know it was value?"
+
+Attribute it. Each bar's P&L splits into factor returns times the book's
+exposures, specific returns times holdings, and a trading term from
+changes within the bar, with cost and financing; the parts add to the
+net exactly. If the cumulative momentum line dwarfs the value line, the
+strategy was a momentum bet.
+
+*In this library:* `alpha/BacktestAttribution.java` (`attribute`,
+`cumulativeFactor`, `format`) from `AlphaBacktester.runTraced`.
+
+### 1042. "What is the 'trading' term in attribution?"
+
+The difference between the actual P&L per name and what the start-of-bar
+holdings would have earned from factor and specific returns. It is
+nonzero when positions change within the bar, so it measures the timing
+and execution of trades. A large negative trading term usually points at
+execution cost not captured elsewhere.
+
+*In this library:* `BacktestAttribution.trading(s)`.
+
+### 1043. "Compute one day's factor P&L by hand."
+
+Long $600k of A with momentum exposure 1.0, short $400k of B with
+exposure -0.5: book exposure `600k x 1 + (-400k) x (-0.5) = 800k`. A
+0.1% momentum return gives $800 of momentum P&L. The short in a
+low-momentum name adds to the long momentum bet rather than hedging it.
+
+*In this library:* `BacktestAttribution.factor(s, k)`.
+
+### 1044. "Why does a strategy's Sharpe fall with capital?"
+
+Impact. The gross return per dollar does not depend on size, but
+square-root impact makes the cost per dollar traded grow as the square
+root of participation, and participation grows with capital. So the
+drag grows as `sqrt(C)` and net Sharpe falls. Capacity is where it
+crosses the Sharpe you need (Ratcliffe, Miranda and Ang 2017).
+
+*In this library:* `alpha/CapacityCurve.java` (`compute`, `netSharpe`,
+`impactDrag`).
+
+### 1045. "Impact costs 0.3 of Sharpe at $100m. What at $400m?"
+
+0.6, since `sqrt(4) = 2`; and 1.2 at $1.6bn. With a gross Sharpe of 1.5
+the net Sharpe is 1.2, 0.9 and 0.3, so capacity at a Sharpe of 1 lies
+between $100m and $400m. The library finds the crossing by interpolating
+in log capital.
+
+*In this library:* `CapacityCurve.capacityAt(floor)`, which returns NaN
+when even the smallest capital misses the floor.
+
+### 1046. "How do you keep a backtest from trading more than the market can absorb?"
+
+Cap participation. Each name trades at most a fraction of its average
+daily volume per bar and the unfilled target carries forward, so a large
+rebalance takes several bars. In the risk-aware optimiser the same idea
+appears as a per-name trade limit,
+`advTradeFraction x ADV x price / (capital x equity)`.
+
+*In this library:* `PortfolioBacktester.Participation(maxFractionOfAdv,
+advWindow)`, `AlphaBacktester.RiskOptions.withAdvTradeFraction`.
+
+---
+
+## Trading operations (Q1047-Q1058)
+
+### 1047. "When does a FIX session reset its sequence numbers?"
+
+At the start of each session period, defined by the schedule. A daily
+17:00 to 17:00 New York schedule rolls every day at 17:00 local time,
+which is 21:00 UTC in summer and 22:00 UTC in winter. The store rolls
+(both counters to 1, history discarded) when the session is created,
+logs on or ticks in a new period, and saves the period so a restart the
+next morning resets instead of resuming yesterday's numbers.
+
+*In this library:* `fix/FixSessionSchedule.java`,
+`fix/FixSessionOptions.withSchedule`, `fix/FileSessionStore.java`
+(`session.period`).
+
+### 1048. "How long is the session period that contains the end of daylight saving?"
+
+25 hours, if the schedule is defined in local time. US daylight saving
+ends on 1 November 2026, so the period that opens at 17:00 New York on
+31 October runs from 21:00Z to 22:00Z on 1 November. A schedule held in
+UTC would keep 24-hour periods and roll at the wrong local time for half
+the year.
+
+*In this library:* `FixSessionSchedule.daily(start, end, zone)`;
+`sessionStartMillis`, `sessionEndMillis`.
+
+### 1049. "What does tag 789 change in a reconnect?"
+
+It moves gap detection into the Logon. Each side's Logon carries
+NextExpectedMsgSeqNum, the next number it expects to receive. If the
+peer's 789 is above our next outgoing number, it claims messages we never
+sent: fatal, log out. If it is below, we resend the gap straight after
+the Logon exchange, without waiting for a ResendRequest. Without 789 a
+gap is found only when the next message arrives out of sequence.
+
+*In this library:* `FixSessionOptions.withNextExpectedMsgSeqNum`,
+`FixSession.overStream(..., clock, options)`.
+
+### 1050. "Average cost says realised P&L is zero, FIFO says 50. Which is right?"
+
+Both. Buy 100 at 10, buy 100 at 12, sell 150 at 11. Average cost pools
+the lots at 11, so the sale realises nothing. FIFO closes the lot at 10
+(+100) and half the lot at 12 (-50). The total P&L is the same either
+way, 100 when marked at 13, because realised plus unrealised always
+equals the mark-to-market value less the net cash. The choice changes
+only the split, which matters for tax and accounting.
+
+*In this library:* `trading/PositionLedger.java` (`realised`,
+`unrealised`, `totalPnl` with `CostMethod.AVERAGE_COST` or `FIFO`).
+
+### 1051. "What is a drop copy for, and what breaks can it find?"
+
+It is an independent copy of your executions from the venue or broker,
+used to prove your own record is complete. Matching on execution id
+finds four breaks: MISSING (the venue has it, you never booked it, so
+your position is wrong), EXTRA (you booked it, the venue does not know
+it), MISMATCH (same id, different symbol, side, quantity or price) and
+DUPLICATE (an id seen twice, for example a replayed fill).
+
+*In this library:* `trading/DropCopyReconciler.java` (`reconcile`,
+`Report.breaks`, `quantityDifference`, `format`).
+
+### 1052. "A fill is missing from your ledger at 15:55. What do you do first?"
+
+Fix the position before the P&L. The missing fill means the risk gate
+and the position limits are working from the wrong quantity, so
+`quantityDifference` per symbol is the first number to read. Book the
+fill (or halt the symbol until it is booked), then find out why it was
+missed: a dropped execution report, a session reset that lost messages,
+or a fill applied to the wrong account.
+
+*In this library:* `DropCopyReconciler.Report.quantityDifference()`,
+`PositionLedger.onFill`.
+
+### 1053. "Why must a limit change be atomic?"
+
+So that no order is checked against half of the old limits and half of
+the new. If maximum order size and maximum notional are updated one at a
+time, an order arriving between the two writes sees a combination nobody
+approved. The library swaps one immutable limits object into the gate,
+and each check reads that object once.
+
+*In this library:* `HftRiskGate.limits(LimitsConfig)`,
+`trading/LimitsConfig.java`.
+
+### 1054. "A desk limits file forgets one key. What should happen?"
+
+It should be rejected. A missing key silently left at yesterday's value,
+or at a default, is how a limit gets turned off by accident. The parser
+requires all nine keys; `unlimited` is an explicit value for "no limit",
+so switching a limit off is a visible decision in the file.
+
+*In this library:* `LimitsConfig.parse` (throws on a missing, unknown or
+repeated key).
+
+### 1055. "Regulators ask who loosened the position limit last Tuesday. How do you answer?"
+
+From the audit trail. Every apply and rollback creates a new version
+with author, time, reason and the list of changed keys, and earlier
+versions stay available so any one can be restored. MiFID II RTS 6
+expects firms to control and document changes to pre-trade limits.
+
+*In this library:* `trading/LimitsManager.java` (`apply`, `rollback`,
+`config(version)`, `auditTrail()`).
+
+### 1056. "How does an auction choose its price?"
+
+Maximum executable volume first: the price where `min(demand, supply)`
+is largest. Ties go to the smallest imbalance, then to the price nearest
+the reference. Buys 100 at 10 and 200 at 9 against sells 150 at 8 and
+100 at 9 uncross at 9 for 250 shares with 50 left on the bid.
+
+*In this library:* `orderbook/AuctionBook.java` (`computeIndicative`,
+`uncross`).
+
+### 1057. "Why publish an indicative price during the call?"
+
+So that participants can see the imbalance and add liquidity on the
+short side before the uncross. A large buy imbalance near the close
+invites sellers, which is how auctions find a price that clears big
+index flows. Nothing trades during the call; only the indicative price,
+volume and imbalance change.
+
+*In this library:* `AuctionBook.publishIndicative`,
+`indicativeListener`.
+
+### 1058. "What happens to unfilled auction orders when continuous trading opens?"
+
+The resting limit orders move to the continuous book, level by level in
+time order, once the call is over. The 50 shares left on the bid at 9 in
+the example become a resting bid in the continuous order book.
+`transferResidual` reports each auction id against its new continuous
+id, or the continuous book's rejection code.
+
+*In this library:* `AuctionBook.transferResidual(HftOrderBook, sink,
+timestampNanos)` and `AuctionBook.TransferSink`.
+
+---
+
 ## How to use this guide
 
 Parts I to III are meant to be read in order. Part IV is different: it is
@@ -26494,6 +28023,27 @@ throughout.
   `volatility/VolatilityDecomposition.java`, `risk/RiskMetrics.java`;
   Sharpe (1964).
 
+- `w(k) = a + b (rho (k - m) + sqrt((k - m)^2 + sigma^2))`, `k = ln(K/F)`,
+  `w = sigma_BS^2 T`. Raw SVI. `pricing/SviSlice.java`; Gatheral (2004);
+  Gatheral and Jacquier (2014), eq. 3.1.
+- `g(k) = (1 - k w'/(2w))^2 - (w'^2/4)(1/w + 1/4) + w''/2 >= 0`. No
+  butterfly arbitrage in a slice, if and only if.
+  `SviSlice.densityFactor`; Gatheral and Jacquier (2014), Lemma 2.2.
+- `w = theta/2 (1 + rho phi k + sqrt((phi k + rho)^2 + 1 - rho^2))`,
+  `phi = eta / (theta^gamma (1 + theta)^(1 - gamma))`; free of static
+  arbitrage for `gamma` in [0, 1/2], `eta (1 + |rho|) <= 2` and
+  non-decreasing `theta_t`. SSVI with a power-law `phi`.
+  `pricing/SsviSurface.java`; Gatheral and Jacquier (2014), Theorems 4.1
+  and 4.2, Remark 4.4.
+- `sigma_loc^2(y, T) = (dw/dT) / g(y)`, `y = ln(K/F)`. Dupire local
+  variance in total-variance form. `pricing/DupireLocalVol.java`;
+  Dupire (1994); Gatheral (2006), eq. 1.10.
+- `V = K e^{-rT} sum'_{k<N} Re{phi(k pi/(b-a)) e^{i k pi (x-a)/(b-a)}} U_k`,
+  `[a, b] = [x + c1 - L sqrt(c2), x + c1 + L sqrt(c2)]`. COS pricing of a
+  European put under Heston; the call by parity; `N = 1024`, `L = 32` by
+  default. `pricing/HestonCos.java`; Fang and Oosterlee (2008), eqs. 30
+  to 33 and Table 11.
+
 **Risk**
 
 - `VaR = z_c * sqrt(w' Sigma w)`. Delta-normal VaR: the Gaussian loss
@@ -26581,6 +28131,19 @@ throughout.
   `executed / (executed + others)`, and p must be below 1.
   `execution/PovTracker.java`, `execution/BenchmarkExecutor.java`.
 
+- `V(p) = min(D(p), S(p))`; uncross at the price maximising `V`, then
+  minimising `|D - S|`, then nearest the reference price. Call auction
+  price determination (maximum executable volume). `orderbook/AuctionBook.java`;
+  Xetra and Euronext auction rules without their market-pressure step.
+- `a' = (n a + q p)/(n + q)` on an increase, realised `q (p - a) sgn(n) m`
+  on a close; FIFO realised `sum_k q_k (p - p_k) sgn(n) m`; both satisfy
+  `realised + unrealised = m (n M - sum_i s_i q_i p_i)`. Average-cost and
+  FIFO P&L. `trading/PositionLedger.java`; IAS 2, para. 25.
+- A FIX session period starts at each occurrence of the start time in the
+  schedule's zone and ends at the next end time; equal times mean always
+  open with a roll only. `fix/FixSessionSchedule.java`; FIX 4.4 errata
+  and FIXT 1.1 for tag 789.
+
 **Market making and hedging**
 
 - `r = mid - q gamma sigma^2 tau`;
@@ -26618,6 +28181,29 @@ throughout.
   lognormal, shifted lognormal or normal (Bachelier) vol, so negative
   rates and any accrual frequency are supported.
   `rates/RatesOptions.java`; Black (1976), Andersen and Piterbarg (2010).
+
+- `K_OIS = (P(s) - P(e)) / sum_i tau_i P(t_i)`. OIS par rate: the
+  compounded overnight leg telescopes to `P(s) - P(e)`. The tests check
+  the strip against the recursion
+  `P_n = (1 - K sum_{i<n} tau_i P_i) / (1 + K tau_n)` to 1e-13.
+  `rates/OisSwap.java`, `rates/MultiCurveBootstrap.java`; Ametrano and
+  Bianchetti (2013).
+- `K_IRS = sum_j tau_j F_j P_ois(t_j) / sum_i tau_i P_ois(t_i)`,
+  `F_j = (P_3m(t_{j-1})/P_3m(t_j) - 1)/tau_j`. Two-curve par swap rate:
+  forwards from the projection curve, discounting on OIS.
+  `rates/InterestRateSwap.java`, `rates/SwapPricer.java`; Bianchetti
+  (2010).
+- `CA = B(t1,t2)/(t2-t1) [B(t1,t2)(1 - e^{-2a t1}) + 2a B(0,t1)^2] sigma^2/(4a)`,
+  `B(s,t) = (1 - e^{-a(t-s)})/a`; Ho-Lee limit `sigma^2 t1 t2 / 2`. The
+  futures-over-forward convexity adjustment in Hull-White.
+  `rates/RateFuture.java` (`hullWhiteConvexity`); Hull, *Options, Futures
+  and Other Derivatives*, Technical Note 1; Kirikos and Novak (1997).
+- Monotone-convex interpolation of `-ln P`: a piecewise quadratic in each interval
+  for the instantaneous forward, matched to the discrete forward's
+  interval average and continuous at the nodes, with the Hagan-West zone
+  rules keeping monotone inputs monotone. No positivity amendment.
+  `rates/DiscountCurve.java`, `rates/CurveInterpolation.MONOTONE_CONVEX`;
+  Hagan and West (2006), Applied Mathematical Finance 13(2).
 
 **Credit**
 
@@ -26744,6 +28330,23 @@ the code returns the deterministic limits rather than NaN.
   `pricing/TouchOption.java`; Wystup, *FX Options and Structured
   Products* (2006).
 
+- `payout [(H/S)^{mu+lambda} N(eta z) + (H/S)^{mu-lambda} N(eta z - 2 eta lambda sigma sqrt T)]`,
+  `mu = (b - sigma^2/2)/sigma^2`, `lambda = sqrt(mu^2 + 2r/sigma^2)`,
+  `z = ln(H/S)/(sigma sqrt T) + lambda sigma sqrt T`, `b = r - q`. One-touch
+  paid at hit, `E[e^{-r tau} 1{tau <= T}]`; equal to the pay-at-expiry
+  touch when `r = 0`. `pricing/TouchOption.oneTouchPayAtHit`; Reiner and
+  Rubinstein (1991); Haug (2007), section 4.17.3.
+- Double no-touch `= payout e^{-rT} P(L < min S, max S < U)`, with the
+  survival probability from the image series over reflections in both
+  barriers, `n = -50..50`. Double one-touch `= payout e^{-rT} - DNT`.
+  `TouchOption.doubleNoTouch`, `doubleOneTouch`; Ikeda and Kunitomo
+  (1992).
+- `V = V_BS(sigma_ATM) + sum_i x_i (C_mkt,i - C_BS,i)` with `x` solving
+  the 3 by 3 vega, vanna, volga match; for a one-touch the smile cost is
+  multiplied by the survival probability. Exact vanna-volga.
+  `pricing/VannaVolga.priceExact`, `fx/VannaVolgaTouch.java`; Castagna and
+  Mercurio (2007); Wystup (2006).
+
 **Asian options and structured notes**
 
 - `E[ln G] = ln S + (r - q - sigma^2/2) T (n+1)/(2n)`,
@@ -26793,6 +28396,17 @@ the code returns the deterministic limits rather than NaN.
   downside-strike vol from the surface as the first correction.
   `pricing/Autocallable.java`; Bouzoubaa and Osseiran, *Exotic Options and
   Hybrids* (2010).
+
+- `K* = (n K - A_obs) / m`, price `= (m/n) x option on the remaining
+  average struck at K*`; if `K* <= 0` the call is `(m/n) e^{-rT} (E[A_rem] - K*)`
+  with no optionality left and the put is 0. Seasoned Asian
+  reduction. `pricing/AsianOption.java` (`turnbullWakemanSeasoned`,
+  `curranPrice`); Haug (2007), section 4.20.1; Curran (1994) for the
+  conditioning on the geometric average.
+- Levy's continuous-average formula: a lognormal matched to the first two
+  moments of the remaining continuous average, with the realised part
+  folded into the strike. `AsianOption.levyPrice`; Levy (1992); Haug
+  (2007), section 4.20.2.
 
 **Dividends, forwards and FX conventions**
 
@@ -26852,6 +28466,12 @@ the code returns the deterministic limits rather than NaN.
   deltas carry the extra `e^{-r_f T}` factor. `DeltaConvention` selects
   forward or spot, with or without premium adjustment.
   `fx/FxVolSurface.java` (strikeForDelta); Reiswich and Wystup (2010).
+
+- `V_cum(S) = max(exercise(S), V_ex(S - D))` at each ex-date on a
+  recombining CRR lattice of stock levels, `V_ex` interpolated linearly
+  in S; ex-dates snap to the nearest step. Discrete cash dividends for
+  American options. `pricing/DividendTree.java`; Vellekoop and
+  Nieuwenhuis (2006).
 
 **Short-rate models and curve fitting**
 
@@ -26984,6 +28604,30 @@ the code returns the deterministic limits rather than NaN.
   (current exposure method), with the 0.4 + 0.6 NGR netting rule
   from the April 1995 amendment on potential exposure (BCBS 18).
 
+- On a segment with constant hazard `lambda` and forward `f`,
+  `k = lambda + f`: protection `= (1 - R) lambda Q0 P0 (1 - e^{-k dt}) / k`
+  per unit notional; accrual on default adds
+  `lambda Q0 P0 [a (t0 - tS)(1 - e^{-k dt})/k + a (1 - e^{-k dt}(1 + k dt))/k^2]`.
+  The ISDA standard CDS model's closed-form legs.
+  `credit/IsdaCdsModel.java`; ISDA CDS Standard Model v1.8.2
+  (`JpmcdsCdsContingentLegPV`, `JpmcdsFeeLegPV`); O'Kane (2008), ch. 6.
+- `P(t,T) = P(0,T)/P(0,t) exp((V(t,T) - V(0,T) + V(0,t))/2 - B(t,T) x(t))`.
+  Hull-White bond price on a simulated path, used to revalue swaps for
+  exposure. `credit/ExposureSimulator.java`; Brigo and Mercurio (2006),
+  eq. 3.39.
+- `CVA = LGD sum_i E[D(0,t_i) E(t_i)] (PD(t_i) - PD(t_{i-1}))`;
+  `DVA` the same with own default and negative exposure. Unilateral.
+  `credit/CvaApproximator.java`; Gregory, *The xVA Challenge* (2015).
+- `P(bucket i | X) = Phi((Phi^-1(PD_i) + rho X)/sqrt(1-rho^2)) - Phi((Phi^-1(PD_{i-1}) + rho X)/sqrt(1-rho^2))`.
+  Wrong-way risk through a Gaussian copula on the terminal market driver;
+  `rho = 0` gives back the independent CVA.
+  `CvaApproximator.cvaWrongWay`; Gregory (2015), ch. 17.
+- `EAD = 1.4 (RC + multiplier x AddOn)`,
+  `multiplier = min(1, 0.05 + 0.95 exp((V - C)/(2 x 0.95 x AddOn)))`,
+  `SD = (e^{-0.05 S} - e^{-0.05 E})/0.05`, interest-rate effective notional
+  `sqrt(D1^2 + D2^2 + D3^2 + 1.4 D1 D2 + 1.4 D2 D3 + 0.6 D1 D3)`. SA-CCR.
+  `risk/SaCcr.java`; BCBS 279 (March 2014), Annex 4 and Table 2.
+
 **Risk engines**
 
 - `VaR = L_(ceil(c n))`, the lower empirical quantile of the loss sample
@@ -27042,6 +28686,25 @@ the code returns the deterministic limits rather than NaN.
   along `Sigma delta`, and its Mahalanobis distance says how implausible
   that move is. `risk/StressTester.java` (reverseStress); Breuer,
   Jandačka, Rheinberger and Summer (2009).
+
+- `r_it = f_mkt + f_sector(i) + sum_k x_ik f_k + u_it`, `V = X F X' + D`.
+  Styles standardised to cap-weighted mean 0 and equal-weighted sd 1,
+  clipped at 3; factor returns by WLS with `sqrt(cap)` weights under
+  `sum_s c_s f_s = 0`. Fundamental factor model.
+  `risk/FactorRiskModel.java`; Menchero, Orr and Wang (2011), USE4
+  methodology, section 3; Menchero (2010).
+- `F = C0 + sum_{l=1}^{L} (1 - l/(L+1)) (C_l + C_l')`, then
+  `F <- lambda_F^2 F` with `lambda_F^2` an EWMA of
+  `B_t^2 = mean_k (f_kt / sigma_k,t-1)^2`. Newey-West and volatility regime
+  adjustment of the factor covariance. Newey and West (1987); USE4
+  section 4.3.
+- `sigma_SH = v mean_n + (1 - v) sigma`,
+  `v = q |sigma - mean_n| / (Delta_n + q |sigma - mean_n|)` within size
+  buckets. Bayesian shrinkage of specific risk. USE4 section 5.3.
+- Marginal `(Vw)_i / sigma`, percent `w_i (Vw)_i / sigma^2`, factor
+  `x_k (F x)_k / sigma^2` with `x = X'w`; the percent shares and the
+  factor plus specific shares each sum to 1. Euler risk allocation.
+  `FactorRiskModel.decompose`; Litterman (1996).
 
 **Model validation and dependence**
 
@@ -27154,6 +28817,16 @@ the code returns the deterministic limits rather than NaN.
   sample is too small or the wins too lucky. `backtest/TradeAnalytics.java`
   (analyze); Kelly (1956), Thorp (2006), section 2.
 
+- `alpha_i = IC x sigma_i x sqrt(H) x z_i`; each rebalance maximises
+  `alpha'w - lambda w'(H V)w - kappa |w - w0|_1` under a per-name trade cap
+  of `advTradeFraction x ADV x price / (capital x equity)`. Risk-aware
+  alpha portfolio. `alpha/AlphaBacktester.java` (`RiskOptions`);
+  Grinold (1994).
+- `IC_k(t) = (1/H) sum_{l<H} corr(z'_k(t), r_{t+l -> t+l+1})` on
+  Gram-Schmidt orthogonalised scores `z'`;
+  `w_k = (1 - delta) IC_k / sum_j |IC_j| + delta / K`. Signal combination.
+  `alpha/AlphaCombiner.java`; Grinold and Kahn (2000), chs. 10 and 13.
+
 **Performance and trade analytics**
 
 - `CAGR = (end/start)^{periodsPerYear/(n-1)} - 1`. Compound annual growth
@@ -27187,6 +28860,15 @@ the code returns the deterministic limits rather than NaN.
   as depth. An episode still open at the end of a backtest has
   `recoveryIndex = -1`. `backtest/DrawdownAnalytics.java` (analyze),
   `risk/RiskMetrics.java` (maxDrawdown); Magdon-Ismail and Atiya (2004).
+
+- `factor_k = (sum_i h_i X_ik) f_k`, `specific = sum_i h_i u_i`,
+  `trading = sum_i pnl_i - sum_k factor_k - specific`,
+  `net = sum_k factor_k + specific + trading + cost + financing` exactly.
+  Holdings-based P&L attribution. `alpha/BacktestAttribution.java`.
+- Impact drag per unit return grows as `sqrt(C)`, so net Sharpe falls with
+  capital; capacity at a floor is the log-capital interpolation of the
+  crossing. `alpha/CapacityCurve.java`; Ratcliffe, Miranda and Ang
+  (2017).
 
 **Strategy validation and factor research**
 
