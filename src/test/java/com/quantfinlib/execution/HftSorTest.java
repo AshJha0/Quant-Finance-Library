@@ -94,12 +94,17 @@ class HftSorTest {
         var mx = (com.sun.management.ThreadMXBean)
                 java.lang.management.ManagementFactory.getThreadMXBean();
         long tid = Thread.currentThread().threadId();
-        long before = mx.getThreadAllocatedBytes(tid);
-        for (int i = 0; i < 500_000; i++) {
-            sor.route((i & 1) == 0 ? Side.BUY : Side.SELL, 500 + (i % 700),
-                    (i & 1) == 0 ? Integer.MAX_VALUE : Integer.MIN_VALUE, out);
+        // Exactly zero after warm-up; a bounded retry absorbs a one-off
+        // JIT or class-loading allocation inside the first window.
+        long allocated = -1;
+        for (int attempt = 0; attempt < 5 && allocated != 0; attempt++) {
+            long before = mx.getThreadAllocatedBytes(tid);
+            for (int i = 0; i < 500_000; i++) {
+                sor.route((i & 1) == 0 ? Side.BUY : Side.SELL, 500 + (i % 700),
+                        (i & 1) == 0 ? Integer.MAX_VALUE : Integer.MIN_VALUE, out);
+            }
+            allocated = mx.getThreadAllocatedBytes(tid) - before;
         }
-        long allocated = mx.getThreadAllocatedBytes(tid) - before;
-        assertTrue(allocated < 100_000, "routing allocated " + allocated + " bytes");
+        assertTrue(allocated == 0, "routing allocated " + allocated + " bytes");
     }
 }

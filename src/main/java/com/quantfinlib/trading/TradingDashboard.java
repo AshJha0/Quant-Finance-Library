@@ -26,10 +26,25 @@ public final class TradingDashboard implements AutoCloseable {
     private final PaperTradingGateway gateway;
     private final Map<String, LatencyRecorder> latencyRecorders = new LinkedHashMap<>();
 
-    /** @param port 0 = pick an ephemeral port (see {@link #port()}) */
+    /**
+     * Binds to the loopback interface only: the endpoints are
+     * unauthenticated, so they are not exposed to the network by default.
+     *
+     * @param port 0 = pick an ephemeral port (see {@link #port()})
+     */
     public TradingDashboard(PaperTradingGateway gateway, int port) throws IOException {
+        this(gateway, new InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), port));
+    }
+
+    /**
+     * Binds to an explicit address. Binding to a non-loopback address
+     * exposes unauthenticated account data; put it behind an authenticating
+     * proxy.
+     */
+    public TradingDashboard(PaperTradingGateway gateway, InetSocketAddress bindAddress)
+            throws IOException {
         this.gateway = gateway;
-        this.server = HttpServer.create(new InetSocketAddress(port), 0);
+        this.server = HttpServer.create(bindAddress, 0);
         server.createContext("/", this::servePage);
         server.createContext("/api/status", this::serveStatus);
         server.setExecutor(Executors.newSingleThreadExecutor(r -> {
@@ -51,6 +66,11 @@ public final class TradingDashboard implements AutoCloseable {
 
     public int port() {
         return server.getAddress().getPort();
+    }
+
+    /** The bound address (loopback unless an explicit address was given). */
+    public InetSocketAddress address() {
+        return server.getAddress();
     }
 
     @Override

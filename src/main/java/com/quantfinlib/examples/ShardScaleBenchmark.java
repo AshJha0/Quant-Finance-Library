@@ -29,12 +29,10 @@ public final class ShardScaleBenchmark {
                         .maxOrderNotional(1e15)
                         .maxPositionQuantity(Long.MAX_VALUE / 4))) {
 
-            // Per-shard counters, 8 slots apart (one cache line) — each venue
-            // thread is the SINGLE writer of its own slot. The first version
-            // of this probe used one synchronized counter across shards and
-            // measured sharding as a SLOWDOWN: the instrumentation itself
-            // was the shared state sharding exists to eliminate.
-            long[] delivered = new long[shards * 8];
+            // Each shard's venue is an in-process loopback that acks and
+            // confirms replaces on that shard's venue thread; delivery counts
+            // come from each gateway's own counter, so no state is shared
+            // across shards by the instrumentation.
             HftQuoter[] quoters = new HftQuoter[shards];
             int[] handles = new int[SYMBOLS];
             for (int i = 0; i < SYMBOLS; i++) {
@@ -44,9 +42,8 @@ public final class ShardScaleBenchmark {
                 quoters[s] = new HftQuoter(engine.gateway(s), 512,
                         HftQuoter.Config.of(100_000, 0.0002).withSkewPerUnit(1e-10));
                 engine.bus(s).subscribeAll(quoters[s]);
-                final int slot = s * 8;
-                engine.gateway(s).addOrderListener((id, sym, side, qty, px, ts) ->
-                        delivered[slot]++);
+                engine.gateway(s).addOrderListener(
+                        new com.quantfinlib.trading.LoopbackVenue(engine.gateway(s)));
             }
             engine.start();
 
@@ -78,7 +75,7 @@ public final class ShardScaleBenchmark {
                             + "(%.2fM per shard)%n",
                     MEASURED / (elapsed / 1e9) / 1e6,
                     MEASURED / (elapsed / 1e9) / 1e6 / shards);
-            System.out.printf("  Orders delivered: %.1fM (%.1fM/sec), "
+            System.out.printf("  Order messages delivered (new + replace): %.1fM (%.1fM/sec), "
                             + "rejected/dropped sides: %d%n",
                     engine.deliveredCount() / 1e6,
                     engine.deliveredCount() / (elapsed / 1e9) / 1e6, rejects);
