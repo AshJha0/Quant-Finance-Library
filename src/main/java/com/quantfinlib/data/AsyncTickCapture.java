@@ -16,7 +16,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * thread drains it into the QFLT file. A page-cache writeback, AV scan or
  * disk hiccup then stalls the <em>writer</em>, never the trading loop.
  *
- * <p>The backpressure policy is the honest one for a recorder on a trading
+ * <p>The backpressure policy suits a recorder on a trading
  * path: when the ring is full (writer stalled longer than the buffer
  * absorbs), ticks are <b>dropped from the capture</b> — counted in
  * {@link #droppedTicks}, never blocking the consumer. A recording gap you
