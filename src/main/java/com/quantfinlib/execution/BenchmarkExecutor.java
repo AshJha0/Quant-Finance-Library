@@ -58,10 +58,11 @@ import com.quantfinlib.util.MathUtils;
  *
  * <h2>Completion</h2>
  * <p>Over the last {@code 1 - rampStart} of the horizon the depth cap is
- * relaxed linearly to the full remainder, and at {@code scheduleFraction >= 1}
- * the whole unworked remainder is due (bounded only by the maximum child),
- * so a time benchmark finishes its parent at the horizon instead of ending
- * with a silent residual. Optional child-size bounds
+ * relaxed linearly from {@code maxDepthFraction} to all of the displayed
+ * depth, and at {@code scheduleFraction >= 1} every curve's target is the
+ * full parent, so the whole unworked remainder is due, limited only by what
+ * is displayed and by the maximum child. A residual left at the horizon is
+ * then one the book could not absorb, visible as {@link #remaining()}. Optional child-size bounds
  * ({@link #withChildBounds}) suppress dribble orders and cap signalling.</p>
  *
  * <h2>Participation</h2>
@@ -320,11 +321,6 @@ public final class BenchmarkExecutor {
             return 0;
         }
         double f = clamp01(scheduleFraction);
-        if (benchmark != Benchmark.PARTICIPATION && f >= 1.0) {
-            // Horizon reached: everything not yet worked is due now.
-            return Math.min(remaining, maxChild);
-        }
-
         long behind;
         if (benchmark == Benchmark.PARTICIPATION) {
             behind = povTarget() - executed - open;
@@ -376,7 +372,9 @@ public final class BenchmarkExecutor {
 
     /** POV target executed quantity: {@code p / (1 - p)} times others' volume. */
     private long povTarget() {
-        return (long) Math.floor(participationRate / (1 - participationRate) * marketVolume);
+        // The 1e-6 absorbs binary rounding (0.1 / 0.9 * 900000 must give 100000).
+        return (long) Math.floor(participationRate / (1 - participationRate) * marketVolume
+                + 1e-6);
     }
 
     /**
