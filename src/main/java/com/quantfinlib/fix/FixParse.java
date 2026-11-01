@@ -3,7 +3,7 @@ package com.quantfinlib.fix;
 /**
  * Shared primitive parsers for the garbage-free FIX flyweights
  * ({@link FixExecReportView}, {@link FixMarketDataView}) — the
- * fraction-rejection and scaled-long price rules are load-bearing for the
+ * fraction-rejection and scaled-long price rules underpin the
  * "feed-to-order never touches a double" invariant, so they exist exactly
  * once. Package-private, static, zero allocation.
  */
@@ -14,16 +14,26 @@ final class FixParse {
 
     /**
      * Non-negative integer field (quantities, counts). Tolerates a zero
-     * fraction ("100.0"); a real fraction or a '-' sign fails loudly —
-     * negative quantities are protocol violations that must never parse
-     * into silent garbage.
+     * fraction ("100.0"); a real fraction, a '-' sign, any other non-digit,
+     * an empty value or more than 18 digits fails loudly: such values are
+     * protocol violations that must never parse into silent garbage.
      */
     static long parseLong(byte[] buf, int from, int to) {
+        if (from >= to) {
+            throw new IllegalArgumentException("empty integer field");
+        }
         long v = 0;
         for (int i = from; i < to; i++) {
             byte b = buf[i];
             if (b == '-') {
                 throw new IllegalArgumentException("negative quantity field");
+            }
+            if (b != '.' && (b < '0' || b > '9')) {
+                throw new IllegalArgumentException("non-digit 0x" + Integer.toHexString(b & 0xFF)
+                        + " in integer field");
+            }
+            if (i - from >= 18 && b != '.') {
+                throw new IllegalArgumentException("integer field longer than 18 digits");
             }
             if (b == '.') {
                 for (int j = i + 1; j < to; j++) {
@@ -41,7 +51,7 @@ final class FixParse {
 
     /**
      * Numeric field that may legitimately be non-numeric on the wire —
-     * e.g. ClOrdID (tag 11), which is only numeric by OUR encoder's
+     * e.g. ClOrdID (tag 11), which is only numeric by our encoder's
      * convention; unsolicited venue messages carry counterparty formats
      * ("ORD-2024-17", UUIDs). Returns {@code fallback} on any non-digit
      * instead of throwing: a foreign id must never kill the message pump.
@@ -66,11 +76,28 @@ final class FixParse {
     static long priceMantissa(byte[] buf, int from, int to) {
         boolean negative = from < to && buf[from] == '-';
         long mantissa = 0;
+        int digits = 0;
+        boolean dot = false;
         for (int i = negative ? from + 1 : from; i < to; i++) {
             byte b = buf[i];
-            if (b != '.') {
+            if (b == '.') {
+                if (dot) {
+                    throw new IllegalArgumentException("two decimal points in price field");
+                }
+                dot = true;
+            } else if (b < '0' || b > '9') {
+                throw new IllegalArgumentException("non-digit 0x" + Integer.toHexString(b & 0xFF)
+                        + " in price field");
+            } else {
+                digits++;
+                if (mantissa > (Long.MAX_VALUE - 9) / 10) {
+                    throw new IllegalArgumentException("price mantissa overflows a long");
+                }
                 mantissa = mantissa * 10 + (b - '0');
             }
+        }
+        if (digits == 0) {
+            throw new IllegalArgumentException("price field has no digits");
         }
         return negative ? -mantissa : mantissa;
     }

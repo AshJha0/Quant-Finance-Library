@@ -9,7 +9,15 @@ import java.util.List;
  * Machine Learning Risk Forecasting: predicts forward realized volatility from
  * a return series using gradient-boosted trees over engineered features
  * (multi-horizon realized vol, momentum, and shock magnitude), and maps the
- * forecast to an intuitive 0-100 risk score.
+ * forecast to a 0-100 risk score.
+ *
+ * <p>{@link #fit} is in-sample: 150 boosting rounds with no early stopping
+ * will fit noise, and {@link #riskScore} ranks against the training targets.
+ * Before relying on the model, run {@link #validate}: it fits on the first
+ * part of the series and scores out-of-sample forecasts against two
+ * baselines the model must beat, RiskMetrics EWMA (λ = 0.94) and HAR-RV on
+ * squared returns. Trees are invariant to monotone feature scaling, so no
+ * scaling is applied.</p>
  */
 public final class VolatilityForecaster {
 
@@ -63,8 +71,9 @@ public final class VolatilityForecaster {
     }
 
     /**
-     * Intelligent risk score in [0, 100]: the percentile of the forecast
-     * within the distribution of historically realized volatilities.
+     * Risk score in [0, 100]: the percentile of the forecast within the
+     * realised volatilities of the training sample (an in-sample reference
+     * distribution).
      */
     public double riskScore(double[] returns) {
         double f = forecast(returns);
@@ -75,6 +84,73 @@ public final class VolatilityForecaster {
             }
         }
         return 100.0 * below / trainingTargets.length;
+    }
+
+    /**
+     * Out-of-sample comparison: RMSE (per-period vol units) of the model and
+     * of the two baselines over the same forecast dates.
+     */
+    public record Validation(int forecasts, double rmseModel, double rmseEwma, double rmseHar) {
+
+        /** True when the model beats both baselines out of sample. */
+        public boolean beatsBaselines() {
+            return rmseModel < rmseEwma && rmseModel < rmseHar;
+        }
+    }
+
+    /**
+     * Time-split validation. A fresh model with this forecaster's horizon is
+     * fitted on {@code returns[0, split)} with {@code split =
+     * floor(trainFraction·n)}; every later date t with a full forward window
+     * is then forecast from {@code returns[0, t)} only, as are the EWMA and
+     * HAR-RV baselines (HAR fitted on the training squared returns). The
+     * target is the sample stdev of {@code returns[t, t+horizon)}. This
+     * forecaster's own fitted state is not changed.
+     */
+    public Validation validate(double[] returns, double trainFraction) {
+        if (!(trainFraction > 0 && trainFraction < 1)) {
+            throw new IllegalArgumentException("trainFraction must be in (0, 1)");
+        }
+        int n = returns.length;
+        int split = (int) Math.floor(trainFraction * n);
+        if (split < 100 || n - split < horizon + 20) {
+            throw new IllegalArgumentException("need >= 100 training returns and >= "
+                    + (horizon + 20) + " test returns");
+        }
+        double[] train = java.util.Arrays.copyOf(returns, split);
+        VolatilityForecaster m = new VolatilityForecaster(horizon).fit(train);
+        double[] sq = new double[n];
+        for (int i = 0; i < n; i++) {
+            sq[i] = returns[i] * returns[i];
+        }
+        com.quantfinlib.volatility.HarRv.Params har =
+                com.quantfinlib.volatility.HarRv.fit(java.util.Arrays.copyOf(sq, split));
+        // EWMA variance for date t from returns before t, bias-corrected.
+        double lambda = 0.94;
+        double raw = 0;
+        double mass = 0;
+        double seModel = 0;
+        double seEwma = 0;
+        double seHar = 0;
+        int count = 0;
+        for (int t = 1; t + horizon <= n; t++) {
+            raw = lambda * raw + (1 - lambda) * sq[t - 1];
+            mass = lambda * mass + (1 - lambda);
+            if (t < split) {
+                continue;
+            }
+            double target = MathUtils.stdDevSample(returns, t, t + horizon);
+            double fModel = Math.max(0, m.model.predict(features(returns, t)));
+            double fEwma = Math.sqrt(raw / mass);
+            double fHar = Math.sqrt(com.quantfinlib.volatility.HarRv.forecast(
+                    java.util.Arrays.copyOfRange(sq, t - 22, t), har));
+            seModel += (fModel - target) * (fModel - target);
+            seEwma += (fEwma - target) * (fEwma - target);
+            seHar += (fHar - target) * (fHar - target);
+            count++;
+        }
+        return new Validation(count, Math.sqrt(seModel / count), Math.sqrt(seEwma / count),
+                Math.sqrt(seHar / count));
     }
 
     /** Feature vector computed from returns strictly before index t. */

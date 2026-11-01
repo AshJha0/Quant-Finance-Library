@@ -4,7 +4,7 @@ import com.quantfinlib.pricing.BlackScholes.OptionType;
 import com.quantfinlib.util.MathUtils;
 
 /**
- * Black-76 — the Black-Scholes sibling for options on FORWARDS and
+ * Black-76 — the Black-Scholes sibling for options on forwards and
  * futures: rates caps/floors and swaptions, commodity futures options,
  * bond futures options. The whole trick is that a forward has no carry
  * (it costs nothing to hold), so the underlying drift drops out and the
@@ -13,8 +13,8 @@ import com.quantfinlib.util.MathUtils;
  * <pre>  call = df · [F·Φ(d₁) − K·Φ(d₂)],   d₁ = (ln(F/K) + σ²T/2)/(σ√T)</pre>
  *
  * <p>Equivalent to {@link BlackScholes} with {@code carry = 0} and
- * spot = forward — a test pins that identity — but the market quotes
- * these instruments IN Black-76 terms (a "cap vol" or a "futures option
+ * spot = forward (a test pins that identity), but the market quotes
+ * these instruments in Black-76 terms (a "cap vol" or a "futures option
  * vol" is a Black-76 σ), so the model deserves its own front door.
  * Static, allocation-free, NaN-transparent inputs produce NaN outputs
  * (research-lane pricing convention, matching BlackScholes).</p>
@@ -42,7 +42,7 @@ public final class Black76 {
         return df * (strike * MathUtils.normCdf(-d2) - forward * MathUtils.normCdf(-d1));
     }
 
-    /** Sensitivity to the FORWARD (not spot): df·Φ(d₁) for calls. */
+    /** Sensitivity to the forward (not spot): df·Φ(d₁) for calls. */
     public static double delta(OptionType type, double forward, double strike,
                                double rate, double vol, double timeYears) {
         if (timeYears <= 0 || vol <= 0) {
@@ -70,23 +70,16 @@ public final class Black76 {
         return Math.exp(-rate * timeYears) * forward * MathUtils.normPdf(d1) * sqrtT;
     }
 
-    /** Black-76 implied vol from a price, via bisection (NaN if unattainable). */
+    /**
+     * Black-76 implied vol from a discounted price, via
+     * {@link ImpliedVolatility#black} (NaN if unattainable, 0 at intrinsic).
+     */
     public static double impliedVol(OptionType type, double marketPrice, double forward,
                                     double strike, double rate, double timeYears) {
-        double lo = 1e-6;
-        double hi = 5.0;
-        if (marketPrice <= price(type, forward, strike, rate, lo, timeYears)
-                || marketPrice >= price(type, forward, strike, rate, hi, timeYears)) {
+        if (!Double.isFinite(rate)) {
             return Double.NaN;
         }
-        for (int i = 0; i < 100; i++) {
-            double mid = 0.5 * (lo + hi);
-            if (price(type, forward, strike, rate, mid, timeYears) < marketPrice) {
-                lo = mid;
-            } else {
-                hi = mid;
-            }
-        }
-        return 0.5 * (lo + hi);
+        return ImpliedVolatility.black(type, marketPrice * Math.exp(rate * timeYears),
+                forward, strike, timeYears);
     }
 }

@@ -3,62 +3,72 @@ package com.quantfinlib.pricing;
 import com.quantfinlib.pricing.BlackScholes.OptionType;
 
 /**
- * QUANTO adjustment — for payoffs on a foreign asset settled in domestic
- * currency at a FIXED conversion rate (a Nikkei option paying in USD at
- * 1:1). The buyer bears no FX risk, but the HEDGER does: the delta hedge
- * lives in the asset's own currency, so the hedge P&amp;L converts at a
- * floating rate that is CORRELATED with the asset. That correlation has a
- * price, and it shows up as a drift correction:
+ * Quanto vanilla: a payoff on a foreign asset S (quoted in foreign currency)
+ * paid in domestic currency at a fixed conversion rate, for example a Nikkei
+ * call paying {@code max(S_T - K, 0)} US dollars per index point.
  *
- * <pre>  F_quanto = S · e^{(r_dom − q − ρ·σ_S·σ_FX)·T}</pre>
+ * <p>Model (Hull, <i>Options, Futures, and Other Derivatives</i>, the section
+ * on quantos in the chapter "Convexity, timing, and quanto adjustments";
+ * Wystup, <i>FX Options and Structured Products</i>, 2006, section 2.6). S and
+ * the FX rate X (domestic per one foreign) follow correlated geometric
+ * Brownian motions with vols σ_S, σ_X and correlation ρ. Under the domestic
+ * risk-neutral measure S drifts at r_f − q − ρσ_Sσ_X, so</p>
  *
- * <p>Sign intuition (the classic exercise): ρ here is the correlation
- * between the asset and the FX rate quoted as DOMESTIC PER FOREIGN.
- * Positive ρ means the asset rallies exactly when the foreign currency
- * strengthens — the hedger's foreign-currency losses on the short hedge
- * convert at a worse rate, a systematic drag they charge for, so the
- * quanto forward is LOWER than the vanilla forward. The vol of the quanto
- * payoff stays the asset's own σ_S: only the drift moves.</p>
+ * <pre>  F_quanto = S · exp((r_f − q − ρ·σ_S·σ_X)·T)
+ *   V = e^{−r_d T} · Black76(F_quanto, K, σ_S, T)</pre>
  *
- * <p>Implementation is honest about being a change of drift: pricing
- * delegates to {@link BlackScholes} with the carry bumped by
- * {@code ρ·σ_S·σ_FX} — one line of new math, every Greek and edge case
- * inherited from the tested vanilla pricer. Research lane.</p>
+ * <p>The option is discounted at the domestic rate r_d; the foreign rate r_f
+ * only enters the forward. With ρ = 0 the quanto forward is the foreign
+ * forward S·e^{(r_f−q)T}, not S·e^{(r_d−q)T}. Positive ρ lowers the forward:
+ * the hedger's short foreign-currency position loses exactly when the
+ * foreign currency is strong.</p>
+ *
+ * <p>Pricing delegates to {@link BlackScholes} with rate r_d and carry
+ * {@code q + (r_d − r_f) + ρσ_Sσ_X}, which reproduces the forward above.</p>
  */
 public final class QuantoOption {
 
     private QuantoOption() {
     }
 
-    /** The quanto-adjusted forward (domestic-settled, fixed conversion). */
-    public static double quantoForward(double spot, double domesticRate, double assetYield,
+    /**
+     * Quanto forward of the foreign asset under the domestic measure, in
+     * foreign-currency units of S.
+     *
+     * @param foreignRate continuously compounded rate of the asset's currency
+     * @param assetYield  continuous dividend yield of the asset
+     * @param rho         correlation of the asset with X = domestic per foreign
+     */
+    public static double quantoForward(double spot, double foreignRate, double assetYield,
                                        double assetVol, double fxVol, double rho,
                                        double timeYears) {
-        validate(spot, assetVol, fxVol, rho, domesticRate, assetYield);
+        validate(spot, assetVol, fxVol, rho, 0.0, foreignRate, assetYield);
         if (!(timeYears >= 0) || timeYears == Double.POSITIVE_INFINITY) {
             throw new IllegalArgumentException("timeYears must be >= 0 and finite");
         }
-        return spot * Math.exp((domesticRate - assetYield - rho * assetVol * fxVol) * timeYears);
+        return spot * Math.exp((foreignRate - assetYield - rho * assetVol * fxVol) * timeYears);
     }
 
     /**
-     * Quanto vanilla priced in domestic currency per unit of the fixed
-     * conversion rate: Black-Scholes with the carry shifted by
-     * {@code ρ·σ_S·σ_FX}.
+     * Quanto vanilla price in domestic currency per unit of the fixed
+     * conversion rate.
+     *
+     * @param domesticRate continuously compounded rate of the payment currency (discounting)
+     * @param foreignRate  continuously compounded rate of the asset's currency (drift)
      */
     public static double price(OptionType type, double spot, double strike,
-                               double domesticRate, double assetYield,
+                               double domesticRate, double foreignRate, double assetYield,
                                double assetVol, double fxVol, double rho, double timeYears) {
-        validate(spot, assetVol, fxVol, rho, domesticRate, assetYield);
+        validate(spot, assetVol, fxVol, rho, domesticRate, foreignRate, assetYield);
         if (!(strike > 0) || strike == Double.POSITIVE_INFINITY) {
             throw new IllegalArgumentException("strike must be positive and finite, got " + strike);
         }
-        return BlackScholes.price(type, spot, strike, domesticRate,
-                assetYield + rho * assetVol * fxVol, assetVol, timeYears);
+        double carry = assetYield + (domesticRate - foreignRate) + rho * assetVol * fxVol;
+        return BlackScholes.price(type, spot, strike, domesticRate, carry, assetVol, timeYears);
     }
 
     private static void validate(double spot, double assetVol, double fxVol, double rho,
-                                 double domesticRate, double assetYield) {
+                                 double domesticRate, double foreignRate, double assetYield) {
         if (!(spot > 0) || spot == Double.POSITIVE_INFINITY) {
             throw new IllegalArgumentException("spot must be positive and finite, got " + spot);
         }
@@ -69,7 +79,8 @@ public final class QuantoOption {
         if (!(rho >= -1) || !(rho <= 1)) {
             throw new IllegalArgumentException("rho must be in [-1, 1], got " + rho);
         }
-        if (!Double.isFinite(domesticRate) || !Double.isFinite(assetYield)) {
+        if (!Double.isFinite(domesticRate) || !Double.isFinite(foreignRate)
+                || !Double.isFinite(assetYield)) {
             throw new IllegalArgumentException("rates must be finite");
         }
     }

@@ -3,7 +3,7 @@ package com.quantfinlib.volatility;
 import com.quantfinlib.core.BarSeries;
 
 /**
- * RANGE-BASED volatility estimators — the free lunch hiding inside every
+ * Range-based volatility estimators — the free lunch hiding inside every
  * OHLC bar: the high-low range carries far more information about the
  * day's variance than the close alone, so a range estimator reaches a
  * given precision with several times fewer bars than close-to-close.
@@ -13,26 +13,26 @@ import com.quantfinlib.core.BarSeries;
  *   <li><b>Parkinson (1980)</b> — range only:
  *       {@code sigma^2 = mean( ln(H/L)^2 ) / (4 ln 2)}. About 4.9x more
  *       efficient than close-to-close under driftless GBM; biased UP by
- *       drift (it books trend as range) and DOWN by discrete sampling
+ *       drift (it books trend as range) and down by discrete sampling
  *       (the observed high underestimates the true high).</li>
  *   <li><b>Garman-Klass (1980)</b> — range plus open/close:
  *       {@code sigma^2 = mean( 0.5 ln(H/L)^2 - (2 ln 2 - 1) ln(C/O)^2 )}.
  *       Roughly 7.4x efficient; still assumes zero drift.</li>
- *   <li><b>Rogers-Satchell (1991)</b> — drift-INDEPENDENT:
+ *   <li><b>Rogers-Satchell (1991)</b> — drift-independent:
  *       {@code sigma^2 = mean( ln(H/C) ln(H/O) + ln(L/C) ln(L/O) )}.
  *       The one to reach for on trending series.</li>
- *   <li><b>Yang-Zhang (2000)</b> — adds the OVERNIGHT gap the others
+ *   <li><b>Yang-Zhang (2000)</b>: adds the overnight gap the others
  *       ignore: {@code sigma^2 = sigma_o^2 + k sigma_c^2 + (1-k) sigma_rs^2}
  *       with {@code sigma_o^2} the sample variance of open-over-prior-close
  *       log returns, {@code sigma_c^2} the sample variance of close-over-open
  *       log returns, {@code sigma_rs^2} the Rogers-Satchell term, and
  *       {@code k = 0.34 / (1.34 + (m+1)/(m-1))} over {@code m} periods —
  *       the weighting that minimizes the estimator's variance. Drift
- *       independent AND jump-aware; the practical default for daily bars
+ *       independent and jump-aware; the practical default for daily bars
  *       on markets that close.</li>
  * </ul>
  *
- * <p>All methods return ANNUALIZED volatility (not variance):
+ * <p>All methods return annualized volatility (not variance):
  * {@code sqrt(perPeriodVariance * periodsPerYear)}, with the annualization
  * factor supplied by the caller (252 for daily bars, 52 for weekly, ...) —
  * this class does not choose your calendar. Estimates are computed over
@@ -62,7 +62,7 @@ public final class RangeVolatility {
 
     /** Parkinson over a whole {@link BarSeries}. */
     public static double parkinson(BarSeries bars, double periodsPerYear) {
-        return parkinson(bars.highs(), bars.lows(), periodsPerYear);
+        return parkinson(bars.highsCopy(), bars.lowsCopy(), periodsPerYear);
     }
 
     /** Garman-Klass estimator, annualized. */
@@ -83,7 +83,7 @@ public final class RangeVolatility {
 
     /** Garman-Klass over a whole {@link BarSeries}. */
     public static double garmanKlass(BarSeries bars, double periodsPerYear) {
-        return garmanKlass(bars.opens(), bars.highs(), bars.lows(), bars.closes(), periodsPerYear);
+        return garmanKlass(bars.opensCopy(), bars.highsCopy(), bars.lowsCopy(), bars.closesCopy(), periodsPerYear);
     }
 
     /** Rogers-Satchell (drift-independent) estimator, annualized. */
@@ -100,7 +100,7 @@ public final class RangeVolatility {
 
     /** Rogers-Satchell over a whole {@link BarSeries}. */
     public static double rogersSatchell(BarSeries bars, double periodsPerYear) {
-        return rogersSatchell(bars.opens(), bars.highs(), bars.lows(), bars.closes(),
+        return rogersSatchell(bars.opensCopy(), bars.highsCopy(), bars.lowsCopy(), bars.closesCopy(),
                 periodsPerYear);
     }
 
@@ -143,7 +143,7 @@ public final class RangeVolatility {
 
     /** Yang-Zhang over a whole {@link BarSeries}. */
     public static double yangZhang(BarSeries bars, double periodsPerYear) {
-        return yangZhang(bars.opens(), bars.highs(), bars.lows(), bars.closes(), periodsPerYear);
+        return yangZhang(bars.opensCopy(), bars.highsCopy(), bars.lowsCopy(), bars.closesCopy(), periodsPerYear);
     }
 
     // ------------------------------------------------------------------

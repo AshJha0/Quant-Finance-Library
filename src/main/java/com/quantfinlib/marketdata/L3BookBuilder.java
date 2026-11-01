@@ -5,9 +5,9 @@ import com.quantfinlib.orderbook.Side;
 /**
  * Participant-side full-depth (L3) book builder: reconstructs a venue's book
  * from an ITCH-style event stream (add / execute / cancel / delete / replace)
- * and answers the questions an execution engine actually asks — best
+ * and answers the questions an execution engine actually asks (best
  * bid/ask, depth, and <b>exactly how many shares are queued ahead of my
- * order</b> — with zero allocation on every event.
+ * order</b>) with zero allocation on every event.
  *
  * <p>Same engineering as {@code orderbook.HftOrderBook} (dense tick ladder,
  * occupancy bitmaps, pooled intrusive nodes, open-addressing ref map with
@@ -24,6 +24,15 @@ import com.quantfinlib.orderbook.Side;
  * you iff it entered the queue before you (insertion sequence numbers).
  * When your order fills, is deleted, or is replaced, tracking ends
  * automatically.
+ *
+ * <h2>Feed state</h2>
+ * Besides the book events, {@link #onMessage} applies C (execution with
+ * price: book effect as E, price recorded as the last trade), H (trading
+ * action: {@link #tradingState()}), S (system events, which carry stock
+ * locate 0: {@link #lastSystemEvent()}), Q (cross: last trade) and B
+ * (broken trade: counted). Message sequencing and gap recovery live a layer
+ * below, in {@code feed.MoldUdp64Receiver}; when it gives up on
+ * retransmission, {@link #clear()} empties the book for a snapshot rebuild.
  *
  * <p><b>Threading</b>: single-writer — one feed-handler thread owns the
  * book. Order references must be positive (0 is the map's empty sentinel),
@@ -88,6 +97,11 @@ public final class L3BookBuilder {
     private long duplicateRefCount;
     private int restingOrders;
     private int lastTradeTick = Integer.MIN_VALUE;
+    private long truncatedCount;
+    private long crossCount;
+    private long brokenTradeCount;
+    private byte tradingState = ItchCodec.STATE_TRADING;
+    private byte lastSystemEvent;
 
     /**
      * @param stockLocate  the feed's locate code for the symbol this book tracks;
@@ -142,14 +156,35 @@ public final class L3BookBuilder {
     // ------------------------------------------------------------------
 
     /**
-     * Applies one wire message starting at {@code offset}. Returns the wire
-     * length consumed, or 0 when the message is for another stock locate or
-     * outside the supported subset (callers skip it by its own length).
+     * Applies one wire message starting at {@code offset}, which may run to
+     * the end of {@code buf}. See {@link #onMessage(byte[], int, int)}.
      */
     public int onMessage(byte[] buf, int offset) {
+        return onMessage(buf, offset, buf.length - offset);
+    }
+
+    /**
+     * Applies one wire message in {@code [offset, offset + available)}.
+     * Returns the wire length consumed when the message was applied to this
+     * book, or 0 when it is for another stock locate, of a type this book
+     * does not use, or incomplete (a short datagram or a split read, counted
+     * in {@link #truncatedCount()} and never read past the end).
+     */
+    public int onMessage(byte[] buf, int offset, int available) {
+        if (!ItchCodec.complete(buf, offset, available)) {
+            if (available > 0 && offset >= 0 && offset < buf.length
+                    && ItchCodec.length(buf[offset]) > 0) {
+                truncatedCount++;
+            }
+            return 0;
+        }
         ItchCodec.View v = view.wrap(buf, offset);
         int len = ItchCodec.length(v.type());
-        if (len < 0 || v.stockLocate() != stockLocate) {
+        if (v.type() == ItchCodec.SYSTEM_EVENT) {
+            lastSystemEvent = v.eventCode();   // market-wide: locate 0
+            return len;
+        }
+        if (v.stockLocate() != stockLocate) {
             return 0;
         }
         switch (v.type()) {
@@ -161,6 +196,20 @@ public final class L3BookBuilder {
             case ItchCodec.DELETE -> onDelete(v.orderRef());
             case ItchCodec.REPLACE -> onReplace(v.origRef(), v.newRef(), v.shares(), v.priceTick());
             case ItchCodec.TRADE -> onTrade(v.priceTick());
+            case ItchCodec.EXECUTED_WITH_PRICE -> {
+                onExecute(v.orderRef(), v.deltaShares());
+                if (v.printable() == 'Y') {
+                    lastTradeTick = v.executionPriceTick();
+                }
+            }
+            case ItchCodec.TRADING_ACTION -> tradingState = v.tradingState();
+            case ItchCodec.CROSS_TRADE -> {
+                crossCount++;
+                if (v.crossShares() > 0) {
+                    lastTradeTick = v.crossPriceTick();
+                }
+            }
+            case ItchCodec.BROKEN_TRADE -> brokenTradeCount++;
             default -> {
                 return 0;
             }
@@ -518,6 +567,62 @@ public final class L3BookBuilder {
         return n;
     }
 
+    /**
+     * Empties the book and stops all queue tracking, keeping counters: the
+     * first step of a snapshot rebuild after unrecoverable message loss.
+     */
+    public void clear() {
+        java.util.Arrays.fill(bidHead, NONE);
+        java.util.Arrays.fill(bidTail, NONE);
+        java.util.Arrays.fill(askHead, NONE);
+        java.util.Arrays.fill(askTail, NONE);
+        java.util.Arrays.fill(bidQty, 0);
+        java.util.Arrays.fill(askQty, 0);
+        java.util.Arrays.fill(bidBits, 0);
+        java.util.Arrays.fill(askBits, 0);
+        bestBidIdx = NONE;
+        bestAskIdx = NONE;
+        int n = nodeNext.length;
+        for (int i = 0; i < n - 1; i++) {
+            nodeNext[i] = i + 1;
+        }
+        nodeNext[n - 1] = NONE;
+        freeHead = 0;
+        java.util.Arrays.fill(mapKeys, 0);
+        trackedCount = 0;
+        restingOrders = 0;
+    }
+
+    /** Trading state from the last H message ({@code 'T'} until one arrives). */
+    public byte tradingState() {
+        return tradingState;
+    }
+
+    /** True unless the last H message halted, paused or set quotation-only. */
+    public boolean isTrading() {
+        return tradingState == ItchCodec.STATE_TRADING;
+    }
+
+    /** Event code of the last S message, 0 before any. */
+    public byte lastSystemEvent() {
+        return lastSystemEvent;
+    }
+
+    /** Messages cut short by the end of the available bytes. */
+    public long truncatedCount() {
+        return truncatedCount;
+    }
+
+    /** Cross trades (Q) seen. */
+    public long crossCount() {
+        return crossCount;
+    }
+
+    /** Broken trades (B) seen. */
+    public long brokenTradeCount() {
+        return brokenTradeCount;
+    }
+
     public int lastTradeTick() {
         return lastTradeTick;
     }
@@ -556,7 +661,7 @@ public final class L3BookBuilder {
     }
 
     /**
-     * Orders dropped for off-band prices or an exhausted pool — adds AND
+     * Orders dropped for off-band prices or an exhausted pool — adds and
      * replace re-adds (widen the band/pool; off-band liquidity is invisible
      * to this book by design, and its later events count as unknown refs).
      */

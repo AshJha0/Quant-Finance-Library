@@ -9,36 +9,98 @@ import java.util.List;
  * most error-prone step in the whole hedging workflow (one transposed
  * index and the optimizer confidently hedges the wrong thing).
  *
- * <p>Each instrument declares what ONE UNIT of its notional does to the
+ * <p>Each instrument declares what one unit of its notional does to the
  * factor space, in the same conventions {@link CentralRiskBook} books
  * with:
  * <ul>
- *   <li>{@link #addSingleFactor} — an instrument that is 1-for-1 one
- *       factor: an index future onto {@code EQ:<index>} (the covariance
- *       carries its correlation to the single names — the regression
- *       hedge falls out of the optimizer, not out of a beta table), a
- *       variance swap onto {@code EQVEGA:<sym>}, an FX vol trade onto
- *       {@code FXVEGA:<pair>};</li>
- *   <li>{@link #addFxForward} — one unit of base notional loads
+ *   <li>{@link #addSingleFactor}: an instrument that is 1-for-1 one
+ *       factor. An index future maps onto {@code EQ:<index>} (the
+ *       covariance carries its correlation to the single names, so the
+ *       regression hedge falls out of the optimizer, not out of a beta
+ *       table), a variance swap onto {@code EQVEGA:<sym>}, an FX vol trade
+ *       onto {@code FXVEGA:<pair>};</li>
+ *   <li>{@link #addFxForward}: one unit of base notional loads
  *       {@code CCY:<base>} +1 and {@code CCY:<quote>} −rate, exactly
- *       like a booked spot/forward — the natural hedge for the
+ *       like a booked spot/forward. It is the natural hedge for the
  *       currency legs that spot, swaps, NDFs and option deltas net
  *       into;</li>
  *   <li>{@link #add} — anything else, factor names and per-unit
  *       loadings side by side.</li>
  * </ul>
  *
- * <p>Factors named here are REGISTERED on the shared registry if new
+ * <p>Factors named here are registered on the shared registry if new
  * (a hedge-only factor simply has zero book exposure), and
  * {@link #loadings()} materializes the matrix at the registry's
- * CURRENT size — build it after all booking and adding is done, and
+ * current size — build it after all booking and adding is done, and
  * feed it straight to {@link HedgeOptimizer}/{@link CrbAutoHedger}
  * with {@link #costs()}. Research lane, single-threaded.</p>
  */
 public final class CrbHedgeUniverse {
 
-    private record Instrument(String name, double costPerUnit,
-                              int[] factorIds, double[] perUnit) {
+    private static final class Instrument {
+        private final String name;
+        private final double costPerUnit;
+        private final int[] factorIds;
+        private final double[] perUnit;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         */
+        Instrument(String name, double costPerUnit, int[] factorIds, double[] perUnit) {
+            this.name = name;
+            this.costPerUnit = costPerUnit;
+            this.factorIds = factorIds;
+            this.perUnit = perUnit;
+        }
+
+        /** {@code name}. */
+        String name() {
+            return name;
+        }
+
+        /** {@code costPerUnit}. */
+        double costPerUnit() {
+            return costPerUnit;
+        }
+
+        /** {@code factorIds}. */
+        int[] factorIds() {
+            return factorIds;
+        }
+
+        /** {@code perUnit}. */
+        double[] perUnit() {
+            return perUnit;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Instrument o)) {
+                return false;
+            }
+            return java.util.Objects.equals(name, o.name)
+                    && Double.compare(costPerUnit, o.costPerUnit) == 0
+                    && java.util.Arrays.equals(factorIds, o.factorIds)
+                    && java.util.Arrays.equals(perUnit, o.perUnit);
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + java.util.Objects.hashCode(name);
+            h = 31 * h + Double.hashCode(costPerUnit);
+            h = 31 * h + java.util.Arrays.hashCode(factorIds);
+            h = 31 * h + java.util.Arrays.hashCode(perUnit);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "Instrument[" + "name=" + name + ", " + "costPerUnit=" + costPerUnit + ", " + "factorIds=" + java.util.Arrays.toString(factorIds) + ", " + "perUnit=" + java.util.Arrays.toString(perUnit) + "]";
+        }
     }
 
     private final FactorRegistry registry;
@@ -96,7 +158,7 @@ public final class CrbHedgeUniverse {
     }
 
     /**
-     * The loadings matrix [factor][instrument] at the registry's CURRENT
+     * The loadings matrix [factor][instrument] at the registry's current
      * size — call after all booking/adding, alongside {@link #costs()}.
      */
     public double[][] loadings() {

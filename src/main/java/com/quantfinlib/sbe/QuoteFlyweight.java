@@ -3,91 +3,124 @@ package com.quantfinlib.sbe;
 import java.nio.ByteBuffer;
 
 /**
- * SBE-style flyweight codec for a two-sided quote message — the outbound
- * format of a market maker (and the inbound format of venue top-of-book
- * feeds), completing the binary codec family: {@link TradeFlyweight} (trade
- * in), {@link OrderFlyweight} (order out), quote (two-sided out).
+ * SBE flyweight for a two-sided quote (templateId 3, schema version 2): the
+ * outbound format of a market maker and the inbound format of top-of-book
+ * feeds.
  *
- * <p>Wire layout (little-endian, 48 bytes):</p>
+ * <p>Layout: the 8-byte {@link MessageHeader}, then a 48-byte block with
+ * every 64-bit field at a multiple of 8 from the message start:</p>
  * <pre>
- * offset  0  int32   messageType   = 3
- * offset  4  int32   symbolId          (dense id shared by both ends)
- * offset  8  double  bidPrice
- * offset 16  double  bidSize
- * offset 24  double  askPrice
- * offset 32  double  askSize
- * offset 40  int64   timestampNanos    (quote creation time)
+ * offset  8  int64  bidPriceMantissa  ({@link Decimal64#NULL_MANTISSA} = side pulled)
+ * offset 16  int64  bidSizeMantissa
+ * offset 24  int64  askPriceMantissa
+ * offset 32  int64  askSizeMantissa
+ * offset 40  int64  timestampNanos
+ * offset 48  int32  symbolId
+ * offset 52  int8   priceExponent
+ * offset 53  int8   sizeExponent
+ * offset 54  2 bytes padding
  * </pre>
- *
- * <p>One-sided quotes carry NaN on the pulled side — the same convention
- * {@code fx.AggregatedBook} consumes. Like its siblings, the flyweight
- * holds only the wrap position: reuse a single instance for millions of
- * messages, zero allocation per encode/decode.</p>
+ * A pulled side reads back as NaN price, the convention
+ * {@code fx.AggregatedBook} consumes.
  */
 public final class QuoteFlyweight {
 
-    /** Message type discriminator at offset 0. */
-    public static final int MESSAGE_TYPE = 3;
-    /** Total encoded size in bytes. */
+    /** SBE templateId. */
+    public static final int TEMPLATE_ID = 3;
+    /** Body length in bytes, as written in the header. */
     public static final int BLOCK_LENGTH = 48;
+    /** Header plus body. */
+    public static final int ENCODED_LENGTH = MessageHeader.ENCODED_LENGTH + BLOCK_LENGTH;
 
-    private static final int TYPE_OFFSET = 0;
-    private static final int SYMBOL_OFFSET = 4;
-    private static final int BID_OFFSET = 8;
-    private static final int BID_SIZE_OFFSET = 16;
-    private static final int ASK_OFFSET = 24;
-    private static final int ASK_SIZE_OFFSET = 32;
-    private static final int TIMESTAMP_OFFSET = 40;
+    private static final int BID = 8;
+    private static final int BID_SIZE = 16;
+    private static final int ASK = 24;
+    private static final int ASK_SIZE = 32;
+    private static final int TIMESTAMP = 40;
+    private static final int SYMBOL = 48;
+    private static final int PRICE_EXP = 52;
+    private static final int SIZE_EXP = 53;
 
     private ByteBuffer buffer;
     private int offset;
 
-    /** Positions this flyweight over {@code buffer} at {@code offset}. */
+    /**
+     * Positions this flyweight over {@code buffer} at {@code offset} (the header start).
+     * The buffer is not copied: the caller keeps ownership, and reads and
+     * writes through this flyweight go straight to its bytes.
+     */
     public QuoteFlyweight wrap(ByteBuffer buffer, int offset) {
         this.buffer = buffer;
         this.offset = offset;
         return this;
     }
 
-    /** Encodes a full quote message at the wrap position (writes the type header). */
-    public QuoteFlyweight encode(int symbolId, double bidPrice, double bidSize,
-                                 double askPrice, double askSize, long timestampNanos) {
-        buffer.putInt(offset + TYPE_OFFSET, MESSAGE_TYPE);
-        buffer.putInt(offset + SYMBOL_OFFSET, symbolId);
-        buffer.putDouble(offset + BID_OFFSET, bidPrice);
-        buffer.putDouble(offset + BID_SIZE_OFFSET, bidSize);
-        buffer.putDouble(offset + ASK_OFFSET, askPrice);
-        buffer.putDouble(offset + ASK_SIZE_OFFSET, askSize);
-        buffer.putLong(offset + TIMESTAMP_OFFSET, timestampNanos);
+    /** Encodes header and body with integer prices and sizes. */
+    public QuoteFlyweight encode(int symbolId, long bidMantissa, long bidSizeMantissa,
+                                 long askMantissa, long askSizeMantissa, int priceExponent,
+                                 int sizeExponent, long timestampNanos) {
+        MessageHeader.write(buffer, offset, BLOCK_LENGTH, TEMPLATE_ID);
+        buffer.putLong(offset + BID, bidMantissa);
+        buffer.putLong(offset + BID_SIZE, bidSizeMantissa);
+        buffer.putLong(offset + ASK, askMantissa);
+        buffer.putLong(offset + ASK_SIZE, askSizeMantissa);
+        buffer.putLong(offset + TIMESTAMP, timestampNanos);
+        buffer.putInt(offset + SYMBOL, symbolId);
+        buffer.put(offset + PRICE_EXP, (byte) priceExponent);
+        buffer.put(offset + SIZE_EXP, (byte) sizeExponent);
+        buffer.putShort(offset + 54, (short) 0);
         return this;
     }
 
+    /** Encodes from doubles on the given grids; a NaN price marks the side pulled. */
+    public QuoteFlyweight encode(int symbolId, double bidPrice, double bidSize, double askPrice,
+                                 double askSize, int priceExponent, int sizeExponent,
+                                 long timestampNanos) {
+        return encode(symbolId,
+                Decimal64.toMantissa(bidPrice, priceExponent),
+                Double.isNaN(bidPrice) ? 0 : Decimal64.toMantissa(bidSize, sizeExponent),
+                Decimal64.toMantissa(askPrice, priceExponent),
+                Double.isNaN(askPrice) ? 0 : Decimal64.toMantissa(askSize, sizeExponent),
+                priceExponent, sizeExponent, timestampNanos);
+    }
+
     public int symbolId() {
-        return buffer.getInt(offset + SYMBOL_OFFSET);
+        return buffer.getInt(offset + SYMBOL);
+    }
+
+    public long bidMantissa() {
+        return buffer.getLong(offset + BID);
+    }
+
+    public long askMantissa() {
+        return buffer.getLong(offset + ASK);
+    }
+
+    public int priceExponent() {
+        return buffer.get(offset + PRICE_EXP);
+    }
+
+    public int sizeExponent() {
+        return buffer.get(offset + SIZE_EXP);
     }
 
     public double bidPrice() {
-        return buffer.getDouble(offset + BID_OFFSET);
+        return Decimal64.toDouble(bidMantissa(), priceExponent());
     }
 
     public double bidSize() {
-        return buffer.getDouble(offset + BID_SIZE_OFFSET);
+        return Decimal64.toDouble(buffer.getLong(offset + BID_SIZE), sizeExponent());
     }
 
     public double askPrice() {
-        return buffer.getDouble(offset + ASK_OFFSET);
+        return Decimal64.toDouble(askMantissa(), priceExponent());
     }
 
     public double askSize() {
-        return buffer.getDouble(offset + ASK_SIZE_OFFSET);
+        return Decimal64.toDouble(buffer.getLong(offset + ASK_SIZE), sizeExponent());
     }
 
     public long timestampNanos() {
-        return buffer.getLong(offset + TIMESTAMP_OFFSET);
-    }
-
-    /** Reads the type discriminator without wrapping a flyweight. */
-    public static int typeAt(ByteBuffer buffer, int offset) {
-        return buffer.getInt(offset);
+        return buffer.getLong(offset + TIMESTAMP);
     }
 }

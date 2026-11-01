@@ -68,11 +68,11 @@ class HftOrderPathTest {
         assertEquals(HftRiskGate.OK, gate.check(0, Side.SELL, 200, 100));   // reducing is fine
         assertEquals(1_900, gate.position(0));
 
-        // The SHORT side of the cap: |position| is what the limit bounds.
-        // Dropping the abs() would leave selling UNBOUNDED and still pass
-        // every long-side assertion above — these pin the short side.
+        // The short side of the cap: |position| is what the limit bounds.
+        // Dropping the abs() would leave selling unbounded and still pass
+        // every long-side assertion above; these pin the short side.
         // (A single flip-through order is unreachable here: the quantity
-        // and notional gates fire first, by design — so build the short
+        // and notional gates fire first, by design. So build the short
         // through fills, which bypass order-level caps.)
         gate.onFill(0, Side.SELL, 3_800);                     // now short 1,900
         assertEquals(-1_900, gate.position(0));
@@ -176,34 +176,29 @@ class HftOrderPathTest {
     // ---- The claim itself: zero allocation on the hot path -----------------
 
     @Test
-    void submitPathAllocatesNothingSteadyState() throws Exception {
-        var mx = (com.sun.management.ThreadMXBean) ManagementFactory.getThreadMXBean();
-        assumeTrue(mx.isThreadAllocatedMemorySupported());
-        mx.setThreadAllocatedMemoryEnabled(true);
-
+    void submitPathAllocatesNothingSteadyState() {
+        // Venue fills every order on arrival, so state-table slots recycle
+        // and the measured loop is pure submit -> check -> reserve -> publish.
         HftRiskGate gate = new HftRiskGate(4).maxOrderQuantity(1_000_000).priceCollarPct(0.10);
         gate.setReferencePrice(0, 100);
         try (HftOrderGateway gw = new HftOrderGateway(1 << 12, gate, false)) {
-            gw.addOrderListener((id, sym, side, qty, px, ts) -> { });
+            gw.addOrderListener(new LoopbackVenue(gw, LoopbackVenue.FILL_ALL, 1 << 12));
             gw.start();
-
-            // Warm up (JIT compilation may allocate).
-            for (int i = 0; i < 200_000; i++) {
-                while (gw.submit(0, Side.BUY, 100, 100, i) <= 0) {
-                    Thread.onSpinWait();
+            long[] ts = {0};
+            Runnable burst = () -> {
+                for (int i = 0; i < 200_000; i++) {
+                    long id;
+                    int spins = 0;
+                    while ((id = gw.submit(0, (i & 1) == 0 ? Side.BUY : Side.SELL, 100, 100,
+                            ts[0]++)) <= 0) {
+                        if (id < 0 || ++spins > 50_000_000) {
+                            throw new AssertionError("submit failed: " + id);
+                        }
+                        Thread.onSpinWait();
+                    }
                 }
-            }
-            long tid = Thread.currentThread().threadId();
-            long before = mx.getThreadAllocatedBytes(tid);
-            for (int i = 0; i < 500_000; i++) {
-                while (gw.submit(0, Side.BUY, 100, 100, i) <= 0) {
-                    Thread.onSpinWait();
-                }
-            }
-            long allocated = mx.getThreadAllocatedBytes(tid) - before;
-            // 500k submits: allow small measurement noise, but no per-order allocation.
-            assertTrue(allocated < 100_000,
-                    "hot path allocated " + allocated + " bytes over 500k submits");
+            };
+            com.quantfinlib.util.AllocationProbe.assertZeroAllocation(burst, burst, 5);
         }
     }
 }

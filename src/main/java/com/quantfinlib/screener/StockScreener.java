@@ -68,8 +68,9 @@ public final class StockScreener {
 
     /** Exports ranked results (symbol, score, last close, fundamentals) to CSV. */
     public static void exportCsv(Path path, List<RankingEngine.ScoredStock> results) throws IOException {
-        if (path.getParent() != null) {
-            Files.createDirectories(path.getParent());
+        Path parent = path.getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
         }
         try (Writer w = Files.newBufferedWriter(path)) {
             w.write("symbol,score,lastClose,marketCap,peRatio,pbRatio,eps,roe,dividendYield,debtToEquity\n");

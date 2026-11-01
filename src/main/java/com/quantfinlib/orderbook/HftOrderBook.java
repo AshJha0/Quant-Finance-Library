@@ -1,9 +1,8 @@
 package com.quantfinlib.orderbook;
 
 /**
- * Venue-grade price-time-priority matching engine: the zero-allocation
- * sibling of {@link OrderBook}, built the way exchange cores are actually
- * built. Where {@code OrderBook} favors clarity (TreeMap, per-order objects)
+ * Price-time-priority matching engine: the zero-allocation sibling of
+ * {@link OrderBook}, built the way exchange matching cores are built. Where {@code OrderBook} favors clarity (TreeMap, per-order objects)
  * for research, this class favors the disciplines of a matching venue:
  *
  * <ul>
@@ -32,6 +31,35 @@ package com.quantfinlib.orderbook;
  * and demands identical books — the readable implementation is the
  * executable specification of this one.</p>
  *
+ * <h2>Venue controls</h2>
+ * <ul>
+ *   <li><b>Owner ids and self-trade prevention</b>: orders entered through
+ *       the overloads with an {@code ownerId} (non-zero) carry it; when a
+ *       taker would trade against a resting order of the same owner the
+ *       configured {@link SelfTradePrevention} policy applies instead of a
+ *       trade. Owner 0 means "no owner" and is never checked.</li>
+ *   <li><b>Modify</b> ({@link #modify}): a size-down at the same price keeps
+ *       time priority; a price change or size-up loses it (the order is
+ *       re-entered, keeps its id, and may trade on re-entry), the usual
+ *       exchange rule.</li>
+ *   <li><b>Market-order protection band</b>
+ *       ({@link #marketProtectionTicks}): a market order may trade at most
+ *       that many ticks through the opposite best at arrival; the remainder
+ *       is cancelled instead of sweeping the whole ladder.</li>
+ *   <li><b>Trade sequence numbers</b>: every trade gets a strictly
+ *       increasing sequence number, delivered to a
+ *       {@link SequencedTradeSink} and readable as {@link #lastTradeSequence}.</li>
+ * </ul>
+ * <p>Not provided: stop orders, auctions and a journal.</p>
+ *
+ * <h2>Trade delivery</h2>
+ * <p>Trades are buffered in primitive arrays while matching and delivered to
+ * the sink after the book is consistent again (after the incoming order has
+ * rested or expired), so a sink that throws cannot leave a half-updated
+ * book. Sinks should still not throw: trades not yet delivered when a sink
+ * throws are dropped from that delivery (the book state already reflects
+ * them).</p>
+ *
  * <p><b>Threading</b>: single-threaded by design, like real matching cores —
  * one engine thread owns the book; fan orders in via
  * {@code trading.OrderRingBuffer} and trades out via the sink. Rejections
@@ -52,6 +80,27 @@ public final class HftOrderBook {
     public interface TradeSink {
         void onTrade(long makerOrderId, long takerOrderId, int priceTick, long quantity,
                      long timestampNanos);
+    }
+
+    /** Fill callback with the trade's sequence number (1, 2, 3, ... per book). */
+    @FunctionalInterface
+    public interface SequencedTradeSink {
+        void onTrade(long tradeSequence, long makerOrderId, long takerOrderId, int priceTick,
+                     long quantity, long timestampNanos);
+    }
+
+    /** What happens when a taker meets a resting order with the same owner id. */
+    public enum SelfTradePrevention {
+        /** No check: same-owner orders trade. */
+        NONE,
+        /** Cancel the resting (older) order and keep matching. */
+        CANCEL_RESTING,
+        /** Cancel the incoming (newer) order's remainder; it does not rest. */
+        CANCEL_INCOMING,
+        /** Cancel both the resting order and the incoming remainder. */
+        CANCEL_BOTH,
+        /** Reduce both by the overlapping quantity without a trade. */
+        DECREMENT
     }
 
     private static final byte BUY = 0;
@@ -81,6 +130,7 @@ public final class HftOrderBook {
     private final int[] nodePrev;
     private final int[] nodeNext;
     private final byte[] nodeSide;
+    private final int[] nodeOwner;
     private int freeHead;                    // free-list threaded through nodeNext
 
     // Open-addressing id → node map (linear probing, backward-shift delete).
@@ -90,6 +140,22 @@ public final class HftOrderBook {
     private final int mapMask;
 
     private TradeSink sink;
+    private SequencedTradeSink seqSink;
+    private SelfTradePrevention stp = SelfTradePrevention.NONE;
+    private int protectionTicks = Integer.MAX_VALUE;
+    private boolean takerStopped;            // set by STP during one match
+    private long stpCount;
+    private long tradeSeq;
+
+    // Trades buffered during matching, emitted once the book is consistent.
+    private long[] bufSeq = new long[256];
+    private long[] bufMaker = new long[256];
+    private long[] bufTaker = new long[256];
+    private int[] bufTick = new int[256];
+    private long[] bufQty = new long[256];
+    private int bufCount;
+    private long bufTs;
+
     private long nextId = 1;
     private long orderCount;
     private long cancelCount;
@@ -122,6 +188,7 @@ public final class HftOrderBook {
         this.nodePrev = new int[maxOrders];
         this.nodeNext = new int[maxOrders];
         this.nodeSide = new byte[maxOrders];
+        this.nodeOwner = new int[maxOrders];
         // Thread the free list through nodeNext.
         for (int i = 0; i < maxOrders - 1; i++) {
             nodeNext[i] = i + 1;
@@ -142,9 +209,33 @@ public final class HftOrderBook {
         return a;
     }
 
-    /** Installs the (single) trade callback; call before trading. */
+    /** Installs the trade callback; call before trading. */
     public void tradeSink(TradeSink sink) {
         this.sink = sink;
+    }
+
+    /** Installs a trade callback that also receives the trade sequence number. */
+    public void tradeSink(SequencedTradeSink sink) {
+        this.seqSink = sink;
+    }
+
+    /** Self-trade prevention policy for owner-tagged orders (default none). */
+    public HftOrderBook selfTradePrevention(SelfTradePrevention policy) {
+        this.stp = policy;
+        return this;
+    }
+
+    /**
+     * Market orders may trade at most {@code ticks} through the opposite best
+     * price seen on arrival ({@code Integer.MAX_VALUE}, the default, = no
+     * band). Must be >= 0.
+     */
+    public HftOrderBook marketProtectionTicks(int ticks) {
+        if (ticks < 0) {
+            throw new IllegalArgumentException("ticks must be >= 0");
+        }
+        this.protectionTicks = ticks;
+        return this;
     }
 
     // ------------------------------------------------------------------
@@ -158,6 +249,12 @@ public final class HftOrderBook {
      * order was accepted), or a negative rejection code. Zero allocation.
      */
     public long submitLimit(Side side, int priceTick, long quantity, long timestampNanos) {
+        return submitLimit(side, priceTick, quantity, 0, timestampNanos);
+    }
+
+    /** As {@link #submitLimit(Side, int, long, long)} for an owner (0 = none) subject to STP. */
+    public long submitLimit(Side side, int priceTick, long quantity, int ownerId,
+                            long timestampNanos) {
         if (quantity <= 0) {
             return REJECT_INVALID;
         }
@@ -167,19 +264,33 @@ public final class HftOrderBook {
         }
         long id = nextId++;
         orderCount++;
+        try {
+            enter(id, side, idx, quantity, ownerId, timestampNanos);
+        } finally {
+            emitTrades();
+        }
+        return lastEnterResult;
+    }
+
+    private long lastEnterResult;
+
+    /** Matches and rests one limit order with a given id (shared by submit and modify). */
+    private void enter(long id, Side side, int idx, long quantity, int ownerId, long ts) {
+        startMatch(ts);
         long remaining = side == Side.BUY
-                ? matchBuy(id, idx, quantity, timestampNanos)
-                : matchSell(id, idx, quantity, timestampNanos);
-        if (remaining > 0) {
+                ? matchBuy(id, ownerId, idx, quantity)
+                : matchSell(id, ownerId, idx, quantity);
+        lastEnterResult = id;
+        if (remaining > 0 && !takerStopped) {
             if (freeHead == NONE) {
                 // Pool exhausted: the matched portion stands (trades were
-                // real); only the resting remainder is rejected — exactly
-                // how a venue sheds load without unwinding executions.
-                return REJECT_POOL_FULL;
+                // real); only the resting remainder is rejected, which is how
+                // a venue sheds load without unwinding executions.
+                lastEnterResult = REJECT_POOL_FULL;
+                return;
             }
-            rest(id, side == Side.BUY ? BUY : SELL, idx, remaining);
+            rest(id, side == Side.BUY ? BUY : SELL, idx, remaining, ownerId);
         }
-        return id;
     }
 
     /**
@@ -187,14 +298,39 @@ public final class HftOrderBook {
      * Returns the filled quantity (0 when the opposite side is empty).
      */
     public long submitMarket(Side side, long quantity, long timestampNanos) {
+        return submitMarket(side, quantity, 0, timestampNanos);
+    }
+
+    /**
+     * Market order for an owner (0 = none). Limited by the protection band
+     * when one is set; the remainder is cancelled. Returns the filled
+     * quantity.
+     */
+    public long submitMarket(Side side, long quantity, int ownerId, long timestampNanos) {
         if (quantity <= 0) {
             return 0;
         }
         long id = nextId++;
         orderCount++;
-        long remaining = side == Side.BUY
-                ? matchBuy(id, ladder - 1, quantity, timestampNanos)
-                : matchSell(id, 0, quantity, timestampNanos);
+        long remaining;
+        try {
+            startMatch(timestampNanos);
+            if (side == Side.BUY) {
+                int limit = ladder - 1;
+                if (protectionTicks != Integer.MAX_VALUE && bestAskIdx != NONE) {
+                    limit = (int) Math.min(ladder - 1L, (long) bestAskIdx + protectionTicks);
+                }
+                remaining = matchBuy(id, ownerId, limit, quantity);
+            } else {
+                int limit = 0;
+                if (protectionTicks != Integer.MAX_VALUE && bestBidIdx != NONE) {
+                    limit = (int) Math.max(0L, (long) bestBidIdx - protectionTicks);
+                }
+                remaining = matchSell(id, ownerId, limit, quantity);
+            }
+        } finally {
+            emitTrades();
+        }
         return quantity - remaining;
     }
 
@@ -204,6 +340,12 @@ public final class HftOrderBook {
      * quantity (0 when nothing crossed). Zero allocation.
      */
     public long submitIoc(Side side, int priceTick, long quantity, long timestampNanos) {
+        return submitIoc(side, priceTick, quantity, 0, timestampNanos);
+    }
+
+    /** Immediate-or-cancel for an owner (0 = none) subject to STP. */
+    public long submitIoc(Side side, int priceTick, long quantity, int ownerId,
+                          long timestampNanos) {
         if (quantity <= 0) {
             return 0;
         }
@@ -213,9 +355,15 @@ public final class HftOrderBook {
         // market order; an off-band-passive limit simply cannot cross. The
         // subtraction is done in long so sentinel limits (Integer.MIN/MAX_VALUE
         // for "pure market") cannot wrap into the opposite meaning.
-        long remaining = side == Side.BUY
-                ? matchBuy(id, buyLimitIdx(priceTick), quantity, timestampNanos)
-                : matchSell(id, sellLimitIdx(priceTick), quantity, timestampNanos);
+        long remaining;
+        try {
+            startMatch(timestampNanos);
+            remaining = side == Side.BUY
+                    ? matchBuy(id, ownerId, buyLimitIdx(priceTick), quantity)
+                    : matchSell(id, ownerId, sellLimitIdx(priceTick), quantity);
+        } finally {
+            emitTrades();
+        }
         return quantity - remaining;
     }
 
@@ -252,6 +400,12 @@ public final class HftOrderBook {
      * order id on acceptance.
      */
     public long submitPostOnly(Side side, int priceTick, long quantity, long timestampNanos) {
+        return submitPostOnly(side, priceTick, quantity, 0, timestampNanos);
+    }
+
+    /** Post-only for an owner (0 = none). */
+    public long submitPostOnly(Side side, int priceTick, long quantity, int ownerId,
+                               long timestampNanos) {
         if (quantity <= 0) {
             return REJECT_INVALID;
         }
@@ -273,7 +427,7 @@ public final class HftOrderBook {
         if (freeHead == NONE) {
             return REJECT_POOL_FULL;
         }
-        rest(id, side == Side.BUY ? BUY : SELL, idx, quantity);
+        rest(id, side == Side.BUY ? BUY : SELL, idx, quantity, ownerId);
         return id;
     }
 
@@ -302,6 +456,57 @@ public final class HftOrderBook {
         return false;
     }
 
+    /**
+     * Modifies a resting order. Same price and {@code newQuantity} at or
+     * below the open quantity: reduced in place, time priority kept. A
+     * price change or size increase: the order leaves its queue and is
+     * re-entered at the back of the new level with the same id, matching
+     * first if it now crosses. {@code newQuantity == 0} cancels.
+     *
+     * @return the order id on success; {@link #REJECT_INVALID} for an
+     *         unknown id or negative quantity; {@link #REJECT_OUT_OF_BAND}
+     *         for a price off the ladder (the order is left unchanged);
+     *         {@link #REJECT_POOL_FULL} if a re-entered remainder could not rest
+     */
+    public long modify(long orderId, long newQuantity, int newPriceTick, long timestampNanos) {
+        int slot = mapFind(orderId);
+        if (slot == NONE || newQuantity < 0) {
+            return REJECT_INVALID;
+        }
+        int newIdx = newPriceTick - minTick;
+        if (newIdx < 0 || newIdx >= ladder) {
+            return REJECT_OUT_OF_BAND;
+        }
+        if (newQuantity == 0) {
+            cancel(orderId);
+            return orderId;
+        }
+        int node = mapVals[slot];
+        int idx = nodeTick[node];
+        if (newIdx == idx && newQuantity <= nodeQty[node]) {
+            long delta = nodeQty[node] - newQuantity;
+            nodeQty[node] = newQuantity;
+            if (nodeSide[node] == BUY) {
+                bidQty[idx] -= delta;
+            } else {
+                askQty[idx] -= delta;
+            }
+            return orderId;
+        }
+        Side side = nodeSide[node] == BUY ? Side.BUY : Side.SELL;
+        int owner = nodeOwner[node];
+        unlink(node);
+        mapRemoveAt(slot);
+        freeNode(node);
+        restingOrders--;
+        try {
+            enter(orderId, side, newIdx, newQuantity, owner, timestampNanos);
+        } finally {
+            emitTrades();
+        }
+        return lastEnterResult;
+    }
+
     /** Cancels a resting order. False when unknown/already gone — never throws. */
     public boolean cancel(long orderId) {
         int slot = mapFind(orderId);
@@ -321,12 +526,17 @@ public final class HftOrderBook {
     // Matching (private hot path)
     // ------------------------------------------------------------------
 
+    private void startMatch(long ts) {
+        takerStopped = false;
+        bufTs = ts;
+    }
+
     /** Buy taker: lift asks from the lowest occupied level up to limitIdx. */
-    private long matchBuy(long takerId, int limitIdx, long quantity, long ts) {
+    private long matchBuy(long takerId, int owner, int limitIdx, long quantity) {
         long remaining = quantity;
-        while (remaining > 0 && bestAskIdx != NONE && bestAskIdx <= limitIdx) {
+        while (remaining > 0 && !takerStopped && bestAskIdx != NONE && bestAskIdx <= limitIdx) {
             remaining = fillLevel(askHead, askTail, askQty, askBits, bestAskIdx,
-                    takerId, remaining, ts);
+                    takerId, owner, remaining);
             if (askQty[bestAskIdx] == 0) {
                 bestAskIdx = nextSetAtOrAbove(askBits, bestAskIdx + 1);
             }
@@ -335,11 +545,11 @@ public final class HftOrderBook {
     }
 
     /** Sell taker: hit bids from the highest occupied level down to limitIdx. */
-    private long matchSell(long takerId, int limitIdx, long quantity, long ts) {
+    private long matchSell(long takerId, int owner, int limitIdx, long quantity) {
         long remaining = quantity;
-        while (remaining > 0 && bestBidIdx != NONE && bestBidIdx >= limitIdx) {
+        while (remaining > 0 && !takerStopped && bestBidIdx != NONE && bestBidIdx >= limitIdx) {
             remaining = fillLevel(bidHead, bidTail, bidQty, bidBits, bestBidIdx,
-                    takerId, remaining, ts);
+                    takerId, owner, remaining);
             if (bidQty[bestBidIdx] == 0) {
                 bestBidIdx = nextSetAtOrBelow(bidBits, bestBidIdx - 1);
             }
@@ -349,43 +559,120 @@ public final class HftOrderBook {
 
     /** FIFO-fills one level; returns the taker's remaining quantity. */
     private long fillLevel(int[] head, int[] tail, long[] levelQty, long[] bits, int idx,
-                           long takerId, long remaining, long ts) {
+                           long takerId, int owner, long remaining) {
         int node = head[idx];
         while (remaining > 0 && node != NONE) {
+            if (owner != 0 && stp != SelfTradePrevention.NONE && nodeOwner[node] == owner) {
+                stpCount++;
+                switch (stp) {
+                    case CANCEL_RESTING -> {
+                        levelQty[idx] -= nodeQty[node];
+                        nodeQty[node] = 0;
+                        node = popHead(head, tail, idx, node);
+                        continue;
+                    }
+                    case CANCEL_INCOMING -> {
+                        takerStopped = true;
+                        return clearIfEmpty(levelQty, bits, idx, remaining);
+                    }
+                    case CANCEL_BOTH -> {
+                        levelQty[idx] -= nodeQty[node];
+                        nodeQty[node] = 0;
+                        popHead(head, tail, idx, node);
+                        takerStopped = true;
+                        return clearIfEmpty(levelQty, bits, idx, remaining);
+                    }
+                    default -> { // DECREMENT
+                        long d = Math.min(remaining, nodeQty[node]);
+                        remaining -= d;
+                        nodeQty[node] -= d;
+                        levelQty[idx] -= d;
+                        if (nodeQty[node] == 0) {
+                            node = popHead(head, tail, idx, node);
+                        }
+                        continue;
+                    }
+                }
+            }
             long fill = Math.min(remaining, nodeQty[node]);
             remaining -= fill;
             nodeQty[node] -= fill;
             levelQty[idx] -= fill;
             tradeCount++;
-            if (sink != null) {
-                sink.onTrade(nodeId[node], takerId, idx + minTick, fill, ts);
-            }
+            bufferTrade(nodeId[node], takerId, idx + minTick, fill);
             if (nodeQty[node] == 0) {
-                // Maker fully filled: pop the head, recycle everything.
-                int next = nodeNext[node];
-                head[idx] = next;
-                if (next == NONE) {
-                    tail[idx] = NONE;
-                } else {
-                    nodePrev[next] = NONE;
-                }
-                mapRemoveAt(mapFind(nodeId[node]));
-                freeNode(node);
-                restingOrders--;
-                node = next;
+                node = popHead(head, tail, idx, node);
             }
         }
+        return clearIfEmpty(levelQty, bits, idx, remaining);
+    }
+
+    private long clearIfEmpty(long[] levelQty, long[] bits, int idx, long remaining) {
         if (levelQty[idx] == 0) {
             bits[idx >>> 6] &= ~(1L << (idx & 63));
         }
         return remaining;
     }
 
+    /** Pops the (exhausted or cancelled) head node of a level; returns the next node. */
+    private int popHead(int[] head, int[] tail, int idx, int node) {
+        assert head[idx] == node : "matching always works the queue head";
+        int next = nodeNext[node];
+        head[idx] = next;
+        if (next == NONE) {
+            tail[idx] = NONE;
+        } else {
+            nodePrev[next] = NONE;
+        }
+        mapRemoveAt(mapFind(nodeId[node]));
+        freeNode(node);
+        restingOrders--;
+        return next;
+    }
+
+    private void bufferTrade(long maker, long taker, int tick, long qty) {
+        if (bufCount == bufQty.length) {
+            int n = bufCount * 2;
+            bufSeq = java.util.Arrays.copyOf(bufSeq, n);
+            bufMaker = java.util.Arrays.copyOf(bufMaker, n);
+            bufTaker = java.util.Arrays.copyOf(bufTaker, n);
+            bufTick = java.util.Arrays.copyOf(bufTick, n);
+            bufQty = java.util.Arrays.copyOf(bufQty, n);
+        }
+        bufSeq[bufCount] = ++tradeSeq;
+        bufMaker[bufCount] = maker;
+        bufTaker[bufCount] = taker;
+        bufTick[bufCount] = tick;
+        bufQty[bufCount] = qty;
+        bufCount++;
+    }
+
+    /** Delivers buffered trades; the buffer is cleared even if a sink throws. */
+    private void emitTrades() {
+        int n = bufCount;
+        bufCount = 0;
+        if (n == 0) {
+            return;
+        }
+        TradeSink s1 = sink;
+        SequencedTradeSink s2 = seqSink;
+        for (int i = 0; i < n; i++) {
+            if (s1 != null) {
+                s1.onTrade(bufMaker[i], bufTaker[i], bufTick[i], bufQty[i], bufTs);
+            }
+            if (s2 != null) {
+                s2.onTrade(bufSeq[i], bufMaker[i], bufTaker[i], bufTick[i], bufQty[i], bufTs);
+            }
+        }
+    }
+
+
     /** Appends a remainder to its level's FIFO tail and indexes it. */
-    private void rest(long id, byte side, int idx, long quantity) {
+    private void rest(long id, byte side, int idx, long quantity, int owner) {
         int node = freeHead;
         freeHead = nodeNext[node];
         nodeId[node] = id;
+        nodeOwner[node] = owner;
         nodeQty[node] = quantity;
         nodeTick[node] = idx;
         nodeSide[node] = side;
@@ -555,6 +842,16 @@ public final class HftOrderBook {
 
     public long tradeCount() {
         return tradeCount;
+    }
+
+    /** Sequence number of the most recent trade (0 before the first). */
+    public long lastTradeSequence() {
+        return tradeSeq;
+    }
+
+    /** Self-trade-prevention interventions so far. */
+    public long selfTradePreventionCount() {
+        return stpCount;
     }
 
     /** Orders currently resting in the book (pool slots in use). */

@@ -26,7 +26,7 @@ class CreditRoundTripTest {
 
     @Test
     void spreadsFromOneFlatHazardBootstrapBackToThatHazardEverywhere() {
-        // Plant a single flat hazard by bootstrapping ONE pillar, read the
+        // Plant a single flat hazard by bootstrapping one pillar, read the
         // par spreads that hazard implies at 1/3/5/7/10y, then bootstrap a
         // fresh multi-pillar curve from those spreads: every recovered
         // pillar hazard must be the planted h, because a flat hazard is
@@ -125,7 +125,7 @@ class CreditRoundTripTest {
             prev = q;
         }
         // Beyond the last pillar the hazard is flat, so
-        // Q(5+s) = Q(5) * exp(-h_last * s) EXACTLY.
+        // Q(5+s) = Q(5) * exp(-h_last * s) exactly.
         double hLast = curve.hazard(6.0);
         assertEquals(curve.hazard(5.0), hLast, 0.0, "flat beyond the last pillar");
         assertEquals(curve.survivalProbability(5) * Math.exp(-hLast * 3),

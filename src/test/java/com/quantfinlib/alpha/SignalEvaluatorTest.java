@@ -70,7 +70,7 @@ class SignalEvaluatorTest {
         assertTrue(r.observations() > 10);
         assertTrue(r.format().contains("ORACLE"));
         // IC series is exposed for downstream plotting/validation.
-        assertEquals(r.observations(), r.icSeries().length);
+        assertEquals(r.observations(), r.icSeriesLength());
     }
 
     @Test
@@ -114,7 +114,7 @@ class SignalEvaluatorTest {
     void factorExposureDetectsDuplicatesAndInverses() {
         AlphaContext ctx = panel();
         AlphaFactor momentum = Factors.momentum(20, 0);
-        // Momentum on this panel IS the drift ranking: exposure ≈ +1.
+        // Momentum on this panel is the drift ranking: exposure ≈ +1.
         assertEquals(1.0, SignalEvaluator.factorExposure(ctx, oracle(), momentum, 30, 10), 1e-9);
         AlphaFactor inverted = (c, i) -> {
             double[] s = oracle().scores(c, i);
@@ -153,21 +153,21 @@ class SignalEvaluatorTest {
         SignalEvaluator.QuantileReport r =
                 SignalEvaluator.quantileReturns(panel(), oracle(), 10, 5, 4);
         assertEquals(4, r.quantiles());
-        assertEquals(4, r.meanReturns().length);
+        assertEquals(4, r.meanReturnsLength());
         assertTrue(r.dates() > 10);
         for (int q = 1; q < 4; q++) {
-            assertTrue(r.meanReturns()[q] > r.meanReturns()[q - 1],
+            assertTrue(r.meanReturns(q) > r.meanReturns(q - 1),
                     "bucket " + q + " not above bucket " + (q - 1));
         }
         double bottom = ((Math.pow(1 - 0.004, 5) - 1) + (Math.pow(1 - 0.003, 5) - 1)) / 2;
         double top = ((Math.pow(1 + 0.004, 5) - 1) + (Math.pow(1 + 0.003, 5) - 1)) / 2;
-        assertEquals(bottom, r.meanReturns()[0], 1e-12);
-        assertEquals(top, r.meanReturns()[3], 1e-12);
+        assertEquals(bottom, r.meanReturns(0), 1e-12);
+        assertEquals(top, r.meanReturns(3), 1e-12);
         assertEquals(top - bottom, r.spread(), 1e-12);
         assertTrue(r.spread() > 0);
         // Every (symbol, date) pair lands in exactly one bucket.
         int total = 0;
-        for (int c : r.counts()) {
+        for (int c : r.countsCopy()) {
             total += c;
         }
         assertEquals(8 * r.dates(), total);
@@ -186,8 +186,8 @@ class SignalEvaluatorTest {
         };
         SignalEvaluator.QuantileReport r =
                 SignalEvaluator.quantileReturns(panel(), noBest, 10, 5, 4);
-        assertEquals(Math.pow(1.003, 5) - 1, r.meanReturns()[3], 1e-12);
-        assertTrue(r.meanReturns()[3] < Math.pow(1.004, 5) - 1);
+        assertEquals(Math.pow(1.003, 5) - 1, r.meanReturns(3), 1e-12);
+        assertTrue(r.meanReturns(3) < Math.pow(1.004, 5) - 1);
     }
 
     @Test

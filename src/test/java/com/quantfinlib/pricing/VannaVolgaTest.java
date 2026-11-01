@@ -29,7 +29,7 @@ class VannaVolgaTest {
     @Test
     void pillarStrikesRecoverTheirMarketVolsExactly() {
         for (int i = 0; i < 3; i++) {
-            assertEquals(VOLS[i], vv.impliedVol(S, STRIKES[i]), 1e-6,
+            assertEquals(VOLS[i], vv.impliedVol(S, STRIKES[i]), 1e-12,
                     "pillar " + i + " must reproduce its market vol");
         }
     }
@@ -74,9 +74,9 @@ class VannaVolgaTest {
                 .add(T, S * Math.exp((R - Q) * T), 0.090, -0.008, 0.0025)
                 .build();
         FxVolSurface.SmilePillar p = surface.pillar(0);
-        VannaVolga fromSurface = VannaVolga.ofPillars(p.strikes(), p.vols(), R, Q, T);
+        VannaVolga fromSurface = VannaVolga.ofPillars(p.strikesCopy(), p.volsCopy(), R, Q, T);
         for (int i = 0; i < 3; i++) {
-            assertEquals(p.vols()[i], fromSurface.impliedVol(S, p.strikes()[i]), 1e-6);
+            assertEquals(p.vols(i), fromSurface.impliedVol(S, p.strikes(i)), 1e-6);
         }
         // The five-pillar overload reduces to the 25Δ triple.
         double[] five = {1.02, 1.05, 1.09, 1.13, 1.16};
@@ -96,5 +96,36 @@ class VannaVolgaTest {
         assertThrows(IllegalArgumentException.class,
                 () -> new VannaVolga(STRIKES, VOLS, R, Q, 0));
         assertThrows(IllegalArgumentException.class, () -> vv.price(OptionType.CALL, S, -1));
+    }
+
+    @Test
+    void wingsBeyondTenDeltaAreFlatOrSmoothlyContinued() {
+        double fwd = S * Math.exp((R - Q) * T);
+        double sv = VOLS[1] * Math.sqrt(T);
+        double k10c = fwd * Math.exp(-com.quantfinlib.util.MathUtils.normInv(0.10) * sv + 0.5 * sv * sv);
+        double k10p = fwd * Math.exp(-com.quantfinlib.util.MathUtils.normInv(0.90) * sv + 0.5 * sv * sv);
+        // Call wing: vol rising outward is continued linearly in log-strike,
+        // so the extension is exactly linear in ln K.
+        double v0 = vv.impliedVol(S, k10c);
+        double v1 = vv.impliedVol(S, k10c * Math.exp(0.1));
+        double v2 = vv.impliedVol(S, k10c * Math.exp(0.2));
+        assertEquals(v1 - v0, v2 - v1, 1e-12);
+        assertTrue(Double.isFinite(vv.impliedVol(S, k10p * 0.7)));
+        // Every vol on a wide strike grid is finite and the resulting call
+        // prices are convex in strike (no butterfly arbitrage from the wings).
+        double prevK = 0, prevC = 0, prevSlope = Double.NEGATIVE_INFINITY;
+        for (int i = 0; i <= 200; i++) {
+            double k = 0.8 + 0.6 * i / 200;
+            double v = vv.impliedVol(S, k);
+            assertTrue(Double.isFinite(v) && v > 0, "k=" + k);
+            double c = BlackScholes.price(OptionType.CALL, S, k, R, Q, v, T);
+            if (i > 0) {
+                double slope = (c - prevC) / (k - prevK);
+                assertTrue(slope >= prevSlope - 1e-9, "convexity at k=" + k);
+                prevSlope = slope;
+            }
+            prevK = k;
+            prevC = c;
+        }
     }
 }

@@ -1,0 +1,73 @@
+name: Nightly
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  full-tests:
+    # Every test, including the load (throughput floors, soak) and timing
+    # (wall-clock, sleep-based) tags, run one class at a time. Shared runners
+    # are noisy, so a single failure here is a prompt to rerun and look, not
+    # proof of a regression.
+    name: all tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Run all tests including load and timing
+        run: ./mvnw -B --no-transfer-progress -Pfull test
+
+  analysis:
+    # Error Prone and SpotBugs. Findings are warnings for now; the job only
+    # fails if the analysis itself cannot run.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Error Prone and SpotBugs
+        run: |
+          set -o pipefail
+          ./mvnw -B --no-transfer-progress -Panalysis -DskipTests clean verify | tee analysis.log
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo '## Static analysis'
+            echo "Error Prone and javac lint warnings: $(grep -cE '^\[WARNING\] .*\.java' analysis.log || true)"
+            echo "SpotBugs: $(grep -oE 'Total bugs: [0-9]+' analysis.log || echo 'no result')"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: analysis-reports
+          path: |
+            analysis.log
+            target/spotbugsXml.xml
+          if-no-files-found: ignore

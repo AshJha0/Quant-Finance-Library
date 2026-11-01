@@ -28,8 +28,7 @@ class FixOrderEncoderTest {
 
     private static FixMessage roundTrip(FixOrderEncoder enc) {
         // FixMessage.parse validates 9= and 10= — a framing bug fails here.
-        return FixMessage.parse(Arrays.copyOfRange(
-                enc.buffer(), enc.offset(), enc.offset() + enc.length()));
+        return FixMessage.parse(enc.toByteArray());
     }
 
     @Test
@@ -111,7 +110,7 @@ class FixOrderEncoderTest {
     @Test
     void encodeLoopIsAllocationFree() {
         FixOrderEncoder enc = encoder();
-        // JIT warmup (also crosses NO day boundary, so the date cache holds).
+        // JIT warmup (also crosses no day boundary, so the date cache holds).
         long base = 1_800_000_000_000L;
         for (int i = 0; i < 100_000; i++) {
             enc.encodeLimit(i, i, i & 1, (i & 1) == 0 ? Side.BUY : Side.SELL,

@@ -8,7 +8,9 @@ import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -18,10 +20,10 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Multi-day persistence of learned state: everything the models learn
- * across sessions — volume/vol/spread baselines, alpha weights and their
- * out-of-sample IC evidence, venue and LP scorecards — is exactly what a
- * desk does NOT want to relearn from zero every morning. A checkpoint is
+ * Multi-day persistence of learned state. Everything the models learn
+ * across sessions (volume/vol/spread baselines, alpha weights and their
+ * out-of-sample IC evidence, venue and LP scorecards) is exactly what a
+ * desk does not want to relearn from zero every morning. A checkpoint is
  * one binary file of named sections, written at end of day and restored at
  * the next session start:
  *
@@ -45,15 +47,19 @@ import java.util.Set;
  * format independently of the file format.</p>
  *
  * <p><b>Durability.</b> The writer buffers sections in memory and commits
- * in {@link Writer#close()}: temp file in the target directory, then an
- * atomic rename over the old checkpoint — a crash mid-save leaves
- * yesterday's file intact, never a torn one. (On the rare filesystem
- * without atomic rename — some network mounts — the commit degrades to a
+ * in {@link Writer#close()}: temp file in the target directory, forced to
+ * the device ({@code FileChannel.force(true)}), then an atomic rename over
+ * the old checkpoint, then the directory itself forced so the rename is
+ * durable (POSIX needs an fsync of the directory for that; Windows refuses
+ * to open a directory and journals the rename through NTFS metadata, so
+ * the step is skipped there). A crash or power loss mid-save leaves
+ * yesterday's file intact, never a torn or empty one. (On the rare filesystem
+ * without atomic rename, such as some network mounts, the commit degrades to a
  * plain replace, and a crash in that narrow window can lose the old file;
  * keep checkpoints on a local disk if that guarantee matters.) If any
  * section writer threw, nothing is committed. The reader loads the whole file up front (these
  * files are kilobytes), skips unknown sections (forward compatibility),
- * and rejects a section the model did not fully consume — the loudest
+ * and rejects a section the model did not fully consume, the loudest
  * possible signal of a writer/reader format drift.</p>
  *
  * <p>Everything here is cold-path (end of day / session start); the hot
@@ -139,15 +145,23 @@ public final class Checkpoint {
                 return;
             }
             Path temp = target.resolveSibling(target.getFileName() + ".tmp");
-            try (OutputStream raw = Files.newOutputStream(temp);
-                 DataOutputStream out = new DataOutputStream(raw)) {
-                out.writeInt(MAGIC);
-                out.writeInt(FORMAT_VERSION);
-                for (Map.Entry<String, byte[]> e : sections.entrySet()) {
-                    out.writeUTF(e.getKey());
-                    out.writeInt(e.getValue().length);
-                    out.write(e.getValue());
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+            DataOutputStream out = new DataOutputStream(bytes);
+            out.writeInt(MAGIC);
+            out.writeInt(FORMAT_VERSION);
+            for (Map.Entry<String, byte[]> e : sections.entrySet()) {
+                out.writeUTF(e.getKey());
+                out.writeInt(e.getValue().length);
+                out.write(e.getValue());
+            }
+            out.flush();
+            try (FileChannel ch = FileChannel.open(temp, StandardOpenOption.CREATE,
+                    StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
+                ByteBuffer buf = ByteBuffer.wrap(bytes.toByteArray());
+                while (buf.hasRemaining()) {
+                    ch.write(buf);
                 }
+                ch.force(true);   // content on the device before the rename can be
             } catch (IOException e) {
                 Files.deleteIfExists(temp);
                 throw e;
@@ -160,6 +174,23 @@ public final class Checkpoint {
                 // fall back to a plain replace rather than failing the save.
                 Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
             }
+            forceDirectory(target.toAbsolutePath().getParent());
+        }
+    }
+
+    /**
+     * Forces a directory's entries (the rename) to the device. Works on
+     * Linux and macOS; Windows cannot open a directory as a channel and the
+     * IOException is ignored there.
+     */
+    static void forceDirectory(Path dir) {
+        if (dir == null) {
+            return;
+        }
+        try (FileChannel ch = FileChannel.open(dir, StandardOpenOption.READ)) {
+            ch.force(true);
+        } catch (IOException | UnsupportedOperationException ignored) {
+            // not supported on this platform
         }
     }
 
@@ -249,7 +280,7 @@ public final class Checkpoint {
     }
 
     /**
-     * Reads a length-prefixed double array INTO {@code a} — a length
+     * Reads a length-prefixed double array into {@code a} — a length
      * mismatch means the checkpoint was written by a differently-configured
      * instance (other bucket/venue count) and throws before touching it.
      */

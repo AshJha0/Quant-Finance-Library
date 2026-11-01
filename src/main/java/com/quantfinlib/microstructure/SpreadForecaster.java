@@ -14,12 +14,12 @@ import java.util.Arrays;
  * you for free:
  *
  * <ol>
- *   <li><b>A time-of-day baseline</b> — spreads are wide at the open, tight
+ *   <li><b>A time-of-day baseline</b>: spreads are wide at the open, tight
  *       midday, wide into the close (and, in FX, wide across the rollover /
  *       thin liquidity hours). Each session accumulates a per-bucket mean;
  *       {@link #rollDay} folds it into the baseline with the {@code
- *       dayAlpha} day-over-day EWMA (the first session seeds it directly) —
- *       the spread analogue of {@link VolumeCurve};</li>
+ *       dayAlpha} day-over-day EWMA (the first session seeds it directly).
+ *       This is the spread analogue of {@link VolumeCurve};</li>
  *   <li><b>A fast mean-reverting deviation</b> — the current spread relative
  *       to its time-of-day baseline, blended per observation with
  *       {@link #DEVIATION_ALPHA} and decayed toward 0 with the configured
@@ -28,13 +28,13 @@ import java.util.Arrays;
  *       than either alone.</li>
  * </ol>
  *
- * <p>{@link #forecast} returns the predicted spread over the next moment —
+ * <p>{@link #forecast} returns the predicted spread over the next moment:
  * the {@code BenchmarkExecutor.MarketState.spread} input, projected rather
  * than merely observed, so the algo damps aggression <em>before</em> a
  * known-wide window (the close) instead of reacting after. Before the first
  * {@link #rollDay} there is no learned baseline yet, so the forecast
- * degrades honestly to the last observed spread. Volatility is the
- * correlated cousin — a wide-spread forecast usually coincides with high
+ * falls back to the last observed spread. Volatility is the
+ * correlated cousin. A wide-spread forecast usually coincides with high
  * {@code volPerSqrtSecond} from {@link SignalEngine}, and an algo should
  * treat both as timing-cost signals. Cross-asset, zero allocation, single
  * writer.</p>
@@ -43,7 +43,7 @@ public final class SpreadForecaster {
 
     /**
      * Per-observation blend weight of the live deviation (distinct from
-     * {@code dayAlpha}, which is the DAY-over-day baseline weight — the two
+     * {@code dayAlpha}, which is the day-over-day baseline weight — the two
      * timescales must not share a knob).
      */
     public static final double DEVIATION_ALPHA = 0.25;
@@ -115,7 +115,7 @@ public final class SpreadForecaster {
         todaySum[bucket] += spread;
         todayCount[bucket]++;
         if (daysLearned == 0 || baselineEwma[bucket] == 0) {
-            // No baseline yet — for the session OR for this bucket (never
+            // No baseline yet — for the session or for this bucket (never
             // observed on a prior day): deviating from 0 would inject the
             // whole spread as a "shock" into the shared deviation and
             // contaminate forecasts at every bucket.
@@ -132,7 +132,7 @@ public final class SpreadForecaster {
      * Closes the session: folds today's per-bucket mean spreads into the
      * baseline with the day-over-day EWMA (buckets with no observations
      * keep their learned value) and resets the intraday state. Seeding is
-     * PER BUCKET — a bucket first observed on a later day (feed started
+     * PER bucket — a bucket first observed on a later day (feed started
      * mid-session, half day) seeds from its own first observation rather
      * than EWMA-ramping from 0 and forecasting too-tight spreads at that
      * hour for weeks.
@@ -161,7 +161,7 @@ public final class SpreadForecaster {
      * Forecast spread at {@code bucket} as of {@code nowNanos}: the learned
      * time-of-day baseline plus the mean-reverting live deviation. Before
      * the first {@link #rollDay}/seed there is no baseline, so it returns
-     * the last observed spread (the honest live estimate), or NaN before
+     * the last observed spread, or NaN before
      * any observation at all.
      */
     public double forecast(int bucket, long nowNanos) {

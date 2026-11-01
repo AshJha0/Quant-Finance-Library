@@ -1,9 +1,9 @@
 package com.quantfinlib.crb;
 
 /**
- * The central risk book's hedging loop: per-factor exposure BANDS, a
+ * The central risk book's hedging loop: per-factor exposure bands, a
  * cost-aware hedge when breached, and a cooldown so the book does not
- * chase its own hedges. The policy is deliberately two-speed:
+ * chase its own hedges. The policy has two speeds:
  *
  * <ul>
  *   <li>inside the bands, warehouse — the whole point of a CRB is that
@@ -11,7 +11,7 @@ package com.quantfinlib.crb;
  *   <li>on a breach, hedge the breached factors back to
  *       {@code resetFraction} of the limit through
  *       {@link HedgeOptimizer} — cost-aware first, but if the
- *       cost-aware hedge leaves any factor still OUTSIDE its limit the
+ *       cost-aware hedge leaves any factor still outside its limit the
  *       hedge reruns at zero cost weight: a hard limit outranks
  *       transaction-cost thrift, always.</li>
  * </ul>
@@ -20,6 +20,8 @@ package com.quantfinlib.crb;
  * deterministic, replayable). Research/warm lane, single-threaded.</p>
  */
 public final class CrbAutoHedger {
+
+    private static final HedgeOrder[] NO_ORDERS = new HedgeOrder[0];   // shared: no allocation when idle
 
     /** One instrument's hedge instruction. */
     public record HedgeOrder(int instrument, double notional) {
@@ -70,7 +72,7 @@ public final class CrbAutoHedger {
     /**
      * The hedging decision for this interval. Empty when inside all
      * bands or still cooling down; otherwise the cheapest hedge of the
-     * EXCESS — only what sits beyond {@code resetFraction·limit} on the
+     * excess — only what sits beyond {@code resetFraction·limit} on the
      * breached factors is hedged, because inventory inside the band is
      * the CRB's edge, not its problem. If the cost-aware hedge still
      * leaves a factor outside its hard limit, the excess is re-hedged
@@ -89,12 +91,12 @@ public final class CrbAutoHedger {
                               double costWeight, long nowInterval) {
         requireLength(exposures);
         if (!breached(exposures)) {
-            return new HedgeOrder[0];
+            return NO_ORDERS;
         }
         // hasHedged guards the subtraction: now − MIN_VALUE would overflow
-        // negative and suppress the very FIRST hedge forever.
+        // negative and suppress the very first hedge forever.
         if (hasHedged && nowInterval - lastHedgeInterval < cooldownIntervals) {
-            return new HedgeOrder[0];
+            return NO_ORDERS;
         }
         // Hedge target: the excess beyond the reset band on breached
         // factors, zero elsewhere — flattening the whole book would
@@ -141,7 +143,7 @@ public final class CrbAutoHedger {
         return orders;
     }
 
-    /** The band the book hedges back INTO for a factor. */
+    /** The band the book hedges back into for a factor. */
     public double targetBand(int factor) {
         return limits[factor] * resetFraction;
     }
@@ -165,7 +167,7 @@ public final class CrbAutoHedger {
                     + " != limits length " + limits.length);
         }
         for (double e : exposures) {
-            // Math.abs(NaN) > limit is FALSE: an unguarded NaN exposure
+            // Math.abs(NaN) > limit is false: an unguarded NaN exposure
             // would read as "inside the band" and silently disable the
             // auto-hedger for that factor forever.
             if (!Double.isFinite(e)) {

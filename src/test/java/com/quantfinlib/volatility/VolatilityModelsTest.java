@@ -49,12 +49,16 @@ class VolatilityModelsTest {
         // True: alpha=0.08, beta=0.90, daily vol 1% (uncond var 1e-4).
         double uncond = 1e-4;
         double[] r = simulateGarch(uncond * 0.02, 0.08, 0.90, 4_000, 42);
-        Garch11.Params fit = Garch11.fit(r);
+        Garch11.Fit mle = Garch11.estimate(r, Innovation.GAUSSIAN);
+        Garch11.Params fit = mle.params();
 
         assertTrue(fit.persistence() > 0.90 && fit.persistence() < 0.9995,
                 "persistence=" + fit.persistence());
-        assertEquals(0.08, fit.alpha(), 0.06);
-        assertEquals(uncond, fit.unconditionalVariance(), uncond * 0.35);
+        // Within three standard errors of the truth (the grid search this
+        // replaced needed +-0.06 on alpha and +-35% on the variance).
+        assertEquals(0.08, fit.alpha(), 3 * mle.standardErrors(1));
+        assertEquals(0.90, fit.beta(), 3 * mle.standardErrors(2));
+        assertEquals(uncond, fit.unconditionalVariance(), uncond * 0.25);
         assertTrue(Double.isFinite(fit.logLikelihood()));
     }
 

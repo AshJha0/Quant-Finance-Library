@@ -1,9 +1,9 @@
 package com.quantfinlib.microstructure;
 
 /**
- * TIME-VARYING regression by Kalman filter — the pairs desk's upgrade
+ * Time-varying regression by Kalman filter — the pairs desk's upgrade
  * over a static OLS hedge ratio. The state {@code [α, β]} follows a
- * random walk (relationships DRIFT: index compositions change, business
+ * random walk (relationships drift: index compositions change, business
  * mixes shift, a hedge ratio fitted on last year is stale by spring),
  * and each observation {@code y = α + β·x + ε} nudges the estimate by
  * exactly as much as its information content warrants:
@@ -11,18 +11,18 @@ package com.quantfinlib.microstructure;
  * <pre>  state:       [α, β]_t = [α, β]_{t-1} + noise(q)
  *  observation:  y_t = α_t + β_t·x_t + noise(r)</pre>
  *
- * The knobs mean something: {@code processNoise} (q) is how fast you
- * believe the relationship drifts — 0 collapses to recursive least
- * squares (β converges and freezes), large q chases every tick;
- * {@code observationNoise} (r) is how noisy each print is. Their RATIO
+ * The knobs mean something. {@code processNoise} (q) is how fast you
+ * believe the relationship drifts: 0 collapses to recursive least
+ * squares (β converges and freezes), large q chases every tick.
+ * {@code observationNoise} (r) is how noisy each print is. Their ratio
  * is what matters. {@link #betaVariance()} is the filter's own
- * uncertainty — a hedge sized off a β the filter itself distrusts is a
+ * uncertainty; a hedge sized off a β the filter itself distrusts is a
  * position, not a hedge.
  *
  * <p>Pairs workflow: {@code hedging.CointegrationTest} (is there a
- * relationship?) → this class (what is the ratio NOW?) →
+ * relationship?), then this class (what is the ratio now?), then
  * {@link OrnsteinUhlenbeck} on the resulting spread (how fast does it
- * revert?) → {@code execution.SpreadExecutionAlgo} (execute with the
+ * revert?), then {@code execution.SpreadExecutionAlgo} (execute with the
  * legging cap). O(1) per observation, allocation-free after
  * construction, deterministic; research/warm lane.</p>
  */

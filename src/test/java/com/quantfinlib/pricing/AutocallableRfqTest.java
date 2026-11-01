@@ -53,7 +53,7 @@ class AutocallableRfqTest {
         // Drift puts the path below the coupon barrier for obs 1-2, then a
         // rising drift... simpler: two observations, drift down then flat is
         // not expressible under GBM zero-vol; instead compare memory ON vs
-        // OFF on a stochastic run — memory can only ADD value.
+        // off on a stochastic run — memory can only add value.
         Autocallable memory = new Autocallable(1_000_000, QUARTERS, 1.05, 0.95, 0.6,
                 0.02, true);
         Autocallable plain = new Autocallable(1_000_000, QUARTERS, 1.05, 0.95, 0.6,

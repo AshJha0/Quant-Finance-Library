@@ -1,5 +1,6 @@
 /**
- * FX-specific market machinery — spot conventions through NDFs:
+ * FX market conventions and instruments, from spot dates to NDFs. The
+ * main classes:
  * {@link com.quantfinlib.fx.CurrencyPair} (pip/precision tables, T+1/T+2
  * spot lags, dual-calendar tenor dates with modified-following and end-end),
  * {@link com.quantfinlib.fx.SwapPointsCurve} (quoted forward points →

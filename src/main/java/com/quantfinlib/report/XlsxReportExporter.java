@@ -18,8 +18,9 @@ public final class XlsxReportExporter implements ReportExporter {
 
     @Override
     public void export(Report report, Path path) throws IOException {
-        if (path.getParent() != null) {
-            Files.createDirectories(path.getParent());
+        Path parent = path.getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
         }
         try (OutputStream fos = Files.newOutputStream(path);
              ZipOutputStream zip = new ZipOutputStream(fos)) {
@@ -66,7 +67,7 @@ public final class XlsxReportExporter implements ReportExporter {
     }
 
     private static boolean isNumeric(String s) {
-        // Strict OOXML decimal syntax, NOT Double.parseDouble: parseDouble
+        // Strict OOXML decimal syntax, not Double.parseDouble: parseDouble
         // accepts Java float-literal forms ("1D", "3f", "+5", hex floats)
         // that are invalid inside <v> — one such cell makes Excel declare
         // the entire workbook corrupt, not just the cell.

@@ -3,76 +3,107 @@ package com.quantfinlib.sbe;
 import java.nio.ByteBuffer;
 
 /**
- * SBE-style flyweight codec for a market-data trade message: fixed field
- * offsets over a {@link ByteBuffer}, so encode/decode is a handful of
- * absolute primitive reads/writes — <b>zero allocation, zero parsing, zero
- * copying</b>. This is the wire format real HFT feeds use (ITCH/SBE family),
- * as opposed to the text protocols (JSON/FIX tag-value) of the retail edges.
+ * SBE flyweight for a market-data trade (templateId 1, schema version 2):
+ * fixed offsets over a little-endian {@link ByteBuffer}, so encode and
+ * decode are absolute primitive reads and writes with no allocation.
  *
- * <p>Wire layout (little-endian, 32 bytes):</p>
+ * <p>Layout: the 8-byte {@link MessageHeader}, then a 32-byte block with
+ * every 64-bit field at a multiple of 8 from the message start:</p>
  * <pre>
- * offset  0  int32   messageType   = 1
- * offset  4  int32   symbolId          (dense id shared by both ends)
- * offset  8  double  price
- * offset 16  double  size
- * offset 24  int64   timestampNanos    (exchange event time)
+ * offset  8  int64  priceMantissa
+ * offset 16  int64  sizeMantissa
+ * offset 24  int64  timestampNanos   (exchange event time)
+ * offset 32  int32  symbolId         (dense id shared by both ends)
+ * offset 36  int8   priceExponent    price = mantissa × 10^exponent
+ * offset 37  int8   sizeExponent
+ * offset 38  2 bytes padding
  * </pre>
- *
- * <p>Usage: {@code wrap(buffer, offset)} then read/write fields. The
- * flyweight holds no state besides the wrap position — reuse one instance
- * for millions of messages.</p>
+ * Wrap at an offset that is a multiple of 8 for aligned access.
  */
 public final class TradeFlyweight {
 
-    /** Message type discriminator at offset 0. */
-    public static final int MESSAGE_TYPE = 1;
-    /** Total encoded size in bytes. */
+    /** SBE templateId. */
+    public static final int TEMPLATE_ID = 1;
+    /** Body length in bytes, as written in the header. */
     public static final int BLOCK_LENGTH = 32;
+    /** Header plus body. */
+    public static final int ENCODED_LENGTH = MessageHeader.ENCODED_LENGTH + BLOCK_LENGTH;
 
-    private static final int TYPE_OFFSET = 0;
-    private static final int SYMBOL_OFFSET = 4;
-    private static final int PRICE_OFFSET = 8;
-    private static final int SIZE_OFFSET = 16;
-    private static final int TIMESTAMP_OFFSET = 24;
+    private static final int PRICE = 8;
+    private static final int SIZE = 16;
+    private static final int TIMESTAMP = 24;
+    private static final int SYMBOL = 32;
+    private static final int PRICE_EXP = 36;
+    private static final int SIZE_EXP = 37;
 
     private ByteBuffer buffer;
     private int offset;
 
-    /** Positions this flyweight over {@code buffer} at {@code offset}. */
+    /**
+     * Positions this flyweight over {@code buffer} at {@code offset} (the header start).
+     * The buffer is not copied: the caller keeps ownership, and reads and
+     * writes through this flyweight go straight to its bytes.
+     */
     public TradeFlyweight wrap(ByteBuffer buffer, int offset) {
         this.buffer = buffer;
         this.offset = offset;
         return this;
     }
 
-    /** Encodes a full trade message at the wrap position (writes the type header). */
-    public TradeFlyweight encode(int symbolId, double price, double size, long timestampNanos) {
-        buffer.putInt(offset + TYPE_OFFSET, MESSAGE_TYPE);
-        buffer.putInt(offset + SYMBOL_OFFSET, symbolId);
-        buffer.putDouble(offset + PRICE_OFFSET, price);
-        buffer.putDouble(offset + SIZE_OFFSET, size);
-        buffer.putLong(offset + TIMESTAMP_OFFSET, timestampNanos);
+    /** Encodes header and body with integer price and size. */
+    public TradeFlyweight encode(int symbolId, long priceMantissa, int priceExponent,
+                                 long sizeMantissa, int sizeExponent, long timestampNanos) {
+        MessageHeader.write(buffer, offset, BLOCK_LENGTH, TEMPLATE_ID);
+        buffer.putLong(offset + PRICE, priceMantissa);
+        buffer.putLong(offset + SIZE, sizeMantissa);
+        buffer.putLong(offset + TIMESTAMP, timestampNanos);
+        buffer.putInt(offset + SYMBOL, symbolId);
+        buffer.put(offset + PRICE_EXP, (byte) priceExponent);
+        buffer.put(offset + SIZE_EXP, (byte) sizeExponent);
+        buffer.putShort(offset + 38, (short) 0);
         return this;
     }
 
-    public int symbolId() {
-        return buffer.getInt(offset + SYMBOL_OFFSET);
+    /**
+     * Encodes from doubles on the given grids; throws when a value is not
+     * on its grid (see {@link Decimal64#toMantissa}).
+     */
+    public TradeFlyweight encode(int symbolId, double price, int priceExponent, double size,
+                                 int sizeExponent, long timestampNanos) {
+        return encode(symbolId, Decimal64.toMantissa(price, priceExponent), priceExponent,
+                Decimal64.toMantissa(size, sizeExponent), sizeExponent, timestampNanos);
     }
 
+    public int symbolId() {
+        return buffer.getInt(offset + SYMBOL);
+    }
+
+    public long priceMantissa() {
+        return buffer.getLong(offset + PRICE);
+    }
+
+    public int priceExponent() {
+        return buffer.get(offset + PRICE_EXP);
+    }
+
+    public long sizeMantissa() {
+        return buffer.getLong(offset + SIZE);
+    }
+
+    public int sizeExponent() {
+        return buffer.get(offset + SIZE_EXP);
+    }
+
+    /** Price as a double (for double-domain consumers such as the bus). */
     public double price() {
-        return buffer.getDouble(offset + PRICE_OFFSET);
+        return Decimal64.toDouble(priceMantissa(), priceExponent());
     }
 
     public double size() {
-        return buffer.getDouble(offset + SIZE_OFFSET);
+        return Decimal64.toDouble(sizeMantissa(), sizeExponent());
     }
 
     public long timestampNanos() {
-        return buffer.getLong(offset + TIMESTAMP_OFFSET);
-    }
-
-    /** Reads the message-type discriminator at {@code offset} without wrapping. */
-    public static int typeAt(ByteBuffer buffer, int offset) {
-        return buffer.getInt(offset);
+        return buffer.getLong(offset + TIMESTAMP);
     }
 }

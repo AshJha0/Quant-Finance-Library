@@ -73,7 +73,7 @@ class BacktestQualityRoundTest {
     @Test
     void zeroPnlTradeIsNeitherWinNorLoss() {
         // The break-even trade adds nothing to gross loss, so PF is infinite;
-        // but it is NOT counted as a win. One character (> vs >=) apart.
+        // but it is not counted as a win. One character (> vs >=) apart.
         PerformanceMetrics m = PerformanceAnalytics.compute(
                 new double[]{100, 110}, List.of(trade(0), trade(100)), 252);
         assertEquals(Double.POSITIVE_INFINITY, m.profitFactor());
@@ -146,7 +146,7 @@ class BacktestQualityRoundTest {
 
         BacktestResult winner = Backtester.run(factory.create(ranked.getFirst().params()),
                 s, BacktestConfig.defaults());
-        double[] eq = winner.equityCurve();
+        double[] eq = winner.equityCurveCopy();
         double[] rets = new double[eq.length - 1];
         for (int i = 1; i < eq.length; i++) {
             rets[i - 1] = eq[i] / eq[i - 1] - 1;
@@ -162,7 +162,7 @@ class BacktestQualityRoundTest {
                 () -> GridSearchOptimizer.deflatedSharpeOfWinner(ranked, rets, 0));
     }
 
-    // ------------------------------------------------------- walk-forward honesty
+    // ------------------------------------------------------- walk-forward state carry-over
 
     @Test
     void walkForwardFoldsTradeBecauseIndicatorsArriveWarm() {
@@ -177,7 +177,7 @@ class BacktestQualityRoundTest {
                 s, grid, factory, BacktestConfig.defaults(), 100, 50,
                 PerformanceMetrics::totalReturn);
         assertEquals(6, r.folds().size());
-        assertEquals(6 * 50, r.outOfSampleEquity().length);
+        assertEquals(6 * 50, r.outOfSampleEquityLength());
         assertTrue(!r.outOfSampleTrades().isEmpty(),
                 "warm folds must actually trade on a cyclical market");
     }
@@ -199,14 +199,15 @@ class BacktestQualityRoundTest {
         // Signal fires at bar 2, but trading starts at bar 5: ignored.
         BacktestResult r = Backtester.run(new Script(2, -1), s,
                 BacktestConfig.defaults(), 5);
-        assertEquals(12 - 5, r.equityCurve().length);
+        assertEquals(12 - 5, r.equityCurveLength());
         assertTrue(r.trades().isEmpty(), "signal before tradeFrom must be ignored");
 
-        // Signal at bar 6 IS acted on; force-closed at end of data.
+        // Signal at bar 6 is acted on: it fills at bar 7's open (next-open
+        // default) and is force-closed at end of data.
         BacktestResult r2 = Backtester.run(new Script(6, -1), s,
                 BacktestConfig.defaults(), 5);
         assertEquals(1, r2.trades().size());
-        assertEquals(6, r2.trades().getFirst().entryIndex());
+        assertEquals(7, r2.trades().getFirst().entryIndex());
 
         assertThrows(IllegalArgumentException.class,
                 () -> Backtester.run(new Script(2, -1), s, BacktestConfig.defaults(), -1));
@@ -219,7 +220,7 @@ class BacktestQualityRoundTest {
     @Test
     void lastLookHoldsOnTheSignalBarAndFillsNextOpen() {
         // Flat market, zero spread: the signal fires at bar 3's close, so
-        // the FIRST possible fill is bar 4 — filling bar 3's open would be
+        // the first possible fill is bar 4 — filling bar 3's open would be
         // intrabar time travel. Exit signal at bar 7 fills at bar 8.
         BarSeries s = flatSeries(12, 100);
         LastLookExecution model = new LastLookExecution(0, 50);
@@ -237,7 +238,7 @@ class BacktestQualityRoundTest {
     void lastLookRejectsRunawayMarketAndNeverFills() {
         // Every bar rallies 150bps open-to-close; threshold 100bps: after
         // the signal-bar hold, every attempt is a reject — the parent
-        // chases and never gets filled. That is the point of the model.
+        // chases and never gets filled. That is what the model is for.
         BarSeries.Builder b = BarSeries.builder("RALLY");
         for (int i = 0; i < 10; i++) {
             double open = 100 * Math.pow(1.02, i);
@@ -250,7 +251,7 @@ class BacktestQualityRoundTest {
         assertTrue(r.backtest().trades().isEmpty());
         assertEquals(0, model.fillCount());
         assertEquals(6, model.rejectCount(), "bars 4..9 all reject");
-        double[] eq = r.backtest().equityCurve();
+        double[] eq = r.backtest().equityCurveCopy();
         assertEquals(100_000, eq[eq.length - 1], 1e-9, "no fill -> capital intact");
     }
 

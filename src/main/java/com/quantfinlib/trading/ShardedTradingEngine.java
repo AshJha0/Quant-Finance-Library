@@ -1,26 +1,28 @@
 package com.quantfinlib.trading;
 
+import com.quantfinlib.util.IdleStrategy;
 import com.quantfinlib.marketdata.HftMarketDataBus;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.IntFunction;
+import java.util.function.Supplier;
 
 /**
  * Horizontal scaling as shipped machinery, not a recipe: N independent
  * {@code bus → risk gate → order gateway} stacks (one consumer core and one
  * venue core per shard) behind a single symbol-routing facade. The scaling
  * model is <b>shared-nothing</b>: shards never touch each other's state, so
- * aggregate capacity is per-shard throughput × shard count — measured at
- * ~2.3M ticks/s per shard on the 300-symbol probe.
+ * aggregate capacity scales with shard count up to the available cores;
+ * {@code examples.ShardScaleBenchmark} measures it (see docs/BENCHMARKS.md).
  *
  * <p>Symbol routing rules:</p>
  * <ul>
  *   <li>{@link #registerSymbol(String, int...)} assigns a symbol to one or
- *       MORE shards — multi-shard registration is the cross co-location
+ *       more shards — multi-shard registration is the cross co-location
  *       tool: a synthetic cross must live where both its legs tick, and
  *       duplicating a leg's feed into a second shard costs one extra ring
- *       publish (~40 ns), which is the whole point of shared-nothing;</li>
+ *       publish, which is the whole point of shared-nothing;</li>
  *   <li>{@link #publish} fans a tick to every shard hosting the symbol —
  *       primitive arrays only, zero allocation, single producer thread
  *       (or one producer per disjoint symbol set);</li>
@@ -29,7 +31,7 @@ import java.util.function.IntFunction;
  *       them.</li>
  * </ul>
  *
- * <p>What sharding deliberately does NOT solve: firm-wide risk. Each
+ * <p>What sharding does not solve: firm-wide risk. Each
  * shard's {@link HftRiskGate} sees only its own symbols; put a
  * {@link GlobalRiskAggregator} over {@link #gates()} for cross-shard
  * exposure caps.</p>
@@ -40,15 +42,15 @@ public final class ShardedTradingEngine implements AutoCloseable {
     private final HftRiskGate[] gates;
     private final HftOrderGateway[] gateways;
 
-    // Routing tables, indexed by the GLOBAL symbol handle returned from
+    // Routing tables, indexed by the global symbol handle returned from
     // registerSymbol: which shards host it, and its dense id in each.
     private final List<int[]> shardsOf = new ArrayList<>();
     private final List<int[]> localIdOf = new ArrayList<>();
     private final List<String> names = new ArrayList<>();
     // Frozen into arrays at start() so the publish hot path is array-only.
-    private int[][] routeShards;
+    private volatile int[][] routeShards;
     private int[][] routeIds;
-    private boolean started;
+    private volatile boolean started;
 
     /**
      * @param shardCount        independent stacks (2 threads each: consumer + venue)
@@ -61,16 +63,36 @@ public final class ShardedTradingEngine implements AutoCloseable {
     public ShardedTradingEngine(int shardCount, int busRingCapacity, int orderRingCapacity,
                                 int maxSymbolsPerShard, boolean busySpin,
                                 IntFunction<HftRiskGate> gateFactory) {
-        if (shardCount <= 0) {
-            throw new IllegalArgumentException("shardCount must be > 0");
+        this(shardCount, busRingCapacity, orderRingCapacity, maxSymbolsPerShard,
+                busySpin ? IdleStrategy::busySpin : () -> IdleStrategy.parking(200), gateFactory);
+    }
+
+    /**
+     * @param shardCount         independent stacks (2 threads each: consumer + venue)
+     * @param busRingCapacity    tick ring per shard (power of two)
+     * @param orderRingCapacity  order ring per shard (power of two)
+     * @param maxSymbolsPerShard dense-id capacity per shard
+     * @param idleFactory        makes one idle strategy per thread (strategies may keep state)
+     * @param gateFactory        builds each shard's risk gate (limits per shard)
+     */
+    public ShardedTradingEngine(int shardCount, int busRingCapacity, int orderRingCapacity,
+                                int maxSymbolsPerShard, Supplier<IdleStrategy> idleFactory,
+                                IntFunction<HftRiskGate> gateFactory) {
+        if (shardCount <= 0 || shardCount > 64) {
+            throw new IllegalArgumentException("shardCount must be in 1..64");
         }
         this.buses = new HftMarketDataBus[shardCount];
         this.gates = new HftRiskGate[shardCount];
         this.gateways = new HftOrderGateway[shardCount];
         for (int s = 0; s < shardCount; s++) {
-            buses[s] = new HftMarketDataBus(busRingCapacity, maxSymbolsPerShard, busySpin);
+            buses[s] = new HftMarketDataBus(busRingCapacity, maxSymbolsPerShard, idleFactory.get());
             gates[s] = gateFactory.apply(s);
-            gateways[s] = new HftOrderGateway(orderRingCapacity, gates[s], busySpin);
+            gateways[s] = new HftOrderGateway(orderRingCapacity, gates[s], idleFactory.get(),
+                    1 << 16, null, 1_000_000_000L);
+            // A failing strategy on a shard's bus stops that shard trading
+            // (and, through the kill epoch, cancels its working orders).
+            HftRiskGate gate = gates[s];
+            buses[s].onListenerFailure(() -> gate.kill(true));
         }
     }
 
@@ -115,8 +137,8 @@ public final class ShardedTradingEngine implements AutoCloseable {
         }
         // Freeze routing into plain 2D arrays: the publish path after this
         // point is array indexing only — no List, no bounds surprises.
-        routeShards = shardsOf.toArray(new int[0][]);
         routeIds = localIdOf.toArray(new int[0][]);
+        routeShards = shardsOf.toArray(new int[0][]); // volatile write publishes both
         for (int s = 0; s < buses.length; s++) {
             gateways[s].start();
             buses[s].start();
@@ -126,17 +148,36 @@ public final class ShardedTradingEngine implements AutoCloseable {
 
     /**
      * The producer hot path: fans one tick to every shard hosting the
-     * symbol. Zero allocation. Returns false when ANY hosting shard's ring
+     * symbol. Zero allocation. Returns false when any hosting shard's ring
      * was full (that shard missed the tick; counted on its bus).
      */
     public boolean publish(int handle, double price, double size, long timestampNanos) {
-        int[] shards = routeShards[handle];
-        int[] ids = routeIds[handle];
-        boolean all = true;
-        for (int i = 0; i < shards.length; i++) {
-            all &= buses[shards[i]].publish(ids[i], price, size, timestampNanos);
+        return publishMissMask(handle, price, size, timestampNanos) == 0;
+    }
+
+    /**
+     * As {@link #publish}, but reports which hosting shards missed the tick:
+     * bit {@code s} of the result is set when shard {@code s}'s ring was
+     * full (0 = delivered everywhere). A cross priced on one shard from a
+     * leg that another shard dropped diverges silently unless the caller
+     * looks at this mask. Supports up to 64 shards.
+     *
+     * @throws IllegalStateException if called before {@link #start}
+     */
+    public long publishMissMask(int handle, double price, double size, long timestampNanos) {
+        int[][] routes = routeShards;
+        if (routes == null) {
+            throw new IllegalStateException("publish before start()");
         }
-        return all;
+        int[] shards = routes[handle];
+        int[] ids = routeIds[handle];
+        long missed = 0;
+        for (int i = 0; i < shards.length; i++) {
+            if (!buses[shards[i]].publish(ids[i], price, size, timestampNanos)) {
+                missed |= 1L << shards[i];
+            }
+        }
+        return missed;
     }
 
     public int shardCount() {

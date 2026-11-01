@@ -15,6 +15,13 @@ package com.quantfinlib.marketdata;
  * <p>An optional {@link Listener} fires only when the NBBO actually changes
  * (price or size at the inside), so downstream logic is naturally conflated
  * to inside-quote updates.</p>
+ *
+ * <p><b>Staleness.</b> Each venue's last update time is kept. With
+ * {@link #maxQuoteAgeNanos(long)} set, {@link #expireStale(long)} removes
+ * every venue whose quote is older than the limit, so a venue whose feed
+ * has silently died stops holding the inside. Call it from the feed thread
+ * on a timer or before acting on the NBBO; the update path itself does not
+ * scan for age.</p>
  */
 public final class Nbbo {
 
@@ -33,6 +40,9 @@ public final class Nbbo {
     private final long[] bidSize;
     private final int[] askTick;
     private final long[] askSize;
+    private final long[] lastUpdateNanos;
+    private long maxQuoteAgeNanos = Long.MAX_VALUE;
+    private long staleExpiries;
 
     private int nbb = NO_BID;
     private long nbbSize;
@@ -57,6 +67,47 @@ public final class Nbbo {
         this.askSize = new long[venueCount];
         java.util.Arrays.fill(bidTick, NO_BID);
         java.util.Arrays.fill(askTick, NO_ASK);
+        this.lastUpdateNanos = new long[venueCount];
+        java.util.Arrays.fill(lastUpdateNanos, Long.MIN_VALUE);
+    }
+
+    /** Maximum quote age honoured by {@link #expireStale}; {@code Long.MAX_VALUE} disables. */
+    public Nbbo maxQuoteAgeNanos(long nanos) {
+        if (nanos <= 0) {
+            throw new IllegalArgumentException("max age must be > 0");
+        }
+        this.maxQuoteAgeNanos = nanos;
+        return this;
+    }
+
+    /**
+     * Removes the quotes of every venue not updated within the maximum age
+     * at {@code nowNanos}. Returns true when the NBBO changed.
+     */
+    public boolean expireStale(long nowNanos) {
+        if (maxQuoteAgeNanos == Long.MAX_VALUE) {
+            return false;
+        }
+        boolean changed = false;
+        for (int v = 0; v < venues; v++) {
+            long t = lastUpdateNanos[v];
+            boolean quoted = bidTick[v] != NO_BID || askTick[v] != NO_ASK;
+            if (quoted && t != Long.MIN_VALUE && nowNanos - t > maxQuoteAgeNanos) {
+                staleExpiries++;
+                changed |= onVenueDown(v, nowNanos);
+            }
+        }
+        return changed;
+    }
+
+    /** Timestamp of a venue's last quote; {@code Long.MIN_VALUE} before the first. */
+    public long lastUpdateNanos(int venue) {
+        return lastUpdateNanos[venue];
+    }
+
+    /** Venues removed by {@link #expireStale} so far. */
+    public long staleExpiryCount() {
+        return staleExpiries;
     }
 
     /** Installs the (single) inside-change callback. */
@@ -77,6 +128,7 @@ public final class Nbbo {
         bidSize[venue] = bidSz > 0 ? bidSz : 0;
         askTick[venue] = newAsk;
         askSize[venue] = askSz > 0 ? askSz : 0;
+        lastUpdateNanos[venue] = timestampNanos;
         updateCount++;
         // Fast path: a venue that was not at either inside and stays strictly
         // off it cannot move the NBBO — most consolidated-tape updates are

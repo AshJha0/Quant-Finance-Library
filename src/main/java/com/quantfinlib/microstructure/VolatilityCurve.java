@@ -21,13 +21,13 @@ import java.util.Arrays;
  * it); {@link #rollDay} folds it into a per-bucket baseline with the
  * day-over-day EWMA, the first session seeding directly.</p>
  *
- * <p>{@link #regime} is the point of the class: the <b>normalized
+ * <p>{@link #regime} is the main output: the normalized
  * volatility-regime signal that {@code execution.BenchmarkExecutor.MarketState}
- * documents as its {@code volatility} input</b> — current vol against the
+ * documents as its {@code volatility} input — current vol against the
  * time-of-day baseline, mapped to ~0 (calm for this hour) … 1 (extreme),
  * so "the open is always wild" doesn't read as an urgency signal but a
  * genuinely wild lunchtime does. Before any baseline is learned the regime
- * is 0 (neutral) — the honest default. Cross-asset, zero allocation,
+ * is 0 (neutral). Cross-asset, zero allocation,
  * single writer.</p>
  */
 public final class VolatilityCurve {
@@ -90,7 +90,7 @@ public final class VolatilityCurve {
     /**
      * Closes the session: folds today's per-bucket mean vol into the
      * baseline (buckets without observations keep their learned value).
-     * Seeding is PER BUCKET — a bucket first observed on day 5 (feed
+     * Seeding is PER bucket — a bucket first observed on day 5 (feed
      * started mid-session on day 1, a half day skipped the afternoon)
      * seeds from its own first observation rather than EWMA-ramping from
      * 0, which would leave {@link #regime} falsely reading "extreme" at

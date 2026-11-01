@@ -1,11 +1,19 @@
 package com.quantfinlib.marketdata;
 
 /**
- * ITCH 5.0-style binary market-data codec: the message subset that drives a
- * full-depth (L3) book — add, add-with-attribution, execute, cancel, delete,
- * replace, and off-book trade — with the exact field layout and big-endian
- * encoding of the Nasdaq TotalView-ITCH 5.0 specification. Styled after the
- * spec for realism; not a certified implementation.
+ * ITCH 5.0 binary market-data codec, after the Nasdaq TotalView-ITCH 5.0
+ * specification (2020 revision): exact field layouts and big-endian
+ * encoding for the messages that move a full-depth (L3) book (A, F, E, C,
+ * X, D, U), the trade prints (P non-cross, Q cross, B broken), and the
+ * session and state messages (S system event, H trading action);
+ * {@link #length} also knows the wire length of every other 5.0 message
+ * (R, Y, L, V, W, K, J, h, I, N, O) so a decoder can skip them. Not a
+ * certified implementation.
+ *
+ * <p>Bounds: {@link #complete} tells whether a whole message of the type at
+ * an offset lies inside the available bytes; decoders call it before
+ * wrapping, so a short datagram is skipped instead of reading past the
+ * buffer.</p>
  *
  * <p>Decoding is a flyweight: {@link View#wrap} points at a message inside a
  * caller-owned buffer and every getter reads the bytes directly — no parsing
@@ -13,12 +21,12 @@ package com.quantfinlib.marketdata;
  * ASCII bytes ({@link #packStock}) so the hot path never touches
  * {@link String}.</p>
  *
- * <p>Prices are unsigned 32-bit integers with four implied decimals — i.e.
+ * <p>Prices are unsigned 32-bit integers with four implied decimals, i.e.
  * the raw value <em>is</em> the price in 0.0001 ticks, which plugs straight
  * into tick-indexed books like {@code L3BookBuilder}. <b>Domain limit</b>:
  * this library's tick-indexed pipeline is signed-{@code int} throughout, so
  * prices above 2³¹−1 ticks ($214,748.36) decode negative and are dropped by
- * band checks downstream — symbols above that price (BRK.A territory) need
+ * band checks downstream. Symbols above that price (BRK.A territory) need
  * a coarser tick or a scaled feed, the same constraint as
  * {@code HftOrderBook}'s ladder.</p>
  *
@@ -34,6 +42,25 @@ public final class ItchCodec {
     public static final byte DELETE = 'D';
     public static final byte REPLACE = 'U';
     public static final byte TRADE = 'P';
+    public static final byte EXECUTED_WITH_PRICE = 'C';
+    public static final byte SYSTEM_EVENT = 'S';
+    public static final byte TRADING_ACTION = 'H';
+    public static final byte CROSS_TRADE = 'Q';
+    public static final byte BROKEN_TRADE = 'B';
+
+    /** Trading states of the H message (ITCH 5.0 section 1.2.2). */
+    public static final byte STATE_HALTED = 'H';
+    public static final byte STATE_PAUSED = 'P';
+    public static final byte STATE_QUOTATION_ONLY = 'Q';
+    public static final byte STATE_TRADING = 'T';
+
+    /** System event codes of the S message (ITCH 5.0 section 1.1). */
+    public static final byte EVENT_START_OF_MESSAGES = 'O';
+    public static final byte EVENT_START_OF_SYSTEM_HOURS = 'S';
+    public static final byte EVENT_START_OF_MARKET_HOURS = 'Q';
+    public static final byte EVENT_END_OF_MARKET_HOURS = 'M';
+    public static final byte EVENT_END_OF_SYSTEM_HOURS = 'E';
+    public static final byte EVENT_END_OF_MESSAGES = 'C';
 
     public static final byte BUY = 'B';
     public static final byte SELL = 'S';
@@ -41,18 +68,46 @@ public final class ItchCodec {
     private ItchCodec() {
     }
 
-    /** Wire length of a message type; -1 for types outside the subset. */
+    /** Wire length of an ITCH 5.0 message type; -1 for an unknown type. */
     public static int length(byte type) {
         return switch (type) {
+            case SYSTEM_EVENT -> 12;
+            case 'R' -> 39;                 // stock directory
+            case TRADING_ACTION -> 25;
+            case 'Y' -> 20;                 // Reg SHO restriction
+            case 'L' -> 26;                 // market participant position
+            case 'V' -> 35;                 // MWCB decline level
+            case 'W' -> 12;                 // MWCB status
+            case 'K' -> 28;                 // IPO quoting period
+            case 'J' -> 35;                 // LULD auction collar
+            case 'h' -> 21;                 // operational halt
             case ADD -> 36;
             case ADD_MPID -> 40;
             case EXECUTED -> 31;
+            case EXECUTED_WITH_PRICE -> 36;
             case CANCEL -> 23;
             case DELETE -> 19;
             case REPLACE -> 35;
             case TRADE -> 44;
+            case CROSS_TRADE -> 40;
+            case BROKEN_TRADE -> 19;
+            case 'I' -> 50;                 // net order imbalance indicator
+            case 'N' -> 20;                 // retail price improvement indicator
+            case 'O' -> 48;                 // direct listing with capital raise
             default -> -1;
         };
+    }
+
+    /**
+     * True when a whole message of the type at {@code offset} lies within
+     * {@code [offset, offset + available)} and the type is known.
+     */
+    public static boolean complete(byte[] buf, int offset, int available) {
+        if (available < 1 || offset < 0 || offset >= buf.length) {
+            return false;
+        }
+        int len = length(buf[offset]);
+        return len > 0 && len <= available && offset + len <= buf.length;
     }
 
     /** Packs up to 8 ASCII chars into a big-endian long, space-padded (ITCH alpha style). */
@@ -96,7 +151,11 @@ public final class ItchCodec {
         private byte[] buf;
         private int off;
 
-        /** Points this view at a message; returns {@code this} for chaining. */
+        /**
+         * Points this view at a message; returns {@code this} for chaining.
+         * The buffer is not copied: the caller keeps ownership and must not
+         * overwrite those bytes while reading through this view.
+         */
         public View wrap(byte[] buffer, int offset) {
             this.buf = buffer;
             this.off = offset;
@@ -121,9 +180,9 @@ public final class ItchCodec {
             return u48(off + 5);
         }
 
-        /** Order reference (A/F/E/X/D/P, and the original ref of U via {@link #origRef}). */
+        /** Order reference (A/F/E/C/X/D/P, and the original ref of U via {@link #origRef}). */
         public long orderRef() {
-            assert "AFEXDUP".indexOf(buf[off]) >= 0 : "no orderRef on type " + (char) buf[off];
+            assert "AFECXDUP".indexOf(buf[off]) >= 0 : "no orderRef on type " + (char) buf[off];
             return u64(off + 11);
         }
 
@@ -154,9 +213,9 @@ public final class ItchCodec {
             };
         }
 
-        /** E: executed shares. X: cancelled shares. */
+        /** E/C: executed shares. X: cancelled shares. */
         public long deltaShares() {
-            assert buf[off] == EXECUTED || buf[off] == CANCEL
+            assert buf[off] == EXECUTED || buf[off] == EXECUTED_WITH_PRICE || buf[off] == CANCEL
                     : "no deltaShares on type " + (char) buf[off];
             return u32(off + 19);
         }
@@ -180,14 +239,65 @@ public final class ItchCodec {
             };
         }
 
-        /** E/P: the venue's match (execution) number. */
+        /** E/C/P/Q/B: the venue's match (execution) number. */
         public long matchNumber() {
-            assert buf[off] == EXECUTED || buf[off] == TRADE
+            assert "ECPQB".indexOf(buf[off]) >= 0
                     : "no matchNumber on type " + (char) buf[off];
             return switch (buf[off]) {
                 case TRADE -> u64(off + 36);
+                case CROSS_TRADE -> u64(off + 31);
+                case BROKEN_TRADE -> u64(off + 11);
                 default -> u64(off + 23);
             };
+        }
+
+        /** C: printable flag, 'Y' when the execution should print to the tape. */
+        public byte printable() {
+            assert buf[off] == EXECUTED_WITH_PRICE : "no printable on type " + (char) buf[off];
+            return buf[off + 31];
+        }
+
+        /** C: execution price in 0.0001 ticks. */
+        public int executionPriceTick() {
+            assert buf[off] == EXECUTED_WITH_PRICE : "no execution price on " + (char) buf[off];
+            return (int) u32(off + 32);
+        }
+
+        /** S: system event code ({@link #EVENT_START_OF_MESSAGES} and so on). */
+        public byte eventCode() {
+            assert buf[off] == SYSTEM_EVENT : "no event code on type " + (char) buf[off];
+            return buf[off + 11];
+        }
+
+        /** H: trading state ({@link #STATE_HALTED}, {@link #STATE_TRADING}, ...). */
+        public byte tradingState() {
+            assert buf[off] == TRADING_ACTION : "no trading state on type " + (char) buf[off];
+            return buf[off + 19];
+        }
+
+        /** H/Q: symbol as 8 packed ASCII bytes. */
+        public long stateStock() {
+            assert buf[off] == TRADING_ACTION || buf[off] == CROSS_TRADE
+                    : "no stock on type " + (char) buf[off];
+            return buf[off] == CROSS_TRADE ? u64(off + 19) : u64(off + 11);
+        }
+
+        /** Q: shares matched in the cross (64-bit on the wire). */
+        public long crossShares() {
+            assert buf[off] == CROSS_TRADE : "no cross shares on type " + (char) buf[off];
+            return u64(off + 11);
+        }
+
+        /** Q: cross price in 0.0001 ticks. */
+        public int crossPriceTick() {
+            assert buf[off] == CROSS_TRADE : "no cross price on type " + (char) buf[off];
+            return (int) u32(off + 27);
+        }
+
+        /** Q: cross type ('O' opening, 'C' closing, 'H' halt/IPO, 'I' intraday). */
+        public byte crossType() {
+            assert buf[off] == CROSS_TRADE : "no cross type on type " + (char) buf[off];
+            return buf[off + 39];
         }
 
         private int u16(int i) {
@@ -275,6 +385,60 @@ public final class ItchCodec {
         p32(buf, off + 32, priceTick);
         p64(buf, off + 36, matchNumber);
         return 44;
+    }
+
+    /** Encodes an Order Executed With Price (C); returns bytes written. */
+    public static int encodeExecutedWithPrice(byte[] buf, int off, int stockLocate,
+                                              long timestampNanos, long orderRef,
+                                              long executedShares, long matchNumber,
+                                              boolean printable, int priceTick) {
+        header(buf, off, EXECUTED_WITH_PRICE, stockLocate, timestampNanos);
+        p64(buf, off + 11, orderRef);
+        p32(buf, off + 19, executedShares);
+        p64(buf, off + 23, matchNumber);
+        buf[off + 31] = (byte) (printable ? 'Y' : 'N');
+        p32(buf, off + 32, priceTick);
+        return 36;
+    }
+
+    /** Encodes a System Event (S, stock locate 0); returns bytes written. */
+    public static int encodeSystemEvent(byte[] buf, int off, long timestampNanos, byte eventCode) {
+        header(buf, off, SYSTEM_EVENT, 0, timestampNanos);
+        buf[off + 11] = eventCode;
+        return 12;
+    }
+
+    /** Encodes a Stock Trading Action (H); returns bytes written. */
+    public static int encodeTradingAction(byte[] buf, int off, int stockLocate,
+                                          long timestampNanos, long packedStock,
+                                          byte tradingState, int reasonCode) {
+        header(buf, off, TRADING_ACTION, stockLocate, timestampNanos);
+        p64(buf, off + 11, packedStock);
+        buf[off + 19] = tradingState;
+        buf[off + 20] = ' ';
+        p32(buf, off + 21, reasonCode & 0xFFFFFFFFL);
+        return 25;
+    }
+
+    /** Encodes a Cross Trade (Q); returns bytes written. */
+    public static int encodeCrossTrade(byte[] buf, int off, int stockLocate, long timestampNanos,
+                                       long shares, long packedStock, int crossPriceTick,
+                                       long matchNumber, byte crossType) {
+        header(buf, off, CROSS_TRADE, stockLocate, timestampNanos);
+        p64(buf, off + 11, shares);
+        p64(buf, off + 19, packedStock);
+        p32(buf, off + 27, crossPriceTick);
+        p64(buf, off + 31, matchNumber);
+        buf[off + 39] = crossType;
+        return 40;
+    }
+
+    /** Encodes a Broken Trade (B); returns bytes written. */
+    public static int encodeBrokenTrade(byte[] buf, int off, int stockLocate, long timestampNanos,
+                                        long matchNumber) {
+        header(buf, off, BROKEN_TRADE, stockLocate, timestampNanos);
+        p64(buf, off + 11, matchNumber);
+        return 19;
     }
 
     private static void header(byte[] buf, int off, byte type, int locate, long tsNanos) {

@@ -2,6 +2,7 @@ package com.quantfinlib.fix;
 
 import com.quantfinlib.orderbook.Side;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -20,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@Tag("socket")
 class FixPersistenceTest {
 
     private final ExecutorService executor = Executors.newCachedThreadPool();
@@ -73,6 +75,7 @@ class FixPersistenceTest {
     }
 
     @Test
+    @Tag("timing")
     void sessionsContinueSequenceNumbersAcrossReconnect(@TempDir Path dir) throws Exception {
         Path clientDir = dir.resolve("client");
         Path venueDir = dir.resolve("venue");
@@ -123,8 +126,13 @@ class FixPersistenceTest {
                     .field(FixMessage.END_SEQ_NO, 0));
             assertTrue(clientEvents2.resendServed.await(5, TimeUnit.SECONDS),
                     "resend from persistent store not serviced");
-            Thread.sleep(300);
-            assertEquals(1, venueEvents2.orders.size(), "PossDup replay not suppressed");
+            // TCP keeps order: once a later order arrives, the replays sent
+            // before it have been processed.
+            client2.sendNewOrderSingle("ord-3", "EURUSD", Side.SELL, 10, 1.0861,
+                    NewOrderSingle.TIF_DAY);
+            awaitTrue(() -> venueEvents2.orders.size() == 2, "post-resend order lost");
+            assertEquals("ord-3", venueEvents2.orders.get(1).clOrdId(),
+                    "PossDup replay of ord-1 not suppressed");
             assertTrue(venue2.isEstablished());
 
             client2.logout();

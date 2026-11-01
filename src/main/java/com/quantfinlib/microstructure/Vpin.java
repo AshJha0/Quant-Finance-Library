@@ -1,13 +1,13 @@
 package com.quantfinlib.microstructure;
 
 /**
- * VPIN — Volume-synchronized Probability of INformed trading (Easley,
+ * VPIN (Volume-synchronized Probability of INformed trading; Easley,
  * López de Prado &amp; O'Hara): the flow-toxicity gauge a market maker
  * watches to decide when quoting is no longer a business. Trades fill
- * fixed-VOLUME buckets (volume time, not clock time — informed trading
- * compresses clock time but not volume time); each full bucket scores
- * its absolute buy/sell imbalance; VPIN is the average over the last
- * {@code window} buckets:
+ * fixed-volume buckets (volume time, not clock time, because informed
+ * trading compresses clock time but not volume time); each full bucket
+ * scores its absolute buy/sell imbalance; VPIN is the average over the
+ * last {@code window} buckets:
  *
  * <pre>  VPIN = (1/n) Σ |buyVol − sellVol| / bucketVolume</pre>
  *
@@ -15,7 +15,7 @@ package com.quantfinlib.microstructure;
  * reads toward 1 — famously elevated in the hour before the 2010 flash
  * crash. Feed it {@code TradeClassifier}'s aggressor sides when the
  * venue does not disclose them. A trade larger than the bucket's
- * remaining capacity SPLITS across buckets, as the original
+ * remaining capacity splits across buckets, as the original
  * construction requires. Deterministic, O(1) per trade, allocation
  * only at construction; research/warm lane.</p>
  */
@@ -71,7 +71,7 @@ public final class Vpin {
         if (remaining == 0) {
             return;
         }
-        // Whole one-sided buckets, handled ARITHMETICALLY: a block of any
+        // Whole one-sided buckets, handled arithmetically: a block of any
         // size is O(window), never O(quantity/bucketVolume) — buckets
         // older than the window would be evicted anyway, so only the
         // last min(full, window) matter (each has imbalance exactly 1).
@@ -79,9 +79,11 @@ public final class Vpin {
         long toRecord = Math.min(full, imbalances.length);
         for (long i = 0; i < toRecord; i++) {
             imbalances[head] = 1.0;
-            head = (head + 1) % imbalances.length;
+            if (++head == imbalances.length) {
+                head = 0;
+            }
         }
-        // Clamp full BEFORE adding: with bucketVolume == 1 a corrupt
+        // Clamp full before adding: with bucketVolume == 1 a corrupt
         // Long.MAX_VALUE trade makes filled + full wrap negative.
         filled = (int) Math.min(imbalances.length,
                 filled + Math.min(full, imbalances.length));
@@ -97,7 +99,9 @@ public final class Vpin {
 
     private void completeBucket() {
         imbalances[head] = Math.abs(bucketBuy - bucketSell) / (double) bucketVolume;
-        head = (head + 1) % imbalances.length;
+        if (++head == imbalances.length) {
+                head = 0;
+            }
         if (filled < imbalances.length) {
             filled++;
         }

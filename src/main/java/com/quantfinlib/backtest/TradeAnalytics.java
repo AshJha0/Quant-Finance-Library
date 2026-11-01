@@ -3,7 +3,7 @@ package com.quantfinlib.backtest;
 import java.util.List;
 
 /**
- * TRADE-LEVEL analytics — the numbers a discretionary reviewer asks for
+ * Trade-level analytics — the numbers a discretionary reviewer asks for
  * that a Sharpe ratio hides. Two strategies with the same Sharpe can have
  * completely different trade signatures: one wins small and often with a
  * few large losses (a hidden short-gamma profile that blows up), the
@@ -15,30 +15,36 @@ import java.util.List;
  *       {@code winRate*avgWin - lossRate*avgLoss}: the single number that
  *       says whether the edge survives being averaged over every
  *       trade;</li>
- *   <li><b>payoff ratio</b> — avgWin / avgLoss: paired with win rate it
- *       IS the strategy's character. A 40% win rate needs a payoff above
- *       1.5 to have positive expectancy — the arithmetic that kills most
+ *   <li><b>payoff ratio</b>: avgWin / avgLoss. Paired with win rate it
+ *       is the strategy's character. A 40% win rate needs a payoff above
+ *       1.5 to have positive expectancy, the arithmetic that kills most
  *       "high win rate" systems whose few losses are huge;</li>
  *   <li><b>streaks</b> — the longest run of consecutive losers (and
  *       winners): the number that decides whether you can psychologically
- *       and financially SIT through the strategy. A positive-expectancy
+ *       and financially sit through the strategy. A positive-expectancy
  *       system with an 11-trade losing streak gets turned off by its
  *       owner at trade 8;</li>
- *   <li><b>Kelly fraction</b> — {@code W - (1-W)/R} for win rate W and
- *       payoff R: the growth-optimal bet size the trade record implies,
- *       and a reality check (a Kelly above ~0.25 usually means the
- *       sample is too small or the wins too lucky);</li>
+ *   <li><b>Kelly fraction</b>: the fraction {@code f ∈ [0, 1]} of equity
+ *       to commit per trade that maximises the empirical log growth
+ *       {@code Σ log(1 + f·rᵢ)} over the trades' {@link Trade#returnPct()}
+ *       (Kelly 1956; Thorp 2006, Handbook of Asset and Liability
+ *       Management, §2). The fixed-odds formula {@code W − (1−W)/R} on
+ *       currency P&amp;L is not a sizing number for all-in trades of a
+ *       compounding book, whose P&amp;L scale depends on equity at the
+ *       time. A Kelly above ~0.25 usually means the sample is too small
+ *       or the wins too lucky;</li>
  *   <li><b>hold times</b> — average bars held for winners vs losers: when
  *       losers are held far longer than winners, that is the
  *       disposition effect showing up in the tape.</li>
  * </ul>
  *
- * <p>All statistics are on realized {@link Trade} P&amp;L; a strategy with
- * no losing trades reports an infinite payoff ratio and Kelly clamped to
- * 1 (bet everything — which is exactly the over-fit warning you want).
+ * <p>Statistics other than Kelly are on realised {@link Trade} P&amp;L; a
+ * strategy with no losing trades reports an infinite payoff ratio and a
+ * Kelly of 1 (bet everything, which is the over-fit warning you want); a
+ * record with no positive mean return reports Kelly 0.
  * Static, deterministic, research lane. Complements
  * {@link PerformanceAnalytics} (equity-curve metrics) and
- * {@code validation.MonteCarloTradeShuffle} (is the SEQUENCE luck?).</p>
+ * {@code validation.MonteCarloTradeShuffle} (is the sequence luck?).</p>
  */
 public final class TradeAnalytics {
 
@@ -51,7 +57,7 @@ public final class TradeAnalytics {
      * @param payoffRatio           avgWin / avgLoss (+inf if no losers)
      * @param maxWinStreak          longest run of consecutive winners
      * @param maxLossStreak         longest run of consecutive losers
-     * @param kellyFraction         W - (1-W)/R, clamped to [0, 1]
+     * @param kellyFraction         empirical growth-optimal fraction in [0, 1] (see class doc)
      * @param avgBarsHeldWinners    mean holding period of winners
      * @param avgBarsHeldLosers     mean holding period of losers
      */
@@ -103,19 +109,57 @@ public final class TradeAnalytics {
         double lossRate = (double) losers / n;
         double expectancy = winRate * avgWin - lossRate * avgLoss;
         double payoff = avgLoss > 0 ? avgWin / avgLoss : Double.POSITIVE_INFINITY;
-        // Kelly = W - (1-W)/R, clamped: no losers -> bet everything (the
-        // over-fit tell); non-positive edge -> zero.
-        double kelly;
-        if (avgLoss == 0) {
-            kelly = 1.0;
-        } else {
-            kelly = winRate - (1 - winRate) / payoff;
-            kelly = Math.max(0, Math.min(1, kelly));
-        }
+        double kelly = empiricalKelly(trades);
         double avgWinBars = wins > 0 ? (double) winBars / wins : 0;
         double avgLossBars = losers > 0 ? (double) lossBars / losers : 0;
         return new Result(n, winRate, expectancy, avgWin, avgLoss, payoff,
                 maxWin, maxLoss, kelly, avgWinBars, avgLossBars);
+    }
+
+    /**
+     * argmax over f in [0, 1] of Σ log(1 + f·rᵢ). The objective is concave,
+     * so the root of its derivative {@code Σ rᵢ/(1 + f·rᵢ)} is found by
+     * bisection: 0 when the derivative at 0 (the sum of returns) is not
+     * positive, 1 when it is still positive at 1.
+     */
+    static double empiricalKelly(List<Trade> trades) {
+        double[] r = new double[trades.size()];
+        for (int i = 0; i < r.length; i++) {
+            r[i] = trades.get(i).returnPct();
+            if (!Double.isFinite(r[i]) || r[i] < -1) {
+                throw new IllegalArgumentException("trade " + i + " has return " + r[i]);
+            }
+        }
+        if (slope(r, 0) <= 0) {
+            return 0;
+        }
+        if (slope(r, 1) > 0) {
+            return 1;
+        }
+        double lo = 0;
+        double hi = 1;
+        for (int it = 0; it < 100 && hi - lo > 1e-15; it++) {
+            double mid = (lo + hi) / 2;
+            if (slope(r, mid) > 0) {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        }
+        return (lo + hi) / 2;
+    }
+
+    /** d/df Σ log(1 + f r); −∞ when a total-loss trade meets f = 1. */
+    private static double slope(double[] r, double f) {
+        double s = 0;
+        for (double x : r) {
+            double denom = 1 + f * x;
+            if (denom <= 0) {
+                return Double.NEGATIVE_INFINITY;
+            }
+            s += x / denom;
+        }
+        return s;
     }
 
     private static int countLosers(List<Trade> trades) {

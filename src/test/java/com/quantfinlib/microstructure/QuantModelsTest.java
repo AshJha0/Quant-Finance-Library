@@ -34,7 +34,7 @@ class QuantModelsTest {
     void volumeCurveRescalesTodayToRealizedVolume() {
         VolumeCurve vc = new VolumeCurve(4, 0.5);
         vc.seedProfile(new double[]{40, 10, 10, 40});   // learned total 100
-        // Today the open trades DOUBLE the expected 40 -> project a bigger day.
+        // Today the open trades double the expected 40 -> project a bigger day.
         vc.onVolume(0, 80);
         double projected = vc.projectedDayVolume(1, 0.0);
         // Expected-so-far = 40; realized 80; ratio 2; weight = 40/100 = 0.4.
@@ -111,7 +111,7 @@ class QuantModelsTest {
 
     @Test
     void detectsAnIcebergWhenASinglePrintExceedsTheDisplay() {
-        // The sound signature: ONE print larger than the displayed tip —
+        // The sound signature: one print larger than the displayed tip —
         // displayed size can't fill more than it shows, so the excess hit
         // hidden liquidity.
         HiddenLiquidityDetector d = new HiddenLiquidityDetector(4, 0.5);
@@ -126,7 +126,7 @@ class QuantModelsTest {
     void ordinaryFragmentedFlowIsNotFalseFlaggedAsAnIceberg() {
         // A busy level legitimately trades many times its instantaneous
         // display via ordinary adds — no single print exceeds the tip, so
-        // it must NOT flag (the cumulative-run formulation would).
+        // it must not flag (the cumulative-run formulation would).
         HiddenLiquidityDetector d = new HiddenLiquidityDetector(4, 0.5);
         for (int i = 0; i < 10; i++) {
             d.onDisplayed(1, 5_000);
@@ -212,7 +212,7 @@ class QuantModelsTest {
     void aBucketWithoutABaselineInjectsNoDeviation() {
         // Regression: bucket 1 was never observed on day 1, so its baseline
         // is 0. Day 2's first print there must SEED it at rollDay and must
-        // NOT enter the shared deviation as a spread-sized "shock" that
+        // not enter the shared deviation as a spread-sized "shock" that
         // would contaminate forecasts at every bucket.
         SpreadForecaster sf = new SpreadForecaster(2, 0.5, SEC);
         sf.onSpread(0, 0.02, SEC);

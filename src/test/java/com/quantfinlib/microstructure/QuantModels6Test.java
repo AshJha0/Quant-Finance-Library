@@ -74,7 +74,7 @@ class QuantModels6Test {
         double[] values = new double[2];
         double planted = 0;
         for (int i = 0; i < 3_000; i++) {
-            // The return realized NOW was leaned by component 0's PREVIOUS value.
+            // The return realized now was leaned by component 0's previous value.
             double ret = 1e-4 * (0.6 * planted + rnd.nextGaussian());
             planted = rnd.nextDouble() * 2 - 1;
             values[0] = planted;                           // predictive
@@ -89,13 +89,19 @@ class QuantModels6Test {
         values[0] = 1;
         values[1] = -1;
         double combined = ens.combined(values);
-        assertTrue(combined > 0.15, "the blend follows the trusted component: " + combined);
+        // Weights are the ICs shrunk by two null standard errors (about 0.07
+        // each at icAlpha 0.01): only the real signal clears its band.
+        double se = IcSignificance.standardError(0.01, ens.samples());
+        double expected = Math.max(0, ens.componentIC(0) - 2 * se)
+                - Math.max(0, ens.componentIC(1) - 2 * se);
+        assertEquals(expected, combined, 1e-12);
+        assertTrue(combined > 0.05, "the blend follows the trusted component: " + combined);
         assertTrue(combined <= 1);
     }
 
     @Test
     void aBarelyTrustedBlendIsABarelySizedSignal() {
-        // The weights are NOT renormalized: with only weak trust, the output
+        // The weights are not renormalized: with only weak trust, the output
         // must be small — never a lone IC-0.02 component at full strength.
         AlphaEnsemble ens = new AlphaEnsemble(1, 0.01);
         Random rnd = new Random(9);
@@ -111,8 +117,24 @@ class QuantModels6Test {
         double ic = ens.componentIC(0);
         assertTrue(ic > 0 && ic < 0.2, "weak but real: " + ic);
         v[0] = 1;
-        assertEquals(ic, ens.combined(v), 1e-9,
-                "output magnitude IS the demonstrated confidence");
+        // Not significant: IC ~0.10 sits inside the 2-SE band (~0.14), so the
+        // gated blend is silent. (The old IC > 0 gate emitted 0.097 here; a
+        // true-zero component passes that gate half the time.)
+        double se = IcSignificance.standardError(0.01, ens.samples());
+        assertTrue(ic < 2 * se, "ic " + ic + " se " + se);
+        assertEquals(0.0, ens.combined(v), 0.0);
+        // With the gate switched off the size is the raw demonstrated IC.
+        AlphaEnsemble ungated = new AlphaEnsemble(1, 0.01, 0);
+        Random again = new Random(9);
+        double p = 0;
+        for (int i = 0; i < 3_000; i++) {
+            double ret = 1e-4 * (0.1 * p + again.nextGaussian());
+            p = again.nextDouble() * 2 - 1;
+            v[0] = p;
+            ungated.onObservation(v, ret);
+        }
+        v[0] = 1;
+        assertEquals(ungated.componentIC(0), ungated.combined(v), 1e-9);
     }
 
     @Test
@@ -161,7 +183,7 @@ class QuantModels6Test {
         assertTrue(ens.componentIC(0) != 0 && Double.isFinite(ens.componentIC(0)),
                 "the skipped component keeps its evidence: " + ens.componentIC(0));
 
-        // An observation where NOTHING scores must not inflate the record.
+        // An observation where nothing scores must not inflate the record.
         ens.onObservation(new double[]{Double.NaN, Double.NaN}, 1e-4);
         long all = ens.samples();
         ens.onObservation(new double[]{0.2, 0.2}, 1e-4);   // all-NaN snapshot: no scoring

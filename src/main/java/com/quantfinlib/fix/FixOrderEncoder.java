@@ -7,10 +7,12 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 
 /**
- * Garbage-free FIX 4.4 NewOrderSingle encoder — the hot-lane counterpart of
+ * Garbage-free FIX 4.4 order-entry encoder: NewOrderSingle (35=D),
+ * OrderCancelRequest (35=F) and OrderCancelReplaceRequest (35=G), so the
+ * whole order lifecycle stays allocation-free. It is — the hot-lane counterpart of
  * the String-based {@link NewOrderSingle}/{@link FixMessage} codec, for
  * venues that only speak FIX (where the {@code sbe} binary adapters aren't
- * an option, order entry IS the FIX edge, and per-order String building
+ * an option, order entry is the FIX edge, and per-order String building
  * would put allocation back on the measured path).
  *
  * <p>Techniques, all standard in commercial garbage-free FIX engines:</p>
@@ -45,7 +47,7 @@ public final class FixOrderEncoder {
     private static final int PREFIX_RESERVE = 32;
 
     private final byte[] buffer;
-    private final byte[] header34; // "35=D|49=SENDER|56=TARGET|34=" — constant per session
+    private final byte[] header34; // "49=SENDER|56=TARGET|34=" — constant per session
     private final byte[][] symbols;
     private int start;
     private int end;
@@ -69,8 +71,8 @@ public final class FixOrderEncoder {
         }
         this.buffer = new byte[bufferSize];
         this.symbols = new byte[maxSymbols][];
-        // The constant chunk of every message: 35=D|49=...|56=...|34=
-        String head = "35=D" + (char) SOH + "49=" + senderCompId + (char) SOH
+        // The constant chunk of every message after 35=X|: 49=...|56=...|34=
+        String head = "49=" + senderCompId + (char) SOH
                 + "56=" + targetCompId + (char) SOH + "34=";
         this.header34 = head.getBytes(StandardCharsets.US_ASCII);
     }
@@ -87,8 +89,8 @@ public final class FixOrderEncoder {
 
     /**
      * Encodes a limit NewOrderSingle into the reusable buffer. Zero
-     * allocation. The encoded message occupies {@code [offset(), offset() +
-     * length())} of {@link #buffer()} until the next encode.
+     * allocation. The encoded message occupies {@code length()} bytes, read with
+     * {@link #copyInto(byte[], int)} or {@link #writeTo(java.nio.ByteBuffer)} until the next encode.
      *
      * @param msgSeqNum      session sequence number (tag 34)
      * @param clOrdId        client order id, numeric (tag 11)
@@ -110,23 +112,112 @@ public final class FixOrderEncoder {
         return encode(msgSeqNum, clOrdId, symbolId, side, quantity, 0, 0, true, epochMillis);
     }
 
-    private int encode(long msgSeqNum, long clOrdId, int symbolId, Side side, long quantity,
-                       long priceMantissa, int priceDecimals, boolean market,
-                       long epochMillis) {
-        byte[] symbol = symbols[symbolId];
+    /**
+     * OrderCancelRequest (35=F) for a working order. Zero allocation.
+     *
+     * @param origClOrdId ClOrdID of the order to cancel (tag 41)
+     * @param clOrdId     new ClOrdID for this request (tag 11)
+     * @param quantity    the order's quantity (tag 38)
+     * @return message length in bytes
+     */
+    public int encodeCancel(long msgSeqNum, long clOrdId, long origClOrdId, int symbolId,
+                            Side side, long quantity, long epochMillis) {
+        byte[] symbol = symbol(symbolId);
+        refreshDate(epochMillis);
+        int p = header('F', msgSeqNum, epochMillis);
+        p = tag(p, '4', '1');
+        p = digits(p, origClOrdId);
+        buffer[p++] = SOH;
+        p = tag(p, '1', '1');
+        p = digits(p, clOrdId);
+        buffer[p++] = SOH;
+        p = tag(p, '5', '5');
+        p = raw(p, symbol);
+        buffer[p++] = SOH;
+        p = tag(p, '5', '4');
+        buffer[p++] = side == Side.BUY ? (byte) '1' : (byte) '2';
+        buffer[p++] = SOH;
+        p = tag(p, '6', '0');
+        p = timestamp(p, epochMillis);
+        buffer[p++] = SOH;
+        p = tag(p, '3', '8');
+        p = digits(p, quantity);
+        buffer[p++] = SOH;
+        return frame(p);
+    }
+
+    /**
+     * Limit OrderCancelReplaceRequest (35=G): new quantity and price for a
+     * working order. Zero allocation.
+     *
+     * @param origClOrdId ClOrdID of the order to amend (tag 41)
+     * @param clOrdId     ClOrdID of the replacement (tag 11)
+     * @return message length in bytes
+     */
+    public int encodeReplace(long msgSeqNum, long clOrdId, long origClOrdId, int symbolId,
+                             Side side, long quantity, long priceMantissa, int priceDecimals,
+                             long epochMillis) {
+        byte[] symbol = symbol(symbolId);
+        refreshDate(epochMillis);
+        int p = header('G', msgSeqNum, epochMillis);
+        p = tag(p, '4', '1');
+        p = digits(p, origClOrdId);
+        buffer[p++] = SOH;
+        p = tag(p, '1', '1');
+        p = digits(p, clOrdId);
+        buffer[p++] = SOH;
+        p = tag(p, '5', '5');
+        p = raw(p, symbol);
+        buffer[p++] = SOH;
+        p = tag(p, '5', '4');
+        buffer[p++] = side == Side.BUY ? (byte) '1' : (byte) '2';
+        buffer[p++] = SOH;
+        p = tag(p, '6', '0');
+        p = timestamp(p, epochMillis);
+        buffer[p++] = SOH;
+        p = tag(p, '3', '8');
+        p = digits(p, quantity);
+        buffer[p++] = SOH;
+        p = tag(p, '4', '0');
+        buffer[p++] = '2';
+        buffer[p++] = SOH;
+        p = tag(p, '4', '4');
+        p = price(p, priceMantissa, priceDecimals);
+        buffer[p++] = SOH;
+        return frame(p);
+    }
+
+    private byte[] symbol(int symbolId) {
+        byte[] symbol = symbolId >= 0 && symbolId < symbols.length ? symbols[symbolId] : null;
         if (symbol == null) {
             throw new IllegalStateException("symbol id " + symbolId + " not registered");
         }
-        refreshDate(epochMillis);
+        return symbol;
+    }
 
-        // ---- body: 35=D|49|56|34=seq|52=ts|11|55|54|38|40[|44]|60=ts| ----
+    /** Writes {@code 35=X|49=..|56=..|34=seq|52=ts|} at the body start; returns the position. */
+    private int header(char msgType, long msgSeqNum, long epochMillis) {
         int p = PREFIX_RESERVE;
+        p = tag(p, '3', '5');
+        buffer[p++] = (byte) msgType;
+        buffer[p++] = SOH;
         p = raw(p, header34);
         p = digits(p, msgSeqNum);
         buffer[p++] = SOH;
         p = tag(p, '5', '2');
         p = timestamp(p, epochMillis);
         buffer[p++] = SOH;
+        return p;
+    }
+
+    private int encode(long msgSeqNum, long clOrdId, int symbolId, Side side, long quantity,
+                       long priceMantissa, int priceDecimals, boolean market,
+                       long epochMillis) {
+        byte[] symbol = symbol(symbolId);
+        refreshDate(epochMillis);
+
+        // ---- body: 35=D|49|56|34=seq|52=ts|11|55|54|38|40[|44]|60=ts| ----
+        int p = header('D', msgSeqNum, epochMillis);
         p = tag(p, '1', '1');
         p = digits(p, clOrdId);
         buffer[p++] = SOH;
@@ -150,9 +241,11 @@ public final class FixOrderEncoder {
         p = tag(p, '6', '0');
         p = timestamp(p, epochMillis);
         buffer[p++] = SOH;
-        int bodyEnd = p;
+        return frame(p);
+    }
 
-        // ---- prefix, written BACKWARDS in front of the body: 8=..|9=len| ----
+    /** Writes {@code 8=FIX.4.4|9=len|} backwards before the body and the checksum after it. */
+    private int frame(int bodyEnd) {
         int bodyLen = bodyEnd - PREFIX_RESERVE;
         int q = PREFIX_RESERVE;
         buffer[--q] = SOH;
@@ -178,10 +271,10 @@ public final class FixOrderEncoder {
         // ---- trailer: 10=NNN| over everything from 8= through the body ----
         int sum = 0;
         for (int i = start; i < bodyEnd; i++) {
-            sum += buffer[i];
+            sum += buffer[i] & 0xFF;
         }
         sum &= 0xFF;
-        p = bodyEnd;
+        int p = bodyEnd;
         p = tag(p, '1', '0');
         buffer[p++] = (byte) ('0' + sum / 100);
         buffer[p++] = (byte) ('0' + (sum / 10) % 10);
@@ -195,14 +288,51 @@ public final class FixOrderEncoder {
     // Buffer access (valid until the next encode)
     // ------------------------------------------------------------------
 
-    /** The reusable buffer holding the last encoded message. */
-    public byte[] buffer() {
-        return buffer;
+    /**
+     * Copies the last encoded message into a caller-owned array without allocating.
+     * The internal buffer is reused by the next encode and is never handed out.
+     *
+     * @param dst       destination array
+     * @param dstOffset index in {@code dst} of the first byte written
+     * @return the number of bytes copied, {@link #length()}
+     */
+    public int copyInto(byte[] dst, int dstOffset) {
+        System.arraycopy(buffer, start, dst, dstOffset, length());
+        return length();
     }
 
-    /** Start offset of the last message within {@link #buffer()}. */
-    public int offset() {
-        return start;
+    /**
+     * Puts the last encoded message into {@code dst} at its position (relative
+     * put, advances the position). Zero allocation; a direct buffer handed to a
+     * socket channel avoids a further copy in the JDK.
+     *
+     * @param dst destination with at least {@link #length()} bytes remaining
+     * @return the number of bytes written
+     */
+    public int writeTo(java.nio.ByteBuffer dst) {
+        dst.put(buffer, start, length());
+        return length();
+    }
+
+    /**
+     * Byte {@code i} of the last encoded message, {@code 0 <= i < length()}.
+     *
+     * @param i index within the message
+     * @return the byte
+     */
+    public byte byteAt(int i) {
+        return buffer[start + i];
+    }
+
+    /**
+     * A fresh copy of the last encoded message (allocates; for tests and logging).
+     *
+     * @return the message bytes
+     */
+    public byte[] toByteArray() {
+        byte[] out = new byte[length()];
+        copyInto(out, 0);
+        return out;
     }
 
     /** Length of the last message. */

@@ -16,8 +16,9 @@ import java.util.Map;
  * <ul>
  *   <li><b>Fixing date</b> — when the official reference rate (e.g. the RBI
  *       INR reference rate, KFTC18 for KRW, PTAX for BRL) is observed. It
- *       precedes settlement by the restricted currency's fixing lag —
- *       typically two local business days, one for BRL/PTAX.</li>
+ *       precedes settlement by the restricted currency's fixing lag,
+ *       typically two local business days (see the caveat on the default
+ *       lag table below).</li>
  *   <li><b>Settlement date</b> — when the USD difference amount pays.</li>
  * </ul>
  *
@@ -34,9 +35,16 @@ import java.util.Map;
 public final class Ndf {
 
     /**
-     * Fixing lags (local business days between fixing and settlement) for
-     * the common NDF currencies; PTAX fixes one day before settlement,
-     * the Asian fixings two. Unlisted currencies default to 2.
+     * Default fixing lags (local business days between fixing and
+     * settlement). These values have not been checked against the EMTA
+     * template terms for each currency, and the BRL and CLP entries in
+     * particular are in doubt: the EMTA BRL PTAX and CLP Dolar Observado
+     * templates are commonly read as valuation date = settlement minus two
+     * business days, not one. A one-day error changes which official print
+     * settles the trade, so confirm the lag on the confirmation or the
+     * current EMTA template and pass it explicitly with
+     * {@link #of(CurrencyPair, LocalDate, String, double, double, int)}.
+     * Unlisted currencies default to 2.
      */
     private static final Map<String, Integer> FIXING_LAG = Map.of(
             "INR", 2, "KRW", 2, "TWD", 2, "IDR", 2, "MYR", 2,
@@ -73,9 +81,18 @@ public final class Ndf {
      */
     public static Ndf of(CurrencyPair pair, LocalDate tradeDate, String tenor,
                          double contractRate, double baseNotional) {
-        LocalDate settlement = pair.tenorDate(tradeDate, tenor);
-        LocalDate fixing = pair.quoteCalendar().subtractBusinessDays(settlement,
+        return of(pair, tradeDate, tenor, contractRate, baseNotional,
                 FIXING_LAG.getOrDefault(pair.quote(), 2));
+    }
+
+    /** As {@link #of(CurrencyPair, LocalDate, String, double, double)} with an explicit fixing lag. */
+    public static Ndf of(CurrencyPair pair, LocalDate tradeDate, String tenor,
+                         double contractRate, double baseNotional, int fixingLagDays) {
+        if (fixingLagDays < 1) {
+            throw new IllegalArgumentException("fixingLagDays must be >= 1, got " + fixingLagDays);
+        }
+        LocalDate settlement = pair.tenorDate(tradeDate, tenor);
+        LocalDate fixing = pair.quoteCalendar().subtractBusinessDays(settlement, fixingLagDays);
         return new Ndf(pair, baseNotional, contractRate, fixing, settlement);
     }
 
@@ -111,13 +128,13 @@ public final class Ndf {
      * the payoff actually references.
      *
      * <p>An NDF inside its fixing window (fixing date at or before the
-     * curve's spot date) has no forward to read — the curve starts at
+     * curve's spot date) has no forward to read: the curve starts at
      * spot. The best curve-only estimate of an imminent or just-published
      * fixing is the spot outright, so the mark degrades to that instead
      * of throwing mid-lifecycle (an aged {@code FxSwap} leg gets the same
      * keep-marking treatment). Once the official fixing prints, the right
-     * number is {@link #settlementAmount} with the actual fixing — a
-     * curve cannot know it.</p>
+     * number is {@link #settlementAmount} with the actual fixing, which a
+     * curve cannot know.</p>
      */
     public double markToMarket(SwapPointsCurve current) {
         LocalDate spot = current.spotDate();

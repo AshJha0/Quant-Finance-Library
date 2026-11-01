@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * The CRB run the way a desk actually runs it — realistic sizes, vols,
  * spreads and costs, over the days that define the business: a quiet
- * two-way day (internalization IS the P&amp;L), a one-way institutional
+ * two-way day (internalization is the P&amp;L), a one-way institutional
  * day (the hedge-escalation path earns its keep), a vol-spike stress
  * day (the numbers a risk committee asks for), and an NDF fixing day
  * with overnight continuity through the checkpoint.
@@ -107,7 +107,7 @@ class CrbRealWorldScenarioTest {
         cov[spx][spy] = cross;
 
         // Band: 10M hard limit on SPY, hedge back to 60%. A punitive
-        // cost weight makes the cost-aware pass hold ZERO — the hedger
+        // cost weight makes the cost-aware pass hold zero — the hedger
         // must escalate to cost-blind, and cost-blind must pick the
         // DIRECT instrument (the proxy cannot satisfy a per-factor band).
         CrbAutoHedger hedger = new CrbAutoHedger(
@@ -130,13 +130,13 @@ class CrbRealWorldScenarioTest {
                         new CrbRouter.DarkVenue("PRINT-POOL", 10_000_000, 1.0, 15),
                         new CrbRouter.DarkVenue("MIDPOINT", 6_000_000, 0.7, 1.2)},
                 0.5, 0.8);
-        assertEquals(4_200_000, alloc.dark()[1], 1e-6, "clean dark first");
-        assertEquals(0, alloc.dark()[0], 1e-9, "toxic pool priced out");
+        assertEquals(4_200_000, alloc.dark(1), 1e-6, "clean dark first");
+        assertEquals(0, alloc.dark(0), 1e-9, "toxic pool priced out");
         assertEquals(7_800_000, alloc.lit(), 1.0);
         ledger.onRoute(Math.abs(orders[0].notional()), alloc);
 
         // The commercial argument, in one assertion: captured spread
-        // paid for the hedge AND its execution, with margin.
+        // paid for the hedge and its execution, with margin.
         // 18M x (2.5 - 0.75) bps = 3,150 captured; 12M x 2 bps = 2,400
         // hedge; ~1.24 bps blended on 12M routed.
         assertTrue(ledger.netEconomics() > 0,
@@ -171,7 +171,7 @@ class CrbRealWorldScenarioTest {
         double[][] cov = {{1.44e-4, 0.3 * Math.sqrt(1.44e-4 * 3.6e-5)},
                 {0.3 * Math.sqrt(1.44e-4 * 3.6e-5), 3.6e-5}};
         StressTester.ReverseStress reverse = StressTester.reverseStress(liquid, cov, 2_000_000);
-        assertEquals(-2_000_000, StressTester.scenarioPnl(liquid, reverse.shocks()), 1e-6);
+        assertEquals(-2_000_000, StressTester.scenarioPnl(liquid, reverse.shocksCopy()), 1e-6);
         assertEquals(2_000_000 / VarEngine.portfolioStdev(liquid, cov),
                 reverse.mahalanobisSigmas(), 1e-9);
         assertTrue(reverse.mahalanobisSigmas() > 10,

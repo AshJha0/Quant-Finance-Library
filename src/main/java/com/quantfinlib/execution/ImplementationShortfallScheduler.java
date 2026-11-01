@@ -29,7 +29,7 @@ public final class ImplementationShortfallScheduler {
      */
     public static List<Slice> schedule(AlmgrenChriss.Params params, long durationMillis) {
         AlmgrenChriss.Trajectory t = AlmgrenChriss.optimalTrajectory(params);
-        double[] weights = t.trades();
+        double[] weights = t.tradesCopy();
         for (double w : weights) {
             if (!Double.isFinite(w)) {
                 // sinh overflows around kappa*T ~ 710; without this guard the
@@ -99,7 +99,7 @@ public final class ImplementationShortfallScheduler {
     private static double frontLoadOf(AlmgrenChriss.Params base, double lambda) {
         AlmgrenChriss.Trajectory t =
                 AlmgrenChriss.optimalTrajectory(base.withRiskAversion(lambda));
-        double f = t.trades()[0] / base.totalShares();
+        double f = t.trades(0) / base.totalShares();
         return Double.isNaN(f) ? Double.POSITIVE_INFINITY : f;
     }
 }

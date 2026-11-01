@@ -3,7 +3,7 @@ package com.quantfinlib.risk;
 import com.quantfinlib.util.MathUtils;
 
 /**
- * COMPONENT VaR — the answer to the risk committee's actual question. A
+ * Component VaR — the answer to the risk committee's actual question. A
  * portfolio VaR of $10m is a fact; "which desk owns how much of it?" is
  * the decision. Under the delta-normal model the Euler allocation makes
  * the split exact and additive:
@@ -14,7 +14,7 @@ import com.quantfinlib.util.MathUtils;
  *   component_i = w_i · marginal_i            and &Sigma;_i component_i = sigma_p  (exact)
  * </pre>
  *
- * <p>Scaled by the same z-score, component VaRs SUM EXACTLY to portfolio
+ * <p>Scaled by the same z-score, component VaRs sum exactly to portfolio
  * VaR — no "diversification residual" bucket to argue over. The three
  * numbers answer three different questions:</p>
  * <ul>
@@ -22,11 +22,11 @@ import com.quantfinlib.util.MathUtils;
  *       owns (the risk-budget number);</li>
  *   <li><b>marginal VaR</b> — how fast VaR moves per unit added (the
  *       "should the next dollar go here?" number);</li>
- *   <li><b>incremental VaR</b> — how much VaR disappears if the position
- *       is CLOSED entirely (a full re-computation without it — NOT
- *       component VaR, and the difference is the whole point: a large
- *       position that hedges the book has POSITIVE size, NEGATIVE
- *       component, and closing it RAISES VaR).</li>
+ *   <li><b>incremental VaR</b>: how much VaR disappears if the position
+ *       is closed entirely (a full re-computation without it). This is not
+ *       component VaR, and the difference matters: a large position that
+ *       hedges the book has positive size, negative component, and
+ *       closing it raises VaR.</li>
  * </ul>
  *
  * <p>Delta-normal only, stated: allocations inherit the model's
@@ -39,13 +39,85 @@ import com.quantfinlib.util.MathUtils;
  */
 public final class ComponentVar {
 
-    /**
-     * @param portfolioVar total delta-normal VaR (positive)
-     * @param components   per-position component VaR; sums exactly to
-     *                     {@code portfolioVar}; hedges are negative
-     * @param marginals    per-position marginal VaR (z · (Σw)_i / σ_p)
-     */
-    public record Allocation(double portfolioVar, double[] components, double[] marginals) {
+    public static final class Allocation {
+        private final double portfolioVar;
+        private final double[] components;
+        private final double[] marginals;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         *
+         * @param portfolioVar total delta-normal VaR (positive)
+         * @param components per-position component VaR; sums exactly to {@code portfolioVar}; hedges are negative
+         * @param marginals per-position marginal VaR (z · (Σw)_i / σ_p)
+         */
+        public Allocation(double portfolioVar, double[] components, double[] marginals) {
+            this.portfolioVar = portfolioVar;
+            this.components = components == null ? null : components.clone();
+            this.marginals = marginals == null ? null : marginals.clone();
+        }
+
+        /** {@code portfolioVar} (total delta-normal VaR (positive)). */
+        public double portfolioVar() {
+            return portfolioVar;
+        }
+
+        /** Element {@code i} of {@code components}. */
+        public double components(int i) {
+            return components[i];
+        }
+
+        /** Length of {@code components}. */
+        public int componentsLength() {
+            return components.length;
+        }
+
+        /** A fresh copy of {@code components}. */
+        public double[] componentsCopy() {
+            return components == null ? null : components.clone();
+        }
+
+        /** Element {@code i} of {@code marginals} (per-position marginal VaR (z · (Σw)_i / σ_p)). */
+        public double marginals(int i) {
+            return marginals[i];
+        }
+
+        /** Length of {@code marginals}. */
+        public int marginalsLength() {
+            return marginals.length;
+        }
+
+        /** A fresh copy of {@code marginals}. */
+        public double[] marginalsCopy() {
+            return marginals == null ? null : marginals.clone();
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Allocation o)) {
+                return false;
+            }
+            return Double.compare(portfolioVar, o.portfolioVar) == 0
+                    && java.util.Arrays.equals(components, o.components)
+                    && java.util.Arrays.equals(marginals, o.marginals);
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + Double.hashCode(portfolioVar);
+            h = 31 * h + java.util.Arrays.hashCode(components);
+            h = 31 * h + java.util.Arrays.hashCode(marginals);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "Allocation[" + "portfolioVar=" + portfolioVar + ", " + "components=" + java.util.Arrays.toString(components) + ", " + "marginals=" + java.util.Arrays.toString(marginals) + "]";
+        }
     }
 
     private ComponentVar() {
@@ -100,7 +172,7 @@ public final class ComponentVar {
     /**
      * Incremental VaR of position {@code i}: portfolio VaR now minus VaR
      * with the position closed (weight zeroed). Positive means closing it
-     * REDUCES risk; negative means the position is a hedge and closing it
+     * reduces risk; negative means the position is a hedge and closing it
      * raises VaR.
      */
     public static double incremental(double[] weights, double[][] covariance,

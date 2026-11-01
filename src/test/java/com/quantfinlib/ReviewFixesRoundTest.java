@@ -39,11 +39,11 @@ class ReviewFixesRoundTest {
     @Test
     void overLimitPositionStillAcceptsRiskReducingOrders() {
         // Two 800-lot fills against a 1000 cap (each passed pre-fill);
-        // the gate must then accept a 500-lot reducing SELL even though
-        // |1600-500| is still above the cap — and keep rejecting adds.
+        // the gate must then accept a 500-lot reducing sell even though
+        // |1600-500| is still above the cap, and keep rejecting adds.
         // The gate does not reserve in-flight quantity: both orders are
-        // checked BEFORE either fills (each projects 800 <= 1000), then
-        // both fill — the classic route to an over-limit book.
+        // checked before either fills (each projects 800 <= 1000), then
+        // both fill. That is the classic route to an over-limit book.
         HftRiskGate gate = new HftRiskGate(4).maxPositionQuantity(1000);
         assertEquals(HftRiskGate.OK, gate.check(0, Side.BUY, 800, 100));
         assertEquals(HftRiskGate.OK, gate.check(0, Side.BUY, 800, 100));
@@ -104,9 +104,10 @@ class ReviewFixesRoundTest {
         MarketState maxAlpha = new MarketState(100, 0, 0,
                 Double.POSITIVE_INFINITY, 0.5, 1.0, 0);
         long due = e.dueQuantity(0.5, maxAlpha);
-        assertTrue(due <= 1_000, "POV must respect its rate, got " + due);
+        // Target share of total volume: p / (1 - p) * 10_000 = 1_111.
+        assertTrue(due <= 1_111, "POV must respect its rate, got " + due);
         e.onFill(due);
-        assertTrue(e.executed() <= 1_000);
+        assertTrue(e.executed() <= 1_111);
     }
 
     // ------------------------------------------- settlement tie-break conservatism
@@ -120,7 +121,7 @@ class ReviewFixesRoundTest {
         assertEquals(180, SettlementRiskAnalyzer.peakExposure(legs, "CP"), 1e-9);
 
         // The discriminating case: T1's receive and T2's payment land on
-        // the SAME millisecond (t=3000). Worst case, our money left before
+        // the same millisecond (t=3000). Worst case, our money left before
         // theirs arrived: the peak must touch 100 + 80 = 180 — a
         // receipts-first tie-break would report only 100.
         List<SettlementRiskAnalyzer.SettlementLeg> tied = List.of(
@@ -219,8 +220,8 @@ class ReviewFixesRoundTest {
         // must be computed UNDER those parameters — the old loop shape
         // returned parameters one M-step ahead of the probabilities.
         RegimeDetector.RegimeModel untrained = RegimeDetector.fit(returns, 0);
-        assertEquals(0.95, untrained.transition()[0][0], 1e-12);
-        assertEquals(0.95, untrained.transition()[1][1], 1e-12);
+        assertEquals(0.95, untrained.transition(0, 0), 1e-12);
+        assertEquals(0.95, untrained.transition(1, 1), 1e-12);
         assertTrue(Double.isFinite(untrained.logLikelihood()));
 
         // Training moves the parameters and improves the likelihood.

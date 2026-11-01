@@ -12,18 +12,18 @@ import java.io.IOException;
  * curve back-loads the continuous session (f²) but is blind to the auction
  * itself — and for many liquid names the close auction is 5-15% of the
  * day, the single deepest liquidity event. Two questions decide how much
- * of a parent to RESERVE for it:
+ * of a parent to reserve for it:
  *
  * <ol>
  *   <li><b>How big is the auction, typically?</b> Learned across days:
  *       feed {@link #onAuctionResult} at each close and the auction's
  *       share of daily volume becomes a day-over-day EWMA (first session
  *       seeds — the same convention as the seasonality curves);</li>
- *   <li><b>Which way is TODAY's auction leaning?</b> From the venue's
- *       imbalance dissemination (see the input contract below): an
- *       imbalance on the OPPOSITE side of your parent means the auction
- *       is looking for exactly your shares — reserve more; an imbalance
- *       on YOUR side means you would join a crowd competing to trade —
+ *   <li><b>Which way is today's auction leaning?</b> From the venue's
+ *       imbalance dissemination (see the input contract below). An
+ *       imbalance on the opposite side of your parent means the auction
+ *       is looking for exactly your shares, so reserve more. An imbalance
+ *       on your side means you would join a crowd competing to trade, so
  *       reserve less and work the continuous market instead.</li>
  * </ol>
  *
@@ -35,11 +35,10 @@ import java.io.IOException;
  * <b>indicative/reference prices</b>. This library ships no venue
  * imbalance feed, so this model is a <b>documented-contract structure</b>:
  * the learning and the reserve logic are tested against synthetic inputs,
- * but the mapping from YOUR venue's message format — and the
- * {@code imbalanceSensitivity} calibration — must be validated against
- * real dissemination data before the output steers size. That caveat is
- * the honest price of shipping the model without pretending to have the
- * data.
+ * but the mapping from your venue's message format (and the
+ * {@code imbalanceSensitivity} calibration) must be validated against
+ * real dissemination data before the output steers size. The model is
+ * shipped without that data, so this caveat applies.
  *
  * <p>Usage with the executor: cap the continuous-session child at
  * {@code (1 − reserveFraction(buy)) × remaining} — the model shapes what
@@ -59,7 +58,7 @@ public final class ClosingAuctionModel {
     private double auctionShareEwma;
     private int daysLearned;
 
-    // Today's dissemination state. Zero IS the no-dissemination state —
+    // Today's dissemination state. Zero is the no-dissemination state —
     // a flag would be a second representation of the same fact.
     private double imbalanceRatio;         // signed: + = buy-side imbalance
     private double indicativePressure;     // (indicative − reference)/reference
@@ -70,7 +69,7 @@ public final class ClosingAuctionModel {
      * @param imbalanceSensitivity how hard the live imbalance tilts the
      *                             reserve around the learned share, e.g.
      *                             0.5 (a fully one-sided book moves the
-     *                             reserve ±50%) — CALIBRATE on your venue
+     *                             reserve ±50%) — calibrate on your venue
      * @param maxReserveFraction   hard cap on what may be held back for
      *                             the auction, e.g. 0.3
      */
@@ -144,7 +143,7 @@ public final class ClosingAuctionModel {
     /**
      * The fraction of the remaining parent to hold back for the auction.
      * Base = the learned auction share; the live imbalance tilts it: an
-     * imbalance OPPOSITE your side raises the reserve (the auction wants
+     * imbalance opposite your side raises the reserve (the auction wants
      * your shares), a same-side imbalance lowers it (you'd join a crowd).
      * Capped at the configured maximum; 0 while nothing is learned.
      */

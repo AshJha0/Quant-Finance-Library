@@ -1,14 +1,15 @@
 package com.quantfinlib.trading;
 
 /**
- * Maker-side symmetric last-look price check — the mechanism FX liquidity
+ * Maker-side symmetric last-look price check: the mechanism FX liquidity
  * providers apply to incoming deal requests, implemented the way the FX
- * Global Code (Principle 17) says it must be: <b>symmetric</b>. At the end
+ * Global Code (Principle 17) says it must be, <b>symmetric</b>. At the end
  * of the hold window the quoted price is compared to the current fair
  * price, and the request is rejected when the market has moved beyond the
- * tolerance in <em>either</em> direction — protecting the maker from being
- * picked off, without free-optioning the taker (accepting only the moves
- * that favor the maker is the asymmetric practice the Code prohibits).
+ * tolerance in <em>either</em> direction. That protects the maker from
+ * being picked off without free-optioning the taker (accepting only the
+ * moves that favor the maker is the asymmetric practice the Code
+ * prohibits).
  *
  * <p>This class is the decision arithmetic plus its disclosure statistics
  * (accept/reject counts split by who the reject protected — the numbers an

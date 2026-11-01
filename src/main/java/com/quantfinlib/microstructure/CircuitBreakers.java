@@ -154,7 +154,7 @@ public final class CircuitBreakers {
         }
 
         /**
-         * Last observed state WITHOUT pause expiry; prefer
+         * Last observed state without pause expiry; prefer
          * {@link #state(long)} when a paused symbol may be quote-silent.
          */
         public LuldState state() {
@@ -205,7 +205,7 @@ public final class CircuitBreakers {
 
         /**
          * @param declineFromPriorClose e.g. 0.08 = the index is down 8%
-         * @param minutesSinceMidnight  local exchange time in MINUTES,
+         * @param minutesSinceMidnight  local exchange time in minutes,
          *                              e.g. 14:30 = 870 (validated to 0..1440
          *                              so a seconds/nanos unit mistake fails
          *                              loudly instead of suppressing halts)

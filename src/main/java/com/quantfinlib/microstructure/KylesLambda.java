@@ -7,26 +7,26 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 /**
- * Kyle's lambda — market impact LEARNED from the tape instead of assumed
+ * Kyle's lambda: market impact learned from the tape instead of assumed
  * from a formula. Kyle (1985): price change is linear in signed order
  * flow, {@code Δp = λ·q + noise}, and λ (price per unit of signed volume)
  * is the market's depth read off its own behavior. Where
  * {@link MarketImpactModel} parameterizes impact (square-root law with
  * calibrated constants), this class runs the streaming through-origin
- * regression {@code λ = E[q·Δp] / E[q²]} on time-decayed moments — the
+ * regression {@code λ = E[q·Δp] / E[q²]} on time-decayed moments. The
  * regression-through-origin form is standard here because both the signed
  * flow and the mid change are zero-mean at these horizons.
  *
  * <p>Feed one {@link #onSample} per aggregation window (a trade, a bar, a
  * decision interval): the mid change over the window and the signed volume
- * that traded in it (buy-aggressor positive — {@link TradeClassifier}
+ * that traded in it (buy-aggressor positive; {@link TradeClassifier}
  * supplies the sign when the feed doesn't). {@link #impactBps} then prices
  * a contemplated child order in the units
- * {@code execution.BenchmarkExecutor.MarketState.impactBps} expects —
+ * {@code execution.BenchmarkExecutor.MarketState.impactBps} expects,
  * closing the last MarketState input that lacked a live producer. A noisy
  * negative λ estimate is clamped to zero impact there: "the market pays
  * you to trade" is an estimation artifact, and feeding it to the executor
- * would ACCELERATE the schedule on garbage. {@link #lambda} stays raw for
+ * would accelerate the schedule on garbage. {@link #lambda} stays raw for
  * diagnostics.</p>
  *
  * <p>Gap discipline: non-finite inputs are skipped whole; the moments seed
@@ -88,11 +88,23 @@ public final class KylesLambda {
 
     /**
      * The estimated impact of trading {@code quantity} now, in basis
-     * points of {@code mid} — the live producer for
-     * {@code MarketState.impactBps}. The SIGN of the quantity is ignored
-     * (impact is a cost in both directions — a signed sell size must not
-     * read as free), a negative λ estimate is clamped to 0 (noise, never
-     * a subsidy), and non-finite inputs are neutral.
+     * points of {@code mid}, the live producer for
+     * {@code MarketState.impactBps}. The sign of the quantity is ignored
+     * (impact is a cost in both directions), a negative λ estimate is
+     * clamped to 0 (noise, never a subsidy), and non-finite inputs are
+     * neutral.
+     *
+     * <p><b>Units and aggregation.</b> λ is estimated from
+     * {@link #onSample} windows as price change per unit of <em>net signed
+     * volume over one aggregation window</em> (Kyle 1985, Econometrica
+     * 53(6); Hasbrouck 2007, ch. 5). Pricing a single child order with it
+     * assumes the child is the window's entire net flow: a child that is
+     * 10% of the window's flow is charged as if it moved the whole window.
+     * Pass the net quantity you expect to trade over one window of the same
+     * length as the one used for estimation (for example the parent
+     * order's slice per window), not an individual fill, and keep
+     * {@code quantity} in the same share units as the signed volume fed to
+     * {@link #onSample}.</p>
      */
     public double impactBps(double quantity, double mid) {
         double size = Math.abs(quantity);

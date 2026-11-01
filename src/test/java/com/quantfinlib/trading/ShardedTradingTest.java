@@ -1,6 +1,7 @@
 package com.quantfinlib.trading;
 
 import com.quantfinlib.orderbook.Side;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.atomic.AtomicLong;
@@ -41,7 +42,7 @@ class ShardedTradingTest {
                 2, 1 << 12, 1 << 12, 64, false, ShardedTradingTest::openGate)) {
             int eurusd = engine.registerSymbol("EURUSD", 0);
             int gbpusd = engine.registerSymbol("GBPUSD", 1);
-            // The cross-leg pattern: USDJPY duplicated into BOTH shards.
+            // The cross-leg pattern: USDJPY duplicated into both shards.
             int usdjpy = engine.registerSymbol("USDJPY", 0, 1);
 
             AtomicLong shard0Ticks = new AtomicLong();
@@ -101,13 +102,14 @@ class ShardedTradingTest {
     }
 
     @Test
+    @Tag("timing")
     void aggregatorTripsAcrossShardsAndRecoversWithHysteresis() throws Exception {
         HftRiskGate gate0 = openGate(0);
         HftRiskGate gate1 = openGate(1);
         gate0.setReferencePrice(0, 100);
         gate1.setReferencePrice(0, 200);
         // Cap 100k gross; resume below 50k.
-        try (GlobalRiskAggregator aggregator = new GlobalRiskAggregator(
+        try (GlobalRiskAggregator aggregator = GlobalRiskAggregator.start(
                 java.util.List.of(gate0, gate1), 100_000, 0.5, 100_000)) {
 
             // 60k on shard 0 + 30k on shard 1 = 90k gross: under the cap.
@@ -117,7 +119,7 @@ class ShardedTradingTest {
             assertFalse(aggregator.isTripped());
             assertEquals(90_000, aggregator.grossNotional(), 1e-9);
 
-            // +20k pushes gross to 110k: the breaker must trip EVERY gate.
+            // +20k pushes gross to 110k: the breaker must trip every gate.
             gate0.onFill(0, Side.BUY, 200);
             awaitTrue(aggregator::isTripped);
             assertEquals(HftRiskGate.REJECT_KILLED, gate0.check(0, Side.BUY, 1, 100));
@@ -133,7 +135,7 @@ class ShardedTradingTest {
             assertEquals(HftRiskGate.OK, gate0.check(0, Side.BUY, 1, 100));
             assertEquals(1, aggregator.tripCount());
         }
-        assertThrows(IllegalArgumentException.class, () -> new GlobalRiskAggregator(
+        assertThrows(IllegalArgumentException.class, () -> GlobalRiskAggregator.start(
                 java.util.List.of(), 100_000, 0.5, 100_000));
     }
 }

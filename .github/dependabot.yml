@@ -1,0 +1,20 @@
+version: 2
+updates:
+  - package-ecosystem: maven
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      maven-plugins:
+        patterns: ["org.apache.maven.plugins:*", "org.codehaus.mojo:*", "org.jacoco:*", "com.github.spotbugs:*", "org.sonatype.central:*"]
+      test-and-tooling:
+        patterns: ["org.junit*", "org.openjdk.jmh:*", "com.google.errorprone:*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

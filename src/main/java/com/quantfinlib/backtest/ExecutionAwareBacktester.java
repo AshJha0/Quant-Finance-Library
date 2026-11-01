@@ -17,14 +17,14 @@ import java.util.List;
  *
  * <p>Semantics (long-only, single instrument, like {@link Backtester}):</p>
  * <ul>
- *   <li>BUY signal while flat → entry parent sized to available cash; worked
+ *   <li>A buy signal while flat opens an entry parent sized to available cash, worked
  *       from the signal bar until filled or superseded.</li>
- *   <li>SELL signal → cancels any unfilled entry remainder and works an exit
+ *   <li>A sell signal cancels any unfilled entry remainder and works an exit
  *       parent for the whole position.</li>
  *   <li>Stop-loss / take-profit are evaluated intrabar against the
  *       <i>volume-weighted average entry price</i>; the triggered exit is
- *       worked through the execution model (a patient model exits slowly —
- *       that realism is the point).</li>
+ *       worked through the execution model (a patient model exits
+ *       slowly).</li>
  *   <li>Any position left at the end of data is force-closed at the last
  *       close less the model's worst-case cost fraction — unconditional
  *       (it bypasses the model's fill logic) but not free.</li>
@@ -107,7 +107,7 @@ public final class ExecutionAwareBacktester {
             // 2. Intrabar risk exits on the accumulated position.
             checkRiskExits(i);
             // 3. Strategy signal at the close.
-            onSignal(strategy.onBar(i), i);
+            onSignal(strategy.onBar(i, (double) position), i);
 
             equity[i] = cash + position * series.close(i);
         }
@@ -126,7 +126,7 @@ public final class ExecutionAwareBacktester {
 
     private void workEntry(int i) {
         // Cap the request by what cash can actually pay for, priced at the
-        // model's own fill anchor (close for most models, the OPEN for
+        // model's own fill anchor (close for most models, the open for
         // last-look) with its declared worst-case all-in cost on top — a
         // flat close-based 1% buffer overdraws cash the moment a model
         // charges more, or fills off a gapped open.

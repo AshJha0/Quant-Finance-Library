@@ -26,7 +26,7 @@ class AdaptiveSorTest {
 
     @Test
     void theClassicExampleRoutesBFirstThenAAndProbesDark() {
-        // Exchange A: 10,000 @ 120µs, Exchange B: 8,000 @ 80µs (SAME price),
+        // Exchange A: 10,000 @ 120µs, Exchange B: 8,000 @ 80µs (same price),
         // Dark Pool: unknown. Expected: 8,000 to B, 2,000 to A, dark probe.
         VenueScorecard card = new VenueScorecard(3);
         AdaptiveSor sor = new AdaptiveSor(card);
@@ -124,7 +124,7 @@ class AdaptiveSorTest {
         card.onMid(99.90, 200 * US);
         assertEquals(-0.10, card.postFillMarkout(0), 1e-12,
                 "seeded from the first matured markout, not ramped from 0");
-        // Venue 1: sell at 100.00, mid falls — the move went OUR way.
+        // Venue 1: sell at 100.00, mid falls — the move went our way.
         card.onFill(1, 50 * US, false, 100.00, 300 * US);
         card.onMid(99.90, 500 * US);
         assertEquals(+0.10, card.postFillMarkout(1), 1e-12, "favorable continuation");
@@ -306,12 +306,17 @@ class AdaptiveSorTest {
         var mx = (com.sun.management.ThreadMXBean)
                 java.lang.management.ManagementFactory.getThreadMXBean();
         long tid = Thread.currentThread().threadId();
-        long before = mx.getThreadAllocatedBytes(tid);
-        for (int i = 0; i < 500_000; i++) {
-            blackhole += scoreStep(card, i);
+        // Exactly zero after warm-up; a bounded retry absorbs a one-off
+        // JIT or class-loading allocation inside the first window.
+        long allocated = -1;
+        for (int attempt = 0; attempt < 5 && allocated != 0; attempt++) {
+            long before = mx.getThreadAllocatedBytes(tid);
+            for (int i = 0; i < 500_000; i++) {
+                blackhole += scoreStep(card, i);
+            }
+            allocated = mx.getThreadAllocatedBytes(tid) - before;
         }
-        long allocated = mx.getThreadAllocatedBytes(tid) - before;
-        assertTrue(allocated < 100_000, "scorecard allocated " + allocated + " bytes");
+        assertTrue(allocated == 0, "scorecard allocated " + allocated + " bytes");
         assertTrue(blackhole != 0);
     }
 

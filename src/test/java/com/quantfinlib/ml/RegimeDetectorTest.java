@@ -34,10 +34,10 @@ class RegimeDetectorTest {
         double[] returns = simulate(3_000, truth, 42);
         RegimeDetector.RegimeModel model = RegimeDetector.fit(returns, 200);
 
-        assertEquals(CALM_VOL, model.stdDevs()[0], CALM_VOL * 0.3);
-        assertEquals(STRESS_VOL, model.stdDevs()[1], STRESS_VOL * 0.3);
-        assertTrue(model.stdDevs()[1] > model.stdDevs()[0], "state 1 must be high vol");
-        assertTrue(model.transition()[0][0] > 0.9 && model.transition()[1][1] > 0.9,
+        assertEquals(CALM_VOL, model.stdDevs(0), CALM_VOL * 0.3);
+        assertEquals(STRESS_VOL, model.stdDevs(1), STRESS_VOL * 0.3);
+        assertTrue(model.stdDevs(1) > model.stdDevs(0), "state 1 must be high vol");
+        assertTrue(model.transition(0, 0) > 0.9 && model.transition(1, 1) > 0.9,
                 "regimes should be persistent");
         assertTrue(model.expectedDuration(0) > 10);
         assertTrue(Double.isFinite(model.logLikelihood()));
@@ -51,7 +51,7 @@ class RegimeDetectorTest {
 
         int correct = 0;
         for (int t = 0; t < returns.length; t++) {
-            int classified = model.smoothedHighVolProbability()[t] > 0.5 ? 1 : 0;
+            int classified = model.smoothedHighVolProbability(t) > 0.5 ? 1 : 0;
             if (classified == truth[t]) {
                 correct++;
             }
@@ -70,9 +70,9 @@ class RegimeDetectorTest {
         }
         RegimeDetector.RegimeModel model = RegimeDetector.fit(returns, 200);
         assertEquals(1, model.currentRegime());
-        assertTrue(model.currentProbabilities()[1] > 0.8);
+        assertTrue(model.currentProbabilities(1) > 0.8);
         // Early sample was calm.
-        assertTrue(model.smoothedHighVolProbability()[100] < 0.5);
+        assertTrue(model.smoothedHighVolProbability(100) < 0.5);
     }
 
     @Test

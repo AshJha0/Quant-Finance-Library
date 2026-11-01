@@ -10,20 +10,20 @@ package com.quantfinlib.fix;
  * the framed bytes recording primitives into preallocated entry arrays, and
  * every getter is primitive.
  *
- * <p>Subset (documented, honest): single-instrument messages — one Symbol
+ * <p>Supported subset: single-instrument messages, one Symbol
  * (55) per message, entries carrying MDUpdateAction (279, X only; W entries
  * are implicitly NEW), MDEntryType (269: '0' bid / '1' offer), MDEntryPx
- * (270, scaled long: mantissa × 10^-decimals — the same representation the
+ * (270, scaled long: mantissa × 10^-decimals, the same representation the
  * order encoder takes, so feed-to-order never touches a double) and
  * MDEntrySize (271). Entry order within the message is preserved: for
- * tiered LP streams, position IS the tier. Unknown tags are skipped without
- * materializing anything.</p>
+ * tiered LP streams, position is the tier. Unknown tags are skipped
+ * without materializing anything.</p>
  *
  * <p>Assumes an already-framed message: {@code buffer[offset]} is the first
  * byte of a tag, every field is SOH-terminated (including the last), and
- * checksum validation happened upstream — framing belongs to the transport
+ * checksum validation happened upstream. Framing belongs to the transport
  * layer (the session-lane {@code FixDecoder} materializes messages and is
- * not this flyweight's feeder). Single-threaded: one view per feed thread —
+ * not this flyweight's feeder). Single-threaded: one view per feed thread;
  * wrap, read, repeat. Zero allocation after construction.</p>
  */
 public final class FixMarketDataView {
@@ -82,7 +82,9 @@ public final class FixMarketDataView {
     /**
      * Parses one framed message in place. Returns {@code true} for 35=W or
      * 35=X; any other message type returns {@code false} immediately and
-     * leaves the getters undefined. Zero allocation.
+     * leaves the getters undefined. Zero allocation. The buffer is not
+     * copied: the caller keeps ownership and must not overwrite those bytes
+     * while reading through this view.
      */
     public boolean wrap(byte[] buffer, int offset, int length) {
         this.buf = buffer;

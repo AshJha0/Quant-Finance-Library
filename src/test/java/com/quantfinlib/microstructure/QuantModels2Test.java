@@ -33,7 +33,7 @@ class QuantModels2Test {
     void regimeIsTimeOfDayAwareNotAbsolute() {
         VolatilityCurve vc = new VolatilityCurve(2, 0.5);
         vc.seedBaseline(new double[]{2e-4, 5e-5});     // wild open, calm lunch
-        // The SAME absolute vol reading is calm at the open, extreme at lunch.
+        // The same absolute vol reading is calm at the open, extreme at lunch.
         assertEquals(0.0, vc.regime(0, 2e-4), 1e-12, "normal for the open");
         assertEquals(1.0, vc.regime(1, 2e-4), 1e-12, "4x lunch baseline: clamped extreme");
         // Halfway elevated: 7.5e-5 on a 5e-5 baseline = +50% -> 0.5.

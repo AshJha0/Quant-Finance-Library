@@ -1,20 +1,20 @@
 package com.quantfinlib.execution;
 
 /**
- * The futures roll — the trade every futures position must do and most
- * do badly: move from the expiring front contract to the back over the
- * roll window, following the LIQUIDITY MIGRATION rather than fighting
- * it. Rolling everything on day one pays wide back-month spreads;
- * waiting for expiry pays the congestion of everyone else's last day.
- * The algo tracks a migration curve — the cumulative fraction of open
- * interest that has moved by each day — and rolls in step:
+ * The futures roll: the trade every futures position must do and most
+ * do badly. It moves from the expiring front contract to the back over
+ * the roll window, following the liquidity migration rather than
+ * fighting it. Rolling everything on day one pays wide back-month
+ * spreads; waiting for expiry pays the congestion of everyone else's
+ * last day. The algo tracks a migration curve (the cumulative fraction
+ * of open interest that has moved by each day) and rolls in step:
  *
  * <pre>  target(day) = round(position · curve[day]);  due = target − rolled</pre>
  *
  * <p>The default curve is the classic roll S-shape (slow start,
  * concentrated middle, complete before the final day's scramble). Each
- * day's due quantity executes as a CALENDAR SPREAD — sell front / buy
- * back for a long — which is exactly a {@link SpreadExecutionAlgo} with
+ * day's due quantity executes as a calendar spread (sell front / buy
+ * back for a long), which is exactly a {@link SpreadExecutionAlgo} with
  * ratio 1 and the calendar spread's own legging cap. Deterministic,
  * single-threaded, research/warm lane.</p>
  */

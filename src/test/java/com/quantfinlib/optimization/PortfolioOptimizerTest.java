@@ -16,11 +16,11 @@ class PortfolioOptimizerTest {
         double[][] cov = {{0.01, 0.0}, {0.0, 0.04}};
         PortfolioOptimizer.Allocation a = new PortfolioOptimizer(mu, cov).minVolatility();
 
-        assertEquals(0.8, a.weights()[0], 0.02);
-        assertEquals(0.2, a.weights()[1], 0.02);
-        assertEquals(1.0, a.weights()[0] + a.weights()[1], 1e-9);
+        assertEquals(0.8, a.weights(0), 1e-10);
+        assertEquals(0.2, a.weights(1), 1e-10);
+        assertEquals(1.0, a.weights(0) + a.weights(1), 1e-9);
         // Analytic min vol = sqrt(0.8^2*0.01 + 0.2^2*0.04) ≈ 0.0894
-        assertEquals(0.0894, a.volatility(), 0.005);
+        assertEquals(Math.sqrt(0.8 * 0.8 * 0.01 + 0.2 * 0.2 * 0.04), a.volatility(), 1e-12);
     }
 
     @Test
@@ -29,7 +29,7 @@ class PortfolioOptimizerTest {
         double[] mu = {0.04, 0.12};
         double[][] cov = {{0.0225, 0.0}, {0.0, 0.0225}};
         PortfolioOptimizer.Allocation a = new PortfolioOptimizer(mu, cov).maxSharpe(0.02);
-        assertTrue(a.weights()[1] > a.weights()[0], "weights=" + java.util.Arrays.toString(a.weights()));
+        assertTrue(a.weights(1) > a.weights(0), "weights=" + java.util.Arrays.toString(a.weightsCopy()));
         assertTrue(a.sharpe() > 0);
     }
 
@@ -45,7 +45,7 @@ class PortfolioOptimizerTest {
                 new PortfolioOptimizer(mu, cov).maxSharpe(0.02),
                 new PortfolioOptimizer(mu, cov).minVolatility())) {
             double sum = 0;
-            for (double w : a.weights()) {
+            for (double w : a.weightsCopy()) {
                 assertTrue(w >= -1e-9, "negative weight " + w);
                 sum += w;
             }

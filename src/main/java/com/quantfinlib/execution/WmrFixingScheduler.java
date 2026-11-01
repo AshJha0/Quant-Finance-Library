@@ -8,9 +8,9 @@ import java.util.List;
  * spreading the parent evenly across the fixing's calculation window, so
  * realized cost tracks the benchmark rather than betting against it — the
  * window is 5 minutes for major pairs, and the benchmark is computed from
- * observations inside it, so TWAP-in-window IS the neutral replication.
+ * observations inside it, so TWAP-in-window is the neutral replication.
  *
- * <p>Deliberately excluded, with reasons: executing ahead of the window to
+ * <p>Not implemented, with reasons: executing ahead of the window to
  * "get done early" is pre-hedging risk against the client's benchmark (the
  * conduct the 2013-15 FX fix scandals were about), and skewing inside the
  * window is a bet, not benchmark replication. Anyone who wants a bet can
@@ -51,11 +51,11 @@ public final class WmrFixingScheduler {
         }
         if (windowMillis > Long.MAX_VALUE / numSlices) {
             // Offset arithmetic (windowMillis * i) would overflow and place
-            // slices BEFORE the window — the pre-window execution this class
+            // slices before the window — the pre-window execution this class
             // exists to refuse.
             throw new IllegalArgumentException("windowMillis too large: " + windowMillis);
         }
-        // The schedule IS a TWAP over the window — delegate so the claim
+        // The schedule is a TWAP over the window — delegate so the claim
         // "TWAP-in-window is neutral replication" is true by construction
         // and cannot drift from the TWAP implementation.
         return TwapScheduler.schedule(totalQty, windowMillis, numSlices);

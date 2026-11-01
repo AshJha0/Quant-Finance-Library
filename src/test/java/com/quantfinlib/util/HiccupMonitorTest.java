@@ -1,10 +1,12 @@
 package com.quantfinlib.util;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@Tag("timing")
 class HiccupMonitorTest {
 
     @Test
@@ -39,5 +41,14 @@ class HiccupMonitorTest {
     @Test
     void rejectsSpinNoiseResolutions() {
         assertThrows(IllegalArgumentException.class, () -> new HiccupMonitor(1_000));
+    }
+
+    @Test
+    void spinModeSamplesWithoutTheTimer() throws Exception {
+        try (HiccupMonitor monitor = HiccupMonitor.spinning(1_000_000).start()) {
+            Thread.sleep(200);
+            assertTrue(monitor.samples() > 10, "samples=" + monitor.samples());
+            assertTrue(monitor.summary().contains("spin"));
+        }
     }
 }

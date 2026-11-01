@@ -34,11 +34,11 @@ public final class BollingerBandsStrategy implements TradingStrategy {
 
     @Override
     public void init(BarSeries series) {
-        close = series.closes();
+        close = series.closesCopy();
         Indicators.Bollinger b = Indicators.bollinger(close, period, k);
-        upper = b.upper();
-        middle = b.middle();
-        lower = b.lower();
+        upper = b.upperCopy();
+        middle = b.middleCopy();
+        lower = b.lowerCopy();
     }
 
     @Override

@@ -11,7 +11,7 @@ package com.quantfinlib.microstructure;
  * size displayed at that moment.</b> Displayed liquidity cannot fill more
  * than it shows, so the excess in that one print necessarily executed
  * against hidden size at the level. (A cumulative executed-vs-displayed
- * comparison is NOT sound at L2: a busy level legitimately trades many
+ * comparison is not sound at L2: a busy level legitimately trades many
  * times its instantaneous display through ordinary adds — that
  * formulation false-flags normal flow.) Per level, the detector keeps an
  * EWMA of the print/displayed ratio at those hidden events;

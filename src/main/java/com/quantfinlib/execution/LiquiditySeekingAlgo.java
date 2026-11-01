@@ -4,18 +4,18 @@ import com.quantfinlib.execution.BenchmarkExecutor.MarketState;
 import com.quantfinlib.util.MathUtils;
 
 /**
- * The opportunistic execution archetype — the counterpart to
+ * The opportunistic execution archetype, counterpart to
  * {@link BenchmarkExecutor}'s schedule-driven family. A schedule algo
  * asks "am I behind the curve?"; a liquidity seeker asks <b>"is the
- * market cheap RIGHT NOW?"</b> and trades in bursts when it is: spread
+ * market cheap right now?"</b> and trades in bursts when it is: spread
  * tighter than its time-of-day forecast, calm volatility regime, low
- * estimated impact. Between opportunities it sits still — which is why
+ * estimated impact. Between opportunities it sits still. That is why
  * it needs the one discipline every seek-style algo ships with: a
  * <b>completion floor</b> that ramps in over the final stretch of the
  * horizon, so patience can never become a missed parent.
  *
  * <p>Inputs reuse the {@link MarketState} units contract (normalized vol
- * regime, impact in bps, take-now depth) plus the spread FORECAST from
+ * regime, impact in bps, take-now depth) plus the spread forecast from
  * {@code microstructure.SpreadForecaster} — cheapness is always relative
  * to what the spread usually is at this hour, not to an absolute number
  * (2 pips is cheap at the London open and expensive at midnight):</p>
@@ -24,16 +24,21 @@ import com.quantfinlib.util.MathUtils;
  * long due = seek.dueQuantity(f, marketState, spreadForecaster.forecast(bucket, now));
  * }</pre>
  *
- * <p>Decision per interval: score the moment — spread at-or-under
- * forecast, vol regime below the calm threshold, impact below the cap —
- * and if ALL hold, take an aggressive clip ({@code maxDepthFraction ×
+ * <p>Decision per interval: score the moment (spread at-or-under
+ * forecast, vol regime below the calm threshold, impact below the cap),
+ * and if all hold, take an aggressive clip ({@code maxDepthFraction ×
  * displayedDepth}). If not, send only the completion floor: 0 until
  * {@code forceCompleteFrom}, then the remaining quantity spread linearly
- * over what is left of the horizon (at f = 1 the floor IS the
- * remainder). NaN inputs degrade honestly: an unknown forecast means the
+ * over what is left of the horizon (at f = 1 the floor is the
+ * remainder). NaN inputs degrade safely: an unknown forecast means the
  * moment cannot be judged cheap (no opportunistic burst), but the floor
  * still guarantees completion. Zero allocation per decision, single
  * parent, single writer.</p>
+ *
+ * <p>Sent-but-unfilled children count against the remainder: report them
+ * with {@link #onChildSent} and their unfilled remainders with
+ * {@link #onChildDone}, so a burst that rests is not repeated while it
+ * works.</p>
  */
 public final class LiquiditySeekingAlgo {
 
@@ -69,6 +74,7 @@ public final class LiquiditySeekingAlgo {
     private final long parentQty;
     private final Config config;
     private long executed;
+    private long open;
 
     public LiquiditySeekingAlgo(long parentQty, Config config) {
         if (parentQty <= 0) {
@@ -95,7 +101,7 @@ public final class LiquiditySeekingAlgo {
      *                         cheapness unknowable, floor only
      */
     public long dueQuantity(double scheduleFraction, MarketState m, double forecastSpread) {
-        long remaining = parentQty - executed;
+        long remaining = parentQty - executed - open;
         if (remaining <= 0) {
             return 0;
         }
@@ -110,7 +116,7 @@ public final class LiquiditySeekingAlgo {
         }
 
         // The completion floor: from forceCompleteFrom, the remainder spread
-        // linearly over the horizon left; at f = 1 the floor IS the remainder.
+        // linearly over the horizon left; at f = 1 the floor is the remainder.
         if (f > config.forceCompleteFrom()) {
             double ramp = (f - config.forceCompleteFrom()) / (1 - config.forceCompleteFrom());
             long floor = f >= 1 ? remaining : (long) Math.ceil(remaining * ramp);
@@ -128,7 +134,7 @@ public final class LiquiditySeekingAlgo {
         boolean spreadCheap = m.spread() >= 0 && forecastSpread > 0
                 && forecastSpread != Double.POSITIVE_INFINITY
                 && m.spread() <= forecastSpread * (1 + config.spreadTolerance());
-        // NaN fails BOTH remaining gates (NaN <= x is false): an unknowable
+        // NaN fails both remaining gates (NaN <= x is false): an unknowable
         // regime or impact must never authorize a burst — a vol-feed outage
         // during a spike is exactly when firing would hurt most.
         boolean calm = m.volatility() <= config.maxVolRegime();
@@ -136,11 +142,31 @@ public final class LiquiditySeekingAlgo {
         return spreadCheap && calm && lowImpact;
     }
 
-    /** Our own child fill. */
+    /** Our own child fill; reduces the open quantity by the same amount. */
     public void onFill(long qty) {
         if (qty > 0) {
             executed += qty;
+            open = Math.max(0, open - qty);
         }
+    }
+
+    /** A child of {@code qty} was sent and is working. */
+    public void onChildSent(long qty) {
+        if (qty > 0) {
+            open += qty;
+        }
+    }
+
+    /** A child ended with {@code unfilledQty} never executed. */
+    public void onChildDone(long unfilledQty) {
+        if (unfilledQty > 0) {
+            open = Math.max(0, open - unfilledQty);
+        }
+    }
+
+    /** Sent child quantity not yet filled or reported done. */
+    public long openQuantity() {
+        return open;
     }
 
     public long executed() {

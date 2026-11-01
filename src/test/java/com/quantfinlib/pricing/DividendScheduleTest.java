@@ -76,4 +76,34 @@ class DividendScheduleTest {
         DividendSchedule huge = DividendSchedule.of(new double[]{0.5}, new double[]{200});
         assertThrows(IllegalArgumentException.class, () -> huge.adjustedSpot(S, R, T));
     }
+
+    @Test
+    void bosVandermarkIsCloserToTheJumpModelThanEscrow() {
+        // Exact model: GBM between dividends, spot drops by the cash amount at
+        // the ex-date. One late, large dividend makes the escrow error visible.
+        double s0 = 100, k = 100, r = 0.05, vol = 0.30, t = 1.0, tDiv = 0.9, div = 7;
+        DividendSchedule d = DividendSchedule.of(new double[]{tDiv}, new double[]{div});
+        java.util.SplittableRandom rng = new java.util.SplittableRandom(7);
+        int n = 400_000;
+        double sum = 0, sum2 = 0;
+        for (int i = 0; i < n; i++) {
+            double s1 = s0 * Math.exp((r - 0.5 * vol * vol) * tDiv + vol * Math.sqrt(tDiv) * rng.nextGaussian());
+            s1 = Math.max(s1 - div, 0);
+            double sT = s1 * Math.exp((r - 0.5 * vol * vol) * (t - tDiv)
+                    + vol * Math.sqrt(t - tDiv) * rng.nextGaussian());
+            double v = Math.exp(-r * t) * Math.max(sT - k, 0);
+            sum += v;
+            sum2 += v * v;
+        }
+        double mc = sum / n;
+        double se = Math.sqrt((sum2 / n - mc * mc) / n);
+        double bv = d.bosVandermarkPrice(OptionType.CALL, s0, k, r, 0, vol, t);
+        double escrow = d.europeanPrice(OptionType.CALL, s0, k, r, 0, vol, t);
+        assertTrue(Math.abs(bv - mc) < Math.abs(escrow - mc),
+                "bv " + bv + " escrow " + escrow + " mc " + mc + " +- " + se);
+        assertTrue(Math.abs(bv - mc) < 0.1, "bv " + bv + " mc " + mc);
+        // No dividends: both are plain Black-Scholes.
+        assertEquals(BlackScholes.price(OptionType.PUT, s0, k, r, 0.01, vol, t),
+                DividendSchedule.NONE.bosVandermarkPrice(OptionType.PUT, s0, k, r, 0.01, vol, t), 1e-12);
+    }
 }

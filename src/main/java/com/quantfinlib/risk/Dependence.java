@@ -2,17 +2,17 @@ package com.quantfinlib.risk;
 
 /**
  * Rank-based dependence measures — what Pearson correlation misses.
- * Pearson (in {@code RiskMetrics.correlation}) measures LINEAR
+ * Pearson (in {@code RiskMetrics.correlation}) measures linear
  * co-movement and is wrecked by a single outlier or a nonlinear (but
  * monotone) relationship; risk work needs the rank alternatives:
  *
  * <ul>
- *   <li><b>Spearman's ρ</b> — Pearson on the RANKS: "do they move in the
+ *   <li><b>Spearman's ρ</b> — Pearson on the ranks: "do they move in the
  *       same order?", robust to outliers and any monotone transform.
  *       Also the correlation FRTB's P&amp;L attribution test is defined
  *       on ({@code PnlAttribution});</li>
- *   <li><b>Kendall's τ</b> — the probability a random pair is concordant
- *       minus discordant. Slower to compute (O(n²) here — fine at risk
+ *   <li><b>Kendall's τ</b>: the probability a random pair is concordant
+ *       minus discordant. Slower to compute (O(n²) here, fine at risk
  *       sample sizes) but with the property copula work leans on:
  *       for elliptical copulas, {@code ρ_pearson = sin(πτ/2)} inverts τ
  *       into the copula correlation without distributional damage.</li>

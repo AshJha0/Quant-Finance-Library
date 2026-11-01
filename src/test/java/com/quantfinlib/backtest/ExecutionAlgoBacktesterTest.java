@@ -79,7 +79,7 @@ class ExecutionAlgoBacktesterTest {
     }
 
     @Test
-    void participationCapsAndPovAreHonest() {
+    void participationCapsAndPovAreRespected() {
         // 26 bars x 1,000 volume x 25% cap = exactly 250/bar, 6,500 total —
         // the Config cap is the SINGLE cap (the executor's internal depth
         // fraction is disabled), so the bound is exact, not approximate.
@@ -89,7 +89,7 @@ class ExecutionAlgoBacktesterTest {
         var r = bt.run(thin, Side.BUY, 100_000, Benchmark.TWAP);
         assertEquals(6_500, r.executed(),
                 "participationCap x volume every bar, nothing more, nothing less");
-        assertTrue(!r.completed(), "an unfillable parent reports itself honestly");
+        assertTrue(!r.completed(), "an unfillable parent reports itself incomplete");
 
         // POV at 10% of a 26M-volume session with a huge parent: the RATE
         // must bind — exactly 100k per 1M bar, 2.6M total.

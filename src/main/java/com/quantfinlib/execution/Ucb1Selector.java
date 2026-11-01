@@ -1,25 +1,25 @@
 package com.quantfinlib.execution;
 
 /**
- * UCB1 multi-armed bandit — principled selection among venues, LPs or
- * algo variants when the scorecards are still THIN. The exploration
+ * UCB1 multi-armed bandit: principled selection among venues, LPs or
+ * algo variants when the scorecards are still thin. The exploration
  * problem is real: always using the best-so-far venue means never
  * learning whether another improved; rotating uniformly wastes flow on
  * known-bad ones. UCB1 (Auer et al. 2002) picks the arm maximizing
  *
  * <pre>  mean reward + √(2·ln N / nᵢ)</pre>
  *
- * — the optimism bonus shrinks as an arm is tried, so exploration
+ * The optimism bonus shrinks as an arm is tried, so exploration
  * decays exactly as fast as the evidence accumulates, with logarithmic
- * regret guaranteed. Rewards must be in [0, 1] (the theory's scale —
- * map fill quality, negated cost bps, or markout onto it; the gate
+ * regret guaranteed. Rewards must be in [0, 1], the theory's scale (map
+ * fill quality, negated cost bps, or markout onto it). The gate
  * enforces it because a mis-scaled reward silently breaks the
- * exploration balance).
+ * exploration balance.
  *
  * <p>Where this sits vs the scorecards: {@code VenueScorecard} and
- * {@code fx.LpScorecard} are the RIGHT tool once hundreds of fills per
+ * {@code fx.LpScorecard} are the right tool once hundreds of fills per
  * venue exist — they model fill rate, latency and markout separately.
- * UCB1 is for the cold start and for A/B-ing ALGO variants (is the
+ * UCB1 is for the cold start and for A/B-ing algo variants (is the
  * new schedule actually better?), where a single scalar reward and a
  * regret guarantee beat a half-warmed-up model. Deterministic
  * (ties break to the lowest index), O(arms) per selection,
@@ -52,7 +52,7 @@ public final class Ucb1Selector {
         }
         int best = 0;
         double bestUcb = Double.NEGATIVE_INFINITY;
-        double logN = Math.log(totalPulls);
+        double logN = Math.log((double) totalPulls);
         for (int i = 0; i < pulls.length; i++) {
             double ucb = rewardSums[i] / pulls[i] + Math.sqrt(2 * logN / pulls[i]);
             if (ucb > bestUcb) {

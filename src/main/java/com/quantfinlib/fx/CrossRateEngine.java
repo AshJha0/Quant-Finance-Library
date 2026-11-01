@@ -21,7 +21,7 @@ import java.util.List;
  *
  * <p><b>Threading.</b> Cross updates are delivered synchronously on the bus
  * consumer thread through a caller-supplied {@link TickListener} — they are
- * deliberately <em>not</em> re-published onto the bus, whose ring is
+ * not re-published onto the bus, whose ring is
  * single-producer (the feed thread); publishing from the consumer thread
  * would break that contract. Chain downstream logic (streaming indicators, a
  * quoter) off the listener exactly as off a native symbol. The cross symbol

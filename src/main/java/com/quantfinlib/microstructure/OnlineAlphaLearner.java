@@ -14,18 +14,18 @@ import java.io.IOException;
  * dimensionless signal ingredients (queue imbalance, trade imbalance,
  * normalized OFI, momentum-Z) to the next-interval return.
  *
- * <h2>The honesty mechanism: prequential out-of-sample IC</h2>
+ * <h2>The safeguard: prequential out-of-sample IC</h2>
  * The trap with any self-updating alpha is grading its own homework. This
  * learner can't: {@link #train} records the prediction made with the
- * CURRENT weights <em>before</em> the realized return updates them
+ * current weights <em>before</em> the realized return updates them
  * (predict-then-train, "prequential" evaluation), and maintains a
  * time-decayed correlation between those genuinely out-of-sample
- * predictions and the outcomes — {@link #outOfSampleIC}. <b>Gate any use
+ * predictions and the outcomes ({@link #outOfSampleIC}). <b>Gate any use
  * of the learned alpha on that number</b>: persistently positive
  * (intraday, ~0.02–0.10 is real) means the weights found signal; an IC
  * hovering at zero means they found noise, and {@link #normalizedPrediction}
  * should be treated as such. This diagnostic is a live tripwire, not a
- * validation — before trading a weighting seriously, run it through the
+ * validation. Before trading a weighting seriously, run it through the
  * {@code alpha} package's walk-forward and permutation machinery like any
  * other signal.
  *
@@ -53,7 +53,7 @@ public final class OnlineAlphaLearner {
     private double absPredEwma;            // prediction scale, for normalization
     private long samples;
 
-    // trainFrom's snapshot: the engine's ingredients as of the PREVIOUS
+    // trainFrom's snapshot: the engine's ingredients as of the previous
     // call, so a return realized over (t, t+1] is fitted against features
     // observed at t — never against the t+1 features that already contain
     // the move (which would be lookahead leakage the IC could not detect).
@@ -110,14 +110,14 @@ public final class OnlineAlphaLearner {
     /**
      * One learning step: the prediction made with the current weights is
      * scored against {@code realizedReturn} (this is what makes
-     * {@link #outOfSampleIC} honest), THEN the weights update by ridge-SGD.
+     * {@link #outOfSampleIC} out of sample), then the weights update by ridge-SGD.
      * Non-finite inputs are skipped entirely — a NaN must neither poison
      * the weights nor sneak into the IC.
      *
      * <p><b>Alignment is the caller's contract here:</b> the four features
-     * must have been observed BEFORE the interval {@code realizedReturn}
+     * must have been observed before the interval {@code realizedReturn}
      * covers. Passing the current features with the return that just ended
-     * fits a nowcast — the features already contain the move — and the IC
+     * fits a nowcast (the features already contain the move), and the IC
      * will read high on pure leakage. {@link #trainFrom} handles this
      * alignment automatically; use it unless you keep your own snapshots.</p>
      */
@@ -128,7 +128,7 @@ public final class OnlineAlphaLearner {
                 || !Double.isFinite(realizedReturn)) {
             return;
         }
-        // 1. Score BEFORE learning: genuinely out-of-sample.
+        // 1. Score before learning: genuinely out-of-sample.
         double pred = predict(queueImbalance, tradeImbalance, normalizedOfi, momentumZ);
         meanPred += icAlpha * (pred - meanPred);
         meanRet += icAlpha * (realizedReturn - meanRet);
@@ -154,7 +154,7 @@ public final class OnlineAlphaLearner {
 
     /**
      * The aligned learning step over a SignalEngine: trains on the
-     * ingredients snapshotted at the PREVIOUS call (which predate the
+     * ingredients snapshotted at the previous call (which predate the
      * interval {@code realizedReturn} covers), then snapshots the current
      * ingredients for the next call. The first call only snapshots — there
      * is nothing aligned to train on yet. Call once per interval, with the
@@ -179,7 +179,7 @@ public final class OnlineAlphaLearner {
 
     /**
      * The prequential (out-of-sample) information coefficient: time-decayed
-     * correlation between the predictions made BEFORE each outcome and the
+     * correlation between the predictions made before each outcome and the
      * outcomes themselves. The gate for using the learned alpha; 0 before
      * enough variance exists to measure.
      */
@@ -191,14 +191,18 @@ public final class OnlineAlphaLearner {
     /**
      * The prediction scaled by its own typical magnitude and clamped to
      * [-1, 1] — the {@code BenchmarkExecutor.MarketState.alpha}-ready form.
-     * Returns 0 while the out-of-sample IC is not positive OR the track
-     * record is shorter than one IC memory (~1/icAlpha samples): a learner
-     * that hasn't demonstrated live predictive power over a meaningful
-     * window emits no signal — a lucky first hour is not evidence.
+     * Returns 0 while the out-of-sample IC is not significant, that is
+     * {@code IC ≤ 2·SE} with SE the null standard error of the EWMA
+     * correlation ({@link IcSignificance}; about 0.07 at {@code icAlpha =
+     * 0.01}), or while the track record is shorter than one IC memory
+     * (~1/icAlpha samples). A true-zero learner would pass an {@code IC > 0}
+     * gate half the time; this gate passes it about 2.3% of the time.
      */
     public double normalizedPrediction(double queueImbalance, double tradeImbalance,
                                        double normalizedOfi, double momentumZ) {
-        if (samples * icAlpha < 1 || outOfSampleIC() <= 0 || absPredEwma <= 0) {
+        if (samples * icAlpha < 1 || absPredEwma <= 0
+                || outOfSampleIC() <= IcSignificance.DEFAULT_Z
+                        * IcSignificance.standardError(icAlpha, samples)) {
             return 0;
         }
         double pred = predict(queueImbalance, tradeImbalance, normalizedOfi, momentumZ);
@@ -219,7 +223,7 @@ public final class OnlineAlphaLearner {
     // ------------------------------------------------------------------
 
     /**
-     * Persists the weights AND the prequential IC evidence — restored
+     * Persists the weights and the prequential IC evidence — restored
      * trust must be earned trust: a learner reloaded without its IC
      * history would start silent again ({@link #normalizedPrediction}
      * gates on the IC), which is exactly right for weights with no
