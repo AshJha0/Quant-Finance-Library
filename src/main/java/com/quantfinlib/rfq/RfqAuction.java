@@ -1,10 +1,10 @@
 package com.quantfinlib.rfq;
 
 /**
- * One request-for-quote auction — how equity derivatives actually trade.
+ * One request-for-quote auction: how equity derivatives actually trade.
  * Structured products (autocallables, exotic options) have no order
- * book: the buy-side sends an RFQ to a panel of dealers, collects quotes
- * for a window, and deals on the best — while recording the <b>cover</b>
+ * book. The buy-side sends an RFQ to a panel of dealers, collects quotes
+ * for a window, and deals on the best, while recording the <b>cover</b>
  * (second-best) price, the industry's standard measure of how much the
  * winner's edge was worth and the input every dealer-selection model
  * feeds on.
@@ -50,10 +50,10 @@ public final class RfqAuction {
 
     /**
      * A dealer's quote. A dealer may refresh; the last price stands (but
-     * {@link #responseNanos} keeps the first response — a dealer who
+     * {@link #responseNanos} keeps the first response: a dealer who
      * showed up in 50ms and refreshed near the close is a fast responder,
-     * not a slow one). Non-positive or non-finite prices are declines —
-     * recorded as no quote, never as a tradable level; an explicit pull
+     * not a slow one). Non-positive or non-finite prices are declines,
+     * recorded as no quote and never as a tradable level; an explicit pull
      * withdraws a standing quote.
      */
     public void onQuote(int dealer, double price, long timestampNanos) {
@@ -91,7 +91,7 @@ public final class RfqAuction {
      * The cover: the second-best price — what the trade would have cost
      * without the winner. NaN with fewer than two quotes. The classic
      * dealer-performance yardstick: a winner far inside the cover left
-     * nothing on the table; a winner AT the cover was replaceable.
+     * nothing on the table; a winner at the cover was replaceable.
      */
     public double coverPrice() {
         int w = winner();
