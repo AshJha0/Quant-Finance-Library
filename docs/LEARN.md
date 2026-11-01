@@ -1490,8 +1490,8 @@ means `s_n · Σ df_i + df_n = 1`. The 1-year quote pins `df_1` directly; each
 subsequent quote adds exactly one unknown discount factor, so you solve
 forward: `df_n = (1 − s_n · Σ_{i<n} df_i) / (1 + s_n)`. The result reprices
 every input instrument exactly — that's the defining property of a
-bootstrap, and the first thing to test. Follow-up you should expect: "what
-are level, slope and curvature?" — the three Nelson-Siegel factors (long-end
+bootstrap, and the first thing to test. A related question is what
+level, slope and curvature are: the three Nelson-Siegel factors (long-end
 level, short-minus-long slope, mid-curve hump) that describe virtually all
 curve movement, which is why central banks publish curves in that form.
 
@@ -1525,8 +1525,8 @@ slowly volatility shocks decay. The unconditional variance is
 `ω / (1 − α − β)`, and the k-step forecast decays geometrically from
 today's variance toward it — `h_{t+k} − h∞ = (α+β)^k (h_t − h∞)`. With
 typical daily fits α + β ≈ 0.98, so vol shocks take months to fade; that's
-volatility clustering, quantified. Expected follow-up: "what does GARCH miss
-on equities?" The leverage effect — down moves raise future variance
+volatility clustering, quantified. What GARCH misses on equities is the
+leverage effect — down moves raise future variance
 more than up moves. GJR-GARCH adds a term γ that only fires on negative
 returns; on equity indices the fitted γ is typically *larger* than α, so
 asymmetry isn't a refinement, it's most of the effect. On FX, γ ≈ 0.
@@ -1548,8 +1548,7 @@ generate zero-touching paths in your simulation. Neither fits today's curve
 by construction — that's what Hull-White's time-dependent drift buys you.
 
 *In this library:* `rates/ShortRateModels.java` — `vasicekBond`, `cirBond`,
-`cirFeller` (the ratio 2ab/σ², one line), and curve-fitted Hull-White for
-the follow-up.
+`cirFeller` (the ratio 2ab/σ², one line), and curve-fitted Hull-White.
 
 ### 6. "Why would anyone hold risk parity instead of 60/40 or equal weight?"
 
@@ -1571,8 +1570,7 @@ compare against `PortfolioOptimizer.maxSharpe` on the same inputs.
 
 ### 7. "Your factor has an IC of 0.03. Is that good?"
 
-Quite possibly excellent — the question is testing whether you know the
-scale. IC is the rank correlation between today's scores and forward
+Quite possibly excellent, once you know the scale. IC is the rank correlation between today's scores and forward
 returns (rank, not Pearson, because factor scores have arbitrary units and
 fat tails). The Fundamental Law of Active Management converts it:
 IR ≈ IC · √breadth. An IC of 0.03 applied across 3,000 stocks monthly is a
@@ -1618,8 +1616,8 @@ cash-or-nothing digitals**. Under Black-Scholes those two pieces are the two
 terms of the formula itself: `S·N(d1)` is the asset digital, `K·e^{−rt}·N(d2)`
 is K cash digitals — so N(d2) is the (risk-neutral) probability of
 finishing in the money, and N(d1) is that probability under the stock
-measure. Teachers love this question because it explains the BS formula
-term-by-term instead of as a memorized blob.
+measure. This reading explains the BS formula term by term instead of
+as a memorized blob.
 
 *In this library:* `pricing/DigitalOption.java` (cash-or-nothing,
 asset-or-nothing, and a test reassembling the vanilla from the pieces),
@@ -1659,7 +1657,7 @@ price is just the discounted Black formula on the forward itself —
 spot = forward and carry = 0. It deserves its own name because the market
 **quotes in it**: a cap vol, a swaption vol, a commodity futures option vol
 are all Black-76 σ by convention, and mixing up which model a quoted vol
-belongs to is a real (and expensive) rookie error. Bonus point: working on
+belongs to is a real and expensive error. Working on
 the forward also sidesteps knowing the dividend/repo/convenience yield —
 it's already inside F.
 
@@ -1703,7 +1701,7 @@ plus delta hedging in the underlying. The fair variance strike is therefore
 readable directly off the option chain — no volatility model, no dynamics
 assumption beyond continuity. This is exactly the integral a VIX-style
 index computes: a VIX of 20 *is* a variance-swap strike of 0.04 — one
-number, two names. The classic follow-ups: a vol swap strike is *below*
+number, two names. Two consequences: a vol swap strike is *below*
 the square root of the variance strike (Jensen: √ is concave, so
 E[√v] < √E[v] — the gap is a convexity adjustment growing with vol-of-vol),
 and the 1/K² weighting means the strike loads heavily on deep OTM puts —
@@ -1764,8 +1762,8 @@ buying unattractive (worse bid), so the flow you attract is the flow that
 flattens you. Around that reservation price you quote a half-spread
 `γσ²τ/2 + (1/γ)·ln(1 + γ/κ)` — wider when volatility or your risk aversion
 is higher, tighter when order-flow intensity κ is higher. Never let the
-skew cross your own quotes. The natural follow-up — "will your bid actually
-fill?" — is a queue position question: at a busy level your fill
+skew cross your own quotes. Whether your bid actually fills is a queue
+position question: at a busy level your fill
 probability is set by how much size rests ahead of you, which an L3 feed
 lets you track exactly.
 
@@ -1807,7 +1805,7 @@ replenishes); trading slow accepts price risk (the market can move
 against you while you hold). The optimal trajectory decays like
 `sinh(κ(T−t))/sinh(κT)` — exponential-ish front-loading whose urgency κ
 grows with risk aversion λ and volatility, and falls with market depth.
-Two limits worth volunteering: λ→0 gives TWAP (risk-neutral traders
+Two limits: λ→0 gives TWAP (risk-neutral traders
 minimize impact only), and λ large sells almost everything immediately.
 The model's inputs (temporary impact η, permanent impact γ) are
 estimated from your own fills, which is where TCA feeds back into
@@ -1847,7 +1845,7 @@ fill more than displayed), and, most often missed, adverse
 selection: measure post-fill markouts per venue, because a
 venue where the price systematically moves against you right after filling
 is *selling you toxic fills* at an invisible cost that can exceed the whole
-spread. Two more marks of a real answer: check the NBBO state first (a
+spread. Two more requirements: check the NBBO state first (a
 locked or crossed tape means your consolidated view is stale — don't route
 on it), and if you run a central book, cross internally before going out;
 your own book is the firm's best dark pool.
@@ -2035,7 +2033,7 @@ belongs).
 
 ### 30. "Your hot path allocates nothing. Prove it."
 
-Claiming is easy; the real answer is a measurement protocol. (1)
+Claiming is easy; proving it takes a measurement protocol. (1)
 **Allocation-counter tests**: `ThreadMXBean.getThreadAllocatedBytes` around
 the hot loop — warm up first (JIT compilation itself allocates), then
 assert zero bytes over N operations. Make it a unit test so a regression
@@ -2065,7 +2063,7 @@ counters**. The producer writes the slot's data with plain stores, then
 publishes the sequence with a release store; the consumer reads the
 sequence with an acquire load, and the happens-before edge guarantees it
 sees fully-written data — publication order is the entire correctness
-argument. Two more marks of a real answer: slots are preallocated primitive
+argument. Two more requirements: slots are preallocated primitive
 arrays (zero allocation, cache-friendly), and head/tail counters live on
 separate cache lines so producer and consumer cores don't false-share —
 otherwise the "lock-free" queue serializes on cache-coherence traffic.
@@ -2154,7 +2152,7 @@ OrigSendingTime), so your engine can distinguish a replay from an original
 — you must be idempotent on PossDup duplicates below the expected number
 and process the rest normally. Admin messages aren't replayed; the peer
 coalesces those runs into a SequenceReset-GapFill (35=4, 123=Y) that
-jumps your expected number past them. The asymmetric rule to volunteer: a
+jumps your expected number past them. The asymmetric rule: a
 too-*low* number *without* PossDup is not recoverable — it means state
 corruption, and the correct action is to disconnect, not to guess.
 
@@ -2492,7 +2490,7 @@ the stationary block bootstrap draws blocks of random (geometric)
 length, preserving local dependence while still mixing the sample.
 Concrete use: a strategy with Sharpe 1.2 over 3 years; the block
 bootstrap gives you the full sampling distribution, and the question becomes "is the 5th percentile of that distribution still
-positive?" rather than "is 1.2 a big number?" Caveats to volunteer: the
+positive?" rather than "is 1.2 a big number?" Caveats: the
 bootstrap cannot manufacture tail events absent from the sample, and it
 assumes stationarity across the window -- it fixes the formula's lies,
 not the sample's.
@@ -2789,8 +2787,7 @@ reading of the slope factor -- the second Nelson-Siegel/PCA component
 trick: the slope factor is the one carrying the macro forecast.
 
 *In this library:* `rates/NelsonSiegel.java` (`shortRate`, `longRate`
--- their difference is the slope factor whose sign this question is
-about), `risk/Pca.java` (slope as the second eigenvector, recovered
+-- their difference is the slope factor whose sign is at issue here), `risk/Pca.java` (slope as the second eigenvector, recovered
 from data rather than assumed).
 
 ### 59. "A cap and a swaption both reference the same 5-year swap rate environment. Why can't you use one's vol for the other?"
@@ -2813,8 +2810,7 @@ correlation position wearing vol clothes. Each quote is Black-76 by
 convention, but on its own underlying: caplet vol on the forward rate,
 swaption vol on the forward swap rate discounted by the annuity.
 Plugging one into the other's formula produces numbers that look
-plausible and are systematically wrong -- the rookie error the
-question is screening for.
+plausible and are systematically wrong.
 
 *In this library:* `rates/RatesOptions.java` -- caplet/cap and
 swaption pricers side by side off the same `YieldCurve`, each taking
@@ -3088,8 +3084,7 @@ is maximal and vol-convexity minimal), so the linear-in-sigma formula
 is accurate to a percent or two for realistic inputs -- and that same
 linearity is why ATM options are the natural vol-trading instrument:
 their price is almost purely a vol position, with minimal
-strike-dependent distortion. Follow-up you should expect: the
-straddle's delta is not zero (each leg's d1 > 0 at-the-money-spot),
+strike-dependent distortion. Note that the straddle's delta is not zero (each leg's d1 > 0 at-the-money-spot),
 which is why FX quotes pin the *delta-neutral* straddle as ATM.
 
 *In this library:* `pricing/BlackScholes.java` -- price the two legs
@@ -3944,8 +3939,7 @@ at the edges. Whalley-Wilmott derive the asymptotically optimal band
 width -- it scales like (cost / risk-aversion)^(1/3) * gamma-dependent
 term -- which formalizes what every options trader does by feel: hedge
 wide when costs are high and gamma is low, tight when a pin or a
-barrier concentrates gamma. Expected follow-up: "so is hedging error a
-vol bet?" Yes -- discretely hedged P&L realizes (realized vol - implied
+barrier concentrates gamma. Is hedging error then a vol bet? Yes -- discretely hedged P&L realizes (realized vol - implied
 vol) noise, which is why hedged books still have vol-of-vol risk.
 
 *In this library:* `hedging/HedgingSimulator.java` (same option, vary
@@ -3994,8 +3988,8 @@ position was risk-free, got assigned early, and turned ~$5k into a
 ~$58k loss -- roughly a -2000% return on the "riskless" trade. Second,
 even European boxes carry rates risk before expiry: a long box is long
 duration, and 2022's hikes marked long-dated boxes down like any bond.
-This question tests whether you see options as
-payoff LEGO rather than directional bets.
+The useful habit is to see options as building blocks of payoffs rather
+than as directional bets.
 
 *In this library:* `rates/YieldCurve.java` (turn the box price into a
 discount factor and compare the implied rate to the curve),
@@ -4104,8 +4098,8 @@ books in pro-rata markets show inflated depth that would never all
 trade -- which is why real allocation rules are hybrids: CME's
 short-rate contracts give a top-of-book time-priority allocation to
 whoever set the new best price first, then pro-rata the remainder, to
-keep some incentive for price discovery. The follow-up is
-"which market structure do HFTs prefer?" -- price-time, because speed
+keep some incentive for price discovery. HFTs prefer price-time,
+because speed
 is their edge and queue position is a durable asset; in pro-rata,
 capital (size) substitutes for speed.
 
@@ -4220,7 +4214,7 @@ ideal to internalize; toxic, one-way flow (a client who is always right
 just before the market moves) should be routed out immediately -- which
 is precisely why internalizers score and segment their flow, and why a
 CRB skews its quotes to *attract* the offsetting side when inventory
-builds. Regulatory footnote worth volunteering: internalization must
+builds. Regulatory footnote: internalization must
 still deliver best execution, and in equities the wholesaler must match
 or improve NBBO -- internalizing is a cost decision, not a license to
 fill at worse prices.
@@ -4587,8 +4581,8 @@ training observations immediately after the test period, because serial
 correlation in features and volatility leaks information even without
 literal label overlap. The cost is a modest loss of training data; the
 benefit is that a good CV score becomes evidence instead of an
-artifact. A good follow-up probe: "your CV accuracy dropped from
-0.62 to 0.51 after purging -- what happened?" The desired answer: the
+artifact. If CV accuracy drops from 0.62 to 0.51 after purging, the
+explanation is that the
 0.62 *was the leak*; 0.51 is what your model actually knows, and you
 just saved yourself from deploying it.
 
@@ -4845,8 +4839,8 @@ compiler-reordering constraints (nearly free) while the volatile
 store still pays the fence. In a hot SPSC ring doing tens of millions
 of ops per second, replacing volatile counters with
 setRelease/getAcquire removes a locked instruction per operation, a
-measurable double-digit-percent throughput difference. The classic
-follow-up -- "when do you still need volatile/seqcst?" -- when two
+measurable double-digit-percent throughput difference. You still need
+volatile or seqcst ordering when two
 independent flags must be observed in a consistent order by a third
 observer (Dekker-style patterns); queues are not that.
 
@@ -4901,9 +4895,7 @@ Related rules: never average latencies (report the full
 percentile spectrum to max), warm up before recording, and correlate
 spikes with the hiccup log -- if the benchmark's p99.9 spikes and the
 hiccup monitor shows a matching stall, the platform, not the
-algorithm, is your problem. This question separates people
-who have published latency numbers from people who have been burned
-by them. A fourth trap is the clock itself: on Windows `nanoTime()`
+algorithm, is your problem. A fourth trap is the clock itself: on Windows `nanoTime()`
 advances in 100 ns steps, so a reported 100 ns is one clock tick, not
 100 ns of work, and a percentile below the clock step is meaningless.
 
@@ -4996,7 +4988,7 @@ replaces arrive by id and must find the order in O(1) without hashing
 garbage. (4) All storage preallocated: order slots from a free list,
 no node allocation per event (Q124). Matching is then: aggressor walks
 levels from the top, consumes FIFO queues, emits trades; partial fills
-update in place. Follow-ups to expect: self-trade prevention, iceberg
+update in place. Related topics: self-trade prevention, iceberg
 refill priority (back of queue), replace semantics (price change loses
 queue position, size-down keeps it), and how the public feed is
 generated from the same event stream that mutates the book (Q130).
@@ -5143,8 +5135,8 @@ the 75% overnight "crash" that a raw series shows at the split becomes a
 smooth join, and every return computed across the boundary is a real
 return. Done wrong (or not at all) your momentum signal sees a
 massive one-day loss, your vol estimate quadruples, and your stop-loss
-logic fires on an event that transferred zero wealth. The subtle detail
-a desk will probe: the adjustment applies to bars strictly before the
+logic fires on an event that transferred zero wealth. The subtle detail:
+the adjustment applies to bars strictly before the
 ex-timestamp (the first bar trading on the new basis), and multiple
 actions compound multiplicatively as you walk backward through time. The
 input series should never be mutated -- adjustment is a derived view,
@@ -5522,7 +5514,7 @@ measure, so crossings of MACD through its signal mark momentum
 accelerating or fading. The histogram is the difference of those two --
 loosely a second derivative of price -- and it is the earliest of the
 three to turn, which is why chartists watch histogram shrinkage as an
-exhaustion cue before the crossover prints. Things a desk will probe:
+exhaustion cue before the crossover prints. Three properties matter:
 MACD is unbounded and price-scaled, so it is not comparable across
 symbols without normalizing (divide by price or use a percentage form);
 it is built from EMAs, so all the lag arguments of Q151 apply doubly;
@@ -6151,8 +6143,8 @@ generation you often save 2x or more in paths for the same standard
 error. When it does not help: payoffs symmetric in the underlying
 (a straddle -- both the up path and its mirror finish in the money, so
 the correlation goes positive and the trick can mildly backfire) and
-deep digital/barrier payoffs where most path pairs both miss. The
-follow-up a desk asks: why not always? Because it complicates path
+deep digital/barrier payoffs where most path pairs both miss. Why not
+always use it? Because it complicates path
 counting (quote paths as pairs), and for heavy variance reduction you
 graduate to control variates (price the analytic cousin, correct by
 the known error) -- but antithetics remain the first thing to switch
@@ -6856,9 +6848,8 @@ carries prices as unsigned 32-bit integers with four implied decimals).
 Doubles remain defensible on internal hops where both ends are your own
 code, the tick semantics are preserved end to end, and convenience wins
 -- but the moment a counterparty, a matching engine, or persistent
-storage is involved, scaled integers are the professional answer. The
-follow-up trap: "just use BigDecimal" fails the latency test -- it
-allocates per operation.
+storage is involved, scaled integers are the standard choice. BigDecimal
+fails the latency test: it allocates per operation.
 
 *In this library:* both choices: `fix/FixOrderEncoder.java`
 takes prices as mantissa x 10^-decimals ("doubles never touch the
@@ -8066,8 +8057,8 @@ about to go. With bid 50.00 x 900, ask 50.02 x 100: microprice =
 cent below the ask, not at the 50.01 mid. Uses on a desk: quote around
 microprice instead of mid (you will shade correctly for free), gate
 passive child orders on imbalance (do not join a queue about to be run
-over), and feed multi-level imbalance into short-horizon alpha. Caveat a
-good answer volunteers: displayed imbalance is gameable (spoofing) and
+over), and feed multi-level imbalance into short-horizon alpha. Caveat:
+displayed imbalance is gameable (spoofing) and
 blind to hidden size, so it degrades where hidden liquidity dominates.
 
 *In this library:* `orderbook/BookAnalytics.java` (`imbalance(book, levels)`,
@@ -8860,7 +8851,7 @@ Second: the optimal total spread, delta = gamma sigma^2 tau +
 fill-rate, where kappa is how fast fill intensity decays as you quote
 away from the touch -- thicker flow near the mid means quote tighter;
 as gamma -> 0 the spread collapses to the pure liquidity floor 2/kappa.
-The trap answer-graders listen for: units. The shade q gamma sigma^2
+The trap is units. The shade q gamma sigma^2
 tau is in price units only when q counts the same instrument units
 sigma^2 is quoted per -- pass round lots instead of shares and the
 shade silently shrinks 100x while the spread term (which never sees q)
@@ -13926,8 +13917,8 @@ between factor scores at date t and forward returns over (t, t+h],
 computed per evaluation date. Rank, not Pearson, because factor scores
 have arbitrary units and fat tails: rank IC asks the only fair
 question, "did the ordering predict the ordering." Real ICs are small:
-0.03 is respectable, 0.10 is exceptional -- the follow-up trap is
-scoffing at 0.05 "correlation," which misunderstands the business.
+0.03 is respectable, 0.10 is exceptional, and scoffing at a 0.05
+"correlation" misunderstands the business.
 IR (the information ratio of the IC series) is mean IC over its
 standard deviation across dates: not just whether the signal works on
 average, but how consistently. The Fundamental Law connects them to
