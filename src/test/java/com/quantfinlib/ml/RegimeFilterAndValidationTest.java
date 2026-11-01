@@ -110,7 +110,7 @@ class RegimeFilterAndValidationTest {
         assertEquals(n - (int) Math.floor(0.6 * n) - 5 + 1, v.forecasts());
         assertTrue(v.rmseModel() > 0 && v.rmseEwma() > 0 && v.rmseHar() > 0);
         // On GARCH data the EWMA is close to the true conditional variance:
-        // an honest comparison has the baselines within a factor of the model.
+        // a fair comparison has the baselines within a factor of the model.
         assertTrue(v.rmseEwma() < 2 * v.rmseModel());
     }
 
