@@ -181,14 +181,21 @@ The benchmarks are in `com.quantfinlib.examples` and `src/test/.../bench`.
 ## 8. JVM settings
 
 The per-event paths do not allocate, so the collector matters little until other code
-allocates. Typical settings for a measurement run:
+allocates. The recommended set for JDK 25, used by the benchmark workflow and the JMH
+forks:
 
 ```
 -Xms2g -Xmx2g                      # fixed heap, no resizing
 -XX:+AlwaysPreTouch                # fault pages in at startup
--XX:+UseZGC                        # short concurrent pauses if anything allocates
+-XX:+UseZGC                        # generational ZGC (the only mode on JDK 24+), short concurrent pauses
+-XX:+UseCompactObjectHeaders       # JEP 519, product flag on JDK 25: 8-byte headers, denser rings and books
+-XX:+PerfDisableSharedMem          # no hsperfdata mmap file, whose writes can stall on a busy disk
 -Xlog:safepoint*:file=sp.log       # correlate stalls with HiccupMonitor output
 ```
+
+`-XX:+ZGenerational` is not needed (and is obsolete) on JDK 24 and later, and
+`-XX:-UseBiasedLocking` no longer exists (biased locking was removed in JDK 18), so
+neither appears above.
 
 The no-op collector, `-XX:+UnlockExperimentalVMOptions -XX:+UseEpsilonGC` with a
 large fixed heap, never collects. A process that allocates more than the heap dies
@@ -197,7 +204,11 @@ not allocate.
 
 Remaining JVM effects: safepoints stop all threads for some VM operations; JIT
 deoptimisation can recompile a hot method mid-run, so warm every path first; and pure
-Java cannot pin a thread to a core.
+Java cannot pin a thread to a core. Every component that owns a polling thread takes a
+`ThreadFactory` (`util.ThreadPlacement`), so a caller can pin threads with an affinity
+library or rely on `taskset` and `isolcpus`, and an `IdleStrategy` (`util.IdleStrategy`:
+busy spin, yield, fixed park, or spin-yield-park back-off) for what the thread does when
+its ring is empty.
 
 ## 9. Operating system and hardware
 

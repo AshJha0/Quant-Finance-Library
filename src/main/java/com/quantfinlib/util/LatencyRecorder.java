@@ -63,8 +63,8 @@ public final class LatencyRecorder {
         if (index < SUB) {
             return index;
         }
-        int exp = index / SUB + SUB_BITS - 1;
-        int sub = index % SUB;
+        int exp = (index >>> SUB_BITS) + SUB_BITS - 1;
+        int sub = index & (SUB - 1);
         return (1L << exp) + ((long) sub << (exp - SUB_BITS));
     }
 
@@ -73,7 +73,7 @@ public final class LatencyRecorder {
         if (index < SUB) {
             return index;
         }
-        int exp = index / SUB + SUB_BITS - 1;
+        int exp = (index >>> SUB_BITS) + SUB_BITS - 1;
         return bucketLow(index) + (1L << (exp - SUB_BITS)) - 1;
     }
 

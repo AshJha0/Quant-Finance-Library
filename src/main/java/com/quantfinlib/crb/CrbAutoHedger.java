@@ -21,6 +21,8 @@ package com.quantfinlib.crb;
  */
 public final class CrbAutoHedger {
 
+    private static final HedgeOrder[] NO_ORDERS = new HedgeOrder[0];   // shared: no allocation when idle
+
     /** One instrument's hedge instruction. */
     public record HedgeOrder(int instrument, double notional) {
     }
@@ -89,12 +91,12 @@ public final class CrbAutoHedger {
                               double costWeight, long nowInterval) {
         requireLength(exposures);
         if (!breached(exposures)) {
-            return new HedgeOrder[0];
+            return NO_ORDERS;
         }
         // hasHedged guards the subtraction: now − MIN_VALUE would overflow
         // negative and suppress the very first hedge forever.
         if (hasHedged && nowInterval - lastHedgeInterval < cooldownIntervals) {
-            return new HedgeOrder[0];
+            return NO_ORDERS;
         }
         // Hedge target: the excess beyond the reset band on breached
         // factors, zero elsewhere — flattening the whole book would

@@ -1,10 +1,12 @@
 package com.quantfinlib.trading;
 
+import com.quantfinlib.util.IdleStrategy;
 import com.quantfinlib.marketdata.HftMarketDataBus;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.IntFunction;
+import java.util.function.Supplier;
 
 /**
  * Horizontal scaling as shipped machinery, not a recipe: N independent
@@ -61,6 +63,21 @@ public final class ShardedTradingEngine implements AutoCloseable {
     public ShardedTradingEngine(int shardCount, int busRingCapacity, int orderRingCapacity,
                                 int maxSymbolsPerShard, boolean busySpin,
                                 IntFunction<HftRiskGate> gateFactory) {
+        this(shardCount, busRingCapacity, orderRingCapacity, maxSymbolsPerShard,
+                busySpin ? IdleStrategy::busySpin : () -> IdleStrategy.parking(200), gateFactory);
+    }
+
+    /**
+     * @param shardCount         independent stacks (2 threads each: consumer + venue)
+     * @param busRingCapacity    tick ring per shard (power of two)
+     * @param orderRingCapacity  order ring per shard (power of two)
+     * @param maxSymbolsPerShard dense-id capacity per shard
+     * @param idleFactory        makes one idle strategy per thread (strategies may keep state)
+     * @param gateFactory        builds each shard's risk gate (limits per shard)
+     */
+    public ShardedTradingEngine(int shardCount, int busRingCapacity, int orderRingCapacity,
+                                int maxSymbolsPerShard, Supplier<IdleStrategy> idleFactory,
+                                IntFunction<HftRiskGate> gateFactory) {
         if (shardCount <= 0 || shardCount > 64) {
             throw new IllegalArgumentException("shardCount must be in 1..64");
         }
@@ -68,9 +85,10 @@ public final class ShardedTradingEngine implements AutoCloseable {
         this.gates = new HftRiskGate[shardCount];
         this.gateways = new HftOrderGateway[shardCount];
         for (int s = 0; s < shardCount; s++) {
-            buses[s] = new HftMarketDataBus(busRingCapacity, maxSymbolsPerShard, busySpin);
+            buses[s] = new HftMarketDataBus(busRingCapacity, maxSymbolsPerShard, idleFactory.get());
             gates[s] = gateFactory.apply(s);
-            gateways[s] = new HftOrderGateway(orderRingCapacity, gates[s], busySpin);
+            gateways[s] = new HftOrderGateway(orderRingCapacity, gates[s], idleFactory.get(),
+                    1 << 16, null, 1_000_000_000L);
             // A failing strategy on a shard's bus stops that shard trading
             // (and, through the kill epoch, cancels its working orders).
             HftRiskGate gate = gates[s];

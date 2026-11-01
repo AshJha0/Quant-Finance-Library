@@ -2,10 +2,12 @@ package com.quantfinlib.trading;
 
 import com.quantfinlib.marketdata.StridedSequences;
 import com.quantfinlib.orderbook.Side;
+import com.quantfinlib.util.IdleStrategy;
+import com.quantfinlib.util.NanoClock;
+import com.quantfinlib.util.ThreadPlacement;
 
 import java.util.Arrays;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.locks.LockSupport;
+import java.util.concurrent.ThreadFactory;
 
 /**
  * Fast-lane order gateway: signal to venue with no allocation, no locks and
@@ -70,23 +72,31 @@ public final class HftOrderGateway implements AutoCloseable {
     private final OrderRingBuffer ring;
     private final HftRiskGate riskGate;
     private final OrderStateTable orders;
-    private final boolean busySpin;
+    private final IdleStrategy idle;          // venue thread only
+    private ThreadFactory threadFactory = ThreadPlacement.daemon("hft-order-venue");
+    private volatile NanoClock clock = NanoClock.SYSTEM;   // stamps kill cancel-alls
     private final OrderThrottle throttle;
     private final long ackTimeoutNanos;
     private volatile OrderListener[] listeners = NO_LISTENERS;
     private final Dispatcher dispatcher = new Dispatcher();
 
     private final StridedSequences tradingCounters = new StridedSequences(6);
-    private final AtomicLong delivered = new AtomicLong();
-    private final AtomicLong listenerErrors = new AtomicLong();
-    private final AtomicLong suppressedWhileKilled = new AtomicLong();
-    private final AtomicLong cancelAllsSent = new AtomicLong();
-    private final AtomicLong acks = new AtomicLong();
-    private final AtomicLong fills = new AtomicLong();
-    private final AtomicLong rejects = new AtomicLong();
-    private final AtomicLong cancels = new AtomicLong();
-    private final AtomicLong unknownReports = new AtomicLong();
-    private final AtomicLong illegalTransitions = new AtomicLong();
+    // Venue-thread counters (single writer: opaque increments, no lock prefix).
+    private static final int DELIVERED = 0;
+    private static final int LISTENER_ERRORS = 1;
+    private static final int SUPPRESSED = 2;
+    private static final int CANCEL_ALLS = 3;
+    private final StridedSequences venueCounters = new StridedSequences(4);
+    // Execution-report counters. Reports can arrive on the venue thread
+    // (in-process venue) or on an adapter thread, so these use atomic adds;
+    // each sits on its own cache-line pair, away from the other threads' counters.
+    private static final int ACKS = 0;
+    private static final int FILLS = 1;
+    private static final int REJECTS = 2;
+    private static final int CANCELED = 3;
+    private static final int UNKNOWN = 4;
+    private static final int ILLEGAL = 5;
+    private final StridedSequences reportCounters = new StridedSequences(6);
 
     private volatile boolean running;
     private volatile boolean venueDead;
@@ -97,13 +107,14 @@ public final class HftOrderGateway implements AutoCloseable {
     /**
      * @param ringCapacity    order ring size (rounded up to a power of two)
      * @param riskGate        pre-trade gate; also receives fills and exposure
-     * @param busySpin        venue thread spins (latency) or parks (CPU)
+     * @param idle            what the venue thread does when the ring is empty;
+     *                        owned by that thread from {@link #start()} on
      * @param maxOpenOrders   order-state table size (rounded up to a power of two)
      * @param throttle        message-rate throttle for new orders and replaces, or null
      * @param ackTimeoutNanos PENDING_NEW age after which {@link #checkAckTimeouts}
      *                        flags and cancels an order ({@code Long.MAX_VALUE} = never)
      */
-    public HftOrderGateway(int ringCapacity, HftRiskGate riskGate, boolean busySpin,
+    public HftOrderGateway(int ringCapacity, HftRiskGate riskGate, IdleStrategy idle,
                            int maxOpenOrders, OrderThrottle throttle, long ackTimeoutNanos) {
         if (riskGate == null) {
             throw new IllegalArgumentException("riskGate is required");
@@ -113,12 +124,32 @@ public final class HftOrderGateway implements AutoCloseable {
         }
         this.ring = new OrderRingBuffer(ringCapacity);
         this.riskGate = riskGate;
-        this.busySpin = busySpin;
+        if (idle == null) {
+            throw new IllegalArgumentException("idle strategy is required");
+        }
+        this.idle = idle;
         this.orders = new OrderStateTable(maxOpenOrders);
         this.throttle = throttle;
         this.ackTimeoutNanos = ackTimeoutNanos;
         this.seenKillEpoch = riskGate.killEpoch();
         tradingCounters.setPlain(NEXT_ID, 1);
+    }
+
+    /**
+     * As the {@link IdleStrategy} constructor, with busy spin when
+     * {@code busySpin} is true and a 200 ns park otherwise.
+     *
+     * @param ringCapacity    order ring size
+     * @param riskGate        pre-trade gate
+     * @param busySpin        spin (latency) or park (CPU)
+     * @param maxOpenOrders   order-state table size
+     * @param throttle        message-rate throttle, or null
+     * @param ackTimeoutNanos PENDING_NEW age that triggers an ack-timeout cancel
+     */
+    public HftOrderGateway(int ringCapacity, HftRiskGate riskGate, boolean busySpin,
+                           int maxOpenOrders, OrderThrottle throttle, long ackTimeoutNanos) {
+        this(ringCapacity, riskGate, busySpin ? IdleStrategy.busySpin() : IdleStrategy.parking(200),
+                maxOpenOrders, throttle, ackTimeoutNanos);
     }
 
     /** No throttle, 64K-order state table, ack timeout of one second. */
@@ -146,8 +177,7 @@ public final class HftOrderGateway implements AutoCloseable {
             return;
         }
         running = true;
-        venueThread = new Thread(this::venueLoop, "hft-order-venue");
-        venueThread.setDaemon(true);
+        venueThread = threadFactory.newThread(this::venueLoop);
         venueThread.setUncaughtExceptionHandler((t, e) -> {
             venueDead = true;
             recordFailure(e);
@@ -166,6 +196,37 @@ public final class HftOrderGateway implements AutoCloseable {
             }
             venueThread = null;
         }
+    }
+
+    /**
+     * Replaces the factory that creates the venue thread (for naming, CPU
+     * placement or priority; see {@link ThreadPlacement}). Takes effect at the
+     * next {@link #start()}.
+     *
+     * @param factory thread factory
+     * @return this gateway
+     */
+    public synchronized HftOrderGateway threadFactory(ThreadFactory factory) {
+        if (factory == null) {
+            throw new IllegalArgumentException("factory is required");
+        }
+        this.threadFactory = factory;
+        return this;
+    }
+
+    /**
+     * Replaces the time source used to stamp the cancel-all the venue thread
+     * sends after a kill (every other timestamp is passed in by the caller).
+     *
+     * @param clock monotonic nanosecond clock
+     * @return this gateway
+     */
+    public HftOrderGateway clock(NanoClock clock) {
+        if (clock == null) {
+            throw new IllegalArgumentException("clock is required");
+        }
+        this.clock = clock;
+        return this;
     }
 
     @Override
@@ -358,13 +419,13 @@ public final class HftOrderGateway implements AutoCloseable {
     public boolean onAck(long orderId, long timestampNanos) {
         int slot = orders.slotOf(orderId);
         if (slot < 0) {
-            unknownReports.incrementAndGet();
+            reportCounters.getAndAdd(UNKNOWN, 1);
             return false;
         }
         if (!transition(slot, OrderStateMachine.EVENT_ACK)) {
             return false;
         }
-        acks.incrementAndGet();
+        reportCounters.getAndAdd(ACKS, 1);
         return true;
     }
 
@@ -372,14 +433,14 @@ public final class HftOrderGateway implements AutoCloseable {
     public boolean onReject(long orderId, long timestampNanos) {
         int slot = orders.slotOf(orderId);
         if (slot < 0) {
-            unknownReports.incrementAndGet();
+            reportCounters.getAndAdd(UNKNOWN, 1);
             return false;
         }
         if (!transition(slot, OrderStateMachine.EVENT_REJECT)) {
             return false;
         }
         releaseAll(slot);
-        rejects.incrementAndGet();
+        reportCounters.getAndAdd(REJECTS, 1);
         return true;
     }
 
@@ -391,7 +452,7 @@ public final class HftOrderGateway implements AutoCloseable {
     public boolean onFill(long orderId, long quantity, double price, long timestampNanos) {
         int slot = orders.slotOf(orderId);
         if (slot < 0 || quantity <= 0) {
-            unknownReports.incrementAndGet();
+            reportCounters.getAndAdd(UNKNOWN, 1);
             return false;
         }
         int state = orders.state(slot);
@@ -401,7 +462,7 @@ public final class HftOrderGateway implements AutoCloseable {
                 : OrderStateMachine.EVENT_PARTIAL_FILL;
         int next = OrderStateMachine.next(state, event);
         if (next == OrderStateMachine.ILLEGAL) {
-            illegalTransitions.incrementAndGet();
+            reportCounters.getAndAdd(ILLEGAL, 1);
             return false;
         }
         int symbolId = orders.symbols[slot];
@@ -413,7 +474,7 @@ public final class HftOrderGateway implements AutoCloseable {
             releaseAll(slot);
         }
         orders.setState(slot, next);
-        fills.incrementAndGet();
+        reportCounters.getAndAdd(FILLS, 1);
         return true;
     }
 
@@ -421,7 +482,7 @@ public final class HftOrderGateway implements AutoCloseable {
     public boolean onCanceled(long orderId, long timestampNanos) {
         int slot = orders.slotOf(orderId);
         if (slot < 0) {
-            unknownReports.incrementAndGet();
+            reportCounters.getAndAdd(UNKNOWN, 1);
             return false;
         }
         if (!transition(slot, OrderStateMachine.EVENT_CANCELED)) {
@@ -430,7 +491,7 @@ public final class HftOrderGateway implements AutoCloseable {
         releaseAll(slot);
         orders.clearFlag(slot, (byte) (OrderStateTable.PENDING_CANCEL
                 | OrderStateTable.PENDING_REPLACE));
-        cancels.incrementAndGet();
+        reportCounters.getAndAdd(CANCELED, 1);
         return true;
     }
 
@@ -443,7 +504,7 @@ public final class HftOrderGateway implements AutoCloseable {
                               long timestampNanos) {
         int slot = orders.slotOf(orderId);
         if (slot < 0 || !OrderStateMachine.isLive(orders.state(slot))) {
-            unknownReports.incrementAndGet();
+            reportCounters.getAndAdd(UNKNOWN, 1);
             return false;
         }
         orders.setQuantity(slot, newQuantity);
@@ -466,7 +527,7 @@ public final class HftOrderGateway implements AutoCloseable {
     public boolean onCancelReject(long orderId, long timestampNanos) {
         int slot = orders.slotOf(orderId);
         if (slot < 0) {
-            unknownReports.incrementAndGet();
+            reportCounters.getAndAdd(UNKNOWN, 1);
             return false;
         }
         long leaves = Math.max(0, orders.quantity(slot) - orders.filled(slot));
@@ -483,7 +544,7 @@ public final class HftOrderGateway implements AutoCloseable {
     private boolean transition(int slot, int event) {
         int next = OrderStateMachine.next(orders.state(slot), event);
         if (next == OrderStateMachine.ILLEGAL) {
-            illegalTransitions.incrementAndGet();
+            reportCounters.getAndAdd(ILLEGAL, 1);
             return false;
         }
         orders.setState(slot, next);
@@ -565,7 +626,7 @@ public final class HftOrderGateway implements AutoCloseable {
                 if (slot >= 0 && transition(slot, OrderStateMachine.EVENT_REJECT)) {
                     releaseAll(slot);
                 }
-                suppressedWhileKilled.incrementAndGet();
+                venueCounters.incrementOpaque(SUPPRESSED);
                 return;
             }
             for (OrderListener l : listeners) {
@@ -592,7 +653,7 @@ public final class HftOrderGateway implements AutoCloseable {
         public void onReplace(long orderId, int symbolId, Side side, long newQuantity,
                               double newPrice, long timestampNanos) {
             if (riskGate.isKilled()) {
-                suppressedWhileKilled.incrementAndGet();
+                venueCounters.incrementOpaque(SUPPRESSED);
                 return;
             }
             for (OrderListener l : listeners) {
@@ -617,7 +678,7 @@ public final class HftOrderGateway implements AutoCloseable {
     }
 
     private void contain(RuntimeException e) {
-        listenerErrors.incrementAndGet();
+        venueCounters.incrementOpaque(LISTENER_ERRORS);
         recordFailure(e);
     }
 
@@ -632,8 +693,8 @@ public final class HftOrderGateway implements AutoCloseable {
         long epoch = riskGate.killEpoch();
         if (epoch != seenKillEpoch) {
             seenKillEpoch = epoch;
-            cancelAllsSent.incrementAndGet();
-            dispatcher.onCancelAll(OrderListener.ALL_SYMBOLS, System.nanoTime());
+            venueCounters.incrementOpaque(CANCEL_ALLS);
+            dispatcher.onCancelAll(OrderListener.ALL_SYMBOLS, clock.nanoTime());
         }
     }
 
@@ -642,18 +703,12 @@ public final class HftOrderGateway implements AutoCloseable {
             checkKill();
             int n = ring.drainTo(dispatcher, 256);
             if (n > 0) {
-                delivered.setRelease(delivered.getPlain() + n);
-            } else {
-                if (!running && ring.isEmpty()) {
-                    checkKill();
-                    return;
-                }
-                if (busySpin) {
-                    Thread.onSpinWait();
-                } else {
-                    LockSupport.parkNanos(200);
-                }
+                venueCounters.addOpaque(DELIVERED, n);
+            } else if (!running && ring.isEmpty()) {
+                checkKill();
+                return;
             }
+            idle.idle(n);
         }
     }
 
@@ -686,7 +741,7 @@ public final class HftOrderGateway implements AutoCloseable {
 
     /** Ring messages (orders, cancels, replaces, mass cancels) consumed by the venue thread. */
     public long deliveredCount() {
-        return delivered.get();
+        return venueCounters.getOpaque(DELIVERED);
     }
 
     public long ringFullCount() {
@@ -706,42 +761,42 @@ public final class HftOrderGateway implements AutoCloseable {
     }
 
     public long listenerErrorCount() {
-        return listenerErrors.get();
+        return venueCounters.getOpaque(LISTENER_ERRORS);
     }
 
     /** New orders and replaces dropped on the venue thread because the gate was killed. */
     public long suppressedWhileKilledCount() {
-        return suppressedWhileKilled.get();
+        return venueCounters.getOpaque(SUPPRESSED);
     }
 
     /** Cancel-alls sent to the venue listeners in response to kill-switch engagements. */
     public long killCancelAllCount() {
-        return cancelAllsSent.get();
+        return venueCounters.getOpaque(CANCEL_ALLS);
     }
 
     public long ackCount() {
-        return acks.get();
+        return reportCounters.getOpaque(ACKS);
     }
 
     public long fillCount() {
-        return fills.get();
+        return reportCounters.getOpaque(FILLS);
     }
 
     public long venueRejectCount() {
-        return rejects.get();
+        return reportCounters.getOpaque(REJECTS);
     }
 
     public long canceledCount() {
-        return cancels.get();
+        return reportCounters.getOpaque(CANCELED);
     }
 
     /** Execution reports for ids the table does not hold (unknown, reused or never sent). */
     public long unknownReportCount() {
-        return unknownReports.get();
+        return reportCounters.getOpaque(UNKNOWN);
     }
 
     /** Reports that would break the state machine (for example a fill after a cancel). */
     public long illegalTransitionCount() {
-        return illegalTransitions.get();
+        return reportCounters.getOpaque(ILLEGAL);
     }
 }

@@ -12,6 +12,26 @@ Two general points first:
   `Autocallable`, the portfolio optimisers, which no longer use random search). Tests
   that pin seeded outputs from 1.x need new values.
 
+## Result types no longer expose arrays
+
+Records with array components are now final classes. Each array is copied once
+when the object is built and never handed out. For an array component `x`:
+
+| 1.x | 2.0 |
+|---|---|
+| `r.x()[i]` | `r.x(i)` (no allocation) |
+| `r.x().length` | `r.xLength()` |
+| `r.x()` passed on whole | `r.xCopy()` (a fresh copy) |
+| `r.m()[i][j]` (2-D) | `r.m(i, j)`; rows `r.mRows()`; copy `r.mCopy()` |
+
+Loops such as `for (i...) r.equity()[i]` become `r.equity(i)`: O(1), no copy.
+`equals` and `hashCode` now compare array contents (records compared array
+references). Record deconstruction patterns on these types no longer compile. List
+and map components of the remaining records are copied into unmodifiable
+collections, so `add` or `put` on a returned list or map throws
+`UnsupportedOperationException`; copy it first if you need to change it.
+`BarSeries` follows the same rule (see `core` below).
+
 ## Build and packaging
 
 - The library jar no longer contains `com.quantfinlib.examples`. Demos and the
@@ -20,6 +40,12 @@ Two general points first:
 - Tests tagged `load` or `timing` are skipped by the default build; run them with
   `./mvnw -Pfull test`.
 - `./mvnw verify` fails when line coverage is below 90 % overall or 80 % in a package.
+
+## `core`, `indicators`, `report`
+
+- `BarSeries.timestamps()`, `opens()`, `highs()`, `lows()`, `closes()` and `volumes()` are removed. Read one bar with `close(i)` and the other indexed accessors (no allocation), take a whole column with `closesCopy()` (and `opensCopy()`, ...), or copy a range into your own buffer with `copyClosesInto(dst, from, len)`. `Indicators.sma(series.closes(), n)` becomes `Indicators.sma(series.closesCopy(), n)`.
+- `Indicators.Macd`, `Bollinger`, `Adx`, `SuperTrend`, `Ichimoku`, `StochRsi`, `Keltner` and `Donchian` are classes: `macd.line()[i]` becomes `macd.line(i)`; `macd.lineCopy()` returns the array.
+- `Report.Section` copies its headers and rows into immutable lists; null headers or rows become empty lists.
 
 ## `backtest`, `backtest.portfolio`, `backtest.validation`, `backtest.tick`
 
@@ -67,6 +93,11 @@ them must pass the new components.
   bar.
 - `ExecutionAlgoBacktester` gives POV runs `(1 - p)` of each bar's volume as other
   traders' volume (see `execution` below).
+- Array accessors replaced as described under "Result types no longer expose arrays": `BacktestResult.equityCurve()` (now `equityCurve(i)`, `equityCurveLength()`, `equityCurveCopy()`), `ParentOrder.fillBarIndices()`, `PortfolioBacktester.Result.equityCurve()`, `TickBacktester.TickBacktestResult.sampledEquity()`, `GridSearchOptimizer.Candidate.equityCurve()`, `OverfitProbability.Result.logits()`, `PurgedKFold.Split.trainIndices()`, `WalkForwardAnalyzer.WalkForwardResult.outOfSampleEquity()` and `inSampleEquity()`. `ParentOrder`, `PortfolioBacktester.Result`, `TickBacktestResult`, `Candidate`, `OverfitProbability.Result`, `Split` and `WalkForwardResult` are classes, not records.
+- `BacktestResult` copies its equity curve and trade list; `trades()` is an immutable copy (1.x wrapped the caller's list, so later changes to it showed through).
+- Lists and maps in `DrawdownAnalytics.Result`, `ParentOrder`, `PortfolioBacktester.Result`, `TickBacktestResult`, `GridSearchOptimizer.Candidate`, `WalkForwardAnalyzer.Fold` and `WalkForwardResult` are unmodifiable copies.
+- `CrossSectionalMomentum.init` copies the data map.
+
 
 ## `alpha`
 
@@ -87,6 +118,9 @@ them must pass the new components.
 - `AlphaContext.of` checks every bar timestamp and throws on misaligned series.
 - Result records of `SignalEvaluator`, `AlphaValidation`, `FamaMacBeth`,
   `CalendarAnomalies` and `AlphaReport.Attribution` have new components.
+- Array accessors replaced (see "Result types no longer expose arrays") on `AlphaBacktester.Result`, `AlphaReport.Decay`, `LagDecay`, `Attribution`, `AlphaValidation.WalkForwardResult`, `CrossValidationResult`, `SensitivityResult`, `CalendarAnomalies.DayOfWeekProfile`, `FamaMacBeth.Result`, `Ols.Fit`, `PortfolioConstruction.Book`, `SignalEvaluator.Report`, `QuantileReport` and `TurnoverAwareOptimizer.Result`; all are classes now. For example `fit.coefficients()[j]` becomes `fit.coefficients(j)`.
+- `AlphaContext.symbols()` is an immutable list.
+
 
 ## `microstructure`
 
@@ -95,6 +129,8 @@ them must pass the new components.
   drop to zero.
 - `LeadLagEstimator.bestLag` reports no lead unless the best lag clears a
   multiple-testing band and beats the contemporaneous correlation.
+- `AlmgrenChriss.Trajectory` is a class: `holdings(i)`, `trades(i)`, `holdingsLength()`, `holdingsCopy()` and the same for `trades`.
+
 
 ## `pricing`
 
@@ -138,6 +174,8 @@ QuantoOption.quantoForward(spot, foreignRate, assetYield, assetVol, fxVol, rho, 
 - `FxVolSurface` reads a quoted butterfly as the broker (market) strangle by default
   and solves for the smile butterfly that reprices it (Clark 2011). Smile
   wings change. For the 1.x reading pass `ButterflyQuote.SMILE_STRANGLE`.
+- `FxVolSurface.SmilePillar` is a class: `strikes(i)`, `vols(i)`, `strikesCopy()`, `volsCopy()`.
+
 
 ## `rates`
 
@@ -182,12 +220,18 @@ BondPricer.dirtyPrice(face, coupon, freq, settle, maturity, yield, dayCount, end
   rank-deficient matrices and throws on indefinite ones.
 - `PortfolioRiskAnalyzer` copies its input, requires equal-length finite rows and takes
   a risk-free rate for the Sharpe ratio.
+- Array accessors replaced (see "Result types no longer expose arrays") on `ComponentVar.Allocation`, `CovarianceShrinkage.Result` (`matrix(i, j)`, `matrixCopy()`), `PortfolioRiskAnalyzer.RiskReport` (`correlationMatrix(i, j)`; its maps are unmodifiable), `PsdMatrices.Eigen` (`values(i)`, `vectors(i, j)`) and `StressTester.ReverseStress` (`shocks(i)`).
+- `PreTradeLimitChecker.CheckResult.violations()` is an immutable list.
+
 
 ## `crb`
 
 - `CentralRiskBook.report` uses delta-gamma (Cornish-Fisher) VaR and ES, so
   `CrbReport.var()` and `es()` change for books with options. A book without options
   gives the same numbers as 1.x.
+- `CrbRouter.Allocation.dark()` becomes `dark(i)`, `darkLength()`, `darkCopy()`.
+- `CentralRiskBook.desks()` returns a sorted unmodifiable copy instead of a live view, and lists only desks that have booked a flow.
+
 
 ## `hedging`
 
@@ -197,6 +241,8 @@ BondPricer.dirtyPrice(face, coupon, freq, settle, maturity, yield, dayCount, end
   removes a bias in mean replication P&L when the carry is non-zero.
 - `CointegrationTest.engleGranger(a, b, lags)` uses ADF lags and MacKinnon (2010)
   critical values. The two-argument form is unchanged.
+- `PairsHedger.PairsAnalysis.spread()` becomes `spread(i)`, `spreadLength()`, `spreadCopy()`.
+
 
 ## `volatility`
 
@@ -206,6 +252,8 @@ BondPricer.dirtyPrice(face, coupon, freq, settle, maturity, yield, dayCount, end
   values change; an explicit-seed overload is available.
 - `HarRv` fits by Householder QR instead of the normal equations; coefficients can
   differ slightly on ill-conditioned data.
+- `Garch11.Fit`, `Egarch11.Fit`, `GjrGarch11.Fit` and `HarRv.Fit` are classes: `standardErrors(i)`, `robustStandardErrors(i)`, `hacStandardErrors(i)` and the matching `...Length()` and `...Copy()` methods.
+
 
 ## `optimization`
 
@@ -215,6 +263,8 @@ BondPricer.dirtyPrice(face, coupon, freq, settle, maturity, yield, dayCount, end
 - `PortfolioOptimizer.maxSharpe` throws when no asset has an expected return above
   the risk-free rate.
 - `RiskParityOptimizer` uses Spinu's convex formulation with damped Newton steps.
+- `BlackLitterman.Posterior` (`mean(i)`, `meanCovariance(i, j)`, `returnCovariance(i, j)`), `NelderMead.Result` (`x(i)`), `PortfolioOptimizer.Allocation` (`weights(i)`) and `QuadraticProgram.Solution` (`x(i)`) are classes; use `...Copy()` for the whole array.
+
 
 ## `ml`, `simulation`, `regulatory`
 
@@ -225,6 +275,9 @@ BondPricer.dirtyPrice(face, coupon, freq, settle, maturity, yield, dayCount, end
   the exact lognormal terminal value. `SimulationResult` CVaR is never below VaR.
 - `BestExecutionAnalyzer.BestExecutionReport` has a quantity-weighted slippage
   component; the record constructor changed.
+- `RegimeDetector.RegimeModel` is a class: `means(i)`, `stdDevs(i)`, `transition(i, j)`, `smoothedHighVolProbability(i)`, `filteredHighVolProbability(i)`, `currentProbabilities(i)` and the `...Copy()` methods.
+- `BestExecutionAnalyzer.BestExecutionReport.avgSlippageBpsByVenue()` is an unmodifiable ordered copy.
+
 
 ## `execution`
 
@@ -239,6 +292,8 @@ BondPricer.dirtyPrice(face, coupon, freq, settle, maturity, yield, dayCount, end
   `1 - sinh(kT(1 - f)) / sinh(kT)`, with urgency set by `withShortfallUrgency`
   (default 2).
 - `BenchmarkExecutor` relaxes its depth cap over the last 10 % of the horizon.
+- `AdaptiveSor.RoutingDecision` and `SmartOrderRouter.RoutingPlan` lists are immutable copies.
+
 
 ## `trading`
 
@@ -273,6 +328,11 @@ BondPricer.dirtyPrice(face, coupon, freq, settle, maturity, yield, dayCount, end
   listeners outside its lock.
 - `ShardedTradingEngine.publish` before `start()` throws `IllegalStateException`.
 - `TradingDashboard` binds to the loopback interface.
+- The `HftOrderGateway` constructor that took `boolean busySpin` with order-table, throttle and timeout arguments now has an `IdleStrategy` twin; the boolean forms remain and map to `IdleStrategy.busySpin()` or a 200 ns park. The venue thread is created through a `ThreadFactory` (`threadFactory(...)`, default daemon "hft-order-venue").
+- `HftMarketDataBus(int, int, IdleStrategy)` and `threadFactory(...)` added; the boolean constructor is unchanged in behaviour.
+- `ShardedTradingEngine` gains a constructor taking `Supplier<IdleStrategy>` (one strategy per thread).
+- `PaperTradingGateway.AccountSnapshot.positions()` is an unmodifiable copy.
+
 
 ## `util`: `LatencyRecorder`
 
@@ -298,6 +358,9 @@ BondPricer.dirtyPrice(face, coupon, freq, settle, maturity, yield, dayCount, end
   SequenceReset are checked; an application message before Logon disconnects; a
   malformed field gets a session Reject (35=3) instead of a disconnect.
 - `FixParse.parseLong` and `priceMantissa` throw on non-digits and overflow.
+- `FixOrderEncoder.buffer()` and `offset()` are removed: read the last message with `copyInto(byte[], int)`, `writeTo(ByteBuffer)` or `byteAt(int)` (all allocation-free), or `toByteArray()` for a copy.
+- `FixExecReportView.buffer()` is replaced by `byteAt(int)`.
+
 
 ## `sbe`
 
@@ -325,6 +388,8 @@ trade.wrap(buf, 0).encode(symbolId, 101.25, -4, 300, 0, tsNanos);
 - `BinaryOrderPublisher` writes through a non-blocking outbound buffer with a circuit
   breaker. Its constructor declares `IOException`, and prices go out on a per-symbol
   `10^exponent` grid (default 1e-8).
+- `BinaryMarketDataClient` and `BinaryOrderReceiver` create their reader thread in `start()` through a replaceable `ThreadFactory` (`threadFactory(...)`); a second `start()` does nothing.
+
 
 ## `data`, `feed`, `marketdata`
 
@@ -341,3 +406,6 @@ trade.wrap(buf, 0).encode(symbolId, 101.25, -4, 300, 0, tsNanos);
   the book. 1.x ignored the message and left phantom liquidity.
 - `RingBuffer` uses acquire/release publication; behaviour is unchanged for correct
   single-producer use.
+- `MoldUdp64Receiver.encodeHeader` and `encodeRequest` throw `IllegalArgumentException` for a session longer than 10 characters (1.x silently wrote the first 10 after formatting).
+- `AsyncTickCapture.attach` has an overload taking the writer thread's `IdleStrategy` and `ThreadFactory`; the default writer idle is a 10 us to 1 ms park back-off instead of a fixed 100 us park.
+

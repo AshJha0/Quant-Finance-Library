@@ -55,7 +55,13 @@ public final class TickFileWriter implements AutoCloseable {
 
     private final FileChannel channel;
     private final ClockDomain clockDomain;
-    private ByteBuffer block = ByteBuffer.allocate(BLOCK_BYTES);
+    // Direct buffers: FileChannel writes them without the JDK's per-call copy
+    // into a temporary direct buffer. The frame head, tail and checksum are
+    // reused, so a steady stream of ticks allocates nothing per block.
+    private ByteBuffer block = ByteBuffer.allocateDirect(BLOCK_BYTES);
+    private final ByteBuffer frameHead = ByteBuffer.allocateDirect(8);
+    private final ByteBuffer frameTail = ByteBuffer.allocateDirect(4);
+    private final CRC32C crc = new CRC32C();
     private int blockRecords;
     private boolean[] defined = new boolean[64];
     private long tickCount;
@@ -131,13 +137,16 @@ public final class TickFileWriter implements AutoCloseable {
         }
         block.flip();
         int length = block.remaining();
-        CRC32C crc = new CRC32C();
-        crc.update(block.array(), 0, length);
-        ByteBuffer head = ByteBuffer.allocate(8).putInt(length).putInt(blockRecords).flip();
-        ByteBuffer tail = ByteBuffer.allocate(4).putInt((int) crc.getValue()).flip();
-        writeFully(head);
+        crc.reset();
+        crc.update(block);
+        block.rewind();
+        frameHead.clear();
+        frameHead.putInt(length).putInt(blockRecords).flip();
+        frameTail.clear();
+        frameTail.putInt((int) crc.getValue()).flip();
+        writeFully(frameHead);
         writeFully(block);
-        writeFully(tail);
+        writeFully(frameTail);
         block.clear();
         blockRecords = 0;
     }
@@ -161,7 +170,7 @@ public final class TickFileWriter implements AutoCloseable {
         if (block.remaining() < bytes) {
             flush();
             if (block.capacity() < bytes) {
-                block = ByteBuffer.allocate(bytes);
+                block = ByteBuffer.allocateDirect(bytes);
             }
         }
     }
