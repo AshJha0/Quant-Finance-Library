@@ -114,7 +114,7 @@ class SignalEvaluatorTest {
     void factorExposureDetectsDuplicatesAndInverses() {
         AlphaContext ctx = panel();
         AlphaFactor momentum = Factors.momentum(20, 0);
-        // Momentum on this panel IS the drift ranking: exposure ≈ +1.
+        // Momentum on this panel is the drift ranking: exposure ≈ +1.
         assertEquals(1.0, SignalEvaluator.factorExposure(ctx, oracle(), momentum, 30, 10), 1e-9);
         AlphaFactor inverted = (c, i) -> {
             double[] s = oracle().scores(c, i);
