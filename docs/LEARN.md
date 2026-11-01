@@ -1741,8 +1741,8 @@ and demand the semi-analytic price sits inside the MC confidence interval.
 branch-cut discontinuity that silently corrupts long-dated prices; use the
 "little Heston trap" formulation, whose complex log stays on the principal
 branch. (4) **Parity and bounds**: put-call parity and no-arbitrage bounds
-hold for any parameters. The meta-answer worth internalizing: semi-analytic
-speed and simulation independence, each validating the other.
+hold for any parameters. The semi-analytic price and the simulation
+check each other because they share no code path.
 
 *In this library:* `pricing/Heston.java` — the little-trap characteristic
 function with the branch-cut reasoning in comments; its BS-limit test
@@ -2302,8 +2302,8 @@ but crashes happen 2% of months and the signal also fires in 5% of
 normal months. Bayes: P(crash | fire) = (0.60 * 0.02) / (0.60 * 0.02 +
 0.05 * 0.98) = 0.012 / 0.061, about 20%. The signal quadrupled your
 crash probability and it is *still* 80% likely nothing happens -- sizing
-as if 60% would be ruinous. The general lesson: rare-event signals are
-dominated by the base rate, and the false-positive rate matters more
+as if 60% would be ruinous. Rare-event signals are dominated by the
+base rate, and the false-positive rate matters more
 than the hit rate. The portfolio-construction version of the same logic
 is Black-Litterman: start from an equilibrium prior (market-implied
 returns), state the view with an explicit confidence, and let the
@@ -2463,9 +2463,7 @@ best-of-N expectation, counting correlated variants as fewer effective
 trials. (5) **Stability**: performance should degrade gracefully as
 parameters move; a sharp peak at one setting is the signature of fitted
 noise. (6) **Regime coverage**: demand the strategy was alive through
-at least one episode that should hurt it. The meta-point this exercise
-rewards: every defense here converts an unstated hope into a computed
-number.
+at least one episode that should hurt it.
 
 *In this library:* `backtest/validation/PurgedKFold.java`,
 `backtest/validation/OverfitProbability.java` (`cscv` -- the PBO
@@ -3274,8 +3272,8 @@ positions could not be sold at *any* price for months, so the true
 horizon was quarters, and losses compounded far beyond any 1-day
 number times sqrt(10). (4) **The tails were fat and the models
 Gaussian**: delta-normal machinery translated "99%" into 2.33 sigma,
-while actual factor moves ran 5-10 calm-period sigmas. Meta-lesson to
-state plainly: VaR answered the question it was asked -- "how bad is
+while actual factor moves ran 5-10 calm-period sigmas. In short, VaR
+answered the question it was asked -- "how bad is
 an ordinarily bad day, judged by the recent past?" -- and management
 had been reading it as "how bad can it get?" The post-mortem produced
 stressed VaR (Basel 2.5), then stressed-calibrated ES with liquidity
@@ -4691,8 +4689,8 @@ is an event bet. (8) Execution realism -- are passive fills assumed
 free of adverse selection, do limit orders fill at prices that were
 never touched in size? (9) Reconciliation -- can a second implementation
 reproduce the equity curve from raw data? Sign errors and timezone bugs
-have produced more Sharpe-4 backtests than genuine edges. Meta-point
-worth saying out loud: a true Sharpe 4 at scale would
+have produced more Sharpe-4 backtests than genuine edges. A true
+Sharpe 4 at scale would
 compound absurdly -- extraordinary claims get the checklist in full,
 and the prior is that beautiful backtests are bugs until proven
 otherwise.
@@ -5184,8 +5182,7 @@ at the comma. Delimiters: European vendors ship semicolon-delimited files
 (because comma is their decimal point), so the splitter must handle both.
 Headers: column order varies, names vary in case, and some files have no
 header at all. Then the quiet ones: blank trailing lines, BOM bytes,
-CRLF vs LF, and locale-dependent decimal points. The desk-level lesson is
-that a CSV loader is not a one-liner; it is a small compiler front-end,
+CRLF vs LF, and locale-dependent decimal points. A CSV loader is not a one-liner; it is a small compiler front-end,
 and every hazard you do not handle explicitly becomes a silent data
 corruption -- the worst kind, because the backtest still runs and just
 gives you confidently wrong numbers.
@@ -5798,8 +5795,7 @@ at financial signal-to-noise.
 
 *In this library:* `ml/GradientBoostedRegressor.java` -- the `Stump`
 record (feature, threshold, leftValue, rightValue), the residual loop,
-and the `rounds` and `learningRate` knobs are the whole story in one
-file.
+and the `rounds` and `learningRate` knobs, all in one file.
 
 ### 165. "Forecast next week's volatility: GARCH or machine learning? Argue both sides."
 
@@ -6035,9 +6031,9 @@ regime (high-vol days front-load volume), on events (expiry days,
 rebalance days, half-days have their own shapes -- better handled as
 separate profiles than as features), and on real-time deviation (if
 today is running 2x profile by 11am, the close will not be normal).
-The desk lesson: a simple model you can explain to the trader who
-overrides it beats a clever one they will not trust -- and the override
-rate is itself a model-quality metric.
+A simple model you can explain to the trader who overrides it is
+usually worth more than a clever one they will not trust, and the
+override rate is itself a model-quality metric.
 
 *In this library:* `ml/IntradayLiquidityForecaster.java` -- per-bucket
 accumulation across days (`addDay`) into a seasonal profile, documented
@@ -8434,8 +8430,8 @@ the sentinel into its opposite meaning. The fix in this library is
 documented at the call site: do the subtraction in long, then clamp into
 the valid range -- buy limits clamp to [-1, ladder-1] (-1 = uncrossable,
 ladder-1 = full sweep), sell limits to [0, ladder] -- so sentinel limits
-saturate to "market" instead of wrapping to "dead." Two transferable
-lessons: first, any time a sentinel travels through arithmetic, the
+saturate to "market" instead of wrapping to "dead." Two rules follow:
+first, any time a sentinel travels through arithmetic, the
 arithmetic must be widened or the sentinel checked first; second, clamp
 only the aggressive end -- an off-band-aggressive limit is a market
 order, while an off-band-passive limit simply cannot cross, and those
@@ -8970,14 +8966,14 @@ sharding exists to eliminate. Even lock-free sharing (one AtomicLong)
 keeps the cache-line ping-pong; even independent counters that happen
 to sit adjacent in one array false-share the line. The fix: per-shard,
 cache-line-spaced counters, aggregated only when someone asks. Two
-lessons worth stating explicitly. Measurement is intrusion: anything
+points follow. Measurement is intrusion: anything
 your benchmark adds to the hot path is part of the system under test,
 and a profiler-friendly design exposes per-shard counters it can sum
 cold. And "shared-nothing means nothing": the discipline fails on the
 last shared byte, not the first -- the same reason the ring buffers
 here keep producer and consumer sequences on separate cache lines.
 
-*In this library:* the war story is written up in
+*In this library:* sharding is described in
 `docs/ULTRA_LOW_LATENCY.md` (sharding section) and `docs/LEARN.md`
 section 18; the spacing discipline lives in
 `marketdata/StridedSequences.java` (counters in one `long[]` with a
@@ -9520,8 +9516,7 @@ conduct the 2013-15 FX fix scandals and the resulting fines were about;
 (2) skewing within the window (front- or back-loading it) is a directional
 bet dressed up as execution -- if the desk wants that bet, it should use
 an arrival-price/IS schedule and own the risk explicitly on its own book,
-not embed it in a client's fixing order. The design lesson generalizes:
-when the benchmark is computable from a window, neutral execution is
+not embed it in a client's fixing order. More generally, when the benchmark is computable from a window, neutral execution is
 defined, and every deviation from it is a position that belongs on
 someone's risk report.
 
@@ -9958,7 +9953,7 @@ supplying aggressor signs when the feed doesn't). Through-origin is the
 standard form because both signed flow and mid change are zero-mean at
 these horizons. The learned lambda then prices a contemplated child order
 in bps -- the live producer for the impact input a dynamic executor
-expects. The clamp is the production lesson: a noisy sample can produce a
+expects. The estimate is clamped at zero, because a noisy sample can produce a
 negative lambda, which literally means "the market pays you to trade."
 That is an estimation artifact, and feeding it downstream would
 accelerate the execution schedule on garbage -- so the impact output
@@ -10261,8 +10256,8 @@ that instant, with everything before the fill excluded). Sign convention
 is half the battle: all costs signed so positive = cost to the trader,
 for buys and sells alike -- a sell filled below the arrival mid is a
 positive cost, and a report that flips signs per side will eventually be
-read wrong. The gating question is the quiet production lesson: benchmark
-prices are denominators and subtrahends, so a zero, negative, NaN or
+read wrong. Input gating matters as much: benchmark prices are
+denominators and subtrahends, so a zero, negative, NaN or
 infinite arrival mid, market VWAP, or per-fill mid must be REJECTED, not
 propagated -- a NaN benchmark yields a NaN cost that averages into a NaN
 report, and a zero yields infinities; fills and mids must also align
@@ -10899,8 +10894,7 @@ the sign convention documented, and the central risk book decomposes
 every FX trade into currency legs in native units -- a 10M EURUSD buy
 books `CCY:EUR +10,000,000` (euros) and `CCY:USD -10,850,000` (dollars)
 -- so a unit confusion produces a visibly absurd exposure instead of a
-silently scaled one. The general lesson: any ambiguity the representation
-can express will eventually be booked; make the representation refuse it.
+silently scaled one.
 
 *In this library:* `fx/FxSwap.java` and `fx/Ndf.java` (explicit
 `baseNotional`, sign conventions in the javadoc);
@@ -11204,8 +11198,8 @@ to 5 minutes (a longer window is harder to push); the FX Global Code
 (2017) codified conduct -- symmetric last look under Principle 17,
 disclosure of hold and reject practices, no trading on client fix
 information; and fix execution became auditable benchmark replication
-rather than discretionary dealing. The engineering lesson: conduct rules
-you can encode, you should -- a scheduler that structurally refuses
+rather than discretionary dealing. Conduct rules that can be encoded
+should be: a scheduler that structurally refuses
 pre-window execution and a gate that is symmetric by construction cannot
 commit the violation, whatever the operator's incentives that day.
 
@@ -12261,8 +12255,7 @@ premium; (2) static replication -- match the barrier value profile with
 a portfolio of vanillas (put spreads at the barrier) that needs no
 rebalancing in the danger zone; (3) inventory limits per barrier level,
 because ten notes with the same popular barrier concentrate a book-sized
-cliff at one price. The lesson generalizes: discontinuous payoffs are
-priced with models but *managed* with structure.
+cliff at one price.
 
 *In this library:* `pricing/BarrierOption.java` -- reverse barriers
 priced in closed form, so you can compute the near-barrier delta and
@@ -13211,7 +13204,7 @@ book near expiry pins you into hedging into every move -- buying back
 convexity converts an unbounded quadratic exposure into a fixed,
 known rent. Run the comparison: simulate the P&L distribution
 each way and look at the left tail, not the mean -- the mean barely
-moves; the tail is the whole argument.
+moves; the difference is in the tail.
 
 *In this library:* `hedging/GreekHedger.java` (the delta-gamma solve:
 which option, how many, and the futures cleanup),
@@ -13743,7 +13736,7 @@ why the gate must not wedge the book.
 
 ### 467. "Position limits, VaR limits, Greek limits -- why do desks need all three? Doesn't one imply the others?"
 
-They fail independently, which is the whole argument. A position limit
+They fail independently. A position limit
 (max quantity or notional per name) is model-free: it cannot be fooled
 by a broken volatility estimate, and it caps the damage from risks the
 model does not see at all -- fraud, legal, operational. But it is blind
@@ -13783,7 +13776,7 @@ delayed margin calls rather than enforcement -- at one bank the
 escalation sat unresolved for weeks while exposure grew to billions.
 When the concentrated swap positions fell, the firms that enforced
 their limits early (sold collateral immediately) lost little; the firm
-that had waived longest lost $5.5bn. The lesson is structural, not
+that had waived longest lost $5.5bn. The failure was structural, not
 personal: a limit whose waiver is decided by people paid on the
 client's revenue is not a control. Governance questions (who sets,
 who waives, who gets told) are the risk system; the math is just its
@@ -14065,7 +14058,7 @@ a structural cause worth monitoring even so.
 *In this library:* `alpha/CalendarAnomalies.java` -- day-of-week and
 turn-of-month profiles with per-bucket mean, Newey-West t-stat (and
 the iid `naiveTStat`) and count; the
-javadoc states the post-publication decay lesson as the class's point.
+javadoc describes the decay of calendar effects after publication.
 
 ### 478. "You have one alpha signal and one history. Design the validation gauntlet, and say which permutation null actually tests predictive power."
 
@@ -14165,9 +14158,7 @@ shrinks: five strong signals trade big, one weak signal trades tiny,
 zero working signals trade nothing. That conviction-scaled exposure
 is the feature, not a bug to "fix" -- and while a track record is
 still building, the emitted weight is zero, not equal-weight
-hope. The general lesson: any normalization step in a pipeline is a
-claim that scale is meaningless; in signal combination, scale is the
-conviction.
+hope.
 
 *In this library:* `microstructure/AlphaEnsemble.java` -- IC-weighted
 combination with each IC shrunk by `z` standard errors (z = 2 by
@@ -14556,9 +14547,8 @@ given the observed Sharpe and moments, how many observations are
 needed before PSR would clear a stated confidence that the true
 Sharpe beats the benchmark? It answers the allocator's actual
 question ("how much longer must we watch this fund") in months,
-and for modest Sharpes the answer (often years) is itself the
-lesson: track records short enough to market are usually too short
-to prove anything.
+and for modest Sharpes the answer is often years: track records short
+enough to market are usually too short to prove anything.
 
 *In this library:*
 `backtest/validation/SharpeValidation.java` --
