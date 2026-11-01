@@ -1,5 +1,0 @@
-### Added
-- `credit.IsdaCdsModel` and `credit.IsdaCurve`: ISDA CDS Standard Model with IMM dates, semi-annual maturity roll, T+1 step-in and T+3 cash settlement, ACT/360 accrual, accrual on default, closed-form segment integrals, clean and dirty upfront, par spread, quoted spread to upfront conversion (40% recovery, 100bp/500bp coupons) and a hazard bootstrap.
-- `credit.ExposureSimulator` and `credit.ExposureProfile`: Monte Carlo netting-set exposure for interest-rate swaps (Hull-White one-factor, exact simulation, closed-form bonds) and FX forwards (GBM correlated with rates), with EE, ENE, PFE and EPE, and a two-way CSA with threshold, minimum transfer amount and margin period of risk.
-- `CvaApproximator.cva(ExposureProfile, ...)`, `dva(...)` and `cvaWrongWay(...)`: CVA and DVA from a simulated profile, and wrong-way CVA through a Gaussian copula between default and a market factor.
-- `risk.SaCcr` and `risk.SaCcrTrade`: SA-CCR (BCBS 279) replacement cost (margined and unmargined), add-ons for interest rates, FX, credit, equity and commodities, the multiplier and EAD; reproduces the Annex 4a examples.
