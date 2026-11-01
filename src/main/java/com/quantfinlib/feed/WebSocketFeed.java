@@ -86,7 +86,7 @@ public final class WebSocketFeed implements AutoCloseable {
     private volatile int maxReconnectAttempts = 10;
     private volatile long initialBackoffMillis = 500;
     private long publishRetryNanos = 1_000_000L;
-    private boolean fixedSymbols;
+    private volatile boolean fixedSymbols;
     private volatile boolean userClosed;
     private volatile boolean connected;
     private volatile WebSocket webSocket;

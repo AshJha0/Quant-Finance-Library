@@ -34,6 +34,9 @@ import java.util.concurrent.locks.LockSupport;
  */
 public final class GlobalRiskAggregator implements AutoCloseable {
 
+    /** Private monitor for lifecycle and registration; never exposed to callers. */
+    private final Object lock = new Object();
+
     private final List<HftRiskGate> gates;
     private final double maxGrossNotional;
     private final double resumeNotional;
@@ -105,37 +108,41 @@ public final class GlobalRiskAggregator implements AutoCloseable {
     }
 
     /** One monitor step; also callable directly (tests, manual checks). */
-    synchronized void sweep() {
-        int[] unpriced = unpricedScratch;   // reused: one sweep per poll, no garbage
-        double gross = grossNotional(unpriced);
-        lastGross = gross;
-        lastUnpriced = unpriced[0];
-        boolean breach = gross > maxGrossNotional || unpriced[0] > 0 || Double.isNaN(gross);
-        if (!tripped && breach) {
-            // Remember which gates were already killed (ops holds, another
-            // breaker): recovery must not clear a kill this aggregator did
-            // not set. A kill placed by someone else during our trip cannot
-            // be told apart from ours; pre-existing holds are preserved.
-            killedBeforeTrip = new boolean[gates.size()];
-            for (int i = 0; i < gates.size(); i++) {
-                killedBeforeTrip[i] = gates.get(i).isKilled();
-                gates.get(i).kill(true);
-            }
-            tripped = true;
-            trips.incrementAndGet();
-        } else if (tripped && gross < resumeNotional && unpriced[0] == 0) {
-            for (int i = 0; i < gates.size(); i++) {
-                if (!killedBeforeTrip[i]) {
-                    gates.get(i).kill(false);
+    void sweep() {
+        synchronized (lock) {
+            int[] unpriced = unpricedScratch;   // reused: one sweep per poll, no garbage
+            double gross = grossNotional(unpriced);
+            lastGross = gross;
+            lastUnpriced = unpriced[0];
+            boolean breach = gross > maxGrossNotional || unpriced[0] > 0 || Double.isNaN(gross);
+            if (!tripped && breach) {
+                // Remember which gates were already killed (ops holds, another
+                // breaker): recovery must not clear a kill this aggregator did
+                // not set. A kill placed by someone else during our trip cannot
+                // be told apart from ours; pre-existing holds are preserved.
+                killedBeforeTrip = new boolean[gates.size()];
+                for (int i = 0; i < gates.size(); i++) {
+                    killedBeforeTrip[i] = gates.get(i).isKilled();
+                    gates.get(i).kill(true);
                 }
+                tripped = true;
+                trips.incrementAndGet();
+            } else if (tripped && gross < resumeNotional && unpriced[0] == 0) {
+                for (int i = 0; i < gates.size(); i++) {
+                    if (!killedBeforeTrip[i]) {
+                        gates.get(i).kill(false);
+                    }
+                }
+                tripped = false;
             }
-            tripped = false;
         }
     }
 
     /** Worst-case gross notional over every gate; unpriced exposed symbols excluded. */
-    public synchronized double grossNotional() {
-        return grossNotional(unpricedScratch);
+    public double grossNotional() {
+        synchronized (lock) {
+            return grossNotional(unpricedScratch);
+        }
     }
 
     private double grossNotional(int[] unpriced) {

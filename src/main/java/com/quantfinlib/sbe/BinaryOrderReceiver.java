@@ -21,6 +21,9 @@ import java.util.concurrent.ThreadFactory;
  */
 public final class BinaryOrderReceiver implements AutoCloseable {
 
+    /** Private monitor for lifecycle and registration; never exposed to callers. */
+    private final Object lock = new Object();
+
     private final ReadableByteChannel channel;
     private final OrderListener listener;
     private final ByteBuffer buffer;
@@ -48,20 +51,24 @@ public final class BinaryOrderReceiver implements AutoCloseable {
      * @param factory thread factory
      * @return this receiver
      */
-    public synchronized BinaryOrderReceiver threadFactory(ThreadFactory factory) {
-        if (factory == null) {
-            throw new IllegalArgumentException("factory is required");
+    public BinaryOrderReceiver threadFactory(ThreadFactory factory) {
+        synchronized (lock) {
+            if (factory == null) {
+                throw new IllegalArgumentException("factory is required");
+            }
+            this.threadFactory = factory;
+            return this;
         }
-        this.threadFactory = factory;
-        return this;
     }
 
-    public synchronized void start() {
-        if (readerThread != null) {
-            return;
+    public void start() {
+        synchronized (lock) {
+            if (readerThread != null) {
+                return;
+            }
+            readerThread = threadFactory.newThread(this::readLoop);
+            readerThread.start();
         }
-        readerThread = threadFactory.newThread(this::readLoop);
-        readerThread.start();
     }
 
     public long ordersReceived() {

@@ -44,6 +44,9 @@ import java.util.concurrent.ThreadFactory;
  */
 public final class HftMarketDataBus implements AutoCloseable {
 
+    /** Private monitor for lifecycle and registration; never exposed to callers. */
+    private final Object lock = new Object();
+
     private static final TickListener[] NO_LISTENERS = new TickListener[0];
 
     private final SymbolRegistry registry = new SymbolRegistry();
@@ -124,43 +127,51 @@ public final class HftMarketDataBus implements AutoCloseable {
         return registry.symbol(id);
     }
 
-    public synchronized void subscribe(int symbolId, TickListener listener) {
-        TickListener[] cur = symbolListeners.get(symbolId);
-        TickListener[] next = cur == null ? new TickListener[1] : Arrays.copyOf(cur, cur.length + 1);
-        next[next.length - 1] = listener;
-        symbolListeners.set(symbolId, next);
-    }
-
-    public synchronized void subscribeAll(TickListener listener) {
-        TickListener[] next = Arrays.copyOf(globalListeners, globalListeners.length + 1);
-        next[next.length - 1] = listener;
-        globalListeners = next;
-    }
-
-    public synchronized void start() {
-        if (running) {
-            return;
+    public void subscribe(int symbolId, TickListener listener) {
+        synchronized (lock) {
+            TickListener[] cur = symbolListeners.get(symbolId);
+            TickListener[] next = cur == null ? new TickListener[1] : Arrays.copyOf(cur, cur.length + 1);
+            next[next.length - 1] = listener;
+            symbolListeners.set(symbolId, next);
         }
-        running = true;
-        consumerDead = false;
-        consumer = threadFactory.newThread(this::consumeLoop);
-        consumer.setUncaughtExceptionHandler((t, e) -> {
-            consumerDead = true;
-            recordFailure(e);
-        });
-        consumer.start();
+    }
+
+    public void subscribeAll(TickListener listener) {
+        synchronized (lock) {
+            TickListener[] next = Arrays.copyOf(globalListeners, globalListeners.length + 1);
+            next[next.length - 1] = listener;
+            globalListeners = next;
+        }
+    }
+
+    public void start() {
+        synchronized (lock) {
+            if (running) {
+                return;
+            }
+            running = true;
+            consumerDead = false;
+            consumer = threadFactory.newThread(this::consumeLoop);
+            consumer.setUncaughtExceptionHandler((t, e) -> {
+                consumerDead = true;
+                recordFailure(e);
+            });
+            consumer.start();
+        }
     }
 
     /** Stops the consumer after draining queued ticks. */
-    public synchronized void stop() {
-        running = false;
-        if (consumer != null) {
-            try {
-                consumer.join(5_000);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+    public void stop() {
+        synchronized (lock) {
+            running = false;
+            if (consumer != null) {
+                try {
+                    consumer.join(5_000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                consumer = null;
             }
-            consumer = null;
         }
     }
 
@@ -171,12 +182,14 @@ public final class HftMarketDataBus implements AutoCloseable {
      * @param factory thread factory
      * @return this bus
      */
-    public synchronized HftMarketDataBus threadFactory(ThreadFactory factory) {
-        if (factory == null) {
-            throw new IllegalArgumentException("factory is required");
+    public HftMarketDataBus threadFactory(ThreadFactory factory) {
+        synchronized (lock) {
+            if (factory == null) {
+                throw new IllegalArgumentException("factory is required");
+            }
+            this.threadFactory = factory;
+            return this;
         }
-        this.threadFactory = factory;
-        return this;
     }
 
     @Override
