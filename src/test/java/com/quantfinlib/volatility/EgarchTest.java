@@ -37,7 +37,7 @@ class EgarchTest {
         assertEquals(fit.omega() / (1 - fit.beta()), fit.unconditionalLogVariance(),
                 1e-12);
 
-        // Symmetric GARCH data: the honest answer is gamma ~ 0.
+        // Symmetric GARCH data: the correct answer is gamma ~ 0.
         double[] sym = new double[n];
         double h = 2e-6 / (1 - 0.08 - 0.9);
         for (int t = 0; t < n; t++) {
@@ -55,7 +55,7 @@ class EgarchTest {
         for (int t = 0; t < base.length; t++) {
             base[t] = 0.01 * rnd.nextGaussian();
         }
-        // Identical histories except the LAST return's sign.
+        // Identical histories except the last return's sign.
         double[] down = base.clone();
         double[] up = base.clone();
         down[base.length - 1] = -0.03;
@@ -68,7 +68,7 @@ class EgarchTest {
                 "gamma < 0: the down move frightens tomorrow more ("
                         + afterDown + " > " + afterUp + ")");
 
-        // Every conditional variance is positive BY CONSTRUCTION — the
+        // Every conditional variance is positive by construction — the
         // log form needs no parameter constraints to guarantee it.
         double[] variances = Egarch11.conditionalVariances(down, leveraged);
         for (double v : variances) {

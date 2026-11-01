@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * Degenerate-bar pins for the range estimators: a market that never
- * moves has EXACTLY zero volatility under all four formulas, and every
+ * moves has exactly zero volatility under all four formulas, and every
  * estimator is scale-invariant (built entirely from log price RATIOS).
  */
 class RangeVolatilityEdgeTest {

@@ -15,7 +15,7 @@ package com.quantfinlib.volatility;
  *
  * <p>Why OTM options? Each strike's option contributes exactly the
  * 1/K² slice needed to build a constant-dollar-gamma payoff — a
- * position whose P&amp;L IS realized variance. The market prices that
+ * position whose P&amp;L is realized variance. The market prices that
  * portfolio, so the portfolio's price reveals the market's variance
  * expectation, whatever model anyone used. That is why a vol smile
  * raises the index above ATM implied vol: the wings carry real premium
