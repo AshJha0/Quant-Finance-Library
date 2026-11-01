@@ -29,7 +29,7 @@ import java.util.function.IntFunction;
  *       them.</li>
  * </ul>
  *
- * <p>What sharding deliberately does NOT solve: firm-wide risk. Each
+ * <p>What sharding does not solve: firm-wide risk. Each
  * shard's {@link HftRiskGate} sees only its own symbols; put a
  * {@link GlobalRiskAggregator} over {@link #gates()} for cross-shard
  * exposure caps.</p>

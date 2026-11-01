@@ -30,7 +30,7 @@ import com.quantfinlib.util.MathUtils;
  * displayedDepth}). If not, send only the completion floor: 0 until
  * {@code forceCompleteFrom}, then the remaining quantity spread linearly
  * over what is left of the horizon (at f = 1 the floor IS the
- * remainder). NaN inputs degrade honestly: an unknown forecast means the
+ * remainder). NaN inputs degrade safely: an unknown forecast means the
  * moment cannot be judged cheap (no opportunistic burst), but the floor
  * still guarantees completion. Zero allocation per decision, single
  * parent, single writer.</p>

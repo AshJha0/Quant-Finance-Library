@@ -132,7 +132,7 @@ class HftOrderBookTest {
         assertEquals(5, b.qtyAtTick(Side.SELL, 1005));
         // Empty bid side: a sell market fills nothing and rests nothing.
         assertEquals(0, b.submitMarket(Side.SELL, 20, 4));
-        assertEquals(0, b.restingOrders() - 1);            // only the 1005 remainder rests
+        assertEquals(1, b.restingOrders());                // only the 1005 remainder rests
     }
 
     // ------------------------------------------------------------------
@@ -272,12 +272,17 @@ class HftOrderBookTest {
         var mx = (com.sun.management.ThreadMXBean)
                 java.lang.management.ManagementFactory.getThreadMXBean();
         long tid = Thread.currentThread().threadId();
-        long before = mx.getThreadAllocatedBytes(tid);
-        for (int i = 0; i < 500_000; i++) {
-            ringSize = churn(b, rnd, ring, ringSize, i);
+        // Exactly zero after warm-up; a bounded retry absorbs a one-off
+        // JIT or class-loading allocation inside the first window.
+        long allocated = -1;
+        for (int attempt = 0; attempt < 5 && allocated != 0; attempt++) {
+            long before = mx.getThreadAllocatedBytes(tid);
+            for (int i = 0; i < 500_000; i++) {
+                ringSize = churn(b, rnd, ring, ringSize, i);
+            }
+            allocated = mx.getThreadAllocatedBytes(tid) - before;
         }
-        long allocated = mx.getThreadAllocatedBytes(tid) - before;
-        assertTrue(allocated < 100_000,
+        assertTrue(allocated == 0,
                 "book churn allocated " + allocated + " bytes (trades=" + b.tradeCount() + ")");
         assertTrue(b.tradeCount() > 0, "the loop must exercise matching, not just resting");
     }

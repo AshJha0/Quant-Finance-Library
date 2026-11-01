@@ -25,7 +25,7 @@ import java.util.concurrent.locks.LockSupport;
  *
  * <p><b>Dispatch cost note:</b> each subscribed listener is an interface
  * call; with three or more distinct {@link TickListener} implementations on
- * one symbol the call site goes megamorphic (~10-20&nbsp;ns per listener,
+ * one symbol the call site goes megamorphic (a virtual call per listener,
  * no inlining). Keep the per-symbol listener count at one or two and fan
  * out inside your own listener when you need more consumers.</p>
  *

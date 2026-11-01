@@ -85,4 +85,12 @@ class TradingDashboardTest {
         assertEquals(1, snapshot.size());
         assertEquals(10, snapshot.get("A"), 1e-9);
     }
+
+    @Test
+    void bindsToLoopbackByDefault() throws Exception {
+        try (TradingDashboard dashboard = new TradingDashboard(new PaperTradingGateway(1), 0)) {
+            assertTrue(dashboard.address().getAddress().isLoopbackAddress(),
+                    "unauthenticated endpoints must not listen on all interfaces");
+        }
+    }
 }

@@ -2,31 +2,37 @@ package com.quantfinlib.examples;
 
 import com.quantfinlib.marketdata.HftMarketDataBus;
 import com.quantfinlib.microstructure.TickSizeSchedule;
+import com.quantfinlib.orderbook.Side;
 import com.quantfinlib.trading.HftOrderGateway;
 import com.quantfinlib.trading.HftQuoter;
 import com.quantfinlib.trading.HftRiskGate;
+import com.quantfinlib.trading.LoopbackVenue;
+import com.quantfinlib.trading.OrderListener;
 import com.quantfinlib.util.HiccupMonitor;
 import com.quantfinlib.util.LatencyRecorder;
 
 import java.util.SplittableRandom;
 
 /**
- * Benchmarks the market-making loop end-to-end, completing the fast-lane
- * benchmark family ({@link HftLatencyBenchmark}: publish→strategy,
- * {@link HftOrderBenchmark}: tick→order):
+ * Benchmarks the market-making loop end to end:
  *
  * <pre>
- *   tick on the bus → HftQuoter (mid + inventory skew + tick-grid snap)
- *        → risk gate ×2 → order ring → venue thread receives BOTH sides
+ *   tick on the bus → HftQuoter (fair value, skew, grid snap)
+ *        → cancel/replace of the working bid and offer through the risk gate
+ *        → order ring → venue thread receives the offer-side message
  * </pre>
  *
- * <p>Latency is stamped from the original tick timestamp to the venue
- * thread receiving the <b>second</b> side of the quote — the full
- * tick-to-two-sided-quote path a live maker runs, including the grid
- * rounding and the two risk-gate passes.</p>
+ * <p>A {@link LoopbackVenue} acknowledges new orders and confirms replaces,
+ * so the quoter keeps one working order per side. Latency is from the tick
+ * timestamp to the venue thread receiving the offer-side message (new order
+ * or replace) of that update. Two runs: closed loop (one tick in flight,
+ * understates tails) and open loop at a fixed rate with intended-start
+ * timestamps (coordinated-omission corrected). Ticks that produce no
+ * offer-side message (the price snapped to the same grid point, or the side
+ * was still waiting for the venue) record nothing.</p>
  *
  * <p>Run: {@code java -Xms512m -Xmx512m -XX:+AlwaysPreTouch -cp target/classes
- * com.quantfinlib.examples.HftQuoterBenchmark}</p>
+ * com.quantfinlib.examples.HftQuoterBenchmark [ratePerSec]}</p>
  */
 public final class HftQuoterBenchmark {
 
@@ -34,19 +40,18 @@ public final class HftQuoterBenchmark {
     private static final int MEASURED_TICKS = 500_000;
 
     public static void main(String[] args) throws Exception {
-        // Hiccups printed alongside: if a latency max coincides with a
-        // platform stall here, the OS owns that tail, not the quoter.
+        long ratePerSec = args.length > 0 ? Long.parseLong(args[0]) : 100_000;
         try (HiccupMonitor hiccups = new HiccupMonitor().start()) {
-            tickToQuoteEndToEnd();
+            tickToQuote(ratePerSec);
             System.out.println(hiccups.summary());
         }
     }
 
-    private static void tickToQuoteEndToEnd() throws Exception {
+    private static void tickToQuote(long ratePerSec) throws Exception {
         HftRiskGate gate = new HftRiskGate(16)
                 .maxOrderQuantity(1_000_000)
                 .maxOrderNotional(1e12)
-                .maxPositionQuantity(Long.MAX_VALUE / 4)
+                .maxPositionQuantity(10_000_000)
                 .priceCollarPct(0.10);
         gate.setReferencePrice(0, 1.0850);
 
@@ -55,49 +60,86 @@ public final class HftQuoterBenchmark {
 
             int eurusd = bus.registerSymbol("EURUSD");
             LatencyRecorder recorder = new LatencyRecorder();
+            gateway.addOrderListener(new OrderListener() {
+                @Override
+                public void onOrder(long id, int sym, Side side, long qty, double px, long ts) {
+                    if (side == Side.SELL) {
+                        recorder.record(System.nanoTime() - ts);
+                    }
+                }
 
-            // The venue thread sees two orders per quote update; record the
-            // completed two-sided quote on the second (SELL) side.
-            gateway.addOrderListener((id, sym, side, qty, px, ts) -> {
-                if (side == com.quantfinlib.orderbook.Side.SELL) {
-                    recorder.record(System.nanoTime() - ts); // ts = tick time
+                @Override
+                public void onReplace(long id, int sym, Side side, long qty, double px, long ts) {
+                    if (side == Side.SELL) {
+                        recorder.record(System.nanoTime() - ts);
+                    }
                 }
             });
+            gateway.addOrderListener(new LoopbackVenue(gateway));
 
-            // Realistic quoting config: half-spread + inventory skew +
-            // FX-style grid snapping, conflation off so every tick quotes
-            // (the benchmark measures the full path, not the suppressor).
             HftQuoter quoter = new HftQuoter(gateway, 16, HftQuoter.Config
                     .of(100_000, 0.00005)
                     .withSkewPerUnit(1e-10)
                     .withTickSchedule(TickSizeSchedule.flat(0.00001)));
             bus.subscribe(eurusd, quoter);
-
             gateway.start();
             bus.start();
 
             SplittableRandom rnd = new SplittableRandom(42);
             double price = 1.0850;
-            long quoted = 0;
+            long published = 0;
             for (int i = 0; i < WARMUP_TICKS + MEASURED_TICKS; i++) {
                 if (i == WARMUP_TICKS) {
                     recorder.reset();
                 }
                 price *= 1 + (rnd.nextDouble() - 0.5) * 2e-5;
-                long tickTs = System.nanoTime();
-                while (!bus.publish(eurusd, price, 1_000_000, tickTs)) {
+                while (!bus.publish(eurusd, price, 1_000_000, System.nanoTime())) {
                     Thread.onSpinWait();
                 }
-                // Pace one-in-flight: wait for both sides at the venue so
-                // queueing never pollutes the per-quote latency numbers.
-                quoted += 2;
-                while (gateway.deliveredCount() < quoted) {
+                published++;
+                awaitQuiet(bus, gateway, published);
+            }
+            System.out.println("Closed-loop tick-to-quote: " + recorder.summary());
+
+            recorder.reset();
+            long period = 1_000_000_000L / ratePerSec;
+            long start = System.nanoTime() + 1_000_000;
+            for (int i = 0; i < MEASURED_TICKS; i++) {
+                long intended = start + i * period;
+                while (System.nanoTime() < intended) {
                     Thread.onSpinWait();
+                }
+                price *= 1 + (rnd.nextDouble() - 0.5) * 2e-5;
+                while (!bus.publish(eurusd, price, 1_000_000, intended)) {
+                    Thread.onSpinWait();
+                }
+                published++;
+            }
+            awaitQuiet(bus, gateway, published);
+            System.out.printf("Open-loop at %,d ticks/s (intended-start): %s%n",
+                    ratePerSec, recorder.summary());
+            System.out.printf("Quote updates: %d, replaces: %d, deferred sides: %d, "
+                            + "suppressed: %d, rejected sides: %d%n",
+                    quoter.quoteUpdates(), quoter.replaces(), quoter.deferredSides(),
+                    quoter.suppressedUpdates(), quoter.rejectedSides());
+        }
+    }
+
+    /** Waits until the bus consumed every tick and the venue thread every order message. */
+    private static void awaitQuiet(HftMarketDataBus bus, HftOrderGateway gateway, long ticks) {
+        long deadline = System.nanoTime() + 30_000_000_000L;
+        while (System.nanoTime() < deadline) {
+            if (bus.processedCount() >= ticks) {
+                long sent = gateway.submittedCount() + gateway.replaceRequestCount()
+                        + gateway.cancelRequestCount();
+                if (gateway.deliveredCount() >= sent) {
+                    return;
                 }
             }
-            System.out.println("Tick-to-two-sided-quote:     " + recorder.summary());
-            System.out.printf("Quote updates: %d, suppressed: %d, rejected sides: %d%n",
-                    quoter.quoteUpdates(), quoter.suppressedUpdates(), quoter.rejectedSides());
+            Thread.onSpinWait();
         }
+    }
+
+    private HftQuoterBenchmark() {
     }
 }

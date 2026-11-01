@@ -58,14 +58,19 @@ class OrderThrottleTest {
         var mx = (com.sun.management.ThreadMXBean)
                 java.lang.management.ManagementFactory.getThreadMXBean();
         long tid = Thread.currentThread().threadId();
-        long before = mx.getThreadAllocatedBytes(tid);
-        for (int i = 0; i < 500_000; i++) {
-            now += 500;
-            t.tryAcquire(now);
-            t.nanosUntilAvailable(now);
+        // Exactly zero after warm-up; a bounded retry absorbs a one-off
+        // JIT or class-loading allocation inside the first window.
+        long allocated = -1;
+        for (int attempt = 0; attempt < 5 && allocated != 0; attempt++) {
+            long before = mx.getThreadAllocatedBytes(tid);
+            for (int i = 0; i < 500_000; i++) {
+                now += 500;
+                t.tryAcquire(now);
+                t.nanosUntilAvailable(now);
+            }
+            allocated = mx.getThreadAllocatedBytes(tid) - before;
         }
-        long allocated = mx.getThreadAllocatedBytes(tid) - before;
-        assertTrue(allocated < 100_000, "throttle allocated " + allocated + " bytes");
+        assertTrue(allocated == 0, "throttle allocated " + allocated + " bytes");
     }
 
     @Test
