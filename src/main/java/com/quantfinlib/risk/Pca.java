@@ -10,9 +10,11 @@ package com.quantfinlib.risk;
  * variance each explains.
  *
  * <p>Implementation is the cyclic Jacobi eigenvalue algorithm — exact
- * for symmetric matrices, dependency-free, and comfortably fast at risk
- * dimensions (tens of factors; it is O(n³) per sweep and converges in a
- * handful of sweeps). Eigenvalues clip at zero: a covariance matrix is
+ * for symmetric matrices, dependency-free, and fast at risk dimensions
+ * (tens of factors; it is O(n³) per sweep and converges in a handful of
+ * sweeps). Beyond about 50 factors it becomes slow; a several-hundred-name
+ * equity book needs Householder tridiagonalisation plus QR, or a Lanczos
+ * method for the leading components, which this class does not provide. Eigenvalues clip at zero: a covariance matrix is
  * PSD in exact arithmetic, and a tiny negative eigenvalue is numerical
  * noise, not an imaginary risk factor. Research lane, deterministic.</p>
  */

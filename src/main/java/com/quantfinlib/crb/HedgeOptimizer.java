@@ -22,13 +22,17 @@ import com.quantfinlib.util.MathUtils;
  * reduction is worth less than their cost get EXACTLY zero, not a dusty
  * small position. {@code λ = 0} recovers the closed-form minimum-
  * variance hedge (the tests pin that against the normal equations).
- * Research lane, static.</p>
+ * Every 50 sweeps the solver tries to finish exactly: it solves the
+ * optimality conditions on the current support and sign pattern and
+ * accepts the result if the subgradient condition holds off the support.
+ * A ridge of 1e-12·tr(G)/m on the instrument Gram matrix makes the
+ * solution unique for collinear instruments. Research lane, static.</p>
  */
 public final class HedgeOptimizer {
 
-    // Generous: near-collinear instruments (0.999-correlated futures)
-    // contract slowly under Gauss-Seidel, and a silent max-iteration
-    // exit would return a plausible-looking, grossly unconverged hedge.
+    // Near-collinear instruments contract slowly under Gauss-Seidel; the
+    // periodic support solve finishes them exactly, and a run that still
+    // fails throws rather than return an unconverged hedge.
     private static final int MAX_ITERATIONS = 20_000;
     private static final double RELATIVE_TOLERANCE = 1e-10;
 
@@ -107,17 +111,33 @@ public final class HedgeOptimizer {
             d[i] = s;
         }
 
+        // A ridge of 1e-12·tr(G)/m on the diagonal makes the minimiser
+        // unique when two instruments are collinear (the twin positions
+        // split evenly instead of drifting apart); its effect on a
+        // well-posed hedge is far below rounding of the notionals.
+        double trace = 0;
+        for (int i = 0; i < m; i++) {
+            if (gram[i][i] < 0) {
+                throw new IllegalArgumentException("covariance is not PSD: "
+                        + "instrument " + i + " has L'ΣL = " + gram[i][i]);
+            }
+            trace += gram[i][i];
+        }
+        double ridge = m > 0 ? 1e-12 * trace / m : 0;
+        for (int i = 0; i < m; i++) {
+            gram[i][i] += ridge;
+        }
+        double[] thresholds = new double[m];
+        for (int i = 0; i < m; i++) {
+            thresholds[i] = costWeight * costPerUnit[i] / 2;
+        }
+
         double[] h = new double[m];
-        boolean converged = false;
-        for (int iter = 0; iter < MAX_ITERATIONS && !converged; iter++) {
+        for (int iter = 0; iter < MAX_ITERATIONS; iter++) {
             double maxDelta = 0;
             double maxH = 1;
             for (int i = 0; i < m; i++) {
                 double a = gram[i][i];
-                if (a < 0) {
-                    throw new IllegalArgumentException("covariance is not PSD: "
-                            + "instrument " + i + " has L'ΣL = " + a);
-                }
                 if (a == 0) {
                     continue;          // instrument carries no risk: leave at 0
                 }
@@ -129,7 +149,7 @@ public final class HedgeOptimizer {
                     }
                 }
                 // minimize a·h² + 2b·h + λc|h|  →  soft threshold at λc/2.
-                double threshold = costWeight * costPerUnit[i] / 2;
+                double threshold = thresholds[i];
                 double next;
                 if (b > threshold) {
                     next = -(b - threshold) / a;
@@ -150,17 +170,86 @@ public final class HedgeOptimizer {
             }
             // RELATIVE tolerance: notionals run in the millions, and an
             // absolute epsilon there is either never met or means nothing.
-            converged = maxDelta < RELATIVE_TOLERANCE * maxH;
+            if (maxDelta < RELATIVE_TOLERANCE * maxH) {
+                return h;
+            }
+            // Coordinate descent finds the support quickly but contracts
+            // slowly on correlated instruments; every 50 sweeps try to
+            // finish exactly on the current support and sign pattern.
+            if (iter % 50 == 49) {
+                double[] exact = solveOnSupport(h, gram, d, thresholds);
+                if (exact != null) {
+                    return exact;
+                }
+            }
         }
-        if (!converged) {
-            // Near-collinear instruments can defeat Gauss-Seidel — an
-            // unconverged hedge that LOOKS like an answer is worse than
-            // an exception (drop the redundant twin instrument).
-            throw new IllegalStateException(
-                    "coordinate descent failed to converge in " + MAX_ITERATIONS
-                            + " iterations — hedge instruments may be near-collinear");
+        double[] exact = solveOnSupport(h, gram, d, thresholds);
+        if (exact != null) {
+            return exact;
         }
-        return h;
+        throw new IllegalStateException(
+                "coordinate descent failed to converge in " + MAX_ITERATIONS
+                        + " iterations and the support solve did not satisfy the optimality conditions");
+    }
+
+    /**
+     * Solves the first-order conditions {@code G_SS·h_S = −(d_S + t_S∘sign)}
+     * on the support S of {@code h} and returns the solution if it keeps the
+     * signs and satisfies the subgradient condition {@code |d_i + (G·h)_i| <= t_i}
+     * off the support; otherwise {@code null}.
+     */
+    private static double[] solveOnSupport(double[] h, double[][] gram, double[] d,
+                                           double[] thresholds) {
+        int m = h.length;
+        int[] support = new int[m];
+        int k = 0;
+        for (int i = 0; i < m; i++) {
+            if (h[i] != 0) {
+                support[k++] = i;
+            }
+        }
+        double[] out = new double[m];
+        if (k > 0) {
+            double[][] a = new double[k][k];
+            double[] rhs = new double[k];
+            for (int p = 0; p < k; p++) {
+                int i = support[p];
+                for (int q = 0; q < k; q++) {
+                    a[p][q] = gram[i][support[q]];
+                }
+                rhs[p] = -(d[i] + thresholds[i] * Math.signum(h[i]));
+            }
+            double[] x;
+            try {
+                x = MathUtils.solveLinear(a, rhs);
+            } catch (RuntimeException singular) {
+                return null;
+            }
+            for (int p = 0; p < k; p++) {
+                int i = support[p];
+                if (!Double.isFinite(x[p]) || (x[p] != 0 && Math.signum(x[p]) != Math.signum(h[i]))) {
+                    return null;
+                }
+                out[i] = x[p];
+            }
+        }
+        double scale = 0;
+        for (int i = 0; i < m; i++) {
+            scale = Math.max(scale, Math.abs(d[i]) + thresholds[i]);
+        }
+        for (int i = 0; i < m; i++) {
+            if (out[i] != 0) {
+                continue;
+            }
+            double g = d[i];
+            for (int j = 0; j < m; j++) {
+                g += gram[i][j] * out[j];
+            }
+            if (Math.abs(g) > thresholds[i] + 1e-9 * Math.max(scale, Double.MIN_NORMAL)) {
+                return null;
+            }
+        }
+        return out;
     }
 
     /** Post-hedge factor exposures e + L·h. */

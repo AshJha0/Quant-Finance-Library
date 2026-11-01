@@ -14,7 +14,10 @@ public final class PortfolioRiskAnalyzer {
 
     /**
      * Full risk report. Volatilities are annualized; VaR/CVaR are per-period
-     * positive loss fractions; risk contributions sum to 1.
+     * positive loss fractions (VaR the interpolated historical quantile,
+     * CVaR the Acerbi-Tasche tail mean of {@link TailRisk}); risk
+     * contributions sum to 1. The constructor copies the return matrix and
+     * requires equal-length, finite rows.
      */
     public record RiskReport(
             double annualizedVolatility,
@@ -37,8 +40,29 @@ public final class PortfolioRiskAnalyzer {
         if (symbols.length != assetReturns.length || symbols.length != weights.length) {
             throw new IllegalArgumentException("symbols, returns and weights must have equal length");
         }
+        if (symbols.length == 0) {
+            throw new IllegalArgumentException("need at least one asset");
+        }
+        int t = assetReturns[0].length;
+        this.assetReturns = new double[assetReturns.length][];
+        for (int a = 0; a < assetReturns.length; a++) {
+            if (assetReturns[a].length != t) {
+                throw new IllegalArgumentException("asset " + a + " has " + assetReturns[a].length
+                        + " returns, asset 0 has " + t);
+            }
+            for (double r : assetReturns[a]) {
+                if (!Double.isFinite(r)) {
+                    throw new IllegalArgumentException("non-finite return for asset " + a);
+                }
+            }
+            this.assetReturns[a] = assetReturns[a].clone();
+        }
+        for (double w : weights) {
+            if (!Double.isFinite(w)) {
+                throw new IllegalArgumentException("weights must be finite");
+            }
+        }
         this.symbols = symbols.clone();
-        this.assetReturns = assetReturns;
         this.weights = weights.clone();
     }
 
@@ -56,7 +80,15 @@ public final class PortfolioRiskAnalyzer {
         return out;
     }
 
+    /** {@link #analyze(double, int, double)} with a zero risk-free rate. */
     public RiskReport analyze(double confidence, int periodsPerYear) {
+        return analyze(confidence, periodsPerYear, 0.0);
+    }
+
+    /**
+     * @param riskFreeRate annual risk-free rate used in the Sharpe ratio
+     */
+    public RiskReport analyze(double confidence, int periodsPerYear, double riskFreeRate) {
         double[] pr = portfolioReturns();
         double[][] cov = CorrelationMatrix.covariance(assetReturns);
 
@@ -74,7 +106,7 @@ public final class PortfolioRiskAnalyzer {
                 RiskMetrics.historicalVar(pr, confidence),
                 RiskMetrics.conditionalVar(pr, confidence),
                 RiskMetrics.parametricVar(pr, confidence),
-                RiskMetrics.sharpeRatio(pr, 0.0, periodsPerYear),
+                RiskMetrics.sharpeRatio(pr, riskFreeRate, periodsPerYear),
                 exposures,
                 assetVols,
                 assetVaR,

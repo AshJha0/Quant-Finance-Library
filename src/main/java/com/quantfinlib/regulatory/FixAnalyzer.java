@@ -3,11 +3,21 @@ package com.quantfinlib.regulatory;
 import java.util.Arrays;
 
 /**
- * WM/Reuters-style 4pm fix analysis: computes the fix rate from mid samples
- * inside the fixing window (median, per WM/R methodology) and screens a
- * participant's flow for the classic "banging the close" signature — a large
- * share of window volume, a price run-up aligned with the participant's net
- * flow into the fix, and reversion afterwards.
+ * WM/R-style 4pm fix analysis: computes a fix rate from samples inside the
+ * fixing window and screens a participant's flow for the classic "banging
+ * the close" signature — a large share of window volume, a price run-up
+ * aligned with the participant's net flow into the fix, and reversion
+ * afterwards.
+ *
+ * <p>The published WM/Refinitiv methodology (since February 2015) takes a
+ * five-minute window of one-second snapshots, computes the median of the
+ * bids and the median of the offers separately (trade-based where trades
+ * are available), and publishes the mid of the two medians.
+ * {@link #calculateFix(double[], double[])} implements that bid/offer
+ * construction on samples the caller provides; {@link #calculateFix(double[])}
+ * is the simpler median of mids. Neither reproduces the vendor's data
+ * capture, validation and trade/quote rules, so the result is a WM/R-style
+ * estimate, not the official benchmark.</p>
  */
 public final class FixAnalyzer {
 
@@ -23,12 +33,29 @@ public final class FixAnalyzer {
     private FixAnalyzer() {
     }
 
-    /** Fix rate = median of the mid samples captured inside the fixing window. */
+    /** Median of the mid samples captured inside the fixing window. */
     public static double calculateFix(double[] midSamplesInWindow) {
-        if (midSamplesInWindow.length == 0) {
+        return median(midSamplesInWindow);
+    }
+
+    /**
+     * WM/R-style fix: the mid of the separate medians of bid and offer
+     * snapshots in the window, {@code (median(bids) + median(offers)) / 2}.
+     */
+    public static double calculateFix(double[] bidSamples, double[] offerSamples) {
+        return 0.5 * (median(bidSamples) + median(offerSamples));
+    }
+
+    private static double median(double[] samples) {
+        if (samples.length == 0) {
             throw new IllegalArgumentException("no samples");
         }
-        double[] sorted = midSamplesInWindow.clone();
+        for (double v : samples) {
+            if (!Double.isFinite(v)) {
+                throw new IllegalArgumentException("samples must be finite");
+            }
+        }
+        double[] sorted = samples.clone();
         Arrays.sort(sorted);
         int n = sorted.length;
         return n % 2 == 1 ? sorted[n / 2] : (sorted[n / 2 - 1] + sorted[n / 2]) / 2;

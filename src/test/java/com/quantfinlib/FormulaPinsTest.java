@@ -46,15 +46,19 @@ class FormulaPinsTest {
 
     @Test
     void ewmaRecursionWeightsPinned() {
-        // {0.01, −0.02}: seed = sample variance 4.5e-4;
-        // h[1] = 0.94·4.5e-4 + 0.06·0.01² = 4.29e-4 (a lambda swap gives 1.21e-4);
-        // next = 0.94·4.29e-4 + 0.06·0.02² = 4.2726e-4 → vol 0.0206703.
+        // Explicit prior 4.5e-4 for {0.01, −0.02}:
+        // h[1] = 0.94·4.5e-4 + 0.06·0.01² = 4.29e-4 (a lambda swap gives 1.21e-4).
         EwmaVolatility ewma = new EwmaVolatility(0.94);
-        double[] h = ewma.variances(new double[]{0.01, -0.02});
-        assertEquals(4.5e-4, h[0], 1e-15, "unconditional seed");
+        double[] h = ewma.variances(new double[]{0.01, -0.02}, 4.5e-4);
+        assertEquals(4.5e-4, h[0], 1e-15, "explicit seed");
         assertEquals(4.29e-4, h[1], 1e-15, "lambda on the OLD variance, 1-lambda on r²");
-        assertEquals(Math.sqrt(4.2726e-4), ewma.latestVol(new double[]{0.01, -0.02}),
-                1e-12);
+        // Causal default (no full-sample seed): h[1] = r0² = 1e-4, and the
+        // forecast weights r0², r1² by 0.94·0.06 and 0.06 over 1 − 0.94²:
+        // (0.0564·1e-4 + 0.06·4e-4)/0.1164 = 2.5464e-4.
+        double[] causal = ewma.variances(new double[]{0.01, -0.02});
+        assertEquals(1e-4, causal[1], 1e-18);
+        assertEquals(Math.sqrt((0.0564e-4 + 0.06 * 4e-4) / 0.1164),
+                ewma.latestVol(new double[]{0.01, -0.02}), 1e-12);
     }
 
     // ------------------------------------------------------------------
@@ -118,9 +122,9 @@ class FormulaPinsTest {
                 new double[]{0.06, 0.10},
                 new double[][]{{0.01, 0}, {0, 0.04}}, 42);
         PortfolioOptimizer.Allocation tangency = opt.maxSharpe(0.02);
-        assertEquals(2.0 / 3, tangency.weights()[0], 0.03,
+        assertEquals(2.0 / 3, tangency.weights()[0], 1e-9,
                 "the analytic tangency, rf included");
-        assertEquals(1.0 / 3, tangency.weights()[1], 0.03);
+        assertEquals(1.0 / 3, tangency.weights()[1], 1e-9);
     }
 
     // ------------------------------------------------------------------
