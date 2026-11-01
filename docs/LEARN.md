@@ -16239,7 +16239,7 @@ PossDup means divergence) it disconnects. The supervisor restarts,
 nothing changed, it dies identically: the loop. The answer is
 ResetSeqNumFlag(141)=Y on the Logon: both sides restart their
 counters at 1, and the reset is applied before sequence validation
--- necessarily, since the whole point is to save a session the
+-- necessarily, since the reset exists to save a session the
 validation would kill. The peer confirms with 141=Y back. Both
 sides also reset their stores (the file store rolls its journal), so
 no pre-reset message can be replayed later under a recycled sequence
@@ -21058,7 +21058,7 @@ They are asking for component VaR, and the defensible property is that under the
 
 ### 759. "A desk head insists its position is a hedge, not a risk. Component VaR shows a negative number for it. Is the hedge real, and how is that different from incremental VaR?"
 
-The negative component confirms the hedge is real, and the distinction from incremental is the whole point of having both numbers. Component VaR is size times marginal VaR: a position that moves opposite the book has a positive size but a negative marginal, so its component is negative -- it is subtracting from today's total risk, and closing it would raise VaR. That is the mathematical signature of a genuine hedge, and it is exactly what the desk head is claiming. Incremental VaR asks a different question: not "what share of current risk is this," but "how much would total VaR change if I removed this position entirely." Incremental is a finite difference (recompute VaR without the position, take the gap), not a derivative, so it captures the full nonlinear effect of removal rather than the local slope. For a small position the two roughly agree; for a large one they diverge, because the marginal slope at the current book does not extrapolate to full removal. Report both: component to attribute today's risk, incremental to answer the trade decision.
+The negative component confirms the hedge is real, and the distinction from incremental is why both numbers exist. Component VaR is size times marginal VaR: a position that moves opposite the book has a positive size but a negative marginal, so its component is negative -- it is subtracting from today's total risk, and closing it would raise VaR. That is the mathematical signature of a genuine hedge, and it is exactly what the desk head is claiming. Incremental VaR asks a different question: not "what share of current risk is this," but "how much would total VaR change if I removed this position entirely." Incremental is a finite difference (recompute VaR without the position, take the gap), not a derivative, so it captures the full nonlinear effect of removal rather than the local slope. For a small position the two roughly agree; for a large one they diverge, because the marginal slope at the current book does not extrapolate to full removal. Report both: component to attribute today's risk, incremental to answer the trade decision.
 
 *In this library:* `risk/ComponentVar.java` -- `allocate` yields the (possibly negative) marginal and component VaRs, `incremental(weights, covariance, ...)` recomputes VaR with the position dropped and returns the difference; the javadoc spells out that a hedging position has positive size, negative component, and closing it raises VaR.
 
@@ -21306,7 +21306,7 @@ The ledger decomposes CRB economics into signed components that must sum to the 
 
 ### 799. "A firm-wide gross breach fires while an ops-hold is already active on one desk. What does the aggregator do, and how do the two interact?"
 
-The aggregator is the slow, firm-wide observer: it sums exposures across every desk's risk gate every few milliseconds and trips a firm-level kill when total gross notional crosses the ceiling -- the hot trading paths only ever read one boolean, so safety is global without slowing anyone down. When a gross breach fires, the aggregator flips that firm-wide trip, and every desk's gate sees the tripped flag and stops sending risk-increasing orders. The interaction with an existing ops-hold is additive, and that is the whole point: the ops-hold is a targeted, human-initiated stop on one desk (a data issue, a manual intervention), while the aggregator trip is an automatic, firm-wide stop on all desks. They do not conflict or override each other: both are blocks, and an order must pass both to proceed, so the effect is the union of the two halts. The held desk stays held for its own reason; the firm-wide trip additionally halts everyone including that desk. Neither clearing lifts the other: releasing the ops-hold does not un-trip the aggregator, and the gross exposure coming back under the ceiling does not clear the ops-hold. This is intended defense in depth: two independent kill mechanisms at two scopes, each fail-safe, so a breach is stopped even if one control was already engaged for something else.
+The aggregator is the slow, firm-wide observer: it sums exposures across every desk's risk gate every few milliseconds and trips a firm-level kill when total gross notional crosses the ceiling -- the hot trading paths only ever read one boolean, so safety is global without slowing anyone down. When a gross breach fires, the aggregator flips that firm-wide trip, and every desk's gate sees the tripped flag and stops sending risk-increasing orders. The interaction with an existing ops-hold is additive by design: the ops-hold is a targeted, human-initiated stop on one desk (a data issue, a manual intervention), while the aggregator trip is an automatic, firm-wide stop on all desks. They do not conflict or override each other: both are blocks, and an order must pass both to proceed, so the effect is the union of the two halts. The held desk stays held for its own reason; the firm-wide trip additionally halts everyone including that desk. Neither clearing lifts the other: releasing the ops-hold does not un-trip the aggregator, and the gross exposure coming back under the ceiling does not clear the ops-hold. This is intended defense in depth: two independent kill mechanisms at two scopes, each fail-safe, so a breach is stopped even if one control was already engaged for something else.
 
 *In this library:* `trading/GlobalRiskAggregator.java` -- created with `GlobalRiskAggregator.start(gates, maxGrossNotional, resumeFraction, pollIntervalNanos)` over the desks' `HftRiskGate`s, it exposes `grossNotional()`, `isTripped()`, `unpricedSymbols()` and `tripCount()`; the firm-wide trip and a per-desk ops-hold are independent blocks an order must clear both of, and a trip also makes each gateway send a cancel-all to its venue.
 
@@ -21364,7 +21364,7 @@ today's-constituents universe. The fix is a point-in-time universe
 attached to the panel so every factor scores non-members and dead
 names as NaN at each bar, and the ICs only ever see the cross-section
 that actually existed. Without one the panel is survivorship-blind:
-fine for methodology work, dishonest for any performance claim.
+fine for methodology work, misleading for any performance claim.
 
 *In this library:* `alpha/AlphaContext.java` -- for the restatement
 leak, `withFundamentalsHistory` attaches an `alpha/FundamentalsHistory`
@@ -22355,7 +22355,7 @@ a hazard curve from the name's CDS par spreads: the credit triangle
 rule of thumb, spread roughly equals hazard times (1 - recovery), says
 a 300bp spread on a 40% recovery name implies a hazard of about 5% a
 year, so the expected annual loss is hazard times (1 - R), roughly the
-spread back again; which is the whole point: a fairly priced CDS pays
+spread back again; which is the key fact: a fairly priced CDS pays
 you exactly your expected loss and no more, so the "carry" is
 compensation, not free money. The trade only earns a positive
 default-adjusted return if you think the market's implied hazard is too
