@@ -1761,15 +1761,19 @@ the market's own U-shaped volume curve: right when you're benchmarked to
 the day's VWAP and want minimal tracking error. POV participates at a fixed
 percentage of *realized* volume: right when urgency should scale with
 liquidity, and the only choice when volume is unpredictable — but it has no
-guaranteed end time. The classic bug: measuring participation against total
-volume **including your own fills**. Then your own trading raises the
-"market volume" you chase, and you converge to p/(1+p) instead of p — the
-algo chases its own tail. Participation must be measured against *other
-people's* volume.
+guaranteed end time. The classic bug is getting the denominator wrong. The
+industry definition of a 10% POV is 10% of total traded volume, your own
+fills included. If V is the volume printed by others and you execute x, your
+share is x/(x+V); setting that to p gives x = p/(1-p) · V. The common
+mistake is to target p · V, which realises only p/(1+p): a 10% target lands
+at 9.1%. The other version of the bug, counting your own prints in the
+volume you chase, makes the algo chase its own tail. So feed the tracker
+other people's volume only, and convert the target with p/(1-p).
 
 *In this library:* `execution/TwapScheduler.java`,
-`execution/VwapScheduler.java`, `execution/PovTracker.java` (the javadoc
-states the p/(1+p) trap and the ledger excludes own fills),
+`execution/VwapScheduler.java`, `execution/PovTracker.java` (the ledger
+takes others' volume through `onMarketVolume` and targets
+`p / (1 - p)` times it; the javadoc states the p/(1+p) trap),
 `execution/BenchmarkExecutor.java` (all benchmarks as one live re-deciding
 executor).
 
@@ -8375,13 +8379,25 @@ discipline and `cancel`'s "never throws"),
 ### 269. "Design the pre-trade risk gate. What do you check, in what order -- and when is it correct to let a limit BREACH pass?"
 
 Order the checks cheapest-and-most-global first: (1) kill switch -- one
-boolean, firm-level, flipped by the risk aggregator; (2) per-symbol halt;
-(3) quantity cap (fat-finger on size); (4) notional cap (quantity x
-price -- catches the size that is fine at 1.08 and insane at 108); (5)
-position projection; (6) price collar versus reference (fat-finger on
-price). Every rejection increments a per-reason counter, because a gate
-that silently rejects is undebuggable. The subtle part is (5). Naive
-version: reject if |position + signed qty| > cap. But suppose two 800-lot
+flag, firm-level, flipped by the risk aggregator -- and per-symbol halt;
+(2) price validity: the limit price must be finite and strictly positive.
+This check has to be explicit, because every comparison against NaN is
+false, so a NaN price sails through a collar written as "reject if
+|price - ref| > x" and through a notional cap written as "reject if
+qty x price > cap"; (3) quantity cap (fat-finger on size) and notional
+cap (quantity x price -- catches the size that is fine at 1.08 and
+insane at 108); (4) daily caps on order count, accepted notional and
+realised loss; (5) position projection; (6) price collar versus
+reference (fat-finger on price); (7) duplicate order within a short
+window. These map to the controls in MiFID II RTS 6 Art. 15 and SEC Rule
+15c3-5. Every rejection increments a per-reason counter, because a gate
+that silently rejects is undebuggable. The subtle part is (5). It must
+count working orders, not just fills: ten resting 200-lot bids against
+a 1000 cap each pass a fills-only check and together put 2000 at risk.
+So the projection is the worst case if every working order on the same
+side fills, |position + sign x (openSameSide + qty)|, and the gateway
+reserves each order's quantity when it is accepted and releases it on
+fill, cancel or reject. Naive version: reject if |position + signed qty| > cap. But suppose two 800-lot
 fills against a 1000 cap leave you at 1600 (fills can legally overshoot
 -- each order passed when checked): the naive gate now rejects a 500-lot
 SELL because |1100| > 1000 -- refusing the exact trade that de-risks the
@@ -8391,18 +8407,20 @@ sign -- an order taking +1600 through zero to -1400 shrinks nothing; it
 is a brand-new over-cap short wearing a hedge's clothes. The gate here
 encodes exactly that two-clause test, with the comment telling the story.
 
-*In this library:* `trading/HftRiskGate.java` (`check` -- the six checks
-in this order, the reducing exception with the flip-through-zero guard
-`(newPosition ^ current) < 0`, and per-reason rejection counters with
-`reasonName`).
+*In this library:* `trading/HftRiskGate.java` (`check` -- the checks in
+this order with `REJECT_PRICE` for NaN, zero, negative and infinite
+prices, open-order exposure through `reserve`/`release`, the reducing
+exception with the flip-through-zero guard `(projected ^ base) < 0`, and
+per-reason rejection counters with `reasonName`), and
+`trading/HftOrderGateway.java`, which makes the reservations.
 
-### 270. "Your risk gate runs in about 3 nanoseconds. Why does that number matter, and what did it cost to get it?"
+### 270. "Your risk gate runs in a few nanoseconds. Why does that number matter, and what did it cost to get it?"
 
-It matters because the gate is on EVERY order's critical path -- it is
+It matters because the gate is on every order's critical path -- it is
 the one component you can never bypass, so its cost is a floor under
-your entire reaction time. At ~3 ns the gate is economically invisible
-(the tick-to-order path is ~504 ns p50; the gate is under 1% of it),
-which kills the most dangerous argument on any fast desk: "we'll skip
+your entire reaction time. When the gate is a small fraction of the
+tick-to-order path (measured figures are in [BENCHMARKS.md](BENCHMARKS.md)),
+it removes the most dangerous argument on any fast desk: "we'll skip
 the risk check on the fast path and reconcile after." When the check
 costs less than a cache miss, there is no performance case for trading
 unchecked -- Knight Capital is the canonical story of what unchecked
@@ -8412,14 +8430,14 @@ path -- reason names are looked up only when someone asks); an int
 return code instead of exceptions; and the part -- when
 cross-thread correctness demanded VarHandle acquire/release element
 access (next question), the gate got slower than its naive version, and
-the library took the 3 ns and documented why: correct-but-3ns beats
-fast-but-wrong, verified by re-running the benchmark after the change.
-That sentence -- keep the slowdown, write down the reason -- is the
-whole engineering culture in miniature.
+the library kept the slower, correct version and documented why. A
+benchmark that measures the gate fairly also has to vary the symbol:
+one hot symbol keeps every array slot in L1 and flatters the number, so
+the library's benchmark spreads checks over 1,024 random symbols.
 
-*In this library:* `trading/HftRiskGate.java` (the javadoc tells the
-correct-but-3ns story), `docs/LEARN.md` sections 15 and its Q&A (~3 ns
-per check; the tick-to-order budget it sits inside).
+*In this library:* `trading/HftRiskGate.java` (the Threading section
+of the javadoc), the JMH `CoreBenchmarks.riskGateCheckRandomSymbols`
+benchmark, and [BENCHMARKS.md](BENCHMARKS.md) for the measured numbers.
 
 ### 271. "The quoter reads positions the ack thread writes. No locks anywhere. Why is a plain long[] wrong, and why is a synchronized one also wrong?"
 
@@ -8438,15 +8456,17 @@ store, readers load with acquire, and the JMM guarantees fresh, untorn
 values with a happens-before edge. The punchline that makes it free-ish:
 on x86, an acquire load compiles to a plain load and a release store to
 a plain store -- the cost is only a compiler-reordering fence, so the
-~3 ns check survives. The arrays stay primitive and cache-friendly; no
+check stays in the nanosecond range. The arrays stay primitive and cache-friendly; no
 AtomicLongArray object per symbol, no boxing. This is the pattern for
 ALL cross-thread state on the lane: single conceptual writer per slot,
 release on write, acquire on read.
 
 *In this library:* `trading/HftRiskGate.java` (the Threading javadoc
-section is a tutorial on exactly this -- "a plain long[] would let the
-JIT serve a stale position to the quoter's skew and the position limit
-forever"); the same idiom in `trading/GlobalRiskAggregator.java` reads.
+section: cross-thread element access through `VarHandle`
+acquire/release, plain loads and stores on x86, atomic adds for
+positions and exposure, limits read with acquire on every check so they
+can be tightened intraday from an operations thread); the same idiom in
+`trading/GlobalRiskAggregator.java` reads.
 
 ### 272. "Fills arrive on the venue-ack thread while the gate is checking on the trading thread. Why is onFill an atomic add rather than a release store?"
 
@@ -8463,11 +8483,14 @@ architecturally plausible -- multiple venue connections, a manual
 adjustment from ops, the paper-trading loop -- so the write side pays
 for full atomicity (a lock-prefixed instruction, a few ns on the ACK
 thread, which is not the quoting hot path). Reads stay cheap acquire
-loads. Contrast with the rejection counters in the same class: those
-have a SINGLE writer (the checking thread), so they use plain-read plus
-release-store -- cheaper, and safe only because the writer is unique.
+loads. The same reasoning applies to the open-order reservations, which
+the trading thread adds and the venue thread releases, and to the
+rejection counters, which both the gate and the gateway (throttle,
+gateway down) increment: several writers, so atomic adds. Where a field
+truly has one writer, as the daily counters written only by the thread
+that records accepted orders do, a release store is enough and cheaper.
 Choosing the memory-ordering strength per field, by writer cardinality,
-instead of sprinkling `synchronized`, is exactly the skill this class
+instead of sprinkling `synchronized`, is the skill this class
 demonstrates.
 
 *In this library:* `trading/HftRiskGate.java`: `onFill` applies fills
@@ -8481,22 +8504,30 @@ already rejects per-order breaches in nanoseconds. Firm-wide, a monitor
 thread polls every shard's gate -- positions and reference prices are
 already published with release semantics for the gate's own
 correctness, so cross-thread aggregation is free-riding on work already
-done -- and computes gross notional = sum of |position| x referencePrice
-across all gates and symbols. On breach it calls kill() on EVERY gate:
-one released boolean per gate, which each shard's check reads as a
-single acquire load, first thing. Detection latency is the poll
+done -- and computes worst-case gross notional: per symbol,
+max(|position + openBuy|, |position - openSell|) x referencePrice, so
+resting orders count, summed across all gates. It fails closed: a symbol
+with a position or open orders and no finite positive reference price
+makes the exposure unmeasurable, and that alone trips the breaker. On
+breach it calls kill() on every gate: one released flag per gate, which
+each shard's check reads as a single acquire load, first thing, and
+which makes every order gateway on that gate send a cancel-all to its
+venue. Stopping new orders is not enough while old ones still rest. Detection latency is the poll
 interval (default 1 ms) -- a trade-off stated in the javadoc:
 the firm-wide cap is a circuit breaker, not a per-order gate, so the
 hot paths never pay for it. The hysteresis: trading resumes only when
-gross drops below cap x resumeFraction (say 0.9), not the cap itself.
+gross drops below cap x resumeFraction (say 0.9) and nothing is
+unpriced, not when it touches the cap itself.
 Without the band, a book sitting AT the limit flaps -- kill, one fill
 rolls off, resume, one tick of mark-to-market, kill again -- and a
 flapping kill switch trains operators to ignore it, which is worse than
 no switch. Hysteresis converts the boundary into two: trip high, reset
 meaningfully lower, resume gradually.
 
-*In this library:* `trading/GlobalRiskAggregator.java` (poll -> gross ->
-kill-all -> hysteretic resume; the javadoc explains each choice),
+*In this library:* `trading/GlobalRiskAggregator.java` (created with
+`GlobalRiskAggregator.start(gates, maxGrossNotional, resumeFraction,
+pollIntervalNanos)`; poll, worst-case gross, kill-all, hysteretic
+resume; `unpricedSymbols()` reports the fail-closed case),
 `trading/HftRiskGate.java` (`kill` / `REJECT_KILLED` as the first check),
 wired over `trading/ShardedTradingEngine.gates()`.
 
@@ -9071,25 +9102,29 @@ time fraction).
 ### 294. "POV at 10% of volume. What's the classic self-referential bug, and what do the size clamps buy you?"
 
 POV (percentage-of-volume) cannot be prescheduled -- it chases realized
-market volume, targeting `executed = p x marketVolume`. The classic bug is
-measuring participation against the total tape, which includes your own
-prints. Run the arithmetic: an algo correctly executing `p` of other
-people's volume M has printed `pM` shares, so its measured share of the
-total tape is `pM / (M + pM) = p/(1+p) < p`. The controller reads itself as
-behind target, speeds up, and every catch-up fill inflates the denominator
-again -- the algo chases its own flow, and its true participation against
-other people's trading overshoots the mandate. The cure is definitional:
-market volume must exclude your own fills, so participation is measured
-against other people's trading only. The size clamps solve two separate
+market volume. The mandate "10% of volume" means 10% of the total tape,
+your own prints included. Run the arithmetic: with M the volume printed by
+other people, executing x gives a share `x / (M + x)`. Setting that to p
+gives `x = p / (1 - p) x M`. An algo that targets `p x M` instead has a
+share of `pM / (M + pM) = p/(1+p) < p`: a 10% mandate realises 9.1%, and
+on 5,000 shares of others' volume it trades 500 where it owed 555. The
+mirror-image bug feeds the tracker the whole tape, own prints included, as
+"market volume": every catch-up fill inflates the volume it chases, and
+the algo chases its own flow. The cure is definitional: count others'
+volume and own fills separately, and convert the target with
+p/(1-p). Sent-but-unfilled children must count against the target too,
+or a resting child gets sent again. The size clamps solve two separate
 problems: a minimum slice suppresses dribble orders (a 3-share child after
 every odd-lot print is pure message cost and signaling), and a maximum
 slice caps the information leaked by any single child when a volume burst
 suddenly makes a large quantity "due."
 
 *In this library:* `execution/PovTracker.java` -- the streaming
-participation ledger; the javadoc derives the p/(1+p) trap and documents
-the `[minSlice, maxSlice]` clamps. `dueQuantity` is the "how much am I
-allowed to send right now" answer.
+participation ledger; the javadoc derives the `p / (1 - p)` target and
+the p/(1+p) trap and documents the `[minSlice, maxSlice]` clamps.
+`onChildSent` and `onChildDone` track resting children,
+`realizedParticipation()` reports executed / (executed + others), and
+`dueQuantity` is the "how much am I allowed to send right now" answer.
 
 ### 295. "Why does implementation-shortfall execution front-load, and how do you turn a trader's 'do 60% in the first half' into a risk-aversion parameter?"
 
@@ -9146,23 +9181,32 @@ fraction of the parent that should be complete by now. Time-driven
 benchmarks read the elapsed schedule fraction -- TWAP linear, arrival/IS
 front-loaded, close back-loaded, open aggressively front-loaded --
 while volume-driven benchmarks read the realized volume curve: VWAP against
-the expected cumulative profile, POV against a fixed share of actual
-volume (time-agnostic). Layer two shapes the raw "behind schedule"
+the expected cumulative profile, POV against a fixed share of total
+volume (time-agnostic; the target is p/(1-p) times others' volume). The
+arrival curve is a fixed heuristic, `1 - (1 - f)^2`; IS follows the
+Almgren-Chriss trajectory `1 - sinh(kT(1 - f))/sinh(kT)` (Almgren and
+Chriss 2000, eq. 18) with an urgency kT. Layer two shapes the raw "behind schedule"
 quantity with live inputs: alpha (trade faster when the price is about to
 move against you), spread and volatility (wide spread damps aggression;
 volatility damps passive benchmarks but RAISES urgency for arrival/IS,
 because there it is timing risk), a liquidity cap (the interval child is
 capped at a participation fraction of displayed depth -- never ask for
 more than the book can give), and fill feedback (falling behind pulls the
-next child up). Input hygiene is part of the design: every field has a
+next child up). Two more pieces of bookkeeping: sent-but-unfilled
+children count against the schedule, so a resting child is not sent
+again, and over the last tenth of the horizon the depth cap relaxes to
+all of the displayed depth, so a time benchmark finishes as far as the
+book allows. Input hygiene is part of the design: every field has a
 neutral value and NaN maps to it, because `(long)` of NaN is 0 and a
 transient bad tick must weaken an input, never silently stall the parent.
 
 *In this library:* `execution/BenchmarkExecutor.java` -- seven benchmarks
 in one stateful executor (`TWAP, VWAP, ARRIVAL_PRICE,
 IMPLEMENTATION_SHORTFALL, CLOSING_PRICE, OPENING_PRICE, PARTICIPATION`),
-re-deciding every interval from `MarketState`; the units contract in the
-javadoc names the live producer for each input.
+re-deciding every interval from `MarketState`; `withShortfallUrgency`
+sets the IS urgency (default 2), `onChildSent`/`onChildDone` track
+resting children, and the units contract in the javadoc names the live
+producer for each input.
 
 ### 298. "What's a liquidity-seeking algo, and how do you stop patience from becoming a missed order?"
 
