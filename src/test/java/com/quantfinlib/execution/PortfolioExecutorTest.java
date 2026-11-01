@@ -261,13 +261,18 @@ class PortfolioExecutorTest {
         var mx = (com.sun.management.ThreadMXBean)
                 java.lang.management.ManagementFactory.getThreadMXBean();
         long tid = Thread.currentThread().threadId();
-        long before = mx.getThreadAllocatedBytes(tid);
-        for (int i = 0; i < 500_000; i++) {
-            pe.decide(0.5, states, due);
-            blackhole += due[0] + due[3];
+        // Exactly zero after warm-up; a bounded retry absorbs a one-off
+        // JIT or class-loading allocation inside the first window.
+        long allocated = -1;
+        for (int attempt = 0; attempt < 5 && allocated != 0; attempt++) {
+            long before = mx.getThreadAllocatedBytes(tid);
+            for (int i = 0; i < 500_000; i++) {
+                pe.decide(0.5, states, due);
+                blackhole += due[0] + due[3];
+            }
+            allocated = mx.getThreadAllocatedBytes(tid) - before;
         }
-        long allocated = mx.getThreadAllocatedBytes(tid) - before;
-        assertTrue(allocated < 100_000, "decide allocated " + allocated + " bytes");
+        assertTrue(allocated == 0, "decide allocated " + allocated + " bytes");
         assertTrue(blackhole != 0);
     }
 }

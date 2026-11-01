@@ -408,7 +408,7 @@ public final class BenchmarkExecutor {
      * impact as a fraction) damps aggression: the term is
      * {@code 1/(1 + cost × SPREAD_SENSITIVITY)}, so a 1% cost halves the
      * pace and a 2-pip FX spread (~0.002%) barely registers.
-     * A deliberate calibration constant, not a unit conversion.
+     * A calibration constant, not a unit conversion.
      */
     public static final double SPREAD_SENSITIVITY = 100;
 

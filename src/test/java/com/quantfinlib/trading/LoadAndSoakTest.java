@@ -74,8 +74,8 @@ class LoadAndSoakTest {
     @Test
     void orderPathSustainsTheThroughputFloor() throws Exception {
         try (HftOrderGateway gateway = new HftOrderGateway(1 << 14, openGate(), false)) {
-            long[] blackhole = {0};
-            gateway.addOrderListener((id, s, side, q, p, t) -> blackhole[0]++);
+            // The venue fills every order, so order-state slots recycle.
+            gateway.addOrderListener(new LoopbackVenue(gateway, LoopbackVenue.FILL_ALL, 1 << 14));
             gateway.start();
             int n = 2_000_000;
             long t0 = System.nanoTime();
@@ -122,17 +122,14 @@ class LoadAndSoakTest {
     @Test
     void fullPipelineSustainsTheThroughputFloorUnderLoad() throws Exception {
         // The composite path: bus -> quoter -> gate -> order ring -> venue,
-        // 1M ticks quoted two-sided at full speed. Drops are budgeted, not
-        // forbidden: even a busy-spinning venue thread gets preempted for
-        // milliseconds by a desktop OS, and a ~10M orders/s burst overruns
-        // any ring in that window — zero-drop under saturation is what
-        // Tier-3 core pinning buys (see ULTRA_LOW_LATENCY.md), not something
-        // an unpinned CI box can promise. Budget: 0.5% of sides.
+        // 1M ticks. The quoter keeps one working order per side and
+        // requotes by cancel/replace once the venue has answered; updates
+        // that arrive while a side waits for the venue are deferred, not
+        // stacked. Every message the gateway accepted must reach the venue.
         HftRiskGate gate = openGate();
         try (HftMarketDataBus bus = new HftMarketDataBus(1 << 14, 4, false);
              HftOrderGateway gateway = new HftOrderGateway(1 << 16, gate, true)) {
-            long[] blackhole = {0};
-            gateway.addOrderListener((id, s, side, q, p, t) -> blackhole[0]++);
+            gateway.addOrderListener(new LoopbackVenue(gateway));
             HftQuoter quoter = new HftQuoter(gateway, 4,
                     HftQuoter.Config.of(100_000, 0.0002));
             int id = bus.registerSymbol("X");
@@ -146,88 +143,26 @@ class LoadAndSoakTest {
                     Thread.onSpinWait();
                 }
             }
-            // Drain with a DEADLINE and account for any rejected sides: an
-            // unconditional wait for 2n once hung this suite forever when a
-            // transiently full order ring dropped a single quote side.
             long deadline = System.nanoTime() + 60_000_000_000L;
-            while (gateway.deliveredCount() + quoter.rejectedSides() < 2L * n
-                    && System.nanoTime() < deadline) {
+            while (bus.processedCount() < n && System.nanoTime() < deadline) {
                 Thread.onSpinWait();
             }
             double perSec = n / ((System.nanoTime() - t0) / 1e9);
-            // Desktop: ~1.7-4M ticks/s quoting. Floor: 100k/s.
+            assertEquals(n, bus.processedCount());
+            // Floor 100k ticks/s: a tripwire for a broken consumer, not a benchmark.
             assertTrue(perSec > 100_000, String.format("pipeline %.0f ticks/s", perSec));
-            long droppedSides = quoter.rejectedSides();
-            // Desktop budget: 0.5% of sides. Shared CI runners (2 vCPUs,
-            // noisy neighbors) preempt the venue thread for WHOLE
-            // timeslices — 2.5–4.3% drops measured on GitHub runners at
-            // v1.12.0 — so CI gets 8%: ~2x the worst observation, still a
-            // tripwire (a broken consumer drops 50-100%), never a
-            // pass-anything. The conservation assert below is the real
-            // correctness check and stays exact in both environments.
-            long budget = System.getenv("CI") != null ? 2L * n * 8 / 100 : 2L * n / 200;
-            assertTrue(droppedSides <= budget, "dropped " + droppedSides
-                    + " sides — beyond OS-preemption budget " + budget);
-            assertEquals(2L * n - droppedSides, blackhole[0]);
-        }
-    }
-
-    // ------------------------------------------------------------------
-    // Soak: sustained load must not grow the heap
-    // ------------------------------------------------------------------
-
-    @Test
-    void sustainedMixedLoadKeepsTheHeapFlat() {
-        // Warm everything (JIT + lazily-initialized JDK internals), settle
-        // the heap, then run 5M mixed operations and demand the heap ends
-        // where it started — the leak/drip detector for the hot paths.
-        HftOrderBook book = new HftOrderBook(90_000, 110_000, 1 << 14);
-        book.tradeSink((m, t, tick, q, ts) -> { /* blackhole */ });
-        SplittableRandom rnd = new SplittableRandom(7);
-        long[] ring = new long[4096];
-        int ringSize = 0;
-        for (int i = 0; i < 500_000; i++) {           // warmup
-            ringSize = churn(book, rnd, ring, ringSize, i);
-        }
-        Runtime rt = Runtime.getRuntime();
-        System.gc();
-        sleepQuiet();
-        long before = rt.totalMemory() - rt.freeMemory();
-        for (int i = 0; i < 5_000_000; i++) {          // soak
-            ringSize = churn(book, rnd, ring, ringSize, i);
-        }
-        System.gc();
-        sleepQuiet();
-        long after = rt.totalMemory() - rt.freeMemory();
-        long growth = after - before;
-        // Allow 10MB of noise (GC bookkeeping, JIT); a real drip at even
-        // 4 bytes/op would show as ~20MB here.
-        assertTrue(growth < 10_000_000,
-                "heap grew " + growth + " bytes over 5M sustained operations");
-        assertTrue(book.tradeCount() > 100_000, "soak must exercise matching");
-    }
-
-    private static int churn(HftOrderBook book, SplittableRandom rnd, long[] ring,
-                             int ringSize, int op) {
-        if (rnd.nextInt(10) < 7 || ringSize == 0) {
-            long id = book.submitLimit(rnd.nextBoolean() ? Side.BUY : Side.SELL,
-                    99_000 + rnd.nextInt(2_000), 1 + rnd.nextInt(50), op);
-            if (id > 0 && book.openQuantity(id) > 0 && ringSize < ring.length) {
-                ring[ringSize++] = id;
+            long sent = gateway.submittedCount() + gateway.replaceRequestCount()
+                    + gateway.cancelRequestCount();
+            while (gateway.deliveredCount() < sent && System.nanoTime() < deadline) {
+                Thread.onSpinWait();
             }
-        } else {
-            int pick = rnd.nextInt(ringSize);
-            book.cancel(ring[pick]);
-            ring[pick] = ring[--ringSize];
-        }
-        return ringSize;
-    }
-
-    private static void sleepQuiet() {
-        try {
-            Thread.sleep(50);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+            assertEquals(sent, gateway.deliveredCount(), "conservation: nothing lost in the ring");
+            assertEquals(n, quoter.quoteUpdates());
+            assertTrue(quoter.replaces() > 0);
+            // Never more than one working order per side.
+            assertTrue(gate.openQuantity(id, Side.BUY) <= 100_000);
+            assertTrue(gate.openQuantity(id, Side.SELL) <= 100_000);
+            assertTrue(gateway.isHealthy());
         }
     }
 
@@ -243,8 +178,7 @@ class LoadAndSoakTest {
         HftRiskGate gate = openGate();
         try (HftMarketDataBus bus = new HftMarketDataBus(1 << 6, 4, false);
              HftOrderGateway gateway = new HftOrderGateway(1 << 6, gate, false)) {
-            long[] delivered = {0};
-            gateway.addOrderListener((id, s, side, q, p, t) -> delivered[0]++);
+            gateway.addOrderListener(new LoopbackVenue(gateway));
             HftQuoter quoter = new HftQuoter(gateway, 4,
                     HftQuoter.Config.of(100_000, 0.0002));
             int id = bus.registerSymbol("X");

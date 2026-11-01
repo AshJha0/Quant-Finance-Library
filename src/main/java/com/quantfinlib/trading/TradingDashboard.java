@@ -68,6 +68,11 @@ public final class TradingDashboard implements AutoCloseable {
         return server.getAddress().getPort();
     }
 
+    /** The bound address (loopback unless an explicit address was given). */
+    public InetSocketAddress address() {
+        return server.getAddress();
+    }
+
     @Override
     public void close() {
         server.stop(0);
