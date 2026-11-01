@@ -88,6 +88,13 @@
   th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--border); }
   th { color: var(--muted); font-weight: 600; }
   .table-wrap { overflow-x: auto; }
+  @media (max-width: 640px) {
+    table, thead, tbody, tr, th, td { display: block; width: auto; }
+    thead { display: none; }
+    tr { padding: 0.75rem 0; border-bottom: 1px solid var(--border); }
+    td { border: 0; padding: 0.15rem 0; }
+    td:first-child { font-weight: 600; }
+  }
   footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.9rem; }
 </style>
 </head>
