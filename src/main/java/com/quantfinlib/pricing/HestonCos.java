@@ -33,8 +33,13 @@ import com.quantfinlib.pricing.BlackScholes.OptionType;
  * <p>which is the "little Heston trap" form (Albrecher et al. 2007) and needs
  * no branch tracking with the principal square root and logarithm. The
  * interval is {@code [x + c1 - L sqrt(c2), x + c1 + L sqrt(c2)]} with the
- * first two cumulants of the paper's Table 11 and {@code L = 12}, c4 omitted as
- * the paper recommends for Heston.</p>
+ * first two cumulants of the paper's Table 11, c4 omitted as the paper does
+ * for Heston. The paper's {@code L = 12} truncates the fat left tail of
+ * parameter sets far from the Feller condition: on its own section 5.2 test
+ * case it leaves an error of 4.5e-5. The default here is {@code L = 32} with
+ * {@code N = 1024}, which agrees with the Simpson pricer in {@link Heston} to 2e-9 and with the published value 5.785155450 to 2e-8
+ * (tested); both are arguments to {@link #price(OptionType, double, double,
+ * double, double, double, Heston.Params, int, double)}.</p>
  *
  * <p>Greeks: with the interval held fixed, the expansion is an explicit
  * function of {@code x} and of the five parameters. Delta and gamma
@@ -49,9 +54,9 @@ import com.quantfinlib.pricing.BlackScholes.OptionType;
 public final class HestonCos {
 
     /** Default number of cosine terms. */
-    public static final int DEFAULT_TERMS = 256;
+    public static final int DEFAULT_TERMS = 1024;
     /** Default truncation width in standard deviations. */
-    public static final double DEFAULT_TRUNCATION = 12;
+    public static final double DEFAULT_TRUNCATION = 32;
 
     /** Number of model parameters in the gradient, in {@link Heston.Params} order. */
     static final int NP = 5;
