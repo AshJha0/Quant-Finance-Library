@@ -14824,10 +14824,15 @@ is ~28 MB and several seconds of a busy feed, so a bigger number is
 usually cheap insurance. If N matters and memory is spare: resize and
 move on. If the sessions are research-critical, capture-only boxes can
 use the synchronous `TickCapture`, which never drops -- it stalls
-instead, which is fine when nothing is trading.
+instead, which is fine when nothing is trading. Check one more counter
+in the same review: a writer that failed (disk full, I/O error) does not
+die silently. `isHealthy()` turns false, `failure()` holds the
+exception and `close()` rethrows it, so a capture that stopped writing
+at 10:02 is visible the same morning.
 
 *In this library:* `data/AsyncTickCapture.java` (`droppedTicks`, the
-counted-never-blocking publish, the ring-sizing note),
+counted-never-blocking publish, the ring-sizing note, `isHealthy` and
+`failure`),
 `data/TickCapture.java` (the synchronous alternative and its trade).
 
 ### 517. "A new symbol started trading at 11am and the desk subscribed it mid-session. Is the capture file still valid?"
@@ -14909,8 +14914,11 @@ partially-consumed sections, per-section version byte).
 
 First: this error is the format doing its job. The QFLT header carries
 a magic and a version byte, and the reader refuses versions it does not
-understand rather than misparsing 28-byte records into garbage prices
--- a version check that fails loudly at open is infinitely better than
+understand rather than misparsing tick records into garbage prices.
+The current reader accepts version 2 (header with clock domain and
+epoch/monotonic anchor, records in CRC-32C blocks) and still reads
+version-1 files, so the error means a version newer than the reader.
+A version check that fails loudly at open is infinitely better than
 one that fills your replay with plausible nonsense. The move depends on
 which side moved. If the DEPLOY bumped the writer's version and old
 readers are refusing new files: roll the reading tools forward -- the
@@ -14934,8 +14942,11 @@ the corrupt-record and truncated-file errors it also distinguishes).
 
 If checkpoints live on a normal local filesystem, the answer is
 designed to be "no": the writer buffers all sections in memory and
-commits only in `close()` -- temp file in the target directory, then an
-atomic rename over the old checkpoint. A crash mid-save leaves either
+commits only in `close()`: temp file in the target directory, forced to
+the device, then an atomic rename over the old checkpoint, then the
+directory forced so the rename itself is durable. Without the first
+force a power loss could leave the renamed file empty, because the
+rename can reach disk before the data. A crash mid-save leaves either
 yesterday's intact file (rename never happened) or the complete new one
 (rename is atomic); a torn file is not a reachable state, and if any
 section writer threw, nothing was committed at all. So the safe
@@ -15007,28 +15018,31 @@ rather than misaligns).
 
 ### 524. "Half-way through a replay: 'corrupt record type 7 after 18,344,201 ticks'. Salvage the file."
 
-Read the error precisely -- it hands you the salvage plan. The reader
+Read the error precisely: it hands you the salvage plan. The reader
 walks framed records and knows exactly two types; a type byte of 7
 means the stream desynchronized at that point (partial write at a
-crash, a bad disk sector, a copy that spliced two files), and the
-message tells you 18.3 million ticks decoded CLEANLY first. Contrast
-the two sibling failures so you know which you have: "truncated QFLT
-file" is a mid-record EOF -- clean data, ragged end, and everything up
-to the truncation is trustworthy; "corrupt record type" mid-file means
-bytes after this point may be misaligned even where they look
-plausible. Salvage accordingly: write a recovery pass that replays and
-re-writes ticks through a fresh `TickFileWriter` until the corruption
-point -- 18.3 million good ticks become a valid shorter file, which for
-most research is the whole session up to the incident. Do NOT attempt
-to skip ahead and resynchronize by scanning for plausible record
-boundaries in a 28-byte binary format; false framing produces
-convincing garbage prices, and a file you half-trust is worse than a
-file honestly cut short. Then the real work: find what wrote the bad
+crash, a bad disk sector, a copy that spliced two files). The error is
+a `TruncatedTickFileException`, and its `ticksDelivered()` says 18.3
+million ticks reached your handler first. In a version-2 file each
+block of about 64 KiB carries a CRC-32C that is checked before any of
+its records are delivered, so corruption inside a block normally shows
+up as "block checksum mismatch" and only whole verified blocks precede
+it; "corrupt record type" mid-file is more typical of a version-1 file,
+which has no checksums. The sibling "truncated" messages mean a ragged
+end: clean data up to the cut. Salvage accordingly: write a recovery
+pass that replays and re-writes ticks through a fresh `TickFileWriter`
+until the failure point. The good ticks become a valid shorter file,
+which for most research is the whole session up to the incident. Do
+not attempt to skip ahead and resynchronize by scanning for plausible
+record boundaries; false framing produces convincing garbage prices,
+and a file you half-trust is worse than a file cut short. Then the real work: find what wrote the bad
 bytes -- check the capture host's logs for the crash, and whether the
 file was copied mid-write by a backup job, the classic culprit.
 
-*In this library:* `data/TickFileReader.java` (the three distinct
-failures: bad magic, truncated, corrupt-record-with-count),
+*In this library:* `data/TickFileReader.java` (bad magic and
+unsupported version as `IOException`; truncation, checksum mismatch and
+corrupt record type as `TruncatedTickFileException` with
+`ticksDelivered`),
 `data/TickFileWriter.java` (the rewrite target for the salvage pass).
 
 ### 525. "Replay of the capture through the tick backtester shows your passive order filling; prod did not fill. Bug?"
@@ -15342,11 +15356,15 @@ capacity is platform-reclaimable), `data/TickFileReader.java`
 ### 536. "Your p99 is being quoted to a client. How much error is in that number, and where does it come from?"
 
 Three sources, in increasing order of danger. (1) Quantization: the
-recorder is an HdrHistogram-style log-linear histogram -- 16
-sub-buckets per power of two -- so any reported quantile is a bucket
-midpoint with roughly 6% worst-case relative error. A p99 of "1.00
-microseconds" is honestly "1.00 +/- ~0.06"; quote it to two significant
-figures and this source never embarrasses you. (2) Sampling: a p99 is
+recorder is an HdrHistogram-style log-linear histogram. Values below
+128 ns are exact; above that each power of two is split into 128
+sub-buckets, so a bucket is at most 0.78% of its value wide.
+`percentile` returns the top edge of the bucket holding the requested
+rank (an upper bound on the true sample quantile, never a midpoint), and
+`percentileLowerBound` gives the bottom edge. A reported p99 of 1.00
+microseconds therefore means "at most 1.00, at least about 0.99". The
+clock is the coarser limit: on Windows `System.nanoTime` steps in 100 ns,
+which `clockResolutionNanos()` estimates and `summary()` prints. (2) Sampling: a p99 is
 only as stable as the count behind it -- with 10,000 records, the p99
 is estimated from the top 100 observations and moves session to
 session; with 10 million it is solid. Check `count()` before quoting
@@ -15358,12 +15376,12 @@ nothing, and the histogram silently excludes the worst events -- the
 exact events the client's p99 question is about. That is why the hiccup
 monitor runs alongside: its excess-park histogram catches the stalls
 your instrumented path slept through. So the quotable sentence is:
-"p99 of X over N million events, +/- 6% quantization, with a max
-platform stall of Y" -- three numbers, each from a recorder you can
-show.
+"p99 at most X over N million events, clock step Z, with a max
+platform stall of Y". Each number comes from a recorder you can show.
 
 *In this library:* `util/LatencyRecorder.java` (log-linear buckets,
-~6% worst-case quantile error, single-writer contract),
+upper-bound and lower-bound percentiles, clock-step estimate,
+single-writer contract),
 `util/HiccupMonitor.java` (the stalls your own timing can miss).
 
 ### 537. "You want the hiccup monitor running in production all day. Pick the resolution, and say what it will and will not catch."
@@ -15389,11 +15407,16 @@ resolution; and the CAUSE -- it tells you the platform stalled for
 or dmesg is your job. Wire `maxHiccupNanos` and the histogram into the
 dashboard next to the application recorders so Q526's attribution is
 standing infrastructure, and alert on max-hiccup, not the mean --
-hiccups are a tail phenomenon by definition.
+hiccups are a tail phenomenon by definition. One platform caveat: the
+default park mode wakes on the operating system timer, which on Windows
+ticks at 1 to 15.6 ms, so there most of what it records is timer
+quantisation and its figures are an upper bound. `HiccupMonitor.spinning`
+busy-reads `nanoTime` instead and records only time the thread was not
+running, at the cost of one core.
 
 *In this library:* `util/HiccupMonitor.java` (the 100 us lower bound
-and its rationale, 1 ms default, allocation-free sampling,
-`maxHiccupNanos`), `trading/TradingDashboard.java` (`attachLatency`).
+and its rationale, 1 ms default, park and spin modes, allocation-free
+sampling, `maxHiccupNanos`), `trading/TradingDashboard.java` (`attachLatency`).
 
 ### 538. "How much does all this observability -- recorders, hiccup monitor, dashboard -- cost the hot path? Prove it."
 
@@ -15688,7 +15711,9 @@ pattern is Part III's first exercise for exactly this task.
 Four, in the order they will bite. (1) Timing look-ahead: a screen
 evaluated on day T's close can be TRADED no earlier than T+1's open --
 a backtest that enters at the same close it screened on embeds the
-overnight gap into the "alpha" (the act-on-close lie). (2) Data
+overnight gap into the "alpha" (the act-on-close lie). The bar
+engines default to `FillPolicy.NEXT_OPEN` for this reason;
+`FillPolicy.CLOSE` exists only to reproduce old results. (2) Data
 look-ahead: the screen's fundamentals must be as-known-on-T --
 restated earnings (Q510) and today-only membership (Q544) both
 smuggle the future into the past; the universe half is solved by
@@ -15963,10 +15988,12 @@ counts and exposes the events.
 ### 559. "Compliance wants yesterday's 9:47-9:52 incident window rerun exactly. How does that work here?"
 
 It works because capture is always-on and timestamps are honest. A
-capture attached to the bus records every tick into a QFLT file (28
-bytes per tick, buffered sequential writes) -- and the recorded
-timestamp is the EXCHANGE's event time, not local receive time, so
-the file preserves true market pacing. Replay has two modes:
+capture attached to the bus records every tick into a QFLT file
+(fixed-size tick records in CRC-32C checked blocks of about 64 KiB,
+buffered sequential writes). The file header records the clock domain
+of the timestamps (`TickFileWriter.ClockDomain`: exchange epoch time or
+local monotonic time) and an anchor instant on both clocks, so you know
+whether the recorded pacing is the market's or your receive path's. Replay has two modes:
 `replay` delivers as fast as possible for analytics and book
 rebuilding; `replayPaced(..., 1.0)` reproduces the original
 inter-tick timing for bugs that only exist under real pacing (a
@@ -16020,17 +16047,25 @@ lives two minutes, and dies again would burn its 10 attempts across
 the night and silently give up at 3am -- the classic
 budget-exhaustion bug. With it, each healthy epoch starts the ladder
 fresh, and only a CONSECUTIVE run of failures exhausts the budget.
-Two more storm properties: reconnect epochs never overlap (the JDK
-invokes listener methods sequentially, preserving the bus's
-single-producer contract), and backoff protects the venue -- when an
+Two more storm properties. Reconnect epochs never overlap: every
+connection attempt gets an epoch number, callbacks from an older
+socket are ignored, at most one reconnect is scheduled per epoch (the
+JDK can report both `onError` and `onClose` for one failure), the
+previous socket is aborted before the next opens, and publishing
+re-checks the epoch under a lock, so two sockets can never publish into
+the single-producer bus. And backoff protects the venue -- when an
 exchange endpoint is bouncing everyone, thousands of clients
 hammering at 0ms is a self-inflicted DDoS. The production step this
 implementation stops short of is jitter: all clients backing off on
-the same 30s beat reconnect in synchronized waves.
+the same 30s beat reconnect in synchronized waves. What 40 reconnects
+did cost is data: trades during each outage are lost, so every
+reconnect raises the gap flag, and a consumer that needs a complete
+stream polls `consumeGap()` and resynchronises.
 
 *In this library:* `feed/WebSocketFeed.java` -- `scheduleReconnect`
 (backoff ladder, max attempts), `onOpen` (`attempt = 0` -- "healthy
-connection resets the backoff ladder"), `reconnectCount()`.
+connection resets the backoff ladder"), the per-attempt epoch,
+`reconnectCount()`, `droppedTicks()`, `consumeGap()`.
 
 ### 562. "The exchange notice says a new message type goes live Monday. What breaks, and where?"
 
@@ -16041,8 +16076,9 @@ gap between `messagesReceived()` and `tradesPublished()` widening
 from the go-live date, which is worth an alert precisely because it
 is the early warning that you are now blind to something the
 exchange thought worth announcing. Binary fixed-length framing is
-the dangerous case: the codec's `length(type)` table returns -1 for
-unknown types, and a consumer that skips messages BY THEIR OWN
+the dangerous case: the codec's `length(type)` table covers every
+ITCH 5.0 message type today but returns -1 for a type it has never
+seen, and a consumer that skips messages BY THEIR OWN
 LENGTH cannot skip a type it cannot size -- one unknown message and
 you have lost the frame boundary for everything after it. That is
 why sequenced binary feeds wrap messages in a transport envelope
@@ -16055,7 +16091,8 @@ a deadline -- parse the new type BEFORE the venue makes you.
 *In this library:* `feed/FeedParser` contract (null = ignore) and the
 `messagesReceived`/`tradesPublished` counters in
 `feed/WebSocketFeed.java`; `marketdata/ItchCodec.java` -- `length(type)`
-returns -1 outside the subset, and callers must skip by envelope.
+returns -1 for an unknown type and `complete` checks a whole message is
+in the buffer; callers must skip by envelope (`feed/MoldUdp64Receiver.java`).
 
 ### 563. "A stock is approaching $214,000 a share. What silently breaks in a tick-indexed pipeline, and when?"
 
@@ -16091,10 +16128,15 @@ the argument. The broker's outbound counter says what they SENT; your
 `expectedIncomingSeq` says what you PROCESSED -- messages can be sent
 and die in a kernel buffer mid-disconnect, so "we sent 92" and "we
 received 83" are both true statements about different events. Your
-evidence is the session store: the sequence file persists both
-counters synchronously (16 bytes, opened in synchronous-write mode,
-updated on every send and receive), so what you restart with IS what
-you had durably processed -- not a guess reconstructed from logs. The
+evidence is the session store. Outbound, `FileSessionStore` appends
+every message (administrative ones with an empty body) to a CRC-32C
+journal and forces it to disk before the bytes reach the socket, so the
+next outgoing number is recovered from the journal itself. Inbound,
+the expected sequence number goes to a two-slot sequence page with a
+positional write and no force: it survives a process crash, and after
+a power loss it may lag, in which case the peer's messages are simply
+requested again and arrive as PossDup replays (dedupe fills on ExecID).
+What you restart with is never ahead of what you processed. The
 resolution is mechanical, not diplomatic: reconnect, and whoever sees
 a higher-than-expected sequence number issues a ResendRequest; the
 gap gets refilled from the peer's store. The argument only becomes
@@ -16104,9 +16146,10 @@ backup), and the session correctly dies rather than guess. Keep the
 raw message log; when money moved in the gap, the store is the
 audit trail both sides reconcile against.
 
-*In this library:* `fix/FileSessionStore.java` -- `seqnums.dat` "16
-bytes, synchronous writes" (RandomAccessFile mode "rwd");
-`fix/FixSession.java` -- the too-low disconnect and gap handling.
+*In this library:* `fix/FileSessionStore.java` -- `messages.journal`
+(CRC-32C records, synced before send, torn tail truncated on open) and
+the two-slot `session.seq` page; `fix/FixSession.java` -- the too-low
+disconnect and gap handling.
 
 ### 565. "Same night: walk the actual reconnect, message by message."
 
@@ -16121,9 +16164,9 @@ current"), and every out-of-order message is DROPPED until
 redelivered in sequence -- processing message 93 before the missing
 84 would reorder fills. Case two, simultaneously: the broker missed
 YOUR messages and sends their own ResendRequest -- yours are
-serviced from the store, which holds application messages persisted
-at send time under the write lock, which is exactly why they survive
-the crash. Replays arrive flagged PossDup with OrigSendingTime;
+serviced from the store, whose journal was forced to disk before each
+message reached the socket, which is exactly why they survive the
+crash and are replayed as the real orders rather than papered over. Replays arrive flagged PossDup with OrigSendingTime;
 admin gaps come back as GapFill. Within a second or two both sides'
 counters have converged and normal flow resumes -- no human decided
 anything, which at 2am is the entire design goal.
@@ -16131,7 +16174,7 @@ anything, which at 2am is the entire design goal.
 *In this library:* `fix/FixSession.java` -- the gap branch in
 `handle()` (drop-until-redelivered), `handleResendRequest` servicing
 from the store; `fix/FileSessionStore.java` for message persistence
-at send time.
+before send.
 
 ### 566. "After the reconnect, hundreds of PossDup messages pour in. The junior on the desk wants to alert on them. Should he?"
 
@@ -16149,8 +16192,11 @@ design. What deserves the alert instead: PossDup volume out of
 proportion to the gap (resend-range misconfiguration), or any
 application-level effect from a duplicate -- which should be
 impossible, and the defense in depth is idempotency one layer up:
-fills keyed by ExecID, so even a duplicate that somehow slipped the
-sequence check cannot double a position. Alert on the disconnect
+fills keyed by ExecID (`FixExecReportView.ExecIdDeduplicator`), so even
+a duplicate that somehow slipped the sequence check cannot double a
+position. This matters more than it sounds: the inbound sequence number
+is written without a disk force, so after a power loss your side may
+re-request messages it had already processed. Alert on the disconnect
 cause, monitor the recovery, and let PossDup be boring.
 
 *In this library:* `fix/FixSession.java` -- the `seq <
@@ -16162,8 +16208,9 @@ PossDupFlag/OrigSendingTime.
 
 They are the resend's way of NOT replaying garbage. The resend range
 inevitably contains admin messages -- heartbeats, test requests --
-that were never stored (the store filters admin types at send time)
-and would be actively harmful replayed: a stale heartbeat proves
+whose sequence numbers are journalled but whose bodies are not (the
+store records them with an empty body), and which would be actively
+harmful replayed: a stale heartbeat proves
 nothing and a stale TestRequest demands an answer to a question
 nobody is asking. The spec's answer is coalescing: while walking the
 requested range, every run of unstored sequence numbers is emitted
@@ -16172,16 +16219,17 @@ NewSeqNo pointing past the run -- "sequences N through M-1 were
 admin; advance your expectation to M." The receiver's handling is a
 forward jump of the expected inbound counter, with one guard: a
 gap-fill that does not move the counter FORWARD is a stale replay of
-an old gap-fill and is ignored. So a healthy resend of a mixed
+an old gap-fill and is rejected (the gap-fill is sequenced like any
+other message and must move the number forward). So a healthy resend of a mixed
 stream interleaves real application replays (PossDup) with gap-fills
 covering the admin runs between them -- exactly what you observed,
 and exactly right. The sibling use of 35=4 without the flag -- the
 hard reset -- is the disaster tool, not the routine one.
 
 *In this library:* `fix/FixSession.java` -- `handleResendRequest`
-(runs of unstored seqs become `sendGapFill`), `handleSequenceReset`
-(forward-only jump, stale resets ignored), and the `ADMIN_TYPES`
-filter in `send`.
+(runs of seqs with no stored application message become
+`sendGapFill`), `handleSequenceReset` (forward-only), and the
+`ADMIN_TYPES` set that marks what is journalled without a body.
 
 ### 568. "The session dies on connect, the supervisor restarts it, it dies again -- a disconnect loop since the weekend's server migration. Break the loop."
 
@@ -16194,18 +16242,17 @@ nothing changed, it dies identically: the loop. The answer is
 ResetSeqNumFlag(141)=Y on the Logon: both sides restart their
 counters at 1, and the reset is applied BEFORE sequence validation
 -- necessarily, since the whole point is to save a session the
-validation would kill. The peer confirms with 141=Y back. Now the
-caveat, stated in the class doc: the reset does NOT wipe the message
-store -- old messages still sit under sequence numbers that will now
-be REUSED, so until they are naturally overwritten, a post-reset
-ResendRequest could replay a pre-reset message under a recycled
-number. When replay purity matters -- and after a migration it does
--- reset into a FRESH store directory. Both halves are proven in the
+validation would kill. The peer confirms with 141=Y back. Both
+sides also reset their stores (the file store rolls its journal), so
+no pre-reset message can be replayed later under a recycled sequence
+number. Keep the old directory as the audit record of what was sent
+before the reset. Both halves are proven in the
 test: the control test shows the loop, the 141=Y test shows the
 recovery with no resend storm and no disconnect.
 
 *In this library:* `fix/FixSession.java` -- the 141=Y handling and
-the store caveat in the class doc, `Config.withResetOnLogon()`;
+the store reset in the class doc, `Config.withResetOnLogon()`;
+`fix/FileSessionStore.reset`;
 `fix/FixResetSeqNumTest.java` -- both scenarios end to end.
 
 ### 569. "The network blipped for 50 seconds at lunch. The session survived. Reconstruct what the heartbeat machinery did, second by second."
@@ -16217,8 +16264,9 @@ Inbound side is the interesting machine. At T+45s -- silence of 1.5
 intervals -- the session sends a TestRequest with a unique TestReqID
 and sets a pending flag so it probes ONCE, not in a barrage. The
 probe converts "no news" into a direct question: the peer must
-answer with a Heartbeat echoing that TestReqID. Any inbound bytes
-clear the pending flag. At T+50s your blip ends; the peer's queued
+answer with a Heartbeat echoing that TestReqID, and only that echo
+clears the pending probe; other inbound traffic resets the silence
+clock. At T+50s your blip ends; the peer's queued
 traffic (or the probe's answering heartbeat) arrives, the silence
 clock resets, the session never noticed beyond one probe. Had the
 blip continued: at T+75s -- 2.5 intervals of silence -- the session
@@ -16229,10 +16277,12 @@ design is the point: one threshold would either false-positive on
 blips or detect death too slowly; probe-then-deadline does both
 jobs with two thresholds.
 
-*In this library:* `fix/FixSession.java` -- `heartbeatLoop`: probe at
-`intervalNanos * 3 / 2` with `testRequestPending`, disconnect at
-`intervalNanos * 5 / 2`; the reader clears the pending flag on any
-inbound bytes.
+*In this library:* `fix/FixSession.java` -- `onTimer()` reading the
+injected `FixClock`: heartbeat after one interval of outbound silence,
+TestRequest after 1.5 intervals of inbound silence, disconnect after
+2.5; only a Heartbeat echoing the TestReqID answers the probe.
+`FixSession.overStream` drives the same state machine without
+threads, which is how the tests step through this timeline.
 
 ### 570. "Since this morning's release, every order comes back with a session Reject (35=3). Decode the incident."
 
@@ -16282,8 +16332,10 @@ keys: yours (ClOrdID) for round-trips you initiated, theirs
 
 *In this library:* `fix/ExecutionReport.java` -- `fromMessage`
 defaults `clOrdId` to `""` (tag 11 optional), carries `orderId`
-(tag 37) for venue-keyed correlation; `fix/FixSession.java`
-delivers it via `onExecutionReport`.
+(tag 37) for venue-keyed correlation, and `possDup`;
+`fix/FixExecReportView.java` and its `ExecIdDeduplicator` for the
+ExecID backstop; `fix/FixSession.java` delivers it via
+`onExecutionReport`.
 
 ### 572. "A trader fired two cancel-replaces on the same order within 100ms and now nobody knows which quantity is working. Untangle it."
 
@@ -16312,29 +16364,32 @@ chain); `fix/ExecutionReport.replaced(...)` --
 
 ### 573. "Six months in production and the FIX box's disk is at 94%, mostly one file. What is growing and what is the sustainable practice?"
 
-The message store: an append-only messages file holding every
-application message ever sent -- persisted at send time so a
-ResendRequest can be serviced even after a crash -- plus the whole
-file replayed into an in-memory map on every open. Three costs grow
-together: disk (the file), heap (the map), and restart time (the
-replay). Heartbeats and other admin messages are deliberately never
-stored (they gap-fill instead, Q567), so the growth is exactly your
-own order flow -- which is why nobody noticed for six months and why
-a busy desk fills the disk eventually. The store has no truncation
-by design; the sustainable practice is the FIX convention the
-protocol already assumes: DAILY sessions. At each day's start,
-reset sequence numbers and open a FRESH store directory; archive
-yesterday's directory (it is your audit trail -- compress it, do not
-delete it). Resend requests never legitimately reach across a
-session day, so nothing of operational value is lost, the replay-
-into-memory stays bounded by one day's flow, and the disk graph
-turns from a ramp into a sawtooth. The 94% incident is the reminder
-that "append-only forever" is a lab default, not an ops policy.
+The message journal. `FileSessionStore` appends every outbound message
+to `messages.journal` (administrative ones with an empty body) so a
+ResendRequest can be serviced after a crash, and keeps an index of
+sequence number to file offset in memory. The store is bounded: it
+retains at most `maxRetained` records (one million by default, or the
+value passed to `FileSessionStore(dir, maxRetained)`), and when the
+journal holds twice that it is compacted to the newest `maxRetained`
+by writing a new file, forcing it and atomically replacing the old
+one. So the journal on its own should plateau at roughly twice the
+retention window. If it has grown for six months, look for three
+things: a retention set far larger than your daily flow, a directory
+that is copied or archived somewhere on the same disk, or a raw
+message log kept beside the store. The sustainable practice is the
+FIX convention the protocol already assumes: daily sessions. Reset
+sequence numbers at the start of each day (ResetSeqNumFlag rolls the
+journal to empty) and archive the previous day's journal as the audit
+trail. Size `maxRetained` to cover the resends you can legitimately
+receive, which is about one day's flow. A request that reaches below
+the window is reported through `Listener.onResendUnavailable` rather
+than silently gap-filled, so a too-small window is visible.
 
-*In this library:* `fix/FileSessionStore.java` -- append-only
-`messages.dat` "replayed into memory on open"; the admin filter is
-`ADMIN_TYPES` in `fix/FixSession.send`; daily reset via
-`Config.withResetOnLogon()` into a new store directory.
+*In this library:* `fix/FileSessionStore.java` -- the journal format,
+`maxRetained` and compaction, `reset()` on ResetSeqNumFlag; the
+in-memory store's default of the last 100,000 messages;
+`FixSession.Listener.onResendUnavailable`; daily reset via
+`Config.withResetOnLogon()`.
 
 ### 574. "You are certifying against a new venue next month. How do the loopback tests turn cert from a phone call into a test suite?"
 
@@ -16402,16 +16457,13 @@ usually a failover to a box with a stale store. So the desk's
 playbook: treat every working order as UNKNOWN, not live and not
 dead -- reconcile via order status or drop copy before quoting
 again; expect no resend of anything from before the reset (the
-history was abandoned with the numbering); and remember the flagged
-store caveat -- the message store is NOT wiped, so old messages sit
-under sequence numbers now being reused, and a post-reset
-ResendRequest can replay a pre-reset message under a recycled
-number. Restart into a fresh store before resuming flow, and get
-the counterparty's incident explanation in writing.
+history was abandoned with the numbering, and the store rolled its
+journal, so nothing pre-reset can come back under a recycled number).
+Get the counterparty's incident explanation in writing.
 
 *In this library:* `fix/FixSession.java` -- the Logon+34=1+141=Y
-gate in `handle()`, `applyLogonSeqReset` (abandons pending resend),
-and the store-not-wiped caveat in the class doc.
+gate in `handle()`, `applyLogonSeqReset` (abandons pending resend
+and resets the store).
 
 ### 577. "Tell the BodyLength war story: the session that stayed 'up' for an hour while processing nothing."
 
@@ -16472,29 +16524,29 @@ drop-until-redelivered branch, `Listener.onReject` with RefSeqNum;
 
 ### 579. "After Tuesday's release, the quote decoder returns sizes in the trillions. The encoder team says they 'just added a field.' Reconstruct the failure."
 
-A flyweight is offset arithmetic wearing a class: bidPrice IS "the 8
-bytes at offset 8," because the schema comment says so. The encoder
-team inserted their new field mid-message, shifting every subsequent
-offset -- and your decoder, compiled against the old layout, now
-reads bidSize where askPrice used to be: not an exception, PLAUSIBLE
-GARBAGE, which is the signature failure mode of schema drift in
-fixed-offset codecs. Defenses in layers: both ends must compile
-against the SAME constants class (one source of truth for offsets,
-MESSAGE_TYPE, BLOCK_LENGTH -- drift becomes a build error, not a
-runtime mystery); the receiver length-checks frames against
-BLOCK_LENGTH so a size change is detected at the edge; and the type
-discriminator at offset 0 gates dispatch so a foreign message never
-reaches the wrong decoder. Real SBE adds what this incident begs
-for: a schema-version field in the header, so a decoder can refuse
-(or version-switch) rather than misread. Rollout discipline: new
-fields go at the END, version bumps with them, and decoders deploy
-before encoders -- append-plus-version turns schema change from an
-incident into a non-event.
+A flyweight is offset arithmetic wearing a class: bidPriceMantissa is
+"the 8 bytes at offset 8", because the layout table says so. The
+encoder team inserted their new field mid-message, shifting every
+subsequent offset. A decoder compiled against the old layout now reads
+bidSize where askPrice used to be: not an exception but plausible
+garbage, which is the signature failure of schema drift in
+fixed-offset codecs. The defenses are layered. Both ends compile
+against the same constants class (one source of truth for offsets,
+`TEMPLATE_ID` and `BLOCK_LENGTH`), so drift becomes a build error.
+Every message starts with the standard 8-byte SBE header
+(`MessageHeader`: blockLength, templateId, schemaId, version), so a
+reader dispatches on templateId, skips a template it does not know by
+its blockLength, stops on a foreign schemaId, and can switch on version
+(the readers still decode version-1 frames). Rollout discipline: new
+fields go at the end of the block, the schema version is bumped with
+them, and decoders deploy before encoders. Append-plus-version turns
+schema change from an incident into a non-event.
 
-*In this library:* `sbe/QuoteFlyweight.java` -- the wire-layout
-table in the javadoc, `MESSAGE_TYPE`, `BLOCK_LENGTH`, `typeAt` for
-dispatch; siblings `OrderFlyweight`/`TradeFlyweight` follow the
-same discipline.
+*In this library:* `sbe/QuoteFlyweight.java` -- the wire-layout table
+in the javadoc, `TEMPLATE_ID`, `BLOCK_LENGTH` (body) and
+`ENCODED_LENGTH` (header plus body); `sbe/MessageHeader.java` for
+dispatch; siblings `OrderFlyweight`/`TradeFlyweight` follow the same
+discipline.
 
 ### 580. "First day connected to a new counterpart's binary feed: symbolId 1 arrives as 16,777,216 and every price is NaN or denormal. Diagnose from the numbers."
 
@@ -16580,8 +16632,8 @@ and `drainTo` batching in `marketdata/TickRingBuffer.java`.
 Because allocation is invisible in a diff and exact in a counter.
 The test pattern: warm up the hot path, then read
 ThreadMXBean.getThreadAllocatedBytes for the current thread, run N
-steady-state operations, read again, and assert (near-)zero delta
--- the JVM's own accounting of every byte the thread allocated, no
+steady-state operations, read again, and assert a delta of exactly
+zero bytes (smallest of a few runs, after warm-up) -- the JVM's own accounting of every byte the thread allocated, no
 sampling, no profiler. The refactors that ship as "harmless" and
 allocate: autoboxing a long into a collection; an enhanced-for
 over a List (iterator per loop); varargs (a fresh array per call);
@@ -16625,9 +16677,10 @@ bytes per file and converts silent misparse -- the worst failure
 in data tooling -- into a one-line error with an obvious fix.
 
 *In this library:* `data/TickFileWriter.java` -- `MAGIC` ("QFLT")
-and `VERSION` written first; `data/TickFileReader.java` -- checks
-magic then rejects `version != TickFileWriter.VERSION` before
-reading any record.
+and `VERSION` (2) written first; `data/TickFileReader.java` -- checks
+magic, accepts versions 1 and 2 (version 1 has no clock-domain header
+and no block checksums) and rejects anything else before reading any
+record.
 
 ### 585. "Two instruments' trades are landing in one book. The registry shows distinct ids. Where did they merge?"
 
@@ -16716,9 +16769,12 @@ Record, per tick, strategy-dispatch time minus the exchange's own
 event timestamp (which the bus carries end to end for exactly this
 reason), into a histogram whose recording cost cannot distort the
 thing measured: the recorder here is HdrHistogram-style log-linear
-bucketing -- 16 sub-buckets per power of two, ~6% worst-case
-quantile error -- and `record()` is a couple of array writes, zero
-allocation, safe on the hot path. Report p50/p99/p99.9/max, and
+bucketing (exact below 128 ns, then 128 sub-buckets per power of two,
+so a bucket is at most 0.78% wide), its percentiles are bucket upper
+bounds rather than midpoints, and `record()` is a few array writes,
+zero allocation, safe on the hot path. On Windows the clock itself
+steps in 100 ns, which `LatencyRecorder.clockResolutionNanos()`
+reports; below that step a number is one clock tick, not a measurement. Report p50/p99/p99.9/max, and
 insist on the tail: a strategy meets p50 by accident; it earns
 p99.9. Two honesty rules from the docs' measurement chapter:
 never report means (a 2us mean with 5ms stalls is a fiction that
@@ -16731,7 +16787,8 @@ the percentile table with a definition line under it; the
 definition is the part that keeps the number honest next quarter.
 
 *In this library:* `util/LatencyRecorder.java` -- log-linear
-zero-allocation histogram, percentile queries; the measurement
+zero-allocation histogram, `percentile` (upper bound) and
+`percentileLowerBound`; the measurement
 doctrine is Part II section 16 of `docs/LEARN.md` and
 `docs/ULTRA_LOW_LATENCY.md`.
 
@@ -17163,27 +17220,24 @@ wiring would drive it from).
 
 ### 605. "The desk wants the position cap raised from 1,000 to 2,500 at 11am for a client flow trade. Who signs, and how does the change actually go in?"
 
-Two answers, one social and one technical, and the technical one
-enforces the social one. Technically: the fast gate's caps are plain
-fields, and the class documents limit configuration as setup-time
-single-threaded -- the hot path reads `maxPositionQuantity` with no
-acquire/release, so a write from a risk terminal's thread mid-session
-has no visibility guarantee; the checking thread may serve the old cap
-indefinitely. The honest sequence is quiesce (halt the symbols or
-kill the gate), apply the change on the owning thread, resume --
-which takes seconds and forces the change to be an EVENT, not a quiet
-edit. Socially: the gate's shape encodes separation of duties -- caps
-are builder-style cold-path setters, not a runtime API, which is a
-design nudge that limits change through risk, not through the trader
-whose P&L wants them raised. So: desk head owns the business case,
-risk officer owns the number and signs, the quiesce window is the
-audit trail, and EOD reconciles the live cap against the change
-ticket. A limit you can raise silently in one thread-unsafe call is
-not a limit.
+Two answers, one social and one technical. Technically the change is
+easy: the gate's limits are written with release semantics and read
+with acquire semantics on every check, so `maxPositionQuantity(2500)`
+called from a risk terminal's thread takes effect on the next order,
+with no restart and no quiesce (the class cites RTS 6 Art. 15(2),
+which expects limits to be adjustable intraday). Because the mechanism
+is that easy, the control has to live in the process around it. The
+desk head owns the business case, the risk officer owns the number and
+signs, the call that changes the limit is made by risk tooling rather
+than by the trading process whose P&L wants it raised, and every
+change is logged with the ticket number. End of day reconciles the
+live cap against the change log, and the raise is reversed (or
+re-approved) for the next session. A limit anyone can raise without a
+record is not a limit.
 
-*In this library:* `trading/HftRiskGate.java` ("Limit configuration
-remains setup-time single-threaded"; the builder setters
-`maxPositionQuantity`, `maxOrderNotional`, `priceCollarPct`).
+*In this library:* `trading/HftRiskGate.java` (limit setters
+`maxPositionQuantity`, `maxOrderNotional`, `priceCollarPct`, the daily
+caps, "limits are read with acquire semantics on every check").
 
 ### 606. "You walk in and every order on every shard returns REJECT_KILLED. Run the forensics on the aggregator."
 
@@ -17194,7 +17248,10 @@ gate and symbol); compare it to the cap and to the hysteresis floor
 `cap x resumeFraction`. `tripCount()` -- how many trips over the
 aggregator's life; if it jumped by five overnight the firm was
 FLAPPING near the limit before the final latch, which points at sizing,
-not a single event. Then the subtle one: `killedBeforeTrip`. Before
+not a single event. Then the subtle one: `killedBeforeTrip`. And check `unpricedSymbols()`: the aggregator fails
+closed, so a symbol with a position or working orders and no valid
+reference price trips the breaker on its own, with gross notional
+nowhere near the cap. Before
 killing, the monitor snapshots which gates were ALREADY killed, and
 recovery only clears kills the aggregator itself set -- so a gate that
 is still dead after `isTripped()` went false is either a pre-existing
@@ -17206,8 +17263,11 @@ question that matters: did positions grow, or did the reference prices
 reprice a static book (see Q608)?
 
 *In this library:* `trading/GlobalRiskAggregator.java` (`tripCount`,
-`lastGrossNotional`, `isTripped`, the `killedBeforeTrip` snapshot and
-its stated limitation in `monitorLoop`).
+`lastGrossNotional`, `unpricedSymbols`, `isTripped`, the
+`killedBeforeTrip` snapshot and its stated limitation in `monitorLoop`).
+Engaging a kill also makes every `HftOrderGateway` on the gate send a
+cancel-all to its venue and drop queued new orders, so a trip leaves
+no resting orders behind.
 
 ### 607. "Ops killed shard 2's gate at 3am for a suspect feed. At 6am the firm breaker tripped on a gap; at 6:20 gross fell back below resume. Is shard 2 trading again?"
 
@@ -17235,8 +17295,10 @@ comment in `monitorLoop`), `trading/HftRiskGate.java`
 ### 608. "Not a single order was sent all morning, and the notional breaker still tripped. How?"
 
 Because notional is price times position, and price moved. The
-aggregator's gross is sum of |position| x referencePrice, re-marked on
-every 1 ms sweep with the live references the market-data thread
+aggregator's gross is the sum over symbols of the worst-case position
+(position plus working buys, or position minus working sells,
+whichever is larger in absolute value) times the reference price,
+re-marked on every 1 ms sweep with the live references the market-data thread
 publishes -- a 12% rally reprices a static inventory by 12%, and a
 book parked near the cap goes through it without a ticket printing.
 The same effect appears one layer down: the per-order
@@ -17249,10 +17311,13 @@ get big -- by sitting still while the market moves. The responses
 that are legitimate: reduce inventory, or a signed intraday limit
 raise through the Q605 process. The response that is not: freezing
 the reference prices so the number stops moving -- that is not
-calming the breaker, it is falsifying the mark.
+calming the breaker, it is falsifying the mark. A missing mark has the
+opposite effect: an exposed symbol whose reference is NaN or zero
+counts as unpriced and trips the breaker by itself.
 
 *In this library:* `trading/GlobalRiskAggregator.java`
-(`grossNotional` -- |position| x referencePrice, NaN-safe),
+(`grossNotional` -- worst case including working orders times
+reference price; unpriced symbols fail closed),
 `trading/HftRiskGate.java` (`check` -- `quantity * price` against
 `maxOrderNotional`).
 
@@ -17260,7 +17325,7 @@ calming the breaker, it is falsifying the mark.
 
 Every rejection bumps a per-reason counter -- the class comment's
 reasoning is that a gate that silently rejects is undebuggable -- so
-the seven counters are the morning EKG. KILLED nonzero: something
+the per-reason counters are the morning EKG. KILLED nonzero: something
 latched overnight; go do Q606 before anything else. HALTED climbing
 after a halt lifted: stuck flag (Q604). PRICE_COLLAR clustered in
 one symbol: stale reference or genuine fat-finger pressure --
@@ -17268,11 +17333,15 @@ correlate with the gap list. MAX_ORDER_QTY as a steady drip: a
 strategy sizing bug, not a market event; drips are code, spikes are
 markets. NOTIONAL rising with no quantity rejections: price moved
 (Q608). POSITION during a trend: the hedger may be losing the race
-(Q614). And the reading beginners skip: all-zero on a busy morning is
+(Q614). PRICE nonzero: something produced a NaN, zero or negative
+limit price and the gate stopped it at the edge; find the producer.
+DUPLICATE, DAILY_ORDERS, DAILY_NOTIONAL or DAILY_LOSS: the
+runaway-loop and daily controls fired, which is a strategy incident
+until proven otherwise. And the reading beginners skip: all-zero on a busy morning is
 itself a finding -- is flow even reaching the gate? Finish with the
-throttle: `throttledCount()` persistently nonzero means the strategy
-outruns the venue's message-rate limit, which earns disconnects, not
-rejections. All of these are acquire-load reads, cheap enough to poll
+throttle: `throttledCount()` (and `REJECT_THROTTLED` from the gateway)
+persistently nonzero means the strategy outruns the venue's
+message-rate limit, which earns disconnects, not rejections. All of these are acquire-load reads, cheap enough to poll
 from a dashboard forever -- which is the point of counting by reason
 instead of logging by line.
 
@@ -17283,27 +17352,33 @@ strategy outruns the venue limit").
 
 ### 610. "A runaway loop re-sent the same 900-lot order 40 times in 300 ms. Every single one passed the gate. Write the postmortem and name the check you add."
 
-The uncomfortable finding first: the gate was not wrong. Each order,
-judged alone, was fine -- 900 lots under the 1,000 quantity cap,
-notional under cap, price inside the collar, and the position
-projection passed for the early ones because positions move only when
-FILLS confirm via `onFill`; forty checks can happen before the first
-ack lands. No single order was the fat finger -- the RATE was, and
-the gate checks orders one at a time by design. Two additions come
-out of this postmortem. First, `OrderThrottle`: a nanosecond token
-bucket -- sustained `ratePerSec` with a `burst` depth -- sits on the
-order-entry thread; forty orders in 300 ms exhausts any sane burst
-and the loop gets denied while `throttledCount` raises the alarm.
-Every real venue enforces a message-rate limit anyway, so the
-throttle is self-defense twice over. Second, name the structural gap
-honestly: the projection uses current position plus THIS order, not
-current plus open orders -- in-flight exposure tracking is the other
-classic hardening, at the cost of an open-order ledger on the hot
-path. Add the throttle now; scope the in-flight ledger as follow-up.
+First establish which gate was running, because the current gate would
+have stopped this loop three ways. Each order alone was fine: 900 lots
+under the 1,000 quantity cap, notional under cap, price inside the
+collar. The position check, though, counts working orders: the
+`HftOrderGateway` reserves each accepted order's quantity on the gate
+and releases it on fill, cancel or reject, and the check projects
+`|position + sign * (openSameSide + qty)|`. The second 900-lot buy
+would therefore have been rejected for position while the first was
+still unacked. An older gate that projected only current position
+plus this order, with positions moving only on fills, is exactly the
+version that lets forty orders through before the first ack. Second,
+the duplicate-order control rejects an order with the same symbol,
+side, quantity and price as the last accepted one within
+`duplicateWindowNanos`, which is this incident's signature. Third, the
+message rate: `OrderThrottle` is a token bucket (sustained
+`ratePerSec`, `burst` depth) on the order-entry thread; forty orders in
+300 ms exhausts any sane burst and the gateway returns
+`REJECT_THROTTLED` while `throttledCount` raises the alarm. Every real
+venue enforces a message-rate limit anyway. The postmortem action is to
+confirm all three are configured (the duplicate window and throttle are
+off unless set) and to add the daily order-count cap as a backstop.
 
 *In this library:* `trading/OrderThrottle.java` (`tryAcquire`, burst
 semantics, caller-supplied nanoTime), `trading/HftRiskGate.java`
-(`check` projects current + this order; fills apply via `onFill`).
+(`check` with open-order exposure, `reserve`/`release`,
+`duplicateWindowNanos`, `maxDailyOrders`), `trading/HftOrderGateway.java`
+(reserves on accept, releases on fill, cancel or reject).
 
 ### 611. "A new listing starts trading today. What does day-one limit setup actually require?"
 
@@ -17311,12 +17386,13 @@ Three concrete items, each with a trap. Capacity: the gate's arrays
 are sized once at construction (`maxSymbols`); the new symbol's dense
 id must land inside `symbolCapacity()` or the first check is an
 array-bounds crash -- registration, not configuration, is the first
-step. Reference price: the collar clause silently SKIPS while the
+step. Reference price: by default the collar clause skips while the
 reference is NaN, so a new listing's first minutes have no
-fat-finger price protection at all unless you seed
-`setReferencePrice` from the opening auction or first prints -- the
-quiet skip is documented, but on day one it is the difference between
-a collar and a hole. Caps: the fast gate's caps are gate-wide, not
+fat-finger price protection unless you seed `setReferencePrice` from
+the opening auction or first prints. If you would rather fail closed,
+`requireReferencePrice(true)` makes the gate reject with
+`REJECT_NO_REFERENCE` until a reference exists; on day one that is the
+difference between a collar and a hole. Caps: the fast gate's caps are gate-wide, not
 per-symbol -- one `maxOrderQuantity` for every symbol on the gate --
 so a thin new listing inherits caps calibrated for your liquid names.
 Two honest options: run it through the slow-lane checker first, which
@@ -17327,16 +17403,16 @@ per-shard limits are the per-symbol-caps mechanism the fast lane
 actually ships.
 
 *In this library:* `trading/HftRiskGate.java` (`symbolCapacity`, NaN
-reference skip, gate-wide caps), `risk/PreTradeLimitChecker.java`
+reference skip or `requireReferencePrice`, gate-wide caps), `risk/PreTradeLimitChecker.java`
 (`restrictSymbol`), `trading/ShardedTradingEngine.java` (`gateFactory`
 -- "limits per shard").
 
 ### 612. "The desk argues: long 50M on shard 1, short 50M on shard 2, 'we are flat -- why did the breaker trip?' Settle the gross-vs-net argument."
 
 Because the firm cap is GROSS by construction: the aggregator sums
-|position| x referencePrice per symbol per gate -- absolute value
-first, then sum -- so 50M long plus 50M short is 100M gross, not
-zero. Net is zero only if the two books truly offset in a crisis,
+the worst-case absolute exposure (position plus working orders) times
+the reference price per symbol per gate -- absolute value first, then
+sum -- so 50M long plus 50M short is 100M gross, not zero. Net is zero only if the two books truly offset in a crisis,
 and the aggregator cannot know that: symbol ids are per-shard and
 per-gate, so "the same instrument on two shards" is information it
 does not have, and gross bounds the worst case regardless of whether
@@ -17351,7 +17427,7 @@ shard and gate, so the exposure nets at the position level before it
 ever grosses at the firm level -- fix the topology, not the metric.
 
 *In this library:* `trading/GlobalRiskAggregator.java`
-(`grossNotional` -- `Math.abs(position) * ref` per gate per symbol),
+(`grossNotional` -- worst-case absolute exposure times `ref` per gate per symbol),
 `trading/HftRiskGate.java` (signed positions, `Math.abs(newPosition)`
 against the cap).
 
@@ -17361,8 +17437,8 @@ They are the same policy at two price points. The slow checker
 returns a `CheckResult` with a LIST of human-readable violations --
 it allocates, formats strings, and checks things that need maps and
 sets: restricted-symbol lists, per-counterparty credit headroom. The
-fast gate returns one int reason code from primitive arrays in ~3 ns
--- and to get there it gave up exactly the checks that need a String
+fast gate returns one int reason code from primitive arrays with no
+allocation (measured cost in `docs/BENCHMARKS.md`) -- and to get there it gave up exactly the checks that need a String
 key: there is no counterparty concept on the fast lane, and
 restriction is expressed as `halt` by dense id instead of a symbol
 set. What they deliberately share is the subtle logic where drift
@@ -17378,7 +17454,7 @@ then decide which lane's policy is right rather than silencing one.
 
 *In this library:* `risk/PreTradeLimitChecker.java` (violations list,
 counterparty and restricted-symbol checks, the "same rule as
-HftRiskGate" comment), `trading/HftRiskGate.java` (int codes, ~3 ns),
+HftRiskGate" comment), `trading/HftRiskGate.java` (int codes, no allocation),
 `trading/PaperTradingGateway.java` (takes the slow checker).
 
 ## Market-making days (Q614-Q626)
@@ -17386,16 +17462,18 @@ HftRiskGate" comment), `trading/HftRiskGate.java` (int codes, ~3 ns),
 ### 614. "Inventory has been pinned at the hedge band all morning: hedge, refill, hedge, refill. Tune the AutoHedger out of the loop."
 
 Read the mechanism first. The hedger checks the gate's live position
-each tick; when |position| exceeds the band it submits the EXCESS
-back to the band edge -- deliberately not to flat, because band-edge
-hedging removes the breach with the smallest order and avoids
-ping-ponging around zero. The cooldown (`minHedgeIntervalNanos`)
-exists because positions only update when fills confirm via
-`onFill`: without it the hedger stacks orders while the first hedge
-is still in flight. "Pinned at the band" means the quoter's inflow
-refills faster than the hedge cycle drains -- so tune the SYSTEM,
-not just the hedger. Cooldown: set it just above your measured ack
-round-trip; longer wastes band headroom, shorter double-hedges.
+each tick; when |position| exceeds the band it sends one IOC for the
+EXCESS back to the band edge, priced at the opposite touch. Band edge
+rather than flat, because that removes the breach with the smallest
+order and avoids ping-ponging around zero. At most one hedge per
+symbol is working at a time: positions only move when fills arrive, so
+the hedger waits until the venue has finished with the previous hedge
+(filled, IOC remainder cancelled, or rejected) before considering the
+next, and then no sooner than `minHedgeIntervalNanos` after the last
+send. "Pinned at the band" means the quoter's inflow refills faster
+than the hedge cycle drains -- so tune the SYSTEM, not just the hedger.
+Interval: it is now a spacing between finished hedges, not a guard
+against double-hedging, so a longer value only wastes band headroom.
 Band: it must be several quote-sizes wide, or every couple of fills
 trips it and the hedger pays the spread the quoter just earned.
 Skew: the cheaper fix is upstream -- raise `skewPerUnit` so the
@@ -17405,8 +17483,8 @@ a hedger bouncing off the risk gate is the silent version of this
 incident.
 
 *In this library:* `trading/AutoHedger.java` (band-edge hedging
-rationale, cooldown-vs-in-flight-fill comment, `hedgesRejected` --
-"monitor this"), `trading/HftQuoter.java` (`skewPerUnit`).
+rationale, working-hedge tracking, `workingHedgeId`, `hedgesHeld`,
+`hedgesRejected`), `trading/HftQuoter.java` (`skewPerUnit`).
 
 ### 615. "Earnings print in 90 seconds. What do you actually do with the quoter?"
 
@@ -17422,15 +17500,17 @@ Stop: `halt(symbolId, true)` on the gate rejects both sides of every
 quote attempt until the dust settles -- the quoter keeps running,
 its sides bounce off the gate and are counted in `rejectedSides`,
 and un-halting resumes cleanly. Two mechanical details that bite:
-the conflation gate suppresses REQUOTES, it does not pull quotes
-already resting at the venue -- cancels are venue-side work your
-adapter owns; and pre-position the post-print reference price
+a halt stops new quotes and replaces, but to take the resting quotes
+off the venue call `pullQuotes(symbolId, now)`, which cancels both
+working orders (if a replace is refused by the gate, the quoter also
+cancels that side rather than leave it at a stale price); and
+pre-position the post-print reference price
 (Q603/Q619) or the collar will reject your first re-quotes into the
 gapped market. Decide the playbook before 90 seconds, not during.
 
 *In this library:* `trading/AvellanedaStoikov.java`
 (`optimalHalfSpread` -- the sigma^2 term), `trading/HftQuoter.java`
-(`quoteSize`, `rejectedSides`), `trading/HftRiskGate.java` (`halt`).
+(`quoteSize`, `rejectedSides`, `pullQuotes`), `trading/HftRiskGate.java` (`halt`).
 
 ### 616. "Vol just tripled intraday. Walk through exactly how the spread should widen, term by term."
 
