@@ -3,7 +3,6 @@ package com.quantfinlib.regulatory;
 import com.quantfinlib.orderbook.Side;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -149,9 +148,6 @@ public final class BestExecutionAnalyzer {
         if (values.isEmpty()) {
             return Double.NaN;
         }
-        double[] a = values.stream().mapToDouble(Double::doubleValue).toArray();
-        Arrays.sort(a);
-        int n = a.length;
-        return n % 2 == 1 ? a[n / 2] : (a[n / 2 - 1] + a[n / 2]) / 2;
+        return com.quantfinlib.stats.Stats.median(values.stream().mapToDouble(Double::doubleValue).toArray());
     }
 }

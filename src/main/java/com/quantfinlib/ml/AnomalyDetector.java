@@ -93,10 +93,7 @@ public final class AnomalyDetector {
     }
 
     private static double median(double[] v) {
-        double[] sorted = v.clone();
-        java.util.Arrays.sort(sorted);
-        int n = sorted.length;
-        return n % 2 == 1 ? sorted[n / 2] : 0.5 * (sorted[n / 2 - 1] + sorted[n / 2]);
+        return com.quantfinlib.stats.Stats.median(v);
     }
 
     /** 1.4826 * MAD, falling back to stdev when MAD is degenerate. */

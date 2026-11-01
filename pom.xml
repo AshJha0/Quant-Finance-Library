@@ -456,6 +456,7 @@
                                         <include>com.quantfinlib.cli</include>
                                         <include>com.quantfinlib.persist</include>
                                         <include>com.quantfinlib.backtest.*</include>
+                                        <include>com.quantfinlib.stats</include>
                                         <include>com.quantfinlib.util.MathUtils</include>
                                         </includes>
                                         <excludes>
