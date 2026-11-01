@@ -17,14 +17,14 @@ package com.quantfinlib.rates;
  * </pre>
  *
  * <p>The float leg needs no forecasting in a single-curve world: it is
- * worth par at inception, i.e. {@code 1 - DF(T)} per unit notional —
+ * worth par at inception, i.e. {@code 1 - DF(T)} per unit notional,
  * which is exactly why the par rate has that closed form. DV01 is the
  * bump-and-reprice sensitivity to a parallel 1bp shift of the zero
  * curve: for a fresh par swap on a flat cc curve it is
  * {@code annuity * e^z * 1bp * notional} (the tests pin exactly that;
  * the desk shorthand {@code annuity * 1bp} is the sensitivity to the
  * simple par rate, a different derivative, ~e^z away). A swap struck at
- * the par rate must PV to zero — an identity, tested at 1e-12.</p>
+ * the par rate must PV to zero: an identity, tested at 1e-12.</p>
  *
  * <p>Stated simplifications: single curve (no OIS/projection split),
  * annual fixed leg, spot start. Research lane, deterministic.</p>
