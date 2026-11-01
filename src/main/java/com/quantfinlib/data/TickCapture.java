@@ -25,14 +25,28 @@ public final class TickCapture implements TickListener, AutoCloseable {
     private final TickFileWriter writer;
     private final HftMarketDataBus bus;
 
-    private TickCapture(HftMarketDataBus bus, Path file) throws IOException {
+    private TickCapture(HftMarketDataBus bus, Path file, TickFileWriter.ClockDomain domain)
+            throws IOException {
         this.bus = bus;
-        this.writer = new TickFileWriter(file);
+        this.writer = new TickFileWriter(file, domain);
     }
 
-    /** Creates a capture and subscribes it to every symbol on the bus. */
+    /**
+     * Creates a capture and subscribes it to every symbol on the bus; the
+     * file records the clock domain as unknown.
+     */
     public static TickCapture attach(HftMarketDataBus bus, Path file) throws IOException {
-        TickCapture capture = new TickCapture(bus, file);
+        return attach(bus, file, TickFileWriter.ClockDomain.UNKNOWN);
+    }
+
+    /**
+     * As {@link #attach(HftMarketDataBus, Path)}, recording what the bus
+     * timestamps measure (epoch nanos for exchange feeds such as
+     * {@code feed.WebSocketFeed}, monotonic for {@code System.nanoTime()}).
+     */
+    public static TickCapture attach(HftMarketDataBus bus, Path file,
+                                     TickFileWriter.ClockDomain domain) throws IOException {
+        TickCapture capture = new TickCapture(bus, file, domain);
         bus.subscribeAll(capture);
         return capture;
     }
@@ -51,6 +65,7 @@ public final class TickCapture implements TickListener, AutoCloseable {
         return writer.tickCount();
     }
 
+    /** Writes the last block and forces the file to the device. */
     @Override
     public void close() throws IOException {
         writer.close();

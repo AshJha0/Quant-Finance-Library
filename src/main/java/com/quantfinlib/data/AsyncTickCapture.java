@@ -23,6 +23,10 @@ import java.util.concurrent.atomic.AtomicLong;
  * can see beats latency you can't explain. Size the ring for the worst
  * stall you tolerate: capacity 1M ≈ 28 MB ≈ several seconds of a busy feed.</p>
  *
+ * <p>A writer failure (disk full, I/O error) stops the writer thread and is
+ * kept: {@link #failure()} returns it, {@link #isHealthy()} turns false,
+ * ticks from then on count as dropped, and {@link #close()} rethrows it.</p>
+ *
  * <p>Use {@link TickCapture} when simplicity wins (research replays,
  * capture-only sessions); use this when the same bus is trading.</p>
  */
@@ -34,11 +38,12 @@ public final class AsyncTickCapture implements TickListener, AutoCloseable {
     private final Thread drainThread;
     private final AtomicLong dropped = new AtomicLong();
     private volatile boolean running = true;
+    private volatile Throwable failure;
 
-    private AsyncTickCapture(HftMarketDataBus bus, Path file, int ringCapacity)
-            throws IOException {
+    private AsyncTickCapture(HftMarketDataBus bus, Path file, int ringCapacity,
+                             TickFileWriter.ClockDomain domain) throws IOException {
         this.bus = bus;
-        this.writer = new TickFileWriter(file);
+        this.writer = new TickFileWriter(file, domain);
         this.ring = new TickRingBuffer(ringCapacity);
         this.drainThread = new Thread(this::drainLoop, "tick-capture-writer");
         this.drainThread.setDaemon(true);
@@ -47,7 +52,13 @@ public final class AsyncTickCapture implements TickListener, AutoCloseable {
     /** Creates the capture, subscribes it to every symbol, starts the writer. */
     public static AsyncTickCapture attach(HftMarketDataBus bus, Path file, int ringCapacity)
             throws IOException {
-        AsyncTickCapture capture = new AsyncTickCapture(bus, file, ringCapacity);
+        return attach(bus, file, ringCapacity, TickFileWriter.ClockDomain.UNKNOWN);
+    }
+
+    /** As {@link #attach(HftMarketDataBus, Path, int)}, recording the timestamps' clock domain. */
+    public static AsyncTickCapture attach(HftMarketDataBus bus, Path file, int ringCapacity,
+                                          TickFileWriter.ClockDomain domain) throws IOException {
+        AsyncTickCapture capture = new AsyncTickCapture(bus, file, ringCapacity, domain);
         bus.subscribeAll(capture);
         capture.drainThread.start();
         return capture;
@@ -56,7 +67,7 @@ public final class AsyncTickCapture implements TickListener, AutoCloseable {
     /** The hot path: one ring publish; a full ring drops (counted), never blocks. */
     @Override
     public void onTick(int symbolId, double price, double size, long timestampNanos) {
-        if (!ring.publish(symbolId, price, size, timestampNanos)) {
+        if (failure != null || !ring.publish(symbolId, price, size, timestampNanos)) {
             dropped.incrementAndGet();
         }
     }
@@ -71,17 +82,32 @@ public final class AsyncTickCapture implements TickListener, AutoCloseable {
                 throw new UncheckedIOException("tick capture failed", e);
             }
         };
-        while (running) {
-            if (ring.drainTo(sink, 4_096) == 0) {
-                // Idle: yield rather than spin — the writer thread has no
-                // latency budget, only the consumer thread does.
-                java.util.concurrent.locks.LockSupport.parkNanos(100_000);
+        try {
+            while (running) {
+                if (ring.drainTo(sink, 4_096) == 0) {
+                    // Idle: yield rather than spin; the writer thread has no
+                    // latency budget, only the consumer thread does.
+                    java.util.concurrent.locks.LockSupport.parkNanos(100_000);
+                }
             }
+            // Final drain so close() loses nothing that made it into the ring.
+            while (ring.drainTo(sink, 4_096) > 0) {
+                // keep draining
+            }
+        } catch (RuntimeException | Error e) {
+            failure = e instanceof UncheckedIOException u ? u.getCause() : e;
+            running = false;
         }
-        // Final drain so close() loses nothing that made it into the ring.
-        while (ring.drainTo(sink, 4_096) > 0) {
-            // keep draining
-        }
+    }
+
+    /** False once the writer thread has failed. */
+    public boolean isHealthy() {
+        return failure == null;
+    }
+
+    /** The writer thread's failure, or null. */
+    public Throwable failure() {
+        return failure;
     }
 
     /** Ticks dropped because the ring was full (writer stalled) — monitor this. */
@@ -102,6 +128,16 @@ public final class AsyncTickCapture implements TickListener, AutoCloseable {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
-        writer.close();
+        try {
+            writer.close();
+        } catch (IOException e) {
+            if (failure == null) {
+                throw e;
+            }
+        }
+        Throwable f = failure;
+        if (f != null) {
+            throw new IOException("tick capture writer failed", f);
+        }
     }
 }

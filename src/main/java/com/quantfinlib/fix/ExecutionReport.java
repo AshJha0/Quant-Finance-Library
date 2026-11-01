@@ -4,12 +4,25 @@ import com.quantfinlib.orderbook.Side;
 
 /**
  * Typed view of a FIX ExecutionReport (35=8) — the venue's answer to an
- * order: acknowledgement, fill, or rejection.
+ * order: acknowledgement, fill, or rejection. {@code possDup} is true when
+ * the report arrived as a resend replay (PossDupFlag(43)=Y) or with
+ * PossResend(97)=Y: it may already have been processed, so deduplicate on
+ * {@code execId} before applying a fill.
  */
 public record ExecutionReport(String orderId, String execId, char execType, char ordStatus,
                               String clOrdId, String symbol, Side side,
                               double lastQty, double lastPrice,
-                              double cumQty, double leavesQty, double avgPrice) {
+                              double cumQty, double leavesQty, double avgPrice,
+                              boolean possDup) {
+
+    /** Report without the PossDup marker (what a venue sends first time). */
+    public ExecutionReport(String orderId, String execId, char execType, char ordStatus,
+                           String clOrdId, String symbol, Side side,
+                           double lastQty, double lastPrice,
+                           double cumQty, double leavesQty, double avgPrice) {
+        this(orderId, execId, execType, ordStatus, clOrdId, symbol, side, lastQty, lastPrice,
+                cumQty, leavesQty, avgPrice, false);
+    }
 
     public static final char EXEC_TYPE_NEW = '0';
     public static final char EXEC_TYPE_CANCELED = '4';
@@ -71,7 +84,8 @@ public record ExecutionReport(String orderId, String execId, char execType, char
                 m.getDouble(FixMessage.LAST_PX, 0),
                 m.getDouble(FixMessage.CUM_QTY, 0),
                 m.getDouble(FixMessage.LEAVES_QTY, 0),
-                m.getDouble(FixMessage.AVG_PX, 0));
+                m.getDouble(FixMessage.AVG_PX, 0),
+                m.isFlagSet(FixMessage.POSS_DUP_FLAG) || m.isFlagSet(FixMessage.POSS_RESEND));
     }
 
     FixMessage.Builder toBuilder() {
