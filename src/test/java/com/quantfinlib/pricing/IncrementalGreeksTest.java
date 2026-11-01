@@ -75,4 +75,19 @@ class IncrementalGreeksTest {
         assertTrue(allocated < 100_000,
                 "tick path allocated " + allocated + " bytes (blackhole " + blackhole + ")");
     }
+
+    @Test
+    void thetaCarriesThePriceBetweenAnchors() {
+        IncrementalGreeks g = new IncrementalGreeks();
+        double t = 30.0 / 365, dt = 2.0 / 24 / 365; // two hours
+        g.reprice(com.quantfinlib.pricing.BlackScholes.OptionType.CALL, 100, 100, 0.03, 0.0, 0.25, t);
+        g.onTick(100.2, dt);
+        double exact = BlackScholes.price(com.quantfinlib.pricing.BlackScholes.OptionType.CALL,
+                100.2, 100, 0.03, 0.0, 0.25, t - dt);
+        // Without the theta term the error is theta*dt (about 1.5e-3 here);
+        // with it the residual is third order.
+        assertEquals(exact, g.estimatedPrice(), 1e-4);
+        g.onTick(100.2);
+        assertTrue(Math.abs(exact - g.estimatedPrice()) > 1e-3);
+    }
 }
