@@ -44,6 +44,8 @@ import java.util.Locale;
 public final class AlphaCombiner {
 
     /**
+     * Combination settings.
+     *
      * @param horizon        holding horizon {@code H} in bars (&ge; 1)
      * @param icHalfLife     half-life of the date weights, in IC dates (&gt; 0)
      * @param shrinkToEqual  {@code δ} in [0, 1]

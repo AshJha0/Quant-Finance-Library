@@ -56,6 +56,10 @@ public final class VolSurface {
     }
 
     public static final class Builder {
+        /** Creates an instance; the explicit form of the default constructor. */
+        public Builder() {
+        }
+
 
         private final TreeMap<Double, TreeMap<Double, Double>> smiles = new TreeMap<>();
         private final TreeMap<Double, Double> forwards = new TreeMap<>();

@@ -72,6 +72,8 @@ public final class AlphaBacktester {
     }
 
     /**
+     * Backtest settings: decision schedule, costs and capital.
+     *
      * @param startIndex         first decision bar (covers factor warm-up and,
      *                           when capital &gt; 0, more than {@code impactWindow} bars)
      * @param rebalanceEveryBars bars between decisions

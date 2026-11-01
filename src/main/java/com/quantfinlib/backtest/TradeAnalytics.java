@@ -49,6 +49,8 @@ import java.util.List;
 public final class TradeAnalytics {
 
     /**
+     * Trade-level statistics.
+     *
      * @param count                 number of trades
      * @param winRate               fraction of strictly-positive trades
      * @param expectancy            average P&amp;L per trade
@@ -69,7 +71,11 @@ public final class TradeAnalytics {
     private TradeAnalytics() {
     }
 
-    /** @param trades completed trades, non-empty */
+    /**
+     * Computes trade-level statistics.
+     *
+     * @param trades completed trades, non-empty
+     */
     public static Result analyze(List<Trade> trades) {
         int n = trades.size();
         if (n == 0) {

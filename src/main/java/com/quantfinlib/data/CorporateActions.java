@@ -28,6 +28,8 @@ public final class CorporateActions {
     }
 
     /**
+     * One corporate action, effective from its ex timestamp.
+     *
      * @param exTimestamp first bar timestamp trading on the adjusted basis
      * @param value       split ratio (2 = 2-for-1) or cash dividend per share
      */

@@ -11,6 +11,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * while analytics read valuations.
  */
 public final class Portfolio {
+    /** Creates an instance; the explicit form of the default constructor. */
+    public Portfolio() {
+    }
+
 
     public record Position(String symbol, double quantity, double price) {
         public double value() {

@@ -1,5 +1,6 @@
 package com.quantfinlib.util;
 
+import com.quantfinlib.stats.Stats;
 import java.util.Arrays;
 
 /**
@@ -11,20 +12,14 @@ public final class MathUtils {
     private MathUtils() {
     }
 
+    /** Arithmetic mean; NaN for an empty array. Delegates to {@link Stats#mean(double[])}. */
     public static double mean(double[] v) {
-        double s = 0;
-        for (double x : v) {
-            s += x;
-        }
-        return s / v.length;
+        return Stats.mean(v);
     }
 
+    /** Arithmetic mean of {@code v[from, to)}; delegates to {@link Stats#mean(double[], int, int)}. */
     public static double mean(double[] v, int from, int to) {
-        double s = 0;
-        for (int i = from; i < to; i++) {
-            s += v[i];
-        }
-        return s / (to - from);
+        return Stats.mean(v, from, to);
     }
 
     /**
@@ -33,70 +28,35 @@ public final class MathUtils {
      * beta reads as "no estimate" instead of a confident zero.
      */
     public static double variance(double[] v) {
-        if (v.length < 2) {
-            return Double.NaN;
-        }
-        double m = mean(v), s = 0;
-        for (double x : v) {
-            double d = x - m;
-            s += d * d;
-        }
-        return s / (v.length - 1);
+        return Stats.sampleVariance(v);
     }
 
     /** Sample standard deviation; NaN for fewer than two observations. */
     public static double stdDev(double[] v) {
-        return Math.sqrt(variance(v));
+        return Stats.sampleStdDev(v);
     }
 
     /** Population standard deviation over [from, to); NaN for an empty range. */
     public static double stdDevP(double[] v, int from, int to) {
-        int n = to - from;
-        if (n < 1) {
-            return Double.NaN;
-        }
-        double m = mean(v, from, to), s = 0;
-        for (int i = from; i < to; i++) {
-            double d = v[i] - m;
-            s += d * d;
-        }
-        return Math.sqrt(s / n);
+        return Stats.populationStdDev(v, from, to);
     }
 
     /** Sample standard deviation over [from, to); NaN for fewer than two points. */
     public static double stdDevSample(double[] v, int from, int to) {
-        int n = to - from;
-        if (n < 2) {
-            return Double.NaN;
-        }
-        double m = mean(v, from, to), s = 0;
-        for (int i = from; i < to; i++) {
-            double d = v[i] - m;
-            s += d * d;
-        }
-        return Math.sqrt(s / (n - 1));
+        return Stats.sampleStdDev(v, from, to);
     }
 
-    /** Linear-interpolated percentile, p in [0, 1]. Copies and sorts the input. */
+    /**
+     * Linear-interpolated percentile (Hyndman-Fan type 7), p in [0, 1].
+     * Copies and sorts the input. Delegates to {@link Stats#quantile}.
+     */
     public static double percentile(double[] values, double p) {
-        double[] sorted = values.clone();
-        Arrays.sort(sorted);
-        return percentileSorted(sorted, p);
+        return Stats.quantile(values, p);
     }
 
-    /** Percentile on an already-sorted array (no copy). */
+    /** Type 7 percentile on an already-sorted array (no copy); delegates to {@link Stats#quantileSorted}. */
     public static double percentileSorted(double[] sorted, double p) {
-        if (sorted.length == 0) {
-            return Double.NaN;
-        }
-        double idx = p * (sorted.length - 1);
-        int lo = (int) Math.floor(idx);
-        int hi = (int) Math.ceil(idx);
-        if (lo == hi) {
-            return sorted[lo];
-        }
-        double frac = idx - lo;
-        return sorted[lo] * (1 - frac) + sorted[hi] * frac;
+        return Stats.quantileSorted(sorted, p);
     }
 
     public static double dot(double[] a, double[] b) {
@@ -128,20 +88,14 @@ public final class MathUtils {
 
     /** Sample covariance of two equally-sized series (n >= 2). */
     public static double covariance(double[] a, double[] b) {
-        if (a.length != b.length) {
-            throw new IllegalArgumentException(
-                    "length mismatch: " + a.length + " vs " + b.length);
-        }
-        if (a.length < 2) {
-            throw new IllegalArgumentException("need at least 2 observations, got " + a.length);
-        }
-        double ma = mean(a), mb = mean(b), s = 0;
-        for (int i = 0; i < a.length; i++) {
-            s += (a[i] - ma) * (b[i] - mb);
-        }
-        return s / (a.length - 1);
+        return Stats.sampleCovariance(a, b);
     }
 
+    /**
+     * Pearson correlation. Unlike {@link Stats#pearson}, which returns NaN,
+     * this returns 0 when either series has zero dispersion; callers such as
+     * {@code risk.CorrelationMatrix} rely on that convention.
+     */
     public static double correlation(double[] a, double[] b) {
         double sa = stdDev(a), sb = stdDev(b);
         if (sa == 0 || sb == 0) {
@@ -342,6 +296,7 @@ public final class MathUtils {
     }
 
     /** Natural log of the standard normal density, finite for any finite x. */
+    @SuppressWarnings("FloatingPointLiteralPrecision") // ln sqrt(2 pi) to 20 digits
     public static double logNormPdf(double x) {
         return -0.5 * x * x - 0.91893853320467274178; // ln sqrt(2 pi)
     }
@@ -364,6 +319,7 @@ public final class MathUtils {
      * relative accuracy (about 1e-15) down to x = -37.5. Further out the value
      * is subnormal and then 0. NaN in gives NaN out.</p>
      */
+    @SuppressWarnings("FloatingPointLiteralPrecision") // sqrt(32) to 30 digits, as in ANORM
     public static double normCdf(double x) {
         if (Double.isNaN(x)) {
             return Double.NaN;
@@ -405,21 +361,30 @@ public final class MathUtils {
         return x > 0 ? 1 - lower : lower;
     }
 
+    // Cody's coefficients keep the digits SPECFUN ANORM publishes, so they can be
+    // checked against the source; each literal rounds to the nearest double.
+    @SuppressWarnings("FloatingPointLiteralPrecision")
     private static final double INV_SQRT_2PI = 0.398942280401432677939946059934;
+    @SuppressWarnings("FloatingPointLiteralPrecision")
     private static final double[] CODY_A = {2.2352520354606839287, 161.02823106855587881,
             1067.6894854603709582, 18154.981253343561249, 0.065682337918207449113};
+    @SuppressWarnings("FloatingPointLiteralPrecision")
     private static final double[] CODY_B = {47.20258190468824187, 976.09855173777669322,
             10260.932208618978205, 45507.789335026729956};
+    @SuppressWarnings("FloatingPointLiteralPrecision")
     private static final double[] CODY_C = {0.39894151208813466764, 8.8831497943883759412,
             93.506656132177855979, 597.27027639480026226, 2494.5375852903726711,
             6848.1904505362823326, 11602.651437647350124, 9842.7148383839780218,
             1.0765576773720192317e-8};
+    @SuppressWarnings("FloatingPointLiteralPrecision")
     private static final double[] CODY_D = {22.266688044328115691, 235.38790178262499861,
             1519.377599407554805, 6485.558298266760755, 18615.571640885098091,
             34900.952721145977266, 38912.003286093271411, 19685.429676859990727};
+    @SuppressWarnings("FloatingPointLiteralPrecision")
     private static final double[] CODY_P = {0.21589853405795699, 0.1274011611602473639,
             0.022235277870649807, 0.001421619193227893466, 2.9112874951168792e-5,
             0.02307344176494017303};
+    @SuppressWarnings("FloatingPointLiteralPrecision")
     private static final double[] CODY_Q = {1.28426009614491121, 0.468238212480865118,
             0.0659881378689285515, 0.00378239633202758244, 7.29751555083966205e-5};
 
@@ -529,6 +494,7 @@ public final class MathUtils {
     }
 
     /** Natural log of the gamma function (Lanczos, |relative error| &lt; 2e-10). */
+    @SuppressWarnings("FloatingPointLiteralPrecision") // Numerical Recipes gammln coefficients as printed
     public static double logGamma(double x) {
         if (!(x > 0)) {
             throw new IllegalArgumentException("x must be > 0: " + x);

@@ -1,6 +1,5 @@
 package com.quantfinlib.regulatory;
 
-import java.util.Arrays;
 
 /**
  * WM/R-style 4pm fix analysis: computes a fix rate from samples inside the
@@ -55,10 +54,7 @@ public final class FixAnalyzer {
                 throw new IllegalArgumentException("samples must be finite");
             }
         }
-        double[] sorted = samples.clone();
-        Arrays.sort(sorted);
-        int n = sorted.length;
-        return n % 2 == 1 ? sorted[n / 2] : (sorted[n / 2 - 1] + sorted[n / 2]) / 2;
+        return com.quantfinlib.stats.Stats.median(samples);
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.quantfinlib.fix;
 
+import com.quantfinlib.core.WireProtocolException;
 import java.util.Arrays;
 
 /**
@@ -35,14 +36,14 @@ final class FixDecoder {
             return null;   // "9=" not yet received; never read stale bytes past length
         }
         if (buffer[firstSoh + 1] != '9' || buffer[firstSoh + 2] != '=') {
-            throw new IllegalStateException("stream corrupt: BodyLength not after BeginString");
+            throw new WireProtocolException("stream corrupt: BodyLength not after BeginString");
         }
         int lenEnd = indexOf(FixMessage.SOH, firstSoh + 3);
         if (lenEnd < 0) {
             return null;
         }
         if (lenEnd == firstSoh + 3) {
-            throw new IllegalStateException("stream corrupt: empty BodyLength");
+            throw new WireProtocolException("stream corrupt: empty BodyLength");
         }
         int bodyLen = 0;
         for (int i = firstSoh + 3; i < lenEnd; i++) {
@@ -53,14 +54,14 @@ final class FixDecoder {
             // later valid message. Corruption must fail loudly so the
             // session layer disconnects.
             if (digit < 0 || digit > 9) {
-                throw new IllegalStateException("stream corrupt: BodyLength contains 0x"
+                throw new WireProtocolException("stream corrupt: BodyLength contains 0x"
                         + Integer.toHexString(buffer[i] & 0xFF));
             }
             bodyLen = bodyLen * 10 + digit;
             // Checked inside the loop: ten corrupt-but-numeric digits
             // would wrap the int and could sneak under a post-loop cap.
             if (bodyLen > 1 << 20) {
-                throw new IllegalStateException(
+                throw new WireProtocolException(
                         "stream corrupt: BodyLength " + bodyLen + " is not a FIX message");
             }
         }

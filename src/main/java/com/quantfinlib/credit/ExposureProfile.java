@@ -140,8 +140,7 @@ public final class ExposureProfile {
             col[p] = expo[p][i];
         }
         Arrays.sort(col);
-        int k = (int) Math.ceil(q * col.length) - 1;
-        return col[Math.max(k, 0)];
+        return com.quantfinlib.stats.Stats.quantileType1Sorted(col, q);
     }
 
     /** Time-weighted average of the forward-measure EE over (0, t_m]. */

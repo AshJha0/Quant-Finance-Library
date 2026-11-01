@@ -76,6 +76,8 @@ public final class ConstrainedPortfolioOptimizer {
     }
 
     /**
+     * Adds a turnover penalty relative to the current weights.
+     *
      * @param penaltyPerUnitTurnover expected-return units charged per unit of
      *                               one-way turnover (e.g. transaction cost), &ge; 0
      */

@@ -125,6 +125,8 @@ public final class PurgedKFold {
     }
 
     /**
+     * Builds purged and embargoed k-fold splits.
+     *
      * @param n            number of samples (bars/observations), &ge; 2·k
      * @param k            number of folds, &ge; 2
      * @param labelHorizon bars each label looks ahead (0 = label known at

@@ -13,7 +13,8 @@ package com.quantfinlib.fix;
  *       and consumes the sequence number {@link #seqNum()}.</li>
  * </ul>
  */
-public final class FixParseException extends IllegalArgumentException {
+public final class FixParseException extends IllegalArgumentException
+        implements com.quantfinlib.core.QuantFinException {
 
     private static final long serialVersionUID = 1L;
 

@@ -29,6 +29,8 @@ public final class SkewedQuoter {
     }
 
     /**
+     * Quotes a bid and an ask skewed by inventory.
+     *
      * @param mid            current fair value, &gt; 0
      * @param halfSpreadBps  unskewed half spread in bps, &gt; 0
      * @param inventory      book inventory in the quoted factor's units (signed)

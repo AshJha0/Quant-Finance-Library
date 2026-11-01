@@ -43,6 +43,10 @@ import java.util.TreeSet;
  * afterwards if not mutated.</p>
  */
 public final class PointInTimeUniverse {
+    /** Creates an instance; the explicit form of the default constructor. */
+    public PointInTimeUniverse() {
+    }
+
 
     /**
      * The standard haircut for involuntary delistings with unknown proceeds:

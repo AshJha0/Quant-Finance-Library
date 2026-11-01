@@ -19,6 +19,8 @@ public final class AllocationProbe {
     }
 
     /**
+     * Asserts that the measured action allocates nothing.
+     *
      * @param warmup   run once before measuring (JIT warm-up)
      * @param measured the block that must allocate nothing
      * @param attempts measured windows to try before failing

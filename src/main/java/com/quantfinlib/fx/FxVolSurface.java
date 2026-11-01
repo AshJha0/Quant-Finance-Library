@@ -199,6 +199,10 @@ public final class FxVolSurface {
 
     /** Accumulates per-expiry delta quotes, then solves strikes once in {@link #build}. */
     public static final class Builder {
+        /** Creates an instance; the explicit form of the default constructor. */
+        public Builder() {
+        }
+
         private record Quote(double t, double forward, double foreignDf, double atm,
                              double rr25, double bf25, double rr10, double bf10) {
         }

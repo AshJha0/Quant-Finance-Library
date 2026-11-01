@@ -148,6 +148,10 @@ public final class ItchCodec {
      * in production (assertions disabled).
      */
     public static final class View {
+        /** Creates an instance; the explicit form of the default constructor. */
+        public View() {
+        }
+
         private byte[] buf;
         private int off;
 

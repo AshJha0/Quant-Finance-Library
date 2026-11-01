@@ -15,6 +15,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * immutable {@link BarSeries} for analytics.
  */
 public final class HistoricalDataStore {
+    /** Creates an instance; the explicit form of the default constructor. */
+    public HistoricalDataStore() {
+    }
+
 
     private final Map<String, List<Bar>> bars = new ConcurrentHashMap<>();
 

@@ -13,6 +13,10 @@ import java.util.Map;
  * Grow-only; ids are registration order. Research/warm lane.
  */
 public final class FactorRegistry {
+    /** Creates an instance; the explicit form of the default constructor. */
+    public FactorRegistry() {
+    }
+
 
     private final Map<String, Integer> ids = new HashMap<>();
     private final List<String> names = new ArrayList<>();

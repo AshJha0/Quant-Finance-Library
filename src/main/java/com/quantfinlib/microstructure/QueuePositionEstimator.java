@@ -38,6 +38,10 @@ package com.quantfinlib.microstructure;
  * last-look world.</p>
  */
 public final class QueuePositionEstimator {
+    /** Creates an instance; the explicit form of the default constructor. */
+    public QueuePositionEstimator() {
+    }
+
 
     private double ahead;          // expected shares ahead of us
     private double aheadAtJoin;    // shares ahead when we joined (progress base)

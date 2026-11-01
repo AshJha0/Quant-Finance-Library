@@ -470,10 +470,7 @@ public final class Factors {
 
     /** Quantile of sorted data, linear between order statistics (Hyndman-Fan type 7). */
     private static double quantile(double[] sorted, double q) {
-        double h = (sorted.length - 1) * q;
-        int lo = (int) Math.floor(h);
-        int hi = Math.min(sorted.length - 1, lo + 1);
-        return sorted[lo] + (h - lo) * (sorted[hi] - sorted[lo]);
+        return com.quantfinlib.stats.Stats.quantileSorted(sorted, q);
     }
 
     @FunctionalInterface

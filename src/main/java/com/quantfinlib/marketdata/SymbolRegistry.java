@@ -9,6 +9,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * time, then publish and dispatch with primitive ints only.
  */
 public final class SymbolRegistry {
+    /** Creates an instance; the explicit form of the default constructor. */
+    public SymbolRegistry() {
+    }
+
 
     private final ConcurrentHashMap<String, Integer> ids = new ConcurrentHashMap<>();
     private volatile String[] symbols = new String[0];

@@ -28,15 +28,6 @@ public final class ForwardCurve {
             this.outrights = outrights;
         }
 
-        /** {@code tenors}. */
-        double[] tenors() {
-            return tenors;
-        }
-
-        /** {@code outrights}. */
-        double[] outrights() {
-            return outrights;
-        }
 
         @Override
         public boolean equals(Object other) {

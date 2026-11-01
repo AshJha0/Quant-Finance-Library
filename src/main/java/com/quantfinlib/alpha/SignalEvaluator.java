@@ -611,50 +611,10 @@ public final class SignalEvaluator {
 
     /**
      * Midrank transform (average rank for ties), 1-based; the values only
-     * feed Pearson. Primitive throughout: sort a copy, then each value's
-     * midrank is the average of its first/last positions in the sorted
-     * array via binary search. No boxed index sort, no comparator dispatch.
+     * feed Pearson. {@link com.quantfinlib.stats.Stats#ranks} sorts a copy
+     * and binary-searches each value's tie run, with no boxed index sort.
      */
     private static double[] ranks(double[] v) {
-        int n = v.length;
-        double[] sorted = v.clone();
-        java.util.Arrays.sort(sorted);
-        double[] rank = new double[n];
-        for (int i = 0; i < n; i++) {
-            int lo = lowerBound(sorted, v[i]);
-            int hi = upperBound(sorted, v[i]);
-            rank[i] = (lo + hi - 1) / 2.0 + 1; // midrank across the tie run
-        }
-        return rank;
-    }
-
-    /** First index with {@code sorted[idx] >= key}. */
-    private static int lowerBound(double[] sorted, double key) {
-        int lo = 0;
-        int hi = sorted.length;
-        while (lo < hi) {
-            int mid = (lo + hi) >>> 1;
-            if (sorted[mid] < key) {
-                lo = mid + 1;
-            } else {
-                hi = mid;
-            }
-        }
-        return lo;
-    }
-
-    /** First index with {@code sorted[idx] > key}. */
-    private static int upperBound(double[] sorted, double key) {
-        int lo = 0;
-        int hi = sorted.length;
-        while (lo < hi) {
-            int mid = (lo + hi) >>> 1;
-            if (sorted[mid] <= key) {
-                lo = mid + 1;
-            } else {
-                hi = mid;
-            }
-        }
-        return lo;
+        return com.quantfinlib.stats.Stats.ranks(v);
     }
 }

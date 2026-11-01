@@ -191,7 +191,11 @@ public final class CalendarAnomalies {
     private CalendarAnomalies() {
     }
 
-    /** @param returns per-period returns aligned with {@code epochMillis} */
+    /**
+     * Mean return by day of the week.
+     *
+     * @param returns per-period returns aligned with {@code epochMillis}
+     */
     public static DayOfWeekProfile dayOfWeek(double[] returns, long[] epochMillis) {
         requireAligned(returns, epochMillis);
         int n = returns.length;
@@ -278,6 +282,8 @@ public final class CalendarAnomalies {
     }
 
     /**
+     * Turn-of-month effect: returns inside against outside the month-end window.
+     *
      * @param daysBeforeMonthEnd  calendar days at month end in the
      *                            window, ≥ 0
      * @param daysAfterMonthStart calendar days at month start in the

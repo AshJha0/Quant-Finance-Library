@@ -33,7 +33,7 @@ DECL = re.compile(r"^(?!new |try|for|if|while|return)(?=[A-Za-z])((public |final
 def library_imports():
     pkgs = set()
     for d, _, files in os.walk(CLASSES):
-        if any(f.endswith(".class") for f in files):
+        if d != CLASSES and any(f.endswith(".class") for f in files):
             pkgs.add(os.path.relpath(d, CLASSES).replace(os.sep, "."))
     nested = ["com.quantfinlib.pricing.BlackScholes.OptionType",
               "com.quantfinlib.execution.BenchmarkExecutor.Benchmark"]

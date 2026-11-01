@@ -142,12 +142,30 @@
                         </path>
                     </annotationProcessorPaths>
                 </configuration>
+                <executions>
+                    <!-- Test sources are compiled into the com.quantfinlib module
+                         (patched in by the plugin). The allocation probes use the
+                         management MXBeans, which the library itself does not need. -->
+                    <execution>
+                        <id>default-testCompile</id>
+                        <configuration>
+                            <compilerArgs combine.children="append">
+                                <arg>--add-modules=java.management,jdk.management</arg>
+                                <arg>--add-reads=com.quantfinlib=java.management,jdk.management</arg>
+                            </compilerArgs>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.6.1</version>
                 <configuration>
+                    <!-- Tests run on the class path: JUnit, JMH and the
+                         reflective test helpers need no opens clauses, and
+                         ModuleDescriptorTest checks the descriptor itself. -->
+                    <useModulePath>false</useModulePath>
                     <excludedGroups>${test.excludedGroups}</excludedGroups>
                 </configuration>
             </plugin>
@@ -456,6 +474,7 @@
                                         <include>com.quantfinlib.cli</include>
                                         <include>com.quantfinlib.persist</include>
                                         <include>com.quantfinlib.backtest.*</include>
+                                        <include>com.quantfinlib.stats</include>
                                         <include>com.quantfinlib.util.MathUtils</include>
                                         </includes>
                                         <excludes>

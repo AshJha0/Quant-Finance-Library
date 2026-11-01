@@ -136,12 +136,12 @@ public final class SaCcr {
             this.isIndex = isIndex;
         }
 
-        /** @return the supervisory factor as a decimal */
+        /** Returns the supervisory factor as a decimal. */
         public double supervisoryFactor() {
             return supervisoryFactor;
         }
 
-        /** @return true for the two index grades */
+        /** Returns true for the two index grades. */
         public boolean isIndex() {
             return isIndex;
         }

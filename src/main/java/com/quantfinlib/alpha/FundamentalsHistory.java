@@ -31,6 +31,10 @@ import java.util.Map;
  * thread-safe while being filled; safe to share once filled.</p>
  */
 public final class FundamentalsHistory {
+    /** Creates an instance; the explicit form of the default constructor. */
+    public FundamentalsHistory() {
+    }
+
 
     /** One published record. */
     public record Entry(long periodEnd, long publishedAt, Fundamentals fundamentals) {

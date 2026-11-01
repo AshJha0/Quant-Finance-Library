@@ -120,6 +120,8 @@ public final class CovarianceShrinkage {
     }
 
     /**
+     * Ledoit-Wolf shrinkage estimate of the covariance matrix.
+     *
      * @param returns T×N: {@code returns[t][j]} = period-t return of asset j;
      *                T &ge; 2, N &ge; 1, rectangular, finite
      */

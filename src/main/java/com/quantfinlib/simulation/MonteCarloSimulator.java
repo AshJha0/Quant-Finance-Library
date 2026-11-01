@@ -119,6 +119,8 @@ public final class MonteCarloSimulator {
     @FunctionalInterface
     public interface PathPayoff {
         /**
+         * Payoff of one simulated path.
+         *
          * @param path {@code path[i][j]} = price of asset i at grid point j,
          *             j = 0 (spot) .. steps (maturity). The array is reused
          *             by the caller thread; copy anything you keep.

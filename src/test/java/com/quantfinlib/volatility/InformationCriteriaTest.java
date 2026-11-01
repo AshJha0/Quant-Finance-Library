@@ -11,9 +11,9 @@ class InformationCriteriaTest {
 
     @Test
     void formulasAreExact() {
-        assertEquals(2 * 3 - 2 * (-100.0), InformationCriteria.aic(-100, 3), 0.0);
+        assertEquals(2 * 3 - 2 * -100.0, InformationCriteria.aic(-100, 3), 0.0);
         assertEquals(206.0, InformationCriteria.aic(-100, 3), 0.0);
-        assertEquals(3 * Math.log(500) - 2 * (-100.0), InformationCriteria.bic(-100, 3, 500), 0.0);
+        assertEquals(3 * Math.log(500) - 2 * -100.0, InformationCriteria.bic(-100, 3, 500), 0.0);
         // Zero parameters: the criteria are just -2 ln L.
         assertEquals(200.0, InformationCriteria.aic(-100, 0), 0.0);
         assertEquals(200.0, InformationCriteria.bic(-100, 0, 500), 0.0);

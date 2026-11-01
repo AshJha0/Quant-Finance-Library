@@ -146,10 +146,6 @@ public final class GradientBoostedRegressor {
     }
 
     private static double mean(double[] v) {
-        double s = 0;
-        for (double x : v) {
-            s += x;
-        }
-        return s / v.length;
+        return com.quantfinlib.stats.Stats.mean(v);
     }
 }

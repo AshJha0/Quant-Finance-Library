@@ -22,6 +22,10 @@ import java.util.Locale;
  * prints it next to the numbers.</p>
  */
 public final class LatencyRecorder {
+    /** Creates an instance; the explicit form of the default constructor. */
+    public LatencyRecorder() {
+    }
+
 
     private static final int SUB_BITS = 7;
     private static final int SUB = 1 << SUB_BITS;

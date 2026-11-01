@@ -52,35 +52,31 @@ public final class OrderStateMachine {
 
     /** The state after {@code event}, or {@link #ILLEGAL}. */
     public static int next(int state, int event) {
-        switch (state) {
-            case PENDING_NEW:
-                return switch (event) {
-                    case EVENT_ACK -> NEW;
-                    case EVENT_REJECT -> REJECTED;
-                    case EVENT_PARTIAL_FILL -> PARTIALLY_FILLED;
-                    case EVENT_FULL_FILL -> FILLED;
-                    case EVENT_CANCELED -> CANCELED;
-                    default -> ILLEGAL;
-                };
-            case NEW:
-                return switch (event) {
-                    case EVENT_ACK -> NEW;
-                    case EVENT_PARTIAL_FILL -> PARTIALLY_FILLED;
-                    case EVENT_FULL_FILL -> FILLED;
-                    case EVENT_CANCELED -> CANCELED;
-                    default -> ILLEGAL;
-                };
-            case PARTIALLY_FILLED:
-                return switch (event) {
-                    case EVENT_ACK -> PARTIALLY_FILLED;
-                    case EVENT_PARTIAL_FILL -> PARTIALLY_FILLED;
-                    case EVENT_FULL_FILL -> FILLED;
-                    case EVENT_CANCELED -> CANCELED;
-                    default -> ILLEGAL;
-                };
-            default:
-                return ILLEGAL;
-        }
+        return switch (state) {
+            case PENDING_NEW -> switch (event) {
+                case EVENT_ACK -> NEW;
+                case EVENT_REJECT -> REJECTED;
+                case EVENT_PARTIAL_FILL -> PARTIALLY_FILLED;
+                case EVENT_FULL_FILL -> FILLED;
+                case EVENT_CANCELED -> CANCELED;
+                default -> ILLEGAL;
+            };
+            case NEW -> switch (event) {
+                case EVENT_ACK -> NEW;
+                case EVENT_PARTIAL_FILL -> PARTIALLY_FILLED;
+                case EVENT_FULL_FILL -> FILLED;
+                case EVENT_CANCELED -> CANCELED;
+                default -> ILLEGAL;
+            };
+            case PARTIALLY_FILLED -> switch (event) {
+                case EVENT_ACK -> PARTIALLY_FILLED;
+                case EVENT_PARTIAL_FILL -> PARTIALLY_FILLED;
+                case EVENT_FULL_FILL -> FILLED;
+                case EVENT_CANCELED -> CANCELED;
+                default -> ILLEGAL;
+            };
+            default -> ILLEGAL;
+        };
     }
 
     /** True for orders that can still trade (pending, acknowledged or partially filled). */

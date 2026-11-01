@@ -189,6 +189,8 @@ public final class FamaMacBeth {
     }
 
     /**
+     * Fits the Fama-MacBeth (1973) two-pass cross-sectional regression.
+     *
      * @param exposures      exposures[t][asset][factor], the loadings known at t
      * @param forwardReturns forwardReturns[t][asset], realised after t
      * @param horizon        bars spanned by each forward return; consecutive
