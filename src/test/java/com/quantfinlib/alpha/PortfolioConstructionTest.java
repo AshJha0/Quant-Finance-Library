@@ -134,10 +134,16 @@ class PortfolioConstructionTest {
         double[] betas = PortfolioConstruction.trailingBetas(ctx, 59, 50);
         int hi = ctx.symbols().indexOf("HI");
         int lo = ctx.symbols().indexOf("LO");
-        // Betas vs the EQUAL-WEIGHT panel return (mean beta 1 by construction):
-        // 2x and 0.5x names land at 2/1.25 = 1.6 and 0.5/1.25 = 0.4.
-        assertEquals(1.6, betas[hi], 0.01);
-        assertEquals(0.4, betas[lo], 0.01);
+        // Leave-one-out market: with two names each name's market is the
+        // other name, so HI's beta is 2/0.5 = 4 and LO's is 0.5/2 = 0.25.
+        // (The old self-inclusive proxy gave 1.6 and 0.4, both pulled toward 1.)
+        assertEquals(4.0, betas[hi], 1e-6);
+        assertEquals(0.25, betas[lo], 1e-6);
+        // Against the true market series the betas are recovered exactly.
+        double[] mkt = PortfolioConstruction.trailingBetas(ctx, 59, 50,
+                follow("MKT", marketMoves, 1.0));
+        assertEquals(2.0, mkt[hi], 1e-6);
+        assertEquals(0.5, mkt[lo], 1e-6);
     }
 
     private static BarSeries follow(String symbol, double[] moves, double beta) {

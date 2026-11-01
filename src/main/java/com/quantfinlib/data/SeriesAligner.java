@@ -20,7 +20,7 @@ import java.util.TreeSet;
  *       series (strictest, no synthetic bars).</li>
  *   <li>{@link #unionForwardFill} — union of timestamps from each series'
  *       first bar onward; gaps carry the previous close forward as a flat
- *       zero-volume bar.</li>
+ *       zero-volume bar flagged {@link BarSeries#isSynthetic synthetic}.</li>
  * </ul>
  */
 public final class SeriesAligner {
@@ -104,8 +104,9 @@ public final class SeriesAligner {
                     lastClose = s.close(cursor);
                     cursor++;
                 } else {
-                    // Gap: carry the previous close as a flat zero-volume bar.
-                    b.add(ts, lastClose, lastClose, lastClose, lastClose, 0);
+                    // Gap: carry the previous close as a flat zero-volume bar,
+                    // flagged synthetic so vol/ADV estimators can skip it.
+                    b.addSynthetic(ts, lastClose, lastClose, lastClose, lastClose, 0);
                 }
             }
             out.put(e.getKey(), b.build());

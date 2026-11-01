@@ -36,8 +36,17 @@ class BacktestAnalyticsRoundTest {
         assertEquals(50.0, r.avgLoss(), 1e-12);               // 100/2
         assertEquals(0.6 * (200.0 / 3) - 0.4 * 50, r.expectancy(), 1e-12); // 40 - 20 = 20
         assertEquals((200.0 / 3) / 50.0, r.payoffRatio(), 1e-12);
-        // Kelly = W - (1-W)/R = 0.6 - 0.4/(1.333) = 0.3.
-        assertEquals(0.6 - 0.4 / ((200.0 / 3) / 50.0), r.kellyFraction(), 1e-12);
+        // Kelly: argmax_f sum log(1 + f r) over the trade returns
+        // (+1.0, -0.4, +0.5, -0.6, +0.5); the old fixed-odds formula on
+        // currency P&L gave 0.3. Pinned value from an independent bisection,
+        // checked here through the first-order condition.
+        assertEquals(0.5617770589668645, r.kellyFraction(), 1e-12);
+        double f = r.kellyFraction();
+        double slope = 0;
+        for (double x : new double[]{1.0, -0.4, 0.5, -0.6, 0.5}) {
+            slope += x / (1 + f * x);
+        }
+        assertEquals(0, slope, 1e-9);
         // Winners held 2,4,6 -> avg 4; losers 8,10 -> avg 9.
         assertEquals(4.0, r.avgBarsHeldWinners(), 1e-12);
         assertEquals(9.0, r.avgBarsHeldLosers(), 1e-12);
@@ -70,13 +79,14 @@ class BacktestAnalyticsRoundTest {
 
     @Test
     void reshuffleTerminalPnlIsOrderInvariantButDrawdownIsNot() {
-        // Terminal P&L is the sum, identical in every ordering.
+        // Terminal wealth is a product, identical in every ordering.
         List<Trade> trades = new ArrayList<>();
         for (int i = 0; i < 20; i++) {
             trades.add(trade(i % 2 == 0 ? 30 : -20, 1)); // net +100 over 20 trades
         }
         MonteCarloTradeShuffle.Result r = MonteCarloTradeShuffle.analyze(trades, 2000, 42);
-        assertEquals(100.0, r.medianTerminalPnl(), 1e-9, "sum is order-invariant");
+        assertEquals(Math.pow(1.3 * 0.8, 10) - 1, r.medianTerminalPnl(), 1e-12,
+                "product is order-invariant");
         assertEquals(0.0, r.probLoss(), 0.0, "always net positive");
         // Drawdown IS order-dependent, so the distribution has spread.
         assertTrue(r.p95MaxDrawdown() >= r.medianMaxDrawdown());
@@ -98,7 +108,7 @@ class BacktestAnalyticsRoundTest {
             trades.add(trade(30, 1));
         }
         MonteCarloTradeShuffle.Result r = MonteCarloTradeShuffle.analyze(trades, 2000, 7);
-        assertEquals(200, r.actualMaxDrawdown(), 1e-9); // 10 * -20
+        assertEquals(1 - Math.pow(0.8, 10), r.actualMaxDrawdown(), 1e-12); // ten -20% trades
         assertTrue(r.actualDrawdownPct() > 0.9,
                 "worst-case ordering must rank in the tail: " + r.actualDrawdownPct());
     }

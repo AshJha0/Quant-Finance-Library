@@ -23,9 +23,15 @@ import java.util.List;
  * <p>Fill model (trade-print data, no book snapshots):</p>
  * <ul>
  *   <li><b>Market orders</b> fill instantly at the last trade price ± half
- *       the configured spread — the aggressor pays the spread.</li>
- *   <li><b>Limit orders</b> fill fully when a print trades <i>through</i> the
- *       limit price. Prints <i>at</i> the limit price accumulate: the order
+ *       the configured spread, plus an optional size term
+ *       {@code impactCoefficientBps·√(quantity / averagePrintSize)} with the
+ *       average print size measured from the replayed prints of that
+ *       symbol (square-root impact in units of typical trade size; 0 by
+ *       default, which treats any size as executable at the touch).</li>
+ *   <li><b>Limit orders</b> fill when a print trades <i>through</i> the limit
+ *       price, but each through print fills at most its own printed size: a
+ *       100-share print through the level cannot fill a 100,000-share
+ *       resting order. Prints <i>at</i> the limit price accumulate: the order
  *       starts behind {@code defaultQueueAhead} simulated resting quantity
  *       and fills (partially) only as traded volume works that queue off —
  *       passive fills must be earned, not assumed.</li>
@@ -49,7 +55,7 @@ public final class TickBacktester implements TickFileReader.ReplayHandler, TickT
      */
     public record Config(double initialCash, double spreadBps, double commissionBps,
                          long defaultQueueAhead, int equitySampleEvery, double tickSize,
-                         TickSizeSchedule tickSchedule) {
+                         TickSizeSchedule tickSchedule, double impactCoefficientBps) {
 
         public Config {
             // Sampling divides the tick counter; 0 would ArithmeticException
@@ -58,6 +64,23 @@ public final class TickBacktester implements TickFileReader.ReplayHandler, TickT
                 throw new IllegalArgumentException(
                         "equitySampleEvery must be > 0, got " + equitySampleEvery);
             }
+            if (!(impactCoefficientBps >= 0)) {
+                throw new IllegalArgumentException("impactCoefficientBps must be >= 0");
+            }
+        }
+
+        /** No market-order size impact. */
+        public Config(double initialCash, double spreadBps, double commissionBps,
+                      long defaultQueueAhead, int equitySampleEvery, double tickSize,
+                      TickSizeSchedule tickSchedule) {
+            this(initialCash, spreadBps, commissionBps, defaultQueueAhead, equitySampleEvery,
+                    tickSize, tickSchedule, 0);
+        }
+
+        /** Square-root size impact on market orders (bps at one average print). */
+        public Config withImpactCoefficientBps(double bps) {
+            return new Config(initialCash, spreadBps, commissionBps, defaultQueueAhead,
+                    equitySampleEvery, tickSize, tickSchedule, bps);
         }
 
         public static Config defaults() {
@@ -66,33 +89,33 @@ public final class TickBacktester implements TickFileReader.ReplayHandler, TickT
 
         public Config withSpreadBps(double bps) {
             return new Config(initialCash, bps, commissionBps, defaultQueueAhead,
-                    equitySampleEvery, tickSize, tickSchedule);
+                    equitySampleEvery, tickSize, tickSchedule, impactCoefficientBps);
         }
 
         public Config withCommissionBps(double bps) {
             return new Config(initialCash, spreadBps, bps, defaultQueueAhead,
-                    equitySampleEvery, tickSize, tickSchedule);
+                    equitySampleEvery, tickSize, tickSchedule, impactCoefficientBps);
         }
 
         public Config withDefaultQueueAhead(long qty) {
             return new Config(initialCash, spreadBps, commissionBps, qty,
-                    equitySampleEvery, tickSize, tickSchedule);
+                    equitySampleEvery, tickSize, tickSchedule, impactCoefficientBps);
         }
 
         public Config withEquitySampleEvery(int ticks) {
             return new Config(initialCash, spreadBps, commissionBps, defaultQueueAhead,
-                    ticks, tickSize, tickSchedule);
+                    ticks, tickSize, tickSchedule, impactCoefficientBps);
         }
 
         public Config withTickSize(double size) {
             return new Config(initialCash, spreadBps, commissionBps, defaultQueueAhead,
-                    equitySampleEvery, size, tickSchedule);
+                    equitySampleEvery, size, tickSchedule, impactCoefficientBps);
         }
 
         /** Price-banded ticks: the tick in force is looked up per price. */
         public Config withTickSchedule(TickSizeSchedule schedule) {
             return new Config(initialCash, spreadBps, commissionBps, defaultQueueAhead,
-                    equitySampleEvery, tickSize, schedule);
+                    equitySampleEvery, tickSize, schedule, impactCoefficientBps);
         }
     }
 
@@ -130,6 +153,8 @@ public final class TickBacktester implements TickFileReader.ReplayHandler, TickT
     private final List<Double> equitySamples = new ArrayList<>();
     private long[] positions = new long[16];
     private double[] lastPrices = new double[16];
+    private double[] printVolume = new double[16];
+    private long[] printCount = new long[16];
     private String[] symbols = new String[16];
     private double cash;
     private long ticks;
@@ -168,6 +193,11 @@ public final class TickBacktester implements TickFileReader.ReplayHandler, TickT
         lastTimestamp = timestampNanos;
         // 1. Resting orders are judged against the print before the strategy reacts.
         matchWorkingOrders(symbolId, price, size, timestampNanos);
+        if (size > 0) {
+            ensureCapacity(symbolId);
+            printVolume[symbolId] += size;
+            printCount[symbolId]++;
+        }
         lastPrices[symbolId] = price;
         // 2. Strategy sees the tick (orders it places wait for the next print).
         strategy.onTick(symbolId, price, size, timestampNanos);
@@ -186,9 +216,13 @@ public final class TickBacktester implements TickFileReader.ReplayHandler, TickT
             }
             boolean through = tradesThrough(order.side, price, order.price);
             if (through) {
-                // Traded through the level: we would have been filled at our price.
-                applyFill(order.symbolId, order.side, order.price, order.remaining, ts);
-                order.remaining = 0;
+                // Traded through the level: filled at our price, but no more
+                // than the print's own size.
+                long qty = Math.min(order.remaining, (long) Math.floor(size));
+                if (qty > 0) {
+                    applyFill(order.symbolId, order.side, order.price, qty, ts);
+                    order.remaining -= qty;
+                }
             } else if (samePriceLevel(price, order.price)) {
                 // Trading at our level: volume works off the queue ahead first.
                 order.volumeAtPrice += size;
@@ -232,7 +266,12 @@ public final class TickBacktester implements TickFileReader.ReplayHandler, TickT
         if (Double.isNaN(last)) {
             return -1;   // no price seen yet
         }
-        double fillPrice = last * (1 + side.sign() * config.spreadBps() / 2 / 1e4);
+        double impactBps = 0;
+        if (config.impactCoefficientBps() > 0 && printCount[symbolId] > 0) {
+            double avgPrint = printVolume[symbolId] / printCount[symbolId];
+            impactBps = config.impactCoefficientBps() * Math.sqrt(quantity / avgPrint);
+        }
+        double fillPrice = last * (1 + side.sign() * (config.spreadBps() / 2 + impactBps) / 1e4);
         applyFill(symbolId, side, fillPrice, quantity, lastTimestamp);
         return nextOrderId++;
     }
@@ -351,6 +390,8 @@ public final class TickBacktester implements TickFileReader.ReplayHandler, TickT
         positions = Arrays.copyOf(positions, cap);
         lastPrices = Arrays.copyOf(lastPrices, cap);
         symbols = Arrays.copyOf(symbols, cap);
+        printVolume = Arrays.copyOf(printVolume, cap);
+        printCount = Arrays.copyOf(printCount, cap);
         Arrays.fill(lastPrices, old, cap, Double.NaN);
     }
 }
