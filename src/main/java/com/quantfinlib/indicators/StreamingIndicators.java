@@ -7,8 +7,8 @@ package com.quantfinlib.indicators;
  * implementations (same seeding and smoothing), so a strategy backtested on
  * batch arrays behaves the same when run live on the streaming versions.
  *
- * <p>Instances are single-threaded by design — one per strategy/consumer
- * thread — matching the single-consumer dispatch model of the HFT bus.</p>
+ * <p>Instances are single-threaded by design (one per strategy/consumer
+ * thread), matching the single-consumer dispatch model of the HFT bus.</p>
  */
 public final class StreamingIndicators {
 
