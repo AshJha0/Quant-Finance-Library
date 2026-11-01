@@ -25,13 +25,13 @@ import java.util.SplittableRandom;
  * </ul>
  *
  * <p><b>Model limits.</b> Monte Carlo under Black-Scholes GBM with flat
- * volatility and rates — the standard first pricer, not a desk-grade
- * one: real autocall books are priced on local/stochastic vol because
+ * volatility and rates: the standard first pricer, not a desk-grade
+ * one. Real autocall books are priced on local/stochastic vol because
  * the knock-in put is deeply smile-sensitive (feed a vol appropriate to
  * the downside strike region, e.g. from {@code VolSurface}, as a
  * first-order correction). European knock-in (observed at maturity
  * only), observation-date monitoring (no continuous barriers), no
- * issuer credit spread — each a documented simplification. Antithetic
+ * issuer credit spread; each is a documented simplification. Antithetic
  * variates halve the variance; a fixed seed makes every price
  * reproducible and every test exact.</p>
  *

@@ -23,7 +23,7 @@ class StructuredNotesTest {
         double replication = par * 1.09 * Math.exp(-R * T)
                 - (par / k) * BlackScholes.price(OptionType.PUT, S, k, R, Q, VOL, T);
         assertEquals(replication, note, 1e-12, "the note IS its replication");
-        // The fat coupon is put premium: the note is worth LESS than the
+        // The fat coupon is put premium: the note is worth less than the
         // same bond without the embedded short put.
         assertTrue(note < par * 1.09 * Math.exp(-R * T));
         // Zero vol, strike comfortably below spot: the put is worthless

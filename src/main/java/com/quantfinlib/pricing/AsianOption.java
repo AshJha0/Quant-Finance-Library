@@ -10,20 +10,20 @@ import com.quantfinlib.util.MathUtils;
  * programs default to them. Two averages, two methods:
  *
  * <ul>
- *   <li><b>Geometric average — exact.</b> A product of lognormals is
+ *   <li><b>Geometric average: exact.</b> A product of lognormals is
  *       lognormal, so the geometric Asian has a Black-Scholes-style closed
  *       form (Kemna-Vorst 1990, discrete-fixing version). For n fixings
- *       equally spaced at {@code t_i = i T / n} (last fixing AT expiry):
+ *       equally spaced at {@code t_i = i T / n} (last fixing at expiry):
  *       <pre>
  *         E[ln G]   = ln S + (r - q - vol^2/2) * T (n+1)/(2n)
  *         Var[ln G] = vol^2 * T * (n+1)(2n+1)/(6 n^2)
  *       </pre>
  *       and the price is the Black-76 form on the lognormal G: discount
  *       {@code E[G] N(d1) - K N(d2)}. As n grows, Var goes to
- *       {@code vol^2 T / 3} — continuous averaging cuts the variance to a
- *       third; at n = 1 both moments collapse to the terminal price and
- *       the formula IS vanilla Black-Scholes (tested exact).</li>
- *   <li><b>Arithmetic average — Turnbull-Wakeman (1991) moment matching.</b>
+ *       {@code vol^2 T / 3}: continuous averaging cuts the variance to a
+ *       third. At n = 1 both moments collapse to the terminal price and
+ *       the formula is vanilla Black-Scholes (tested exact).</li>
+ *   <li><b>Arithmetic average: Turnbull-Wakeman (1991) moment matching.</b>
  *       A sum of lognormals is not lognormal and has no closed form; TW
  *       computes the arithmetic average's first two moments exactly under
  *       GBM,
@@ -39,13 +39,13 @@ import com.quantfinlib.util.MathUtils;
  * </ul>
  *
  * <p>AM-GM guarantees {@code A >= G} pathwise, so an arithmetic call is
- * always worth at least the geometric call (tested) — the geometric price
- * is the standard control variate for Monte Carlo on the arithmetic. Rates
- * and vol are annualized and continuously compounded; {@code carry} is the
- * dividend/foreign yield exactly as {@link BlackScholes}. Fixings strictly
- * after inception ({@code t_1 = T/n > 0}): a seasoned Asian with fixings
- * already struck is a payoff on the remaining average plus a known cash
- * amount — decompose it before calling. Research lane.</p>
+ * always worth at least the geometric call (tested), and the geometric
+ * price is the standard control variate for Monte Carlo on the arithmetic.
+ * Rates and vol are annualized and continuously compounded; {@code carry}
+ * is the dividend/foreign yield exactly as {@link BlackScholes}. Fixings
+ * strictly after inception ({@code t_1 = T/n > 0}): a seasoned Asian with
+ * fixings already struck is a payoff on the remaining average plus a
+ * known cash amount, so decompose it before calling. Research lane.</p>
  */
 public final class AsianOption {
 
