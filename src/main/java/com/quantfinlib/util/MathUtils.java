@@ -155,10 +155,10 @@ public final class MathUtils {
      * Adds tiny diagonal jitter if the matrix is borderline non-PSD
      * (rank-deficient factor models produce pivots a hair below zero),
      * but a pivot grossly negative relative to the diagonal scale means
-     * the input is genuinely indefinite — a typo'd correlation &gt; 1, or
-     * inconsistent pairwise estimates — and simulating a silently
-     * clamped, different dependence structure would misstate risk, so
-     * that fails loudly instead.
+     * the input is indefinite (a typo'd correlation &gt; 1, or
+     * inconsistent pairwise estimates). Simulating a silently clamped,
+     * different dependence structure would misstate risk, so that fails
+     * loudly instead.
      */
     public static double[][] cholesky(double[][] a) {
         int n = a.length;

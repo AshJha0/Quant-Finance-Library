@@ -5,9 +5,9 @@ import java.util.concurrent.locks.LockSupport;
 /**
  * jHiccup-style platform stall monitor: a daemon thread repeatedly parks for
  * a fixed resolution and records how much <b>longer than requested</b> each
- * park took. Any excess is a "hiccup" — GC pause, JVM safepoint, JIT
- * deoptimization stall, or OS scheduler preemption — exactly the pauses that
- * corrupt latency percentiles without showing up in application code.
+ * park took. Any excess is a "hiccup" (GC pause, JVM safepoint, JIT
+ * deoptimization stall, or OS scheduler preemption): exactly the pauses
+ * that corrupt latency percentiles without showing up in application code.
  *
  * <p>Run one alongside a latency benchmark or a live session: if the
  * benchmark's p99.9 spikes while the hiccup monitor shows a matching stall,
