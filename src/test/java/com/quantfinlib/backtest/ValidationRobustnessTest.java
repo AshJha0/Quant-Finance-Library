@@ -220,7 +220,7 @@ class ValidationRobustnessTest {
         DrawdownAnalytics.Drawdown second = r.episodes().get(1);
         assertEquals(5, second.peakIndex());
         assertEquals(7, second.troughIndex());
-        assertEquals(-1, second.recoveryIndex()); // honest: not recovered
+        assertEquals(-1, second.recoveryIndex()); // not recovered
         assertEquals(1 - 100.0 / 121.0, second.depth(), 1e-12);
         assertEquals(2, second.duration(equity.length));
 
