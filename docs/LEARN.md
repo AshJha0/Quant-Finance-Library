@@ -22648,7 +22648,10 @@ one-pass "optimization" is a downgrade, not a speedup.
 
 *In this library:* `util/MathUtils.variance` and the `[from, to)`
 overloads (`stdDevP`, `stdDevSample`) -- all two-pass, mean-then-
-deviations; `covariance` follows the same shape.
+deviations, and NaN rather than 0 when there are too few points (a
+variance of one observation is undefined, and a 0 would make a
+one-point Sharpe ratio look infinitely good); `covariance` follows the
+same shape.
 
 ### 853. "The covariance matrix from your factor model won't Cholesky-decompose -- a pivot goes negative. Do you add jitter and continue, or throw?"
 
@@ -22666,31 +22669,49 @@ dependence structure and misstate risk while looking like it worked.
 So the code sets a scale-aware threshold -- `-1e-8 * maxDiag` -- clamps
 pivots between that and zero up to 1e-12, and throws for anything
 below it with "check for correlations beyond 1". The rule of thumb:
-repair dust, refuse lies.
+repair dust, refuse lies. For genuinely rank-deficient matrices (more
+assets than observations, a factor model with fewer factors than
+names) the risk engines use a pivoted PSD Cholesky that accepts
+zero-rank directions exactly rather than by jitter and still rejects
+indefinite input, and when you need to repair an estimate rather than
+refuse it, project it onto the nearest correlation matrix (Higham 2002)
+explicitly and say so.
 
 *In this library:* `util/MathUtils.cholesky` -- the `indefinite`
 threshold, the `sum <= 0 -> 1e-12` clamp, and the loud throw with the
-correlations-beyond-1 hint.
+correlations-beyond-1 hint; `risk/PsdMatrices.java` -- `choleskyPsd`
+(shared by `VarEngine.monteCarloVar`, `GaussianCopula` and
+`MonteCarloSimulator`), Jacobi eigen-decomposition, nearest PSD matrix
+and Higham's nearest correlation matrix.
 
 ### 854. "Your 99.97% VaR quantile calls normInv(0.9997). A colleague worries the approximation falls apart in the tail. Is that a real concern here?"
 
 Not with this implementation, and it is worth knowing why. A naive
 rational approximation to the inverse normal is fitted to the central
 region and drifts badly past the 3-4 sigma point -- precisely where a
-tail risk number lives. This library uses Acklam's algorithm, which
-switches formulas by region: for p below 0.02425 or above 0.97575 it
-works in the variable `sqrt(-2*ln(p))` with a dedicated rational
-approximation for the tail, so the accuracy holds to |error| < 1.15e-9
-across the whole open interval, not just the middle. The one hard
-edge is the boundary itself: at p = 0 or p = 1 the true value is
+tail risk number lives. This library seeds with Acklam's algorithm,
+which switches formulas by region: for p below 0.02425 or above
+0.97575 it works in the variable `sqrt(-2*ln(p))` with a dedicated
+rational approximation for the tail, accurate to |error| < 1.15e-9 on
+its own. One Halley step on the forward CDF then refines that seed to
+double precision apart from the last few bits. The refinement is only
+as good as the forward CDF, which is why `normCdf` is Cody's rational
+erfc algorithm (Cody 1969), accurate to about 1e-15 relative down to
+x = -37.5, rather than the Abramowitz-Stegun 26.2.17 polynomial with
+its 7.5e-8 absolute error: an absolute error of that size is a large
+relative error in the far tail, exactly where a 99.97% quantile or a
+deep out-of-the-money option lives. The one hard edge is the boundary
+itself: at p = 0 or p = 1 the true value is
 +/- infinity, so the method refuses them with an exception rather than
 return a large finite lie. The practical takeaway for a risk desk:
 0.9997 is comfortably inside the supported range and the tail branch
 is exactly the code path that runs, so the quantile is trustworthy;
 what you must never do is feed it a p that rounds to 0 or 1.
 
-*In this library:* `util/MathUtils.normInv` -- Acklam, the plow/phigh
-region split, and the `p <= 0 || p >= 1` guard. Its exact-tail
+*In this library:* `util/MathUtils.normInv` -- Acklam seed, the
+plow/phigh region split, the Halley refinement and the
+`p <= 0 || p >= 1` guard; `util/MathUtils.normCdf` (Cody erfc) and
+`logNormPdf`. Its exact-tail
 companion is `tCdf` (Student-t via the regularized incomplete beta,
 no normal approximation, because the tails are where the two diverge).
 
@@ -22728,8 +22749,9 @@ loop `for (i = from; i < to; i++)` and the denominator can never
 disagree -- the count is literally the loop's span. Population and
 sample variants then differ only in the denominator (`n` vs `n - 1`),
 both computed from that same `to - from`, and each guards the
-degenerate window (fewer than 1 or 2 points returns 0 rather than
-dividing by zero or a negative). Because a rolling indicator advances
+degenerate window: fewer than 1 point (population) or 2 points
+(sample) returns NaN rather than dividing by zero, and rather than a 0
+that downstream code would read as "no volatility". Because a rolling indicator advances
 by moving `from` and `to` together, using half-open intervals
 end-to-end means the boundary bars are counted exactly once as the
 window slides -- no gap, no overlap. The fix for the reported bug is
