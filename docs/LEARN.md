@@ -21323,23 +21323,30 @@ First separate two different "decays". Quarter-over-quarter mean IC
 falling could be regime noise (one quarter is ~60 non-overlapping
 observations at a monthly horizon -- a wide error bar), or genuine
 crowding as the signal gets arbitraged. The number that actually
-bounds your trading is not the level but the horizon decay: mean IC
-as a function of how far forward you predict. A signal with IC 0.04
-at one bar but 0.01 at five bars must be traded fast and pays for it
-in turnover; one whose IC is flat across horizons can be held and
-rebalanced lazily. The half-life -- the horizon where IC first falls
-below half its shortest-horizon value -- is the single number that
-says "rebalance no slower than this or you are holding a dead
-signal". When the IC never halves within the tested range the honest
-answer is +infinity: a slow signal, cheap to trade. Report the decay
+bounds your trading is not the level but the decay: how much
+information the score at t still carries about the return h bars
+later. Measure it with the lagged one-bar IC, the IC of scores at t
+against the single-bar return over (t+h-1, t+h], for h = 1..H, and
+fit IC(h) = IC_0 exp(-(h-1)/tau). A signal with IC 0.04 at lag one but
+0.01 at lag five must be traded fast and pays for it in turnover; one
+whose lagged IC stays up can be held and rebalanced lazily. The
+half-life of that fit says "rebalance no slower than this or you are
+holding a dead signal". Report the signal's own rank autocorrelation
+beside it, since turnover is roughly one minus that autocorrelation.
+Do not confuse this with the holding-period IC, the IC against the
+cumulative return over (t, t+h]: for a slow signal that curve usually
+rises and plateaus, so its "half-crossing" can be +infinity even when
+the information decays steadily. It answers "what is my IC if I hold
+for h bars", not "how fast is the signal used up". Report the decay
 profile before arguing about the level, because the level without the
 horizon is unactionable.
 
-*In this library:* `alpha/AlphaReport.java` -- `decayProfile` returns
-mean IC per horizon and the interpolated `halfLifeBars` (+infinity
-when the IC never halves, the honest answer for slow signals); it
-reuses `AlphaValidation.meanIc` so decay and validation cannot fork
-on a definition.
+*In this library:* `alpha/AlphaReport.java` -- `lagIcProfile` returns
+the lagged one-bar ICs, the exponential fit and its `halfLifeBars`,
+and the signal autocorrelation per lag; `decayProfile` is the
+holding-period IC with its interpolated half-crossing (+infinity when
+the IC never halves); both reuse `AlphaValidation.meanIc` so decay and
+validation cannot fork on a definition.
 
 ### 802. "A vendor restated a fundamental after the fact and your value factor lit up. What went wrong, and what does the panel have to guarantee?"
 
@@ -21359,11 +21366,17 @@ names as NaN at each bar, and the ICs only ever see the cross-section
 that actually existed. Without one the panel is survivorship-blind:
 fine for methodology work, dishonest for any performance claim.
 
-*In this library:* `alpha/AlphaContext.java` -- fundamentals are an
-optional static snapshot (factors needing them return NaN for
-missing names, honest about what the library cannot invent), and
-`withUniverse` attaches a `data/PointInTimeUniverse.java` so
-`isActive` masks dead/dropped names to NaN per bar.
+*In this library:* `alpha/AlphaContext.java` -- for the restatement
+leak, `withFundamentalsHistory` attaches an `alpha/FundamentalsHistory`
+keyed by publication date (with reporting lags), so value and quality
+factors see only what was published at each bar; a static snapshot
+(`AlphaContext.of`) is served only at the last bar and
+`fundamentalsAsOf` throws for earlier bars, because scoring history
+with today's snapshot is look-ahead. For survivorship, `withUniverse`
+attaches a `data/PointInTimeUniverse.java` so `isActive` masks
+dead/dropped names to NaN per bar, and forward returns earn the
+delisting or merger proceeds rather than reading the flat bars after a
+delisting as a zero return.
 
 ### 803. "Show me exactly where a cross-sectional signal can peek one bar into the future."
 
@@ -21442,20 +21455,23 @@ years. Fama-MacBeth's genuine strength is that it kills
 CROSS-sectional correlation: each period contributes exactly one
 premium observation per factor, so the correlation between assets
 that wrecks a pooled regression's standard errors is absorbed. But
-the TIME-SERIES standard error of those per-period premia is still
-computed as if they were iid, and persistent premia make that
-standard error too small and the t-stat too big. The fix is a
-Newey-West HAC correction that inflates the standard error for
-autocorrelation. Read the intercept too: it should be near zero with
+the TIME-SERIES standard error of those per-period premia, computed
+as if they were iid, is too small when premia persist, and the t-stat
+too big. The fix is a Newey-West (1987) HAC standard error that
+accounts for the autocorrelation, with the lag chosen by Andrews'
+(1991) automatic rule; with overlapping holding periods the lag must
+be at least the horizon. Read the intercept too: it should be near zero with
 |t| < 2; a significant intercept says returns exist your factors do
 not explain. A t of 4 on an uncorrected, autocorrelated premium might
 be a t of 2 done honestly.
 
 *In this library:* `alpha/FamaMacBeth.java` -- two-pass cross-section
-then time-series mean, with the no-Newey-West limitation stated in
-the javadoc ("premia autocorrelation inflates them"), the intercept
-and its t-stat returned for exactly the unexplained-return check
-above.
+then time-series mean, with Newey-West HAC t-stats on each premium
+(lag from `alpha/NeweyWest.java`, at least the horizon) and the iid
+versions kept as `naiveTStats` so you can see how much the correction
+moved them; no Shanken (1992) errors-in-variables correction (stated
+in the javadoc). The intercept and its t-stat are returned for exactly
+the unexplained-return check above.
 
 ### 807. "You found a Tuesday effect. Six months live it is gone. What happened?"
 
@@ -21475,9 +21491,11 @@ mean return without its error bar. If it dies live, the live period
 is just the out-of-sample test you should have run first.
 
 *In this library:* `alpha/CalendarAnomalies.java` -- `dayOfWeek` and
-`turnOfMonth` return means WITH t-stats (Welch on the difference),
-the javadoc says treat |t| < 2 as decoration and re-test via
-`AlphaValidation` before believing anything.
+`turnOfMonth` return means WITH Newey-West t-stats (the iid ones kept
+as `naiveTStat`), and the day-of-week profile flags significance after
+a Holm correction for testing several days at once; the javadoc says
+treat |t| < 2 as decoration and re-test via `AlphaValidation` before
+believing anything.
 
 ### 808. "The top-minus-bottom quintile spread is positive but the middle quintiles are a mess. Do you trade it?"
 
@@ -21504,8 +21522,12 @@ exactly the "tail bet vs factor" point.
 
 It should give that signal zero weight, and -- the subtle part -- it
 must NOT renormalize the surviving weights back up to sum to one.
-Weight each component by max(0, its prequential IC) and let those
-weights BE the size of the blended signal, not just its mix. Here is
+Weight each component by its prequential IC shrunk toward zero by two
+standard errors, max(0, IC - 2 SE), and let those weights BE the size
+of the blended signal, not just its mix. The shrink matters: gating on
+IC > 0 alone hands weight to a true-zero component half the time, and
+with an EWMA memory of about 200 observations the standard error of
+the IC is near 0.07. Here is
 why renormalizing is wrong: if three of four components go quiet and
 only one has a barely-positive IC of 0.01, renormalizing would let
 that lone weak signal emit at full strength -- a barely-trusted blend
@@ -21518,7 +21540,8 @@ until its track record spans at least one IC memory -- an unproven
 ensemble emits zero, exactly like the learner beneath it.
 
 *In this library:* `microstructure/AlphaEnsemble.java` -- `combined`
-weights each component by `max(0, IC)` and clamps the sum,
+weights each component by `max(0, IC - z SE)` (z = 2 by default,
+`IcSignificance` for the standard error) and clamps the sum,
 DELIBERATELY not renormalized (class doc), emits 0 while
 `samples * icAlpha < 1`; `onObservation` scores the previous
 snapshot against the realized return.
@@ -21554,22 +21577,27 @@ luckiest of 400 zero-skill trials would have scored anyway". With 400
 draws you are reporting a maximum of 400, and the maximum of many
 noisy estimates is large by construction -- selection bias, not skill.
 Two complementary answers. First, on the winning FACTOR itself, a
-permutation test: re-pair its score dates with return dates at
-random, thousands of times, to build the null distribution of mean IC
-under no relationship, and see where the observed IC falls; a small
-p-value means the time-variation of the scores genuinely aligns with
-returns. Second, on the SEARCH, deflate the winning Sharpe by the
-number of trials (the expected max of N zero-skill Sharpes) -- covered
-by the backtesting toolkit's deflated Sharpe. The permutation test is
-deliberately conservative: a static ranking is invariant under date
-permutation and earns p ~ 1 no matter its in-sample IC, correctly,
-because one time-invariant cross-section is one effective observation.
+permutation test, and the choice of null decides what it tests.
+Within each date, permute which symbol gets which forward return,
+thousands of times: that destroys the cross-sectional score-return
+link while keeping both marginals and every time-series dependence, so
+the null distribution of mean IC is "no predictive power" and a small
+p-value means the ranking genuinely predicts. Do not permute dates
+instead. Re-pairing score dates with return dates is invariant for any
+slow factor (value, quality, low volatility, 12-1 momentum all keep
+nearly the same ranking from month to month), so it gives p near 1
+whatever their skill; it only tests whether the ranking varies over
+time. Second, on the SEARCH, deflate the winning Sharpe by the number
+of trials (the expected max of N zero-skill Sharpes) -- covered by the
+backtesting toolkit's deflated Sharpe (Bailey and Lopez de Prado 2014).
 
 *In this library:* `alpha/AlphaValidation.java` --
-`monteCarloRobustness` builds the permutation null of mean IC and
-returns an add-one-smoothed p-value; the class doc spells out the
-static-ranking conservatism. Pair with
-`backtest/validation/SharpeValidation.java` for the trials haircut.
+`monteCarloRobustness` builds the permutation null of mean IC with
+`NullModel.CROSS_SECTIONAL` by default (`CIRCULAR_SHIFT` keeps all
+autocorrelation as an exact enumeration; `DATE_PERMUTATION` is kept as
+a diagnostic) and returns a two-sided add-one-smoothed p-value (Phipson
+and Smyth 2010). Pair with `backtest/validation/SharpeValidation.java`
+for the trials haircut.
 
 ### 812. "Walk-forward or cross-validation for this signal -- which, and why?"
 
@@ -21589,7 +21617,10 @@ walk-forward when there is a choice to overfit, blocked CV when there
 is only a formula to stress across regimes; never a shuffled fold.
 
 *In this library:* `alpha/AlphaValidation.java` -- `walkForward`
-(rolling train/test with `efficiency()`) and `crossValidate`
+(rolling train/test with `efficiency()`, folds weighted by their
+number of IC observations, a Newey-West t-stat on the stitched
+out-of-sample IC series, and the in-sample winner haircut by the
+expected maximum of N null candidates) and `crossValidate`
 (k contiguous blocks with `signConsistency()`), the class doc naming
 the "consistency check for unfitted signals" reading explicitly.
 
@@ -21636,7 +21667,10 @@ Replace raw return forecasts with equilibrium-anchored ones
 maximizer back into an optimizer.
 
 *In this library:* `optimization/PortfolioOptimizer.java`
-(`maxSharpe` -- the naive optimizer, watch it misbehave) and
+(`maxSharpe` -- the naive objective, solved exactly by the active-set
+QP in `optimization/QuadraticProgram.java`, so what you watch
+misbehave is the inputs, not the solver; it throws when no asset's
+expected return beats the risk-free rate) and
 `risk/CovarianceShrinkage.java` (`ledoitWolf` -- data-chosen
 intensity, always positive-definite, the fix that makes a
 short-history covariance safe to optimize on).
@@ -21645,15 +21679,20 @@ short-history covariance safe to optimize on).
 
 Probably not -- it is the solver refusing to lie. Risk parity solves
 for weights where every asset contributes equally to portfolio
-variance, via a multiplicative fixed-point iteration on marginal risk
-contributions. Two things legitimately make it refuse. If any asset
-has non-positive variance (a flat or forward-filled series), the
-equal-risk fixed point does not exist -- an asset with no risk cannot
-contribute a share of it -- and the update thrashes; the honest move
-is to throw at construction rather than spin. And if the iteration
-does not converge within its cap, handing back the stalled iterate as
-though it were the solution would be worse than throwing, because
-downstream code cannot tell a converged answer from a stuck one. So a
+variance. The library uses the convex formulation of Spinu (2013):
+minimise `0.5 x'Sigma x - sum b_i ln x_i` over x > 0, whose unique
+minimiser satisfies `x_i (Sigma x)_i = b_i`, then normalise
+`w = x / 1'x`. Damped Newton steps with a backtracking line search
+that keeps x positive converge quadratically, typically in under 20
+iterations, including on nearly collinear assets where the older
+multiplicative fixed-point update oscillates. So a refusal is rare
+and means something. If any asset has non-positive variance (a flat
+or forward-filled series), the equal-risk solution does not exist --
+an asset with no risk cannot contribute a share of it -- and the
+input is rejected. And if the line search or the iteration fails
+within its cap, handing back the stalled iterate as though it were
+the solution would be worse than throwing, because downstream code
+cannot tell a converged answer from a stuck one. So a
 refusal points at your INPUTS: a degenerate asset, a broken
 covariance, or a genuinely pathological correlation structure. Fix the
 data, not the solver. The value of risk parity is precisely that it
@@ -21661,9 +21700,11 @@ needs no return forecasts, so a failure is almost always a covariance
 problem.
 
 *In this library:* `optimization/RiskParityOptimizer.java` --
-`equalRiskContribution` throws on non-positive variance and throws
-`IllegalStateException` if the fixed point does not converge in
-10,000 iterations, rather than returning a stalled iterate.
+`equalRiskContribution` and `riskBudget` (unequal budgets) solve the
+Spinu formulation by damped Newton, reject invalid inputs, and throw
+`IllegalStateException` if the line search fails or the iteration
+does not converge in 200 Newton steps, rather than returning a stalled
+iterate.
 
 ### 816. "You have three views and a market. How does Black-Litterman turn that into weights without blowing up?"
 
@@ -21684,9 +21725,13 @@ each deviation". Size a view by shrinking its Omega; walk it to zero
 confidence and the posterior returns to equilibrium.
 
 *In this library:* `optimization/BlackLitterman.java` --
-`impliedEquilibriumReturns` (Pi = delta Sigma w_mkt) and
+`impliedEquilibriumReturns` (Pi = delta Sigma w_mkt),
 `posteriorReturns` (the one-screen posterior formula, `omegaDiag`
-smaller = more confident, empty views returns the prior unchanged).
+smaller = more confident, empty views returns the prior unchanged),
+`posterior` (posterior mean, covariance of the mean and Sigma + M,
+computed in view space so Sigma need not be invertible) and
+`heLittermanOmega` (view variances proportional to the prior variance
+of each view portfolio, He and Litterman 1999).
 
 ### 817. "The constrained optimizer came back sitting on every position bound. What does that tell you?"
 
@@ -21707,9 +21752,10 @@ they are load-bearing and you should question the inputs that push so
 hard against them.
 
 *In this library:* `optimization/ConstrainedPortfolioOptimizer.java`
--- `withBounds` (validated to admit a fully-invested portfolio) and
-the box-simplex `project`; a solution on the bounds is the derivative-
-free search hitting the feasible edge the alphas pushed it to.
+-- `withBounds` (validated to admit a fully-invested portfolio); the
+problem is solved exactly by the active-set QP, so a solution on the
+bounds is the true optimum sitting on the feasible edge the alphas
+pushed it to, not a search that stopped early.
 
 ### 818. "Turnover penalty versus a tracking-error constraint -- when do you reach for which?"
 
@@ -21732,8 +21778,12 @@ the rebalance-frequency question two down.
 *In this library:*
 `optimization/ConstrainedPortfolioOptimizer.java` --
 `withTurnoverPenalty(currentWeights, penaltyPerUnitTurnover)` folds
-the one-way turnover cost straight into the objective, so the
-optimizer only trades where the alpha clears the cost.
+the turnover cost straight into the objective (linearised as
+`w - w_current = u - v` with u, v >= 0 and solved exactly as a QP), so
+the optimizer only trades where the alpha clears the cost.
+`alpha/TurnoverAwareOptimizer.java` is the larger version for a
+cross-sectional book: alpha, risk, an L1 turnover penalty, position
+and trade boxes and neutrality equalities, solved by ADMM.
 
 ### 819. "Equal-weight and cap-weight hold the same names. Why does only one of them cost you turnover?"
 
@@ -21770,30 +21820,37 @@ every sector nets to zero. Beta neutrality is a separate operation:
 project the weight vector orthogonal to the beta vector,
 w minus beta times (w.beta)/(beta.beta), so that sum w_i beta_i = 0
 exactly. If the risk report shows residual beta after sector
-neutralization, you skipped that projection. Apply both if you want
-both neutralities, and remember each one changes gross exposure, so
-re-target gross last. The general lesson: "neutral" always begs the
+neutralization, you skipped that projection. Applying the two
+projections one after the other does not in general leave both
+satisfied, because the second can undo the first; project onto both
+constraints jointly. Each changes gross exposure, so re-target gross
+last. The general lesson: "neutral" always begs the
 question "neutral to WHAT" -- sector, beta, size, each is its own
 constraint and none implies the others.
 
 *In this library:* `alpha/PortfolioConstruction.java` --
 `betaNeutralize` projects out the market-beta component
 (sum w_i beta_i = 0 exactly) as a step distinct from
-`sectorNeutralize`; `trailingBetas` builds the beta vector against
-the in-panel equal-weight proxy.
+`sectorNeutralize`; `neutralize(weights, constraints)` projects onto
+several constraints at once (use `sectorRows` plus the beta vector);
+`trailingBetas` builds the beta vector against a leave-one-out
+in-panel equal-weight market (or an external market series), because
+including the name in its own market proxy biases the beta toward 1.
 
 ### 821. "Would you use hierarchical risk parity here instead? Be honest about what you have."
 
 Honest answer: this library does not implement HRP, so I would not
 claim to run it -- I would say so and reach for what exists. HRP's
 appeal is real: it clusters assets by a correlation-distance tree and
-allocates down the hierarchy, sidestepping the covariance INVERSION
-that makes mean-variance so fragile on near-singular matrices, and it
-tends to produce more stable, less concentrated weights out of sample.
-What the library gives me instead attacks the same fragility from two
-other directions. Risk parity equalizes risk contribution without any
-matrix inversion at all (a multiplicative fixed point) and needs no
-return forecasts. And Ledoit-Wolf shrinkage conditions the covariance
+allocates down the hierarchy (Lopez de Prado 2016), sidestepping the
+covariance INVERSION that makes mean-variance so fragile on
+near-singular matrices, and it tends to produce more stable, less
+concentrated weights out of sample. What the library gives me instead
+attacks the same fragility from two other directions. Risk parity
+equalizes risk contribution without inverting the covariance to form
+a return-chasing tilt (the Spinu Newton step solves with Sigma, which
+is well posed because the log-barrier keeps every weight positive) and
+needs no return forecasts. And Ledoit-Wolf shrinkage conditions the covariance
 before any optimizer touches it, which is precisely the ill-
 conditioning HRP routes around. So for a near-singular problem I would
 combine shrinkage with risk parity and be explicit that this is not
@@ -21901,7 +21958,7 @@ across the strategy streams, no forecasts needed) plus
 hedgers showing negative), on a covariance from
 `risk/CovarianceShrinkage.java` or `microstructure/EwmaCovariance.java`.
 
-## Backtesting honestly (Q826-Q838)
+## Backtesting pitfalls (Q826-Q838)
 
 ### 826. "A backtest lands on your desk showing Sharpe 3 and a smooth equity curve. Walk me through your checklist before you believe a number of it."
 
