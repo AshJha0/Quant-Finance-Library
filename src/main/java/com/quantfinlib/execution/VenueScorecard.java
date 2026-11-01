@@ -13,9 +13,9 @@ import java.io.IOException;
  * there. Everything the {@link AdaptiveSor} needs beyond the quote:
  *
  * <ul>
- *   <li><b>Fill rate</b> — EWMA of {1 fill, 0 miss} per marketable child:
+ *   <li><b>Fill rate</b>: EWMA of {1 fill, 0 miss} per marketable child,
  *       the venue's reliability. Quotes fade, systems reject, sessions
- *       hiccup — a venue that fills 80% of what you send is worth less
+ *       hiccup; a venue that fills 80% of what you send is worth less
  *       than its displayed price says;</li>
  *   <li><b>Response latency</b> — EWMA of send→ack/fill time as you
  *       measure it, which routinely disagrees with the venue's advertised
@@ -23,17 +23,17 @@ import java.io.IOException;
  *   <li><b>Hidden liquidity</b> — for dark venues, an EWMA of the shares
  *       each probe actually found. "Unknown" becomes an estimate only
  *       by probing and remembering;</li>
- *   <li><b>Post-fill markout (adverse selection)</b> — what the mid does
- *       one horizon after your fill, signed in your trading direction:
- *       positive = the price kept going your way (a clean fill), negative
- *       = it reverted (you paid the spread to trade against informed or
- *       stale flow — the "fade" venues). Arm it via the extended
+ *   <li><b>Post-fill markout (adverse selection)</b>: what the mid does
+ *       one horizon after your fill, signed in your trading direction.
+ *       Positive means the price kept going your way (a clean fill);
+ *       negative means it reverted (you paid the spread to trade against
+ *       informed or stale flow, the "fade" venues). Arm it via the extended
  *       {@link #onFill(int, long, boolean, double, long)} and feed mids
- *       via {@link #onMid}; the equities counterpart of
- *       {@code fx.LpScorecard}'s post-REJECT markout. <b>The markout leg
+ *       via {@link #onMid}; it is the equities counterpart of
+ *       {@code fx.LpScorecard}'s post-reject markout. <b>The markout leg
  *       makes the card single-symbol</b>: {@link #onMid} matures every
  *       pending fill against the one mid it is given, and the markout is
- *       in absolute price units — one card per symbol once you use it
+ *       in absolute price units. Use one card per symbol once you use it
  *       (the fill-rate/latency stats alone were symbol-agnostic).</li>
  * </ul>
  *
