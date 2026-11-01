@@ -1,194 +1,226 @@
-# Market Risk Modeling — the 14-Step Roadmap
+# Market risk workflow
 
-Market risk modeling is far more than a daily VaR number: it is the complete
-workflow from market data through pricing models, Greeks, volatility and
-correlation models, VaR and Expected Shortfall, stress testing, and
-Basel/FRTB compliance, into production. This page maps every step of that
-workflow to the classes in this library — what exists, what each is for, and
-(step 14 and the honest-gaps section) what a JDK-only library deliberately
-does not pretend to ship.
+A market-risk process runs from market data through pricing models, sensitivities,
+volatility and correlation models, VaR and expected shortfall, stress testing,
+backtesting and regulatory measures. This page maps each of fourteen steps to the
+classes in this library and lists what is not implemented.
 
-Every class named here follows the house rules: tested behavior, documented
-limits, deterministic results. Regulatory items are **styled after the
-regulation, not certified** — the formulas are the regulation's and the
-tests pin their arithmetic, but capital approval involves programs no
-library can contain.
+Regulatory pieces follow the published text (Basel Committee MAR31-33) and their
+arithmetic is tested, but they are not certified for capital use. An internal-model
+approval also depends on data, governance and validation processes that a library
+cannot supply.
+
+Convention: unless a class says otherwise, VaR and ES are reported as positive
+numbers for losses.
 
 ---
 
-## 1. Market Data Collection
+## 1. Market data
 
 | Need | Where |
 |---|---|
-| Equity/FX/commodity bars | `data.CsvBarLoader`, `data.HttpBarFetcher`, `core.BarSeries` |
-| Live streams | `feed.WebSocketFeed`, `marketdata.HftMarketDataBus`, FIX 35=W/X views |
-| Tick history | `data.TickFileWriter/Reader` (QFLT), `data.TickCapture` |
-| Yield curves | `rates.YieldCurve` (zero rates, par-swap bootstrap) |
-| Implied volatility / option data | `pricing.VolSurface` (pillar smiles), `fx.FxVolSurface` (delta-quoted) |
-| FX forwards/swap points | `fx.SwapPointsCurve`, `pricing.ForwardCurve` |
+| Equity, FX and commodity bars | `data.CsvBarLoader`, `data.HttpBarFetcher`, `core.BarSeries` |
+| Live streams | `feed.WebSocketFeed`, `marketdata.HftMarketDataBus`, `fix.FixMarketDataView` (35=W/X) |
+| Tick history | `data.TickFileWriter`/`TickFileReader` (QFLT), `data.TickCapture` |
+| Yield curves | `rates.YieldCurve` (zero rates; `bootstrapAnnualParSwaps` from annual par swaps, single curve) |
+| Implied volatility | `pricing.VolSurface`, `fx.FxVolSurface` (delta-quoted) |
+| FX forwards and swap points | `fx.SwapPointsCurve`, `pricing.ForwardCurve` |
 
-*Gap (deliberate):* credit-spread market data has no dedicated loader —
-represent spreads as a `BarSeries` or a `YieldCurve` spread over the
-risk-free curve.
+There is no dedicated loader for credit-spread data; hold spreads in a `BarSeries`,
+or bootstrap a `credit.CreditCurve` from CDS par spreads.
 
-## 2. Data Cleaning & Processing
+## 2. Cleaning and preparation
 
 | Need | Where |
 |---|---|
-| Corporate action adjustment | `data.CorporateActions` (back-adjustment) |
-| Alignment / missing values | `data.SeriesAligner` (intersect, union + forward-fill) |
-| Return calculation | `core.BarSeries.returns()/logReturns()` |
-| Volatility estimation | step 6 below |
-| Curve construction | `rates.YieldCurve.bootstrapAnnualParSwaps` |
-| Liquidity/spread from bars alone | `microstructure.LiquidityMeasures` (Roll, Corwin-Schultz, Amihud — for history that predates your quote capture) |
-| Survivorship honesty | `data.PointInTimeUniverse` + delisting returns |
+| Splits and cash dividends | `data.CorporateActions` (back-adjustment) |
+| Alignment and missing values | `data.SeriesAligner` (intersection, or union with forward fill; filled bars are flagged as synthetic and skipped by volatility and impact estimators) |
+| Returns | `core.BarSeries.returns()`, `logReturns()` |
+| Liquidity from bars | `microstructure.LiquidityMeasures` (Roll, Corwin-Schultz, Amihud) |
+| Survivorship | `data.PointInTimeUniverse` with delisting and merger events |
 
-## 3. Risk Factor Identification
+## 3. Risk factors
 
-Factors in this library are **dense vectors with a documented order** —
-equity returns, rate moves, FX returns, commodity returns, vol points —
-consumed by the covariance/VaR/stress layers below. `risk.Pca` is the
-factor-count honesty check: how many of your named factors are real
-(a 12-tenor curve is ~3 factors: level, slope, curvature). Correlation and
-basis risk live in the covariance matrix itself (`microstructure.EwmaCovariance`
-streaming, or a sample covariance). For a WORKED factor decomposition —
-cash equities, equity options, FX spot/swaps/NDFs/FX options all landing
-on one named factor space at booking — see `crb.CentralRiskBook`
-([CENTRAL_RISK_BOOK.md](CENTRAL_RISK_BOOK.md)): currency-level FX legs,
-per-symbol equity deltas, dollar gamma/vega, forward-points risk.
+Risk factors are dense vectors with a documented order (equity returns, rate moves,
+FX returns, volatility points) that the covariance, VaR and stress layers consume.
+`risk.Pca` shows how many independent factors the data supports; a 12-tenor curve is
+usually about three (level, slope, curvature). `crb.CentralRiskBook` is a worked
+decomposition of equity and FX products onto named factors
+([CENTRAL_RISK_BOOK.md](CENTRAL_RISK_BOOK.md)).
 
-## 4. Pricing Models
+## 4. Pricing models
 
 | Model | Where |
 |---|---|
-| Black-Scholes (+ Garman-Kohlhagen) | `pricing.BlackScholes` |
-| Black-76 (futures/forwards options) | `pricing.Black76` |
+| Black-Scholes-Merton, Garman-Kohlhagen | `pricing.BlackScholes` |
+| Black-76 | `pricing.Black76` |
+| Bachelier (normal) | `pricing.Bachelier` |
 | Binomial trees (American) | `pricing.BinomialTree` |
-| Monte Carlo | `simulation.MonteCarloSimulator`, `pricing.Autocallable`, `pricing.Heston.callMonteCarlo` |
-| Heston stochastic vol | `pricing.Heston` (semi-analytic, little-trap form, MC cross-checked) |
-| SABR | `pricing.SabrModel` (Hagan 2002 + calibration) |
-| Vasicek / CIR / Hull-White | `rates.ShortRateModels` (closed-form bonds + simulation steps) |
-| Exotics | `pricing.DigitalOption/TouchOption/BarrierOption/VannaVolga/Autocallable` |
+| Monte Carlo | `simulation.MonteCarloSimulator` (`simulatePaths`, `price`), `pricing.Autocallable`, `pricing.Heston` |
+| Heston | `pricing.Heston` (semi-analytic, little-trap form of Albrecher et al. 2007) |
+| SABR | `pricing.SabrModel` (Hagan et al. 2002, Levenberg-Marquardt calibration) |
+| Short-rate models | `rates.ShortRateModels` (Vasicek, CIR, Hull-White) |
+| Swaptions, caps and floors | `rates.RatesOptions` (lognormal, shifted lognormal, normal) |
+| Exotics | `pricing.BarrierOption`, `DigitalOption`, `TouchOption`, `AsianOption`, `VannaVolga`, `Autocallable` |
 
-## 5. Sensitivity Analysis (Greeks)
+## 5. Sensitivities
 
-| Greek | Where |
+| Measure | Where |
 |---|---|
-| Delta, Gamma, Vega, Theta, Rho | `pricing.BlackScholes.greeks` |
-| Vanna, Volga, cross-gamma | `pricing.HigherOrderGreeks` |
-| Tick-frequency Greeks | `pricing.IncrementalGreeks` (delta-gamma Taylor per tick) |
-| DV01 / duration / convexity | `rates.BondPricer` |
-| Key-rate durations, PV01 by node | `rates.KeyRateDurations` (slices sum to the parallel DV01 — tested) |
-| Book-level scenario grids | `hedging.OptionsBook` |
+| Delta, gamma, vega, theta, rho | `pricing.BlackScholes.greeks` |
+| Vanna, volga, cross-gamma | `pricing.HigherOrderGreeks` |
+| Per-tick Greeks | `pricing.IncrementalGreeks` (delta-gamma Taylor update with theta between re-anchors) |
+| Duration, convexity, DV01 | `rates.BondPricer`, `rates.SwapPricer` |
+| Key-rate durations | `rates.KeyRateDurations` (slices sum to the parallel DV01) |
+| Book scenario grids and P&L explain | `hedging.OptionsBook` (delta, gamma, vega, vanna, volga, theta) |
 
-## 6. Volatility Modeling
+## 6. Volatility
 
 | Model | Where |
 |---|---|
-| Historical / EWMA | `risk.RiskMetrics.volatility`, `volatility.EwmaVolatility` |
-| GARCH(1,1) | `volatility.Garch11` (MLE, variance targeting) |
-| GJR-GARCH (leverage effect) | `volatility.GjrGarch11` — γ ≈ 0 on a symmetric series is itself the finding |
-| EGARCH (log-variance) | `volatility.Egarch11` — leverage as a SIGN (γ < 0), no positivity constraints by construction; one-step forecast exact, multi-step deliberately refused (the log recursion forecasts the median, not the mean) |
-| HAR-RV forecasting | `volatility.HarRv` — Corsi's daily/weekly/monthly OLS, the benchmark GARCH papers must beat |
-| Jump-robust realized vol | `microstructure.JumpRobustVolatility` (bipower) |
+| Historical, EWMA | `risk.RiskMetrics.volatility`, `volatility.EwmaVolatility` (causal, bias-corrected start) |
+| GARCH(1,1), GJR-GARCH, EGARCH | `volatility.Garch11`, `GjrGarch11`, `Egarch11`. Maximum likelihood (Nelder-Mead on transformed parameters, several starts), omega estimated. `estimate(returns, Innovation)` adds Student-t innovations and Bollerslev-Wooldridge (1992) robust standard errors. EGARCH forecasts one step only, because the log recursion forecasts the median rather than the mean beyond that. |
+| HAR-RV | `volatility.HarRv` (Corsi 2009), with Newey-West errors and a log variant |
+| Jump-robust realised volatility | `microstructure.JumpRobustVolatility` (bipower variation) |
 | Intraday seasonality | `microstructure.VolatilityCurve` |
-| Stochastic volatility | `pricing.Heston` |
-| Market volatility (fear gauge) | `volatility.VolatilityIndex` — VIX-style model-free index from an option chain; a flat-vol chain hands the vol back within discretization accuracy (tested at 2e-3, measured bias ~+5e-4), and the smile RAISES the index above ATM |
-| Systematic vs idiosyncratic | `volatility.VolatilityDecomposition` — the exact OLS split β²·Var(mkt) + Var(residual); R² is the systematic share |
+| Model-free volatility index | `volatility.VolatilityIndex` (CBOE-style variance replication, single expiry) |
+| Systematic and idiosyncratic split | `volatility.VolatilityDecomposition` |
+| Out-of-sample comparison | `ml.VolatilityForecaster.validate` (against EWMA and HAR-RV baselines) |
 
-## 7. Correlation & Dependence Modeling
+## 7. Correlation and dependence
 
 | Tool | Where |
 |---|---|
 | Pearson | `risk.RiskMetrics.correlation` |
-| Spearman, Kendall's τ | `risk.Dependence` (+ the τ → Pearson elliptical bridge) |
-| PCA | `risk.Pca` (Jacobi, eigenvalues descending, explained variance) |
-| Gaussian / Student-t copulas | `risk.GaussianCopula` (t has the tail dependence Gaussian lacks — tested) |
-| Streaming covariance | `microstructure.EwmaCovariance` (RiskMetrics-style, PSD-preserving) |
+| Spearman, Kendall's tau | `risk.Dependence` |
+| PCA | `risk.Pca` (Jacobi) |
+| Gaussian and Student-t copulas | `risk.GaussianCopula` |
+| Shrinkage | `risk.CovarianceShrinkage` (Ledoit-Wolf 2004 to the scaled identity, and to constant correlation) |
+| PSD repair | `risk.PsdMatrices` (PSD Cholesky, nearest PSD matrix, Higham 2002 nearest correlation matrix) |
+| Streaming covariance | `microstructure.EwmaCovariance` |
 
-## 8. Value at Risk
+## 8. Value at risk
 
 | Method | Where |
 |---|---|
-| Single-series historical/parametric/CVaR | `risk.RiskMetrics` |
-| Portfolio delta-normal (variance-covariance) | `risk.VarEngine.deltaNormalVar/Es` |
-| Portfolio Monte Carlo | `risk.VarEngine.monteCarloVar` (agrees with delta-normal on linear books — tested) |
-| Delta-gamma (Cornish-Fisher) | `risk.VarEngine.deltaGammaVar/Es` (short gamma worsens the tail — tested) |
-| Historical simulation (portfolio) | `risk.VarEngine.historicalVar` |
-| Full revaluation | `risk.VarEngine.fullRevaluationVar` — every scenario through YOUR pricer callback; sees the knocked-out barrier and the pinned short gamma that every sensitivity shortcut misses (a linear pricer reproduces historical simulation exactly — tested; a quadratic book's 99% VaR pinned to the dollar) |
+| Single series: historical, parametric, CVaR | `risk.RiskMetrics` |
+| Delta-normal | `risk.VarEngine.deltaNormalVar`, `deltaNormalEs` |
+| Delta-gamma (Cornish-Fisher) | `risk.VarEngine.deltaGammaVar`, `deltaGammaEs` |
+| Monte Carlo | `risk.VarEngine.monteCarloVar` |
+| Historical simulation | `risk.VarEngine.historicalVar` |
+| Filtered historical simulation | `risk.VarEngine.filteredHistoricalVar` (EWMA devolatilisation; Hull and White 1998, Barone-Adesi et al. 1999) |
+| Full revaluation | `risk.VarEngine.fullRevaluationVar` (each scenario through a pricer callback you supply) |
+| Allocation | `risk.ComponentVar` (Euler components sum to portfolio VaR) |
 
-Scenario rows are yours: historical rows for historical full-reval,
-Cholesky-generated rows for Monte Carlo full-reval.
+Full revaluation takes scenario rows from the caller: historical rows for historical
+simulation, or simulated rows for Monte Carlo.
 
-## 9. Tail Risk
+## 9. Tail risk
+
+**Expected shortfall.** Every empirical VaR/ES pair in the library comes from
+`risk.TailRisk`. VaR is the lower empirical quantile `L(ceil(c n))` of the sorted
+losses. ES is the Acerbi-Tasche (2002) estimator: the mean of the worst
+`w = (1 - c) n` losses, with a fractional weight on the boundary observation:
+
+```
+ES = ( L(n) + ... + L(n-k+1) + (w - k) L(n-k) ) / w,    k = floor(w)
+```
+
+Example: losses 1, 2, ..., 1000 at c = 97.5 % give w = 25, VaR = 975 and
+ES = mean(976..1000) = 988.0. An estimator that also averages the VaR observation
+gives 987.5; at a 250-day window that bias is about 17 % of the tail spread.
+
+**Extreme value theory.** `risk.ExtremeValueTheory` fits a generalised Pareto
+distribution to threshold exceedances by probability-weighted moments (`fitPot`) or
+maximum likelihood with standard errors (`fitPotMle`), with `meanExcess` for threshold
+choice. ES is refused when the shape parameter is 1 or more, because the tail mean is
+then infinite.
+
+## 10. Stress testing
 
 | Tool | Where |
 |---|---|
-| Expected Shortfall | every `VarEngine` method returns it beside VaR; `RiskMetrics.expectedShortfall` |
-| EVT / POT / GPD | `risk.ExtremeValueTheory` (PWM fit; refuses a finite ES when ξ ≥ 1 — the honest failure) |
-
-## 10. Stress Testing & Scenario Analysis
-
-| Tool | Where |
-|---|---|
-| Named/hypothetical scenarios | `risk.StressTester.scenarioPnl` (delta and delta-gamma) |
-| Historical templates | `blackMonday1987/lehman2008/covidMarch2020` — stylized STARTING POINTS, edit them |
-| Sensitivity ladders | `risk.StressTester.sensitivityLadder` |
-| Reverse stress | `risk.StressTester.reverseStress` — closed form, reports the breaking move's implausibility in sigmas |
+| Scenario P&L (delta and delta-gamma) | `risk.StressTester.scenarioPnl` |
+| Historical templates | `StressTester.blackMonday1987`, `lehman2008`, `covidMarch2020` (stylised shocks; edit them for your factors) |
+| Sensitivity ladders | `StressTester.sensitivityLadder` |
+| Reverse stress | `StressTester.reverseStress` (closed form for a linear book; reports the move's size in standard deviations) |
 
 ## 11. Backtesting
 
 | Test | Where |
 |---|---|
-| Kupiec POF | `risk.VarBacktest` |
-| Christoffersen independence + conditional coverage | `risk.VarBacktest` |
-| Basel traffic light | `risk.FrtbEs.TrafficLight` (≤4 green, 5–9 amber, ≥10 red) |
-| P&L attribution | `risk.PnlAttribution` (step 12) |
+| Kupiec proportion of failures | `risk.VarBacktest` |
+| Christoffersen independence and conditional coverage | `risk.VarBacktest` |
+| Acerbi-Szekely Z2 for ES | `risk.VarBacktest.acerbiSzekelyZ2` (thresholds -0.70 at 5 % and -1.80 at 0.01 %, from Acerbi and Szekely 2014) |
+| Basel traffic light | `risk.FrtbEs.TrafficLight` (0-4 green, 5-9 amber, 10 or more red, over 250 days at 99 %) |
+| P&L attribution test | `risk.PnlAttribution` (step 12) |
 
-## 12. Regulatory Framework (Basel III / FRTB)
+## 12. Regulatory measures (FRTB internal models)
 
-| Piece | Where | Status |
+| Piece | Where | Notes |
 |---|---|---|
-| ES 97.5% | `risk.FrtbEs.es975` | formulas per MAR33, **not certified** |
-| Liquidity-horizon cascade | `risk.FrtbEs.liquidityHorizonEs` | tested arithmetic |
-| Stressed calibration (IMCC ratio, floored at 1) | `risk.FrtbEs.stressCalibratedEs` | tested |
-| P&L Attribution Test (Spearman + KS, green/amber/red) | `risk.PnlAttribution` | per MAR32 thresholds |
-| Standardized Approach (SA) | — | **out of scope**: a large regulatory lookup-table exercise (risk weights, buckets, correlation scenarios) with no algorithmic content; implementing it partially would be worse than not at all |
-| NMRF capital | — | **out of scope**: requires observability data governance, not code |
+| ES at 97.5 % | `risk.FrtbEs.es975` | Acerbi-Tasche estimator (step 9) |
+| Liquidity-horizon cascade | `risk.FrtbEs.liquidityHorizonEs` | MAR33 cascade over the liquidity horizons |
+| Stressed calibration | `risk.FrtbEs.stressCalibratedEs` | See below |
+| P&L attribution test | `risk.PnlAttribution` | Spearman correlation and Kolmogorov-Smirnov statistic with the MAR32 zone thresholds |
 
-## 13. Model Validation
+Stressed calibration follows MAR33:
 
-The validation toolkit is the library's existing honesty machinery applied
-to risk models: benchmarking = the cross-checks every pricer ships with
-(Heston vs its own MC, exotics vs MC, zero-vol exact cases); calibration
-testing = `VarBacktest` + `PnlAttribution`; challenger models = fit both
-`Garch11` and `GjrGarch11` and compare likelihoods (tested pattern);
-sensitivity analysis = `StressTester.sensitivityLadder`. SR 11-7 governance
-(documentation, independent review, effective challenge) is a PROCESS —
-what a library can contribute is that every model documents its
-assumptions and limits in javadoc, which this one does.
+```
+ES = ES_R,S * max(1, ES_F,C / ES_R,C)
+```
 
-## 14. Production Deployment
+`ES_R,S` is the ES of the reduced factor set over the stressed period, `ES_F,C` the
+ES of the full factor set over the current 12 months, and `ES_R,C` the ES of the
+reduced set over the current period. The ratio is floored at 1. The method throws when
+the reduced set explains less than 75 % of the full-set current ES
+(`ES_R,C < 0.75 ES_F,C`). Arguments are in the order
+`stressCalibratedEs(esCurrentFull, esStressedReduced, esCurrentReduced)`.
+
+Example: `ES_F,C = 100`, `ES_R,C = 80`, `ES_R,S = 150` give `150 * 1.25 = 187.5`.
+
+## 13. Model validation
+
+The validation tools are the ones above applied to the models themselves: pricers are
+tested against independent methods (Heston against its own Monte Carlo, exotics
+against simulation, closed-form limits at zero volatility); calibration is tested with
+`VarBacktest` and `PnlAttribution`; challenger models are compared by likelihood
+(`Garch11` against `GjrGarch11`, with `InformationCriteria`); sensitivity is explored
+with `StressTester.sensitivityLadder`. Governance in the sense of SR 11-7
+(documentation, independent review, effective challenge) is an organisational process.
+Each class documents its assumptions and limits in its javadoc.
+
+## 14. Running it
 
 | Piece | Where |
 |---|---|
-| Real-time risk gate | `trading.HftRiskGate` (~3 ns/check), `trading.GlobalRiskAggregator` |
-| Live dashboards | `trading.TradingDashboard` |
-| Automated reporting | `report.ReportGenerator` (HTML/PDF/XLSX/CSV) |
-| Portfolio aggregation | `risk.PortfolioRiskAnalyzer`, `execution.PortfolioExecutor` |
-| Model state across sessions | `persist.Checkpoint` |
-| Model monitoring | `VarBacktest` + `PnlAttribution` run on a schedule ARE the monitor |
+| Pre-trade risk gate | `trading.HftRiskGate`, firm-wide `trading.GlobalRiskAggregator` |
+| Dashboards | `trading.TradingDashboard` |
+| Reports | `report.ReportGenerator` (HTML, PDF, XLSX, CSV) |
+| Portfolio aggregation | `risk.PortfolioRiskAnalyzer`, `crb.CentralRiskBook` |
+| State across sessions | `persist.Checkpoint` |
+| Monitoring | `VarBacktest` and `PnlAttribution` run on a schedule |
 
-*Gap (deliberate):* cloud deployment, schedulers and data pipelines are
-infrastructure, not library code. Everything here runs in a plain JVM.
+Schedulers, data pipelines and deployment are infrastructure and are not part of the
+library.
 
 ---
 
-## Reading order for the risk-curious
+## Not implemented
 
-`RiskMetrics` → `VarEngine` → `VarBacktest` → `ExtremeValueTheory` →
-`StressTester` → `FrtbEs`/`PnlAttribution`, with `Dependence`/`Pca`/
-`GaussianCopula` as the correlation toolkit and step 4's pricers underneath.
-The from-zero explanations live in [LEARN.md](LEARN.md) §9 (risk) and §10
-(derivatives); every behavior claimed above is pinned in
-`MarketRiskTest` and `MarketRiskPricingTest`.
+- FRTB standardised approach (sensitivities-based method, default risk charge,
+  residual risk add-on).
+- Non-modellable risk factor capital and the risk-factor eligibility test.
+- SA-CCR, SIMM, CVA capital, and xVA beyond the unilateral `credit.CvaApproximator`.
+- Multi-curve rate risk (OIS discounting with separate projection curves).
+- SVI/SSVI and local-volatility surfaces; smile risk uses SABR, vanna-volga or the
+  pillar-smile `VolSurface`.
+- A scenario or market-data store; scenarios are arrays supplied by the caller.
+
+## Reading order
+
+`TailRisk` and `RiskMetrics`, then `VarEngine`, `VarBacktest`,
+`ExtremeValueTheory`, `StressTester`, and `FrtbEs` with `PnlAttribution`.
+`Dependence`, `Pca`, `GaussianCopula` and `PsdMatrices` are the correlation tools,
+and the pricers of step 4 sit underneath. [LEARN.md](LEARN.md) explains the ideas from
+first principles.
