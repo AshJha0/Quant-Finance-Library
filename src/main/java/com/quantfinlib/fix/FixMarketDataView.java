@@ -10,7 +10,7 @@ package com.quantfinlib.fix;
  * the framed bytes recording primitives into preallocated entry arrays, and
  * every getter is primitive.
  *
- * <p>Subset (documented, honest): single-instrument messages — one Symbol
+ * <p>Supported subset: single-instrument messages — one Symbol
  * (55) per message, entries carrying MDUpdateAction (279, X only; W entries
  * are implicitly NEW), MDEntryType (269: '0' bid / '1' offer), MDEntryPx
  * (270, scaled long: mantissa × 10^-decimals — the same representation the

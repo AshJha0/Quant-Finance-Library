@@ -9,7 +9,7 @@ package com.quantfinlib.rfq;
  * winner's edge was worth and the input every dealer-selection model
  * feeds on.
  *
- * <p>Prices are for ONE unit of the instrument in the client's
+ * <p>Prices are for one unit of the instrument in the client's
  * direction: for a client BUY, lower is better; for a SELL, higher.
  * Anchor the auction with the model fair value (e.g.
  * {@code pricing.Autocallable.price}) and {@link #winnerSpreadToFairBps}
@@ -49,8 +49,8 @@ public final class RfqAuction {
     }
 
     /**
-     * A dealer's quote. A dealer may refresh; the LAST price stands (but
-     * {@link #responseNanos} keeps the FIRST response — a dealer who
+     * A dealer's quote. A dealer may refresh; the last price stands (but
+     * {@link #responseNanos} keeps the first response — a dealer who
      * showed up in 50ms and refreshed near the close is a fast responder,
      * not a slow one). Non-positive or non-finite prices are declines —
      * recorded as no quote, never as a tradable level; an explicit pull
@@ -127,7 +127,7 @@ public final class RfqAuction {
     }
 
     /**
-     * Time from the request to this dealer's FIRST response, or -1 if the
+     * Time from the request to this dealer's first response, or -1 if the
      * dealer never quoted this auction (a later pull does not erase that
      * they showed up).
      */

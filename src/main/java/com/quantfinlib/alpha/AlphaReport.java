@@ -375,7 +375,7 @@ public final class AlphaReport {
      * NaN until the window fills. The steadiness plot: a flat positive line
      * is a strategy, a single spike is an anecdote.
      *
-     * <p>Uses the SAMPLE standard deviation (n−1) — the same definition as
+     * <p>Uses the sample standard deviation (n−1) — the same definition as
      * {@code risk.RiskMetrics.sharpeRatio} behind {@link #summarize} — so a
      * full-sample rolling window reproduces the headline Sharpe exactly
      * rather than differing by {@code √(n/(n−1))}.</p>

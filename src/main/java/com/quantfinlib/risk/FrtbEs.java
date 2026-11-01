@@ -3,17 +3,17 @@ package com.quantfinlib.risk;
 /**
  * FRTB Internal Models Approach expected shortfall — the market-risk
  * capital measure that replaced 10-day VaR: ES at 97.5%, computed on a
- * base 10-day horizon and scaled up across LIQUIDITY HORIZONS (how long
+ * base 10-day horizon and scaled up across liquidity horizons (how long
  * each risk factor class realistically takes to exit under stress: 10
  * days for major FX and rates, up to 120 for exotic credit), then
- * anchored to a STRESSED period:
+ * anchored to a stressed period:
  *
  * <pre>  ES = √( Σⱼ [ ESⱼ · √((LHⱼ − LHⱼ₋₁)/10) ]² )      (the LH cascade)
  *  ES   = ES_R,S · max(1, ES_F,C / ES_R,C)                    (MAR33, stressed calibration)</pre>
  *
  * <p><b>Styled after BCBS MAR33, not certified</b> — the same
  * stance as the LULD and ESMA-tick implementations elsewhere in this
- * library: the FORMULAS are the regulation's, the tests pin their
+ * library: the formulas are the regulation's, the tests pin their
  * arithmetic, but regulatory capital additionally requires desk-level
  * approvals, the full P&amp;L attribution program
  * ({@link PnlAttribution}), non-modellable risk factor (NMRF) capital,
@@ -47,7 +47,7 @@ public final class FrtbEs {
 
     /**
      * The liquidity-horizon cascade: given the base 10-day ES computed
-     * on the FULL factor set and the ESs of the nested subsets that
+     * on the full factor set and the ESs of the nested subsets that
      * remain shocked at each longer horizon, aggregates per MAR33.5:
      *
      * @param esByHorizon esByHorizon[j] = 10-day ES with only the

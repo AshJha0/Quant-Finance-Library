@@ -1,5 +1,5 @@
 /**
- * Monte Carlo simulation:
+ * Monte Carlo simulation of portfolio and multi-asset price paths.
  * {@link com.quantfinlib.simulation.MonteCarloSimulator} runs GBM scenarios
  * (single portfolio or correlated multi-asset via Cholesky) in parallel
  * across cores, deterministic per seed;

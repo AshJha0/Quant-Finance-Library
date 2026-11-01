@@ -9,7 +9,7 @@ import java.time.temporal.ChronoUnit;
  * and the disagreement is worth real money.
  *
  * <p>An interest payment is {@code notional × rate × yearFraction}, and the
- * SAME two calendar dates produce different year fractions under different
+ * same two calendar dates produce different year fractions under different
  * conventions: 2024-01-15 → 2024-07-15 is 182 days, which is 0.5056 under
  * ACT/360 (money markets: USD deposits, SOFR), 0.4986 under ACT/365
  * (GBP money markets, many swap fixed legs), and exactly 0.5 under 30/360
@@ -18,7 +18,7 @@ import java.time.temporal.ChronoUnit;
  * moves the payment by tens of thousands of dollars — a booking error that
  * surfaces as an unexplained break on settlement day, not a model error.</p>
  *
- * <p>The rule in practice: the convention is part of the INSTRUMENT (read
+ * <p>The rule in practice: the convention is part of the instrument (read
  * the term sheet), never a system-wide default. That is why
  * {@link BondPricer} and the curve utilities take a {@code DayCount}
  * argument instead of assuming one.</p>

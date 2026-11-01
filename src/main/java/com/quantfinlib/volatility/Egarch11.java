@@ -3,15 +3,15 @@ package com.quantfinlib.volatility;
 import com.quantfinlib.util.MathUtils;
 
 /**
- * EGARCH(1,1) — Nelson's exponential GARCH, the LOG-variance dynamics
+ * EGARCH(1,1) — Nelson's exponential GARCH, the log-variance dynamics
  * the plain family cannot express:
  *
  * <pre>  ln h_t = ω + β·ln h_{t-1} + α(|z_{t-1}| − √(2/π)) + γ·z_{t-1}</pre>
  *
  * with standardized shocks {@code z = r/√h}. Two things the log form
- * buys: no positivity constraints AT ALL (any parameter signs give a
+ * buys: no positivity constraints AT all (any parameter signs give a
  * valid variance — the exp does the work {@code Garch11}'s ω,α,β ≥ 0
- * constraints do), and leverage as a SIGN — {@code γ < 0} means a
+ * constraints do), and leverage as a sign — {@code γ < 0} means a
  * down move raises tomorrow's volatility more than an equal up move,
  * and the magnitude reads directly. Stationarity is {@code |β| < 1},
  * nothing else.
@@ -183,7 +183,7 @@ public final class Egarch11 {
         return h;
     }
 
-    /** One-step-ahead variance — EXACT (tomorrow's ln h is deterministic today). */
+    /** One-step-ahead variance — exact (tomorrow's ln h is deterministic today). */
     public static double nextVariance(double[] returns, Params p) {
         double[] h = conditionalVariances(returns, p);
         double mean = MathUtils.mean(returns);

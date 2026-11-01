@@ -125,7 +125,7 @@ public final class Pca {
 
     private static void jacobi(double[][] m, double[][] v) {
         int n = m.length;
-        // Convergence must be RELATIVE to the matrix's own scale — the
+        // Convergence must be relative to the matrix's own scale — the
         // caller chooses the units (return fractions vs currency², ~1e16
         // apart), so absolute thresholds either never trigger (burning
         // all sweeps on a converged matrix) or trigger too early.
@@ -139,7 +139,7 @@ public final class Pca {
             return;                        // the zero matrix is already diagonal
         }
         double offTol = 1e-24 * normSq;
-        // The per-element skip threshold must be CONSISTENT with the total
+        // The per-element skip threshold must be consistent with the total
         // off-diagonal stop: if every element sits below skipTol, their
         // summed squares must already satisfy off < offTol — otherwise all
         // rotations get skipped while the stop never fires, and the sweep

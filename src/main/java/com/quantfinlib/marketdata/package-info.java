@@ -1,5 +1,6 @@
 /**
- * Market data transport, two lanes:
+ * In-process market data transport: a zero-allocation lane for the hot
+ * path and an object-based lane for research and monitoring.
  *
  * <p><b>HFT lane</b>: {@link com.quantfinlib.marketdata.HftMarketDataBus}
  * over {@link com.quantfinlib.marketdata.TickRingBuffer} (lock-free SPSC,
@@ -8,9 +9,9 @@
  * {@link com.quantfinlib.marketdata.SymbolRegistry} interning symbols to
  * dense int ids, {@link com.quantfinlib.marketdata.QuoteListener} for
  * top-of-book input and {@link com.quantfinlib.marketdata.Nbbo} for the
- * consolidated inside with per-venue staleness. Latency figures come from
+ * consolidated inside with per-venue staleness. Latency is measured by
  * {@code examples.HftLatencyBenchmark}, which prints the clock resolution
- * alongside them.</p>
+ * alongside its results; see docs/BENCHMARKS.md.</p>
  *
  * <p><b>Convenience lane</b>:
  * {@link com.quantfinlib.marketdata.MarketDataProcessor} (object events,

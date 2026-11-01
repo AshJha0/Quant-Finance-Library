@@ -9,7 +9,7 @@ package com.quantfinlib.microstructure;
  * exponentially distributed with mean {@code expectedTradedQty}; an order
  * fills when cumulative executions reach the quantity ahead of it plus its
  * own size, giving {@code P(fill) = exp(-(qtyAhead + orderQty) / expectedTradedQty)}.
- * A deliberately simple, closed-form model — calibrate {@code expectedTradedQty}
+ * A simple closed-form model — calibrate {@code expectedTradedQty}
  * from observed level turnover.</p>
  */
 public final class QueueModel {

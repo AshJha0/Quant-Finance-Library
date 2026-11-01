@@ -1,5 +1,6 @@
 /**
- * Multi-asset backtesting:
+ * Multi-asset portfolio backtesting with point-in-time universes and
+ * financing. The main classes:
  * {@link com.quantfinlib.backtest.portfolio.PortfolioBacktester} rebalances
  * long/short weight targets from a
  * {@link com.quantfinlib.backtest.portfolio.PortfolioStrategy} with

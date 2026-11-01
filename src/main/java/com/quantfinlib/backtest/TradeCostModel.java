@@ -4,7 +4,7 @@ import com.quantfinlib.core.BarSeries;
 import com.quantfinlib.microstructure.MarketImpactModel;
 
 /**
- * A pluggable per-trade cost model — the ONE definition of "what a trade
+ * A pluggable per-trade cost model — the one definition of "what a trade
  * costs" shared by the backtest engines, so an execution-aware number and a
  * survivorship-aware number can come out of the <em>same</em> run:
  *
@@ -21,7 +21,7 @@ import com.quantfinlib.microstructure.MarketImpactModel;
  *       number.</li>
  * </ul>
  *
- * <p>The contract prices ONE side of a trade (a buy or a sell), all-in, in
+ * <p>The contract prices one side of a trade (a buy or a sell), all-in, in
  * basis points of traded notional. Implementations must be pure functions
  * of their arguments — engines may call them at any bar in any order.</p>
  */

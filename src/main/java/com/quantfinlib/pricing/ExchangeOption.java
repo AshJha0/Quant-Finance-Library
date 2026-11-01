@@ -3,15 +3,15 @@ package com.quantfinlib.pricing;
 import com.quantfinlib.util.MathUtils;
 
 /**
- * TWO-ASSET closed forms: Margrabe's exchange option and Kirk's spread
+ * Two-asset closed forms: Margrabe's exchange option and Kirk's spread
  * approximation — the workhorse formulas for relative-value option books
  * (crack spreads, calendar spreads, stock-vs-index switches).
  *
  * <p><b>Margrabe (1978)</b> — the right to exchange asset 2 for asset 1
  * (payoff {@code max(0, S1 − S2)}) is a Black-Scholes call in disguise:
- * price asset 1 IN UNITS OF asset 2 and the strike becomes 1, the rate
+ * price asset 1 in units of asset 2 and the strike becomes 1, the rate
  * drops out entirely (a ratio has no financing cost) and the vol is the
- * vol of the RATIO, {@code σ² = σ1² + σ2² − 2ρσ1σ2}. The observation
+ * vol of the ratio, {@code σ² = σ1² + σ2² − 2ρσ1σ2}. The observation
  * worth knowing: with ρ = 1 and σ1 = σ2 the ratio has zero
  * vol and the option is pure forward intrinsic — two perfectly correlated
  * equal-vol assets can never finish crossed.</p>
@@ -68,7 +68,7 @@ public final class ExchangeOption {
     }
 
     /**
-     * Kirk's approximation for a spread CALL on two forwards:
+     * Kirk's approximation for a spread call on two forwards:
      * {@code max(0, F1 − F2 − K)} paid at expiry, discounted at
      * {@code rate}. {@code strike} may be 0 (Margrabe limit) but not
      * negative — flip the legs instead.

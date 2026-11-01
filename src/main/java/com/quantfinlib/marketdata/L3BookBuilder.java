@@ -661,7 +661,7 @@ public final class L3BookBuilder {
     }
 
     /**
-     * Orders dropped for off-band prices or an exhausted pool — adds AND
+     * Orders dropped for off-band prices or an exhausted pool — adds and
      * replace re-adds (widen the band/pool; off-band liquidity is invisible
      * to this book by design, and its later events count as unknown refs).
      */

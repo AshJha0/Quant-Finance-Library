@@ -1,7 +1,7 @@
 package com.quantfinlib.hedging;
 
 /**
- * Whalley-Wilmott OPTIMAL hedge bands — the answer to the question
+ * Whalley-Wilmott optimal hedge bands — the answer to the question
  * every band hedger otherwise guesses: how wide should the no-trade
  * band around delta be? Hedging continuously is bankruptcy by
  * transaction costs; hedging never is a naked option. The asymptotic
@@ -25,8 +25,8 @@ package com.quantfinlib.hedging;
  * by 8x to move the band by 2x, which is why band width is remarkably
  * stable across venues.
  *
- * <p>The POLICY is as important as the width: when the hedge drifts
- * outside the band, trade back to the NEAREST EDGE, not to the center
+ * <p>The policy is as important as the width: when the hedge drifts
+ * outside the band, trade back to the nearest edge, not to the center
  * — hedging to delta itself throws away the band's whole point (you
  * would pay the spread again on the next tick's drift). Zero gamma
  * degenerates cleanly: zero band, always hedge exactly to delta.
@@ -90,7 +90,7 @@ public final class WhalleyWilmott {
 
     /**
      * The hedge-to-the-edge policy: hold inside the band, trade to the
-     * NEAREST edge outside it.
+     * nearest edge outside it.
      *
      * @param currentHedge the position currently held against the book
      * @param delta        the book's current delta (the band's center)

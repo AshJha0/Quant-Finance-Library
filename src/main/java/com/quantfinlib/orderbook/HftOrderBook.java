@@ -219,7 +219,7 @@ public final class HftOrderBook {
         this.seqSink = sink;
     }
 
-    /** Self-trade prevention policy for owner-tagged orders (default NONE). */
+    /** Self-trade prevention policy for owner-tagged orders (default none). */
     public HftOrderBook selfTradePrevention(SelfTradePrevention policy) {
         this.stp = policy;
         return this;

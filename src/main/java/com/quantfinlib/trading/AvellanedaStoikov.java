@@ -25,7 +25,7 @@ package com.quantfinlib.trading;
  * <p><b>Units contract</b> (same discipline as
  * {@code execution.BenchmarkExecutor.MarketState}):</p>
  * <ul>
- *   <li>{@code priceVariancePerSecond} — variance of the PRICE per second,
+ *   <li>{@code priceVariancePerSecond} — variance of the price per second,
  *       not the return: from the signal engine,
  *       {@code Math.pow(mid * sig.volPerSqrtSecond(sym), 2)}. NaN or
  *       negative reads as 0 (the inventory term disables; the liquidity
@@ -34,7 +34,7 @@ package com.quantfinlib.trading;
  *       flat (the close, the fixing). Continuous 24/5 FX has no terminal
  *       time: use a fixed risk horizon (how long you are willing to sit
  *       on a position) — the standard practitioner reading of τ;</li>
- *   <li>{@code inventory} — signed position in UNITS OF THE INSTRUMENT
+ *   <li>{@code inventory} — signed position in units OF the instrument
  *       the mid prices (shares of the stock, base-currency units of the
  *       pair). This is dimensional, not stylistic: the shade
  *       {@code q·γ·σ²·τ} is in price units only when q counts the same

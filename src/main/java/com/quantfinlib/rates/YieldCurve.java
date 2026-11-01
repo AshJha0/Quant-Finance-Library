@@ -5,9 +5,9 @@ import java.util.NavigableSet;
 import java.util.TreeMap;
 
 /**
- * Zero-coupon yield curve — the single most load-bearing object in fixed
- * income: every bond price, swap value, forward rate and DV01 is a
- * function of it. The curve stores continuously-compounded ZERO rates at
+ * Zero-coupon yield curve. In fixed income
+ * every bond price, swap value, forward rate and DV01 is a
+ * function of it. The curve stores continuously-compounded zero rates at
  * pillar tenors; everything else is derived: the discount factor
  * {@code DF(t) = e^{-z(t)·t}} answers "what is 1 unit at time t worth
  * today", and the implied forward between t1 and t2 falls out of the
@@ -22,7 +22,7 @@ import java.util.TreeMap;
  * with {@code A} the annuity so far. The result reprices every input
  * exactly (tested), which is the definition of a usable curve.</p>
  *
- * <p>Model choices, stated: linear interpolation ON ZERO RATES (simple,
+ * <p>Model choices, stated: linear interpolation ON zero rates (simple,
  * fast, and the standard first choice; its known wart is small forward-rate
  * kinks at pillars — smoothing splines fix that at the cost of locality),
  * flat extrapolation beyond the pillars, and one curve for both

@@ -116,7 +116,7 @@ public final class BenchmarkExecutor {
      * <p><b>Units contract (normalized, so the shipped models plug in
      * directly):</b></p>
      * <ul>
-     *   <li>{@code volatility} — a normalized volatility-REGIME signal,
+     *   <li>{@code volatility} — a normalized volatility-regime signal,
      *       ~0 calm to ~1 extreme:
      *       {@code microstructure.VolatilityCurve.regime(bucket, currentVol)}
      *       produces exactly this (elevated vs the time-of-day baseline).
@@ -126,7 +126,7 @@ public final class BenchmarkExecutor {
      *       (+ = up): {@code SignalEngine.alpha()} plugs in directly. A raw
      *       price-return forecast must be rescaled (÷ its typical magnitude)
      *       first;</li>
-     *   <li>{@code displayedDepth} — size dealable NOW (displayed top of
+     *   <li>{@code displayedDepth} — size dealable now (displayed top of
      *       book). Feeding {@code HiddenLiquidityDetector.estimatedTrueDepth}
      *       is a conscious choice to size against inferred reserve, not a
      *       drop-in.</li>
@@ -177,7 +177,7 @@ public final class BenchmarkExecutor {
      * @param side              buy or sell (sets the alpha sign convention)
      * @param parentQty         total quantity to execute
      * @param benchmark         the benchmark to track
-     * @param participationRate POV target in (0,1] (ignored unless PARTICIPATION)
+     * @param participationRate POV target in (0,1] (ignored unless participation)
      * @param alphaUrgency      how hard alpha shifts the pace (0 disables; ~5–20 typical)
      * @param maxDepthFraction  cap each child at this fraction of displayed depth (0,1]
      */
@@ -208,7 +208,7 @@ public final class BenchmarkExecutor {
     /**
      * Sensible defaults: alpha urgency 1 (a full-scale normalized alpha of
      * ±1 doubles/halves the pace — smooth, never rail-pinned), child capped
-     * at 25% of displayed depth. PARTICIPATION must state its rate — use
+     * at 25% of displayed depth. Participation must state its rate — use
      * {@link #pov}.
      */
     public static BenchmarkExecutor of(Side side, long parentQty, Benchmark benchmark) {
@@ -286,7 +286,7 @@ public final class BenchmarkExecutor {
         }
     }
 
-    /** A market print that was NOT our fill (drives VWAP/POV realized volume). */
+    /** A market print that was not our fill (drives VWAP/POV realized volume). */
     public void onMarketVolume(long qty) {
         if (qty > 0) {
             marketVolume += qty;
@@ -312,7 +312,7 @@ public final class BenchmarkExecutor {
      *
      * @param scheduleFraction elapsed fraction of the execution horizon in
      *                         [0, 1] (wall-clock progress); ignored by
-     *                         PARTICIPATION, which is volume-driven
+     *                         participation, which is volume-driven
      * @param m                the live market snapshot
      */
     public long dueQuantity(double scheduleFraction, MarketState m) {
@@ -340,7 +340,7 @@ public final class BenchmarkExecutor {
         }
 
         // Dynamic shaping: alpha pulls the pace, spread/vol damp it. For
-        // PARTICIPATION the multiplier may only DAMP (clamp to <= 1): the
+        // participation the multiplier may only damp (clamp to <= 1): the
         // participation rate is a hard promise to the client, and letting
         // alpha push a POV child to 4x "behind" realizes participation
         // far above the configured rate — the one number POV must honor
@@ -378,7 +378,7 @@ public final class BenchmarkExecutor {
     }
 
     /**
-     * Fraction of the parent that SHOULD be complete at schedule progress
+     * Fraction of the parent that should be complete at schedule progress
      * {@code f} under this benchmark's curve.
      */
     private double targetCompletion(double f, MarketState m) {
@@ -425,7 +425,7 @@ public final class BenchmarkExecutor {
         double signedAlpha = side == Side.BUY ? alpha : -alpha;
         double u = 1 + alphaUrgency * signedAlpha;
 
-        // Cost of trading NOW: relative spread plus the estimated impact of
+        // Cost of trading now: relative spread plus the estimated impact of
         // a full child (both dimensionless fractions of price), damping
         // aggression together — NaN in either fails the > 0 test = neutral.
         double cost = 0;
@@ -493,7 +493,7 @@ public final class BenchmarkExecutor {
     /**
      * Schedule drift: executed fraction minus the benchmark's target
      * fraction at {@code scheduleFraction}. Positive = ahead, negative =
-     * behind. For PARTICIPATION this compares against the participation
+     * behind. For participation this compares against the participation
      * target instead of the time curve.
      */
     public double scheduleDrift(double scheduleFraction, MarketState m) {

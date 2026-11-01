@@ -7,14 +7,14 @@ package com.quantfinlib.rates;
  *
  * <ul>
  *   <li><b>Vasicek</b> {@code dr = a(b − r)dt + σ dW} — Gaussian,
- *       tractable everywhere, and honest about its flaw: rates can go
+ *       tractable everywhere; its known flaw is that rates can go
  *       negative (which, post-2015, is a feature as much as a bug);</li>
  *   <li><b>CIR</b> {@code dr = a(b − r)dt + σ√r dW} — the square-root
  *       diffusion keeps rates non-negative (strictly positive when the
  *       Feller condition {@code 2ab ≥ σ²} holds), at the cost of
  *       fatter formulas;</li>
  *   <li><b>Hull-White</b> — Vasicek with a time-dependent drift fitted
- *       so the model reprices TODAY'S curve exactly: the standard
+ *       so the model reprices today's curve exactly: the standard
  *       production choice, because a rates model that disagrees with
  *       the discount curve it hedges against is wrong by construction.
  *       Bond prices come from the curve plus a Gaussian convexity
@@ -56,7 +56,7 @@ public final class ShortRateModels {
     }
 
     /**
-     * One EXACT Vasicek simulation step (the transition is Gaussian, so
+     * One exact Vasicek simulation step (the transition is Gaussian, so
      * no discretization error): {@code r ← b + (r−b)e^{−aΔt} + stdev·z}.
      */
     public static double vasicekStep(double shortRate, double a, double b, double sigma,
@@ -113,7 +113,7 @@ public final class ShortRateModels {
      *
      * @param curve      today's discount curve
      * @param tYears     valuation time (0 = today)
-     * @param maturityYears time FROM t to the bond's maturity
+     * @param maturityYears time from t to the bond's maturity
      * @param shortRate  the simulated short rate at t
      * @param a          mean-reversion speed
      * @param sigma      short-rate vol

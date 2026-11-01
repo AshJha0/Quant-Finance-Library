@@ -16,14 +16,14 @@ import java.util.ArrayDeque;
  *
  * <p><b>Which lane this is in</b>: this is the <em>research-grade venue
  * model</em> — used by the microstructure fuzz tests, queue analytics and
- * simulations — NOT part of the measured ultra-low-latency path. The
- * library's sub-microsecond numbers are <em>participant-side</em>
- * (tick → strategy/quoter → risk gate → order ring → venue adapter); in that
- * architecture matching happens at the exchange, not in this process, so no
- * order on the hot path ever touches this class. Internally it deliberately
+ * simulations — not part of the measured low-latency path. The
+ * library's latency measurements are participant-side
+ * (tick, strategy or quoter, risk gate, order ring, venue adapter; see
+ * docs/BENCHMARKS.md). In that architecture matching happens at the exchange, not in this process, so no
+ * order on the hot path ever touches this class. Internally it
  * favors clarity over allocation discipline ({@code TreeMap<Double,…>}
  * boxing, per-order objects, iterators) — adequate for simulation, and
- * exactly what a venue-grade core must NOT do. The venue-grade sibling is
+ * exactly what a venue-grade core must not do. The venue-grade sibling is
  * {@link HftOrderBook} (dense integer-tick ladder, pooled intrusive nodes,
  * primitive id map, zero allocation) — and its correctness is defined BY
  * this class: a model-based equivalence test drives both books with

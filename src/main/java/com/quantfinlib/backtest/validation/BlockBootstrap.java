@@ -7,27 +7,26 @@ import java.util.Random;
 /**
  * Stationary block bootstrap (Politis-Romano) — the confidence interval
  * your backtest's Sharpe ratio deserves and almost never gets. A single
- * historical path yields ONE Sharpe estimate; resampling the path in
- * blocks yields its sampling DISTRIBUTION, and the honest question
+ * historical path yields one Sharpe estimate; resampling the path in
+ * blocks yields its sampling distribution, and the question
  * becomes "is the 5th percentile still positive?" rather than "is 1.2
  * a good number?".
  *
- * <p>Why BLOCKS: returns are autocorrelated (vol clusters, trends
+ * <p>Why blocks: returns are autocorrelated (vol clusters, trends
  * persist), and resampling single observations (an iid bootstrap)
- * destroys that structure and UNDERSTATES the uncertainty — the
+ * destroys that structure and understates the uncertainty — the
  * classic way to be falsely confident. Blocks of geometric mean length
  * L preserve local dependence; the stationary variant restarts blocks
  * with probability 1/L and wraps circularly, so every resampled path
  * has the full original length. Rule of thumb: L ≈ n^(1/3) (about 10
  * for a 1,000-day history).
  *
- * <p>Deterministic per seed (replayable), and honest about what it is
- * NOT: the bootstrap resamples the history you had — it cannot
+ * <p>Deterministic per seed (replayable). Limitation: the bootstrap resamples the history you had — it cannot
  * manufacture regimes the sample never contained. Pair with
  * {@code SharpeValidation} (multiple-testing haircut) and
  * {@code AlphaValidation} (out-of-sample discipline); this class
- * quantifies the sampling error that remains even for an honest,
- * single-trial backtest. Research lane.</p>
+ * quantifies the sampling error that remains even for a
+ * single-trial backtest with no parameter search. Research lane.</p>
  */
 public final class BlockBootstrap {
 
@@ -35,7 +34,7 @@ public final class BlockBootstrap {
     }
 
     /**
-     * The bootstrap distribution of ANNUALIZED Sharpe, sorted ascending
+     * The bootstrap distribution of annualized Sharpe, sorted ascending
      * — read percentiles with {@code MathUtils.percentileSorted}.
      *
      * @param returns         per-period strategy returns, ≥ 50 finite

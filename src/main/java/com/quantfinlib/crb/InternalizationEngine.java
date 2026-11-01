@@ -3,26 +3,26 @@ package com.quantfinlib.crb;
 /**
  * The internalize-or-route decision — the economics that justify a
  * central risk book's existence. Every internalized unit of flow saves
- * the street's spread AND market impact twice over (the client's
+ * the street's spread and market impact twice over (the client's
  * execution and the eventual hedge), so:
  *
  * <ul>
- *   <li><b>Risk-REDUCING flow</b> (opposite sign to the book's net) is
+ *   <li><b>Risk-reducing flow</b> (opposite sign to the book's net) is
  *       internalized up to the offsetting inventory, and the client is
  *       given back a share of the saved spread as price improvement —
  *       the book was going to pay to shed that risk anyway;</li>
- *   <li><b>Risk-ADDING flow</b> is warehoused (internalized without
+ *   <li><b>Risk-adding flow</b> is warehoused (internalized without
  *       improvement) only while the post-trade inventory stays inside
  *       the warehouse limit — beyond that it routes out, because a
  *       warehouse limit that yields to one more trade is not a
  *       limit.</li>
  * </ul>
  *
- * <p>Flows and exposures are in the SAME factor units (currency
+ * <p>Flows and exposures are in the same factor units (currency
  * notional for {@code EQ:}/{@code CCY:} factors). Counters accumulate
  * for the {@link #internalizationRate()} the desk reports. Sign
  * convention matches {@link CentralRiskBook}: the flow is what the book
- * ABSORBS if it internalizes. Deterministic, single-threaded.</p>
+ * absorbs if it internalizes. Deterministic, single-threaded.</p>
  */
 public final class InternalizationEngine {
 
@@ -75,7 +75,7 @@ public final class InternalizationEngine {
             double reducing = Math.min(Math.abs(flow), Math.abs(bookNet));
             improvement = improvementShare * halfSpreadBps;
             // Whatever exceeds the offset flips the book's sign — that
-            // excess is risk-ADDING and faces the warehouse test below.
+            // excess is risk-adding and faces the warehouse test below.
             double excess = Math.abs(flow) - reducing;
             double warehoused = Math.min(excess, warehouseLimit);
             internalized = Math.signum(flow) * (reducing + warehoused);
@@ -123,7 +123,7 @@ public final class InternalizationEngine {
 
     /**
      * Restores counters written by {@link #writeState}. The configuration
-     * must MATCH: an internalization rate earned under one warehouse
+     * must match: an internalization rate earned under one warehouse
      * limit says nothing about a different one, so a mismatch throws
      * rather than silently blending regimes.
      */

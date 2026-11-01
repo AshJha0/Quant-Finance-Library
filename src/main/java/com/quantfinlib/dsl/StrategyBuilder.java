@@ -108,10 +108,10 @@ public final class StrategyBuilder {
         }
 
         /**
-         * Long: the exit rule alone decides (SELL or HOLD); the entry rule is
+         * Long: the exit rule alone decides (SELL or hold); the entry rule is
          * not consulted, so a level-type entry such as "RSI above 50" cannot
          * mask an exit that fires on the same bar. Flat: the entry rule
-         * decides (BUY or HOLD).
+         * decides (BUY or hold).
          */
         @Override
         public Signal onBar(int index, double position) {

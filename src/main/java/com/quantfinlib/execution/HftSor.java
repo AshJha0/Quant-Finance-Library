@@ -13,8 +13,8 @@ import com.quantfinlib.orderbook.Side;
  * <p>Fees are expressed in <em>ticks</em> (venue taker fee converted at the
  * instrument's tick size, once, at configuration time), so the comparison
  * stays in integer-friendly arithmetic. Negative fee ticks model rebates.
- * With the handful of venues real equities routing faces, the O(V²)
- * selection sweep is faster than any heap — and allocates nothing.</p>
+ * With the handful of venues real equities routing faces, an O(V²)
+ * selection sweep is used instead of a heap; it allocates nothing.</p>
  *
  * <p>Single-writer; reuse one router per routing thread.</p>
  */

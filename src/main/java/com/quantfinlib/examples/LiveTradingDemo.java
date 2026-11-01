@@ -34,9 +34,9 @@ import java.time.Duration;
  *       {@link TradingDashboard}.</li>
  * </ol>
  *
- * <p>This is the SIMULATION lane end to end on live data: convenient
- * String-keyed paper venue, synchronized accounting — the point is seeing
- * the whole loop run, not nanoseconds. The measured hot lane is the same
+ * <p>This is the simulation lane end to end on live data: convenient
+ * String-keyed paper venue, synchronized accounting. It shows
+ * the whole loop running; it is not a latency measurement. The measured hot lane is the same
  * shape with {@code HftOrderGateway}/{@code HftQuoter} instead of the paper
  * venue (see the benchmarks). Runs until Ctrl-C; prints a session summary
  * on exit. No network? It says so and exits politely.</p>
