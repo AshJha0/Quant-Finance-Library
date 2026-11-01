@@ -1629,16 +1629,23 @@ that touch a barrier H can be mapped to the law of paths started from the
 reflected point H²/S. That gives Reiner-Rubinstein closed forms for
 knock-ins, and knock-outs follow from in-out parity: KI + KO = vanilla —
 touch it or don't, you own the vanilla either way. The closed form assumes
-**continuous monitoring, flat vol, and a "regular" barrier** (barrier in the
-OTM region). It stops being the right answer when monitoring is discrete
-(daily fixings — the Broadie-Glasserman-Kou barrier shift), when the smile
-matters (a reverse barrier's value concentrates near H, where flat-vol is
-most wrong), or for reverse barriers generally, where the discontinuous
-payoff at the barrier makes Greeks explode and desks price with a model.
+**continuous monitoring and flat vol**, and it covers both regular barriers
+(barrier in the OTM region) and reverse ones (barrier in the ITM region,
+e.g. an up-and-out call with H > K) (Reiner and Rubinstein 1991; Haug
+2007, section 4.17.1). It stops being the right answer when monitoring is
+discrete (daily fixings — the Broadie-Glasserman-Kou barrier shift
+H·e^{±0.5826σ√Δt}), and when the smile matters, which is acute for reverse
+barriers: their value concentrates near H, the payoff is discontinuous
+there, Greeks explode, and flat vol is most wrong exactly where it counts.
+Desks use the closed form as a reference and price reverse barriers with a
+smile model.
 
-*In this library:* `pricing/BarrierOption.java` — the regular cases in
-closed form, in-out parity pinned by a test, and a javadoc that names the
-reverse-barrier limitation instead of hiding it.
+*In this library:* `pricing/BarrierOption.java` — `price(type, direction,
+knock, ...)` covers all eight in/out, up/down, call/put cases, regular and
+reverse, with a cash rebate, pinned to Haug's table 4-13; in-out parity is
+pinned by a test; with the barrier already breached, `price` returns the
+vanilla for a knock-in and the rebate for a knock-out, while the named
+helpers such as `downAndOutCall` throw.
 
 ### 11. "Why does Black-76 exist when Black-Scholes already does?"
 
@@ -1661,19 +1668,29 @@ assertion.
 
 Two steps. First, decode the quotes: FX smiles are quoted in **delta**, not
 strike — ATM is the delta-neutral straddle vol, the risk reversal is
-`σ(25Δcall) − σ(25Δput)` (skew direction), the butterfly is the average of
-the wings minus ATM (smile curvature). So `σ(25Δcall) = atm + bf + rr/2`,
-`σ(25Δput) = atm + bf − rr/2`, and each delta is converted to its strike by
-inverting the BS delta formula. Second, interpolate to your strike
+`σ(25Δcall) − σ(25Δput)` (skew direction), and the butterfly measures
+curvature. The trap is which butterfly. The smile butterfly BF_s defines
+the wings directly: `σ(25Δcall) = atm + BF_s + rr/2`,
+`σ(25Δput) = atm + BF_s − rr/2`. The broker screen does not show BF_s; it
+shows the market (broker) strangle BF_m, a single vol `atm + BF_m` at which
+a 25-delta strangle is priced, both strikes solved at that one vol. With
+RR = 0 the two coincide; with skew BF_s is larger, by up to a few tenths
+of a vol on skewed pairs, and you find it by solving for the BF_s whose
+smile reprices the market strangle (Clark 2011, section 3.6; Reiswich and
+Wystup 2010). Plugging BF_m straight into the wing formula understates
+the wings. Each pillar's delta is then converted to its strike by
+inverting the delta formula in the pair's convention. Second, interpolate to your strike
 **smile-consistently**: vanna-volga prices the flat-vol BS value plus the
 market cost of the portfolio of the three pillars that hedges the vega,
 vanna and volga — exact *at* the pillars (pricing a pillar strike returns
 its own market vol), smooth between them. A negative RR means puts are
 bid over calls: the market pays up for downside protection in that pair.
 
-*In this library:* `fx/FxVolSurface.java` (quotes → pillar strikes/vols),
-`pricing/VannaVolga.java` (the log-strike weights; the pillar-exactness
-test is the one to re-run).
+*In this library:* `fx/FxVolSurface.java` (quotes → pillar strikes/vols;
+`ButterflyQuote.BROKER_STRANGLE` is the default reading of the BF quote and
+`SMILE_STRANGLE` takes a smile butterfly as given; `smileButterfly25`
+reports the solved BF_s), `pricing/VannaVolga.java` (the log-strike
+weights; the pillar-exactness test is the one to re-run).
 
 ### 13. "What's the fair strike of a variance swap — and why is it model-free?"
 
@@ -1706,9 +1723,11 @@ smile (level, skew, wings), and — critically for rates — it prescribes how
 the smile *moves when the forward moves*, which is what you need for
 correct Greeks, not just correct prices today.
 
-*In this library:* `pricing/SabrModel.java` — Hagan's formula and a (α, ρ, ν)
-calibration with β fixed; perturb ρ and ν in a test and watch slope and
-curvature move independently.
+*In this library:* `pricing/SabrModel.java` — Hagan's formula (Hagan et al.
+2002, eq. 2.17a) and a Levenberg-Marquardt (α, ρ, ν) calibration with β
+fixed, plus `calibrateToAtm`, which fits the ATM vol exactly through West's
+cubic for α; perturb ρ and ν in a test and watch slope and curvature move
+independently.
 
 ### 15. "You've implemented a Heston pricer. How do you know it's right?"
 
@@ -10693,9 +10712,14 @@ window mids per the WM/R-style median methodology and emits a
 Convert the quotes to pillar vols, then solve each pillar's strike from
 its own delta. The market quotes the smile in delta space: ATM (the
 delta-neutral straddle), risk reversal `RR25 = vol(25dCall) -
-vol(25dPut)` (the skew), butterfly `BF25 = (vol(25dCall) + vol(25dPut))/2
-- ATM` (the wings). Invert: `vol(25dC) = atm + bf25 + rr25/2`, `vol(25dP)
-= atm + bf25 - rr25/2`, same shape at 10-delta. Each pillar now has a
+vol(25dPut)` (the skew), and a butterfly for the wings. The smile
+butterfly is `BF_s = (vol(25dCall) + vol(25dPut))/2 - ATM`, which inverts
+to `vol(25dC) = atm + BF_s + rr25/2`, `vol(25dP) = atm + BF_s - rr25/2`.
+But the number on a broker screen is usually the market strangle
+butterfly BF_m: the single vol `atm + BF_m` at which a 25-delta strangle
+is priced. When RR is not zero, BF_s differs from BF_m and must be
+solved so that the smile reprices that strangle (Clark 2011, section
+3.6); with 10-delta wings the two levels are solved jointly. Each pillar now has a
 delta and a vol, so its STRIKE solves from the delta equation -- and here
 the convention matters: forward delta `N(d1)` is standard for long-dated
 and EM pairs, but pairs whose premium is paid in base currency (USDJPY)
@@ -10707,9 +10731,12 @@ expiry, linear in total variance sigma^2 * tau across expiries -- and any
 strike-based pricer can consume the result.
 
 *In this library:* `fx/FxVolSurface.java` -- the builder takes ATM/RR/BF
-quotes per expiry, solves pillar strikes (with `premiumAdjusted`
-selecting `(K/F)N(d2)` and the OTM root, as the javadoc documents), and
-feeds strike-based pricers like `pricing/BlackScholes.java` and
+quotes per expiry, reads BF as the broker strangle by default
+(`ButterflyQuote.BROKER_STRANGLE`, or `SMILE_STRANGLE`), solves pillar
+strikes under a `DeltaConvention` (forward or spot, with or without
+premium adjustment, the adjusted forms taking the OTM root) and an
+`AtmConvention` (delta-neutral straddle or ATM forward), and feeds
+strike-based pricers like `pricing/BlackScholes.java` and
 `pricing/VannaVolga.java`.
 
 ### 354. "Only EURUSD and USDJPY are liquid right now. How do you make an EURJPY price, and what keeps the triangle consistent?"
@@ -11920,11 +11947,18 @@ bounded band: a call is worth at least its discounted forward intrinsic
 (the sigma -> 0 limit) and at most the sigma -> infinity limit
 (approaching `S e^{-qT}`). A quoted price outside that band is not a
 volatility at all -- it is a stale print, a crossed market, a fat-finger
-mid, or rounding on a penny option. Bisection makes the honesty
-mechanical: bracket vol in something like [1e-4, 5.0], check that the
-target price actually lies between the prices at the two bracket ends,
-and if it does not, return NaN instead of converging to a bracket
-endpoint and reporting 0.0001 or 5.0 as if it were information. The
+mid, or rounding on a penny option. So check the band before solving,
+and return NaN for a price outside it instead of converging to a
+bracket endpoint and reporting 0.0001 or 5.0 as if it were information.
+A price exactly at intrinsic is the one boundary case with an answer:
+zero vol. Inside the band, solve on the out-of-the-money option (convert
+an in-the-money quote by put-call parity first): an ITM price is mostly
+intrinsic value, and inverting it directly throws away the digits that
+carry the vol. A safeguarded Newton iteration on the normalised Black
+function, with every step kept inside a shrinking bracket, converges to
+machine precision in a handful of steps, where plain bisection needs a
+hundred or more and still loses accuracy in the deep wings (Jäckel 2015,
+for the normalisation). The
 failure mode this prevents is real: a surface builder that clamps
 instead of rejecting will happily ingest a stale deep-ITM quote as
 "0.01 percent vol," poison the smile interpolation around it, and feed
@@ -11932,10 +11966,11 @@ garbage Greeks to the hedger. NaN forces the caller to decide -- drop
 the quote, widen the bracket knowingly, or investigate -- which is
 exactly the decision that should not be made silently inside a solver.
 
-*In this library:* `pricing/BlackScholes.java` -- `impliedVol` bisects
-inside the documented [1e-4, 5.0] bracket and returns `NaN` for prices
-below intrinsic or above the maximum attainable Black-Scholes price,
-with the javadoc naming stale/rounded quotes as the expected cause.
+*In this library:* `pricing/BlackScholes.java` -- `impliedVol` goes
+through `pricing/ImpliedVolatility.java` (safeguarded Newton on the
+normalised Black function, OTM inversion) and returns `NaN` for prices
+below intrinsic or at or above the zero-strike bound, and 0 for a price
+exactly at intrinsic; `Black76.impliedVol` uses the same solver.
 
 ### 405. "State put-call parity and explain why it needs no model."
 
@@ -12115,7 +12150,7 @@ with the explicit `return 1; // already touching` pin, `oneTouch` /
 no-touch as discounted probability and complement; javadoc notes the
 pay-at-expiry vs pay-at-hit distinction.
 
-### 412. "Explain in/out parity for barriers, and why a closed-form pricer should refuse reverse barriers."
+### 412. "Explain in/out parity for barriers, and why a closed-form price for a reverse barrier needs a warning label."
 
 In/out parity: holding a knock-in plus a knock-out with the same
 barrier, strike and expiry replicates the vanilla -- every path either
@@ -12133,15 +12168,16 @@ barrier, delta flips sign, and gamma explodes near H. The flat-vol
 closed form still produces *a* number there, but it is the wrong number
 in exactly the region that matters -- reverse barriers are acutely
 smile-sensitive, and desks price them on local/stochastic vol with
-barrier shifts. So the engineering choice is refusal: reject
-reverse configurations with a clear exception rather than return a
-plausible-looking price that mis-hedges.
+barrier shifts. The flat-vol closed form is still worth having for
+reverse barriers: it is the exact answer under its assumptions, which
+makes it the reference a smile model's price is compared against and
+the test pin for any numerical method. What it must not be is the
+desk's mark.
 
 *In this library:* `pricing/BarrierOption.java` -- Reiner-Rubinstein
-knock-ins, knock-outs derived through in/out parity (`KO = vanilla -
-KI` in the code), and explicit `IllegalArgumentException`s naming
-reverse barriers (H > K calls, H < K puts) as unsupported in closed
-form, with the reason.
+closed forms for all eight barrier types, regular and reverse, with a
+cash rebate (Haug 2007, section 4.17.1, pinned to Haug's table 4-13),
+and in/out parity checked in the tests.
 
 ### 413. "Why does hedging a barrier option blow up near the barrier, and what do desks do about it?"
 
@@ -12165,10 +12201,11 @@ because ten notes with the same popular barrier concentrate a book-sized
 cliff at one price. The lesson generalizes: discontinuous payoffs are
 priced with models but *managed* with structure.
 
-*In this library:* `pricing/BarrierOption.java` -- the javadoc's
-regular/reverse discussion is exactly this failure mode (reverse
-barriers rejected because the closed form is least trustworthy where
-gamma explodes); `hedging/HedgingSimulator.java` shows the discrete
+*In this library:* `pricing/BarrierOption.java` -- reverse barriers
+priced in closed form, so you can compute the near-barrier delta and
+gamma by bumping and watch them blow up; the javadoc points to the
+Broadie-Glasserman-Kou shift for discrete monitoring;
+`hedging/HedgingSimulator.java` shows the discrete
 version of the cost/error blowup mechanics on plain options.
 
 ### 414. "Walk me through an autocallable: what is the client long, what is the dealer short, and where are the hidden risks?"
@@ -12338,7 +12375,8 @@ production code states them.
 *In this library:* `pricing/BinomialTree.java` -- CRR with
 EUROPEAN/AMERICAN styles, an `earlyExercisePremium` helper, and an
 explicit degenerate-tree exception ("increase steps or check inputs")
-when p leaves (0, 1).
+when p leaves (0, 1); the check is written so that zero volatility,
+where p is 0/0 = NaN, throws too instead of returning NaN silently.
 
 ### 420. "In SABR, what do rho and nu each do to the smile? Why do desks fix beta?"
 
@@ -12384,17 +12422,21 @@ method interpolates the smile through the quotes rather than merely
 near them, and pricing a quoted instrument reproduces its quote --
 the minimal consistency a desk demands. Read the smile out by
 converting adjusted prices back through Black-Scholes and you get a
-full strike-continuous smile from three quotes. Limits,: it is
+full strike-continuous smile from three quotes. Limits: it is
 an interpolation dressed as a model -- extrapolation into far wings is
-unreliable, there is no guarantee of no-arbitrage (butterflies can go
-negative outside the pillar span), no dynamics (so it prices
+unreliable (the quadratic log-strike weights grow without bound, so
+butterflies go negative outside the pillar span unless the wings are
+capped), there is no guarantee of no-arbitrage, no dynamics (so it prices
 path-dependent exotics only via ad hoc weightings), and with three
 pillars it cannot express smiles with more than three features.
 
 *In this library:* `pricing/VannaVolga.java` -- three ascending pillars
 enforced at construction (25d put / ATM / 25d call), the
 vega/vanna/volga replication against the pillars, exactness at pillar
-strikes stated and delivered, smile read-back through Black-Scholes.
+strikes stated and delivered, smile read-back through Black-Scholes on
+the out-of-the-money option, and beyond the 10-delta strikes the vol is
+held flat or continued linearly in log-strike instead of using the raw
+weights.
 
 ### 422. "You implemented Heston. What is the 'little trap', and how do you know your integral is right?"
 
