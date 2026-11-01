@@ -196,4 +196,23 @@ class ExoticOptionsTest {
         }
         return Math.exp(-R * T) * sum / PATHS;
     }
+
+    @Test
+    void skewAdjustedDigitalIsTheCallSpreadLimitOnTheSmile() {
+        // Smile linear in strike: sigma(K) = 0.20 - 0.002 (K - 100).
+        double s0 = 100, k = 103, r = 0.03, q = 0.01, t = 0.75, slope = -0.002;
+        java.util.function.DoubleUnaryOperator sig = kk -> 0.20 + slope * (kk - 100);
+        double h = 1e-4;
+        double spread = (BlackScholes.price(OptionType.CALL, s0, k - h, r, q, sig.applyAsDouble(k - h), t)
+                - BlackScholes.price(OptionType.CALL, s0, k + h, r, q, sig.applyAsDouble(k + h), t)) / (2 * h);
+        double adj = DigitalOption.cashOrNothingSkewAdjusted(OptionType.CALL, s0, k, r, q,
+                sig.applyAsDouble(k), slope, t, 1.0);
+        assertEquals(spread, adj, 1e-7);
+        double flat = DigitalOption.cashOrNothing(OptionType.CALL, s0, k, r, q, sig.applyAsDouble(k), t, 1.0);
+        assertTrue(adj > flat + 0.01, "negative skew lifts the call digital");
+        // Put side: call digital + put digital = discount factor.
+        double put = DigitalOption.cashOrNothingSkewAdjusted(OptionType.PUT, s0, k, r, q,
+                sig.applyAsDouble(k), slope, t, 1.0);
+        assertEquals(Math.exp(-r * t), adj + put, 1e-15);
+    }
 }
