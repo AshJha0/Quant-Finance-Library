@@ -20712,7 +20712,9 @@ bottoms out.
 
 *In this library:* `hedging/DeltaHedger.java` (`simulateShortOption`
 with configurable delta band and per-trade bps -- the path-level ledger
-of rebalance count, cost and final P&L = replication error) and
+of rebalance count, cost and final P&L = replication error; the hedge
+position earns the continuous carry, dividend yield or foreign rate, so
+the mean error is not biased when q is non-zero) and
 `hedging/HedgingSimulator.java` (`simulate` runs thousands of paths into
 a `HedgingErrorDistribution`; vary frequency and watch 1/sqrt(n) appear).
 
@@ -20720,7 +20722,9 @@ a `HedgingErrorDistribution`; vary frequency and watch 1/sqrt(n) appear).
 
 Whalley-Wilmott gives the width from asymptotic stochastic control: for
 proportional cost k and risk aversion lambda the optimal band around the
-Black-Scholes delta is `band = ((3/2) k S Gamma^2 / lambda)^{1/3}`. The
+Black-Scholes delta is `band = ((3/2) e^{-r(T-t)} k S Gamma^2 / lambda)^{1/3}`
+(Whalley and Wilmott 1997); the discount factor is close to 1 for
+short-dated books and is often dropped. The
 structure reads off directly -- more gamma churns delta faster, so the
 band widens with Gamma^2 (do not chase a delta that will chase itself
 back); higher cost widens it; higher risk aversion narrows it. The
@@ -20738,7 +20742,9 @@ visibly less, and the gap is widest exactly where gamma is large --
 short-dated, near-the-money books.
 
 *In this library:* `hedging/WhalleyWilmott.java` -- `bandHalfWidth` (the
-cube-root formula) and `rebalance` returning an `Action` that hedges to
+cube-root formula; the six-argument overload includes the
+`e^{-r(T-t)}` factor, and the javadoc states the units of the risk
+aversion) and `rebalance` returning an `Action` that hedges to
 the nearest edge; the javadoc makes both the 8x-to-2x insensitivity and
 the edge-not-center point, and it plugs into `hedging/DeltaHedger.java`
 to score against naive bands.
@@ -20811,15 +20817,18 @@ the candidate hedge ratio, (2) run an ADF unit-root test on the residual
 spread. The subtlety that matters at scale: because the spread was
 *estimated* to look as stationary as possible, ordinary ADF critical
 values are too lenient -- you must use the Engle-Granger two-variable
-values (about -3.34 at 5 percent, not -2.86), or you will certify
-spurious pairs. Treat a failing retest as a **structural exit signal**,
+values (about -3.34 at 5 percent asymptotically, not -2.86), and on a
+one-year sample the finite-sample value from MacKinnon (2010) is a
+little more negative still, or you will certify spurious pairs. Add
+ADF lags if the residual is autocorrelated, or the test over-rejects. Treat a failing retest as a **structural exit signal**,
 not noise: the relationship broke (index deletion, merger, model drift),
 so close and stop re-entering.
 
 *In this library:* `hedging/CointegrationTest.java` -- `engleGranger`
-(two-step, `adfTStatistic` on the residual) with the correct
+(two-step, `adfTStatistic` on the residual) with the asymptotic
 two-variable critical values (-3.90 / -3.34 / -3.04 at 1/5/10 percent)
-hard-coded; run it before `hedging/PairsHedger.java` (`analyze`,
+as constants, and `engleGranger(a, b, lags)` using ADF lags and the
+MacKinnon (2010) finite-sample `criticalValue(level, T)`; run it before `hedging/PairsHedger.java` (`analyze`,
 `halfLife`) sizes anything.
 
 ### 745. "The hedge ratio on your index-futures overlay clearly drifts through the quarter. Rolling OLS or a Kalman filter -- and how do you know when to step aside?"
@@ -20922,9 +20931,14 @@ hedge (every instrument, maximal cost); as lambda rises the expensive
 marginal hedges drop out one by one and residual variance climbs. The
 desk then picks a point as *policy* -- "hedge until the next unit of
 variance costs more than X bps" -- instead of re-arguing every hedge.
-One warning the solver enforces: near-collinear instruments (0.999
-futures twins) defeat coordinate descent, and it throws rather than
-return a plausible unconverged hedge -- drop the redundant twin.
+One warning about near-collinear instruments (0.999 futures twins):
+plain coordinate descent crawls on them and must not
+return a plausible unconverged hedge. The solver handles that by
+solving the optimality conditions exactly on the current support and
+sign pattern at intervals, with a tiny ridge on the instrument Gram
+matrix, so near-collinear twins converge (and only a run that still
+fails throws). The answer between twins is then arbitrary in a way
+that does not matter for risk, so drop the redundant twin anyway.
 
 *In this library:* `crb/HedgeOptimizer.java` -- `hedge` (L1 cost term,
 soft-threshold coordinate descent, lambda = 0 = pure min-variance,
@@ -20964,18 +20978,21 @@ carry priced next to the risk removed).
 
 The core loop is a position band: while the hedged measure stays inside
 the band, do nothing; the moment it breaches, submit an opposite-side
-order for **the excess over the band** -- hedge back to the edge, not to
-flat. Edge-hedging is deliberate: flattening maximizes trade size
+IOC for **the excess over the band**, priced at the opposite touch --
+hedge back to the edge, not to flat. Edge-hedging is deliberate: flattening maximizes trade size
 (maximal spread and impact) and immediately restarts the random walk
 from zero, so the next breach comes sooner, while hedging the excess
 trades the minimum that restores compliance and lets natural two-way
-flow mean-revert the rest for free. The **cooldown** is the
-loop-stability guard: after firing, suppress further hedges for a fixed
-interval, or the hedger self-oscillates -- its own child-order fills and
-the market's reaction re-trip the band while the first hedge is still
-working, and you machine-gun orders into your own impact. It is also the
-humility window for fill latency: position updates lag submission, so
-re-deciding before the first decision settles is acting on stale state.
+flow mean-revert the rest for free. The loop-stability guard is
+**working-hedge tracking**: position updates lag submission, so a hedger
+that re-decides before the first hedge settles is acting on stale state
+and machine-guns orders into its own impact. A time cooldown alone does
+not fix that, because the first hedge can still be working when the
+cooldown expires. So at most one hedge per symbol is working; the next
+is considered only after the venue has finished with the previous one
+(filled, IOC remainder cancelled, or rejected), and then no sooner than
+the configured minimum interval, which spaces hedges so passive flow
+gets a chance to work.
 For the autocallable book specifically, the risk is measure-agnostic --
 run the same band logic on the *delta of the short knock-in put*, which
 grows sharply as spot slides toward the barrier (the crash-vol short
@@ -20984,9 +21001,10 @@ chasing that steepening delta into its own impact, while the model tells
 you how fast the delta is moving.
 
 *In this library:* `trading/AutoHedger.java` -- `onTick` streaming a
-position-band hedger (breach -> opposite-side order for the excess,
-hedge-to-edge rationale and a configurable cooldown in the javadoc,
-`hedgesSubmitted` / `hedgesRejected` counters), hedging the delta of
+position-band hedger (on a breach, one IOC for the excess at the
+opposite touch; hedge-to-edge rationale and working-hedge tracking in
+the javadoc; `hedgesSubmitted` / `hedgesRejected` / `hedgesHeld`
+counters), hedging the delta of
 `pricing/Autocallable.java`'s short knock-in put.
 ## VaR & ES daily (Q751-Q763)
 
@@ -20998,9 +21016,9 @@ You do not pick the biggest and you do not pick your favorite -- you read the di
 
 ### 752. "The committee wants Expected Shortfall, not VaR. What are you actually buying, and where does the number still hide?"
 
-VaR is the loss you will not exceed with probability p; ES is the average loss GIVEN you are in that tail. The committee wants ES for two concrete reasons. First, coherence: VaR is not subadditive, so a merged book can show higher VaR than the sum of its parts, which rewards hiding risk in separate silos -- ES is subadditive, so diversification never looks like a penalty. Second, tail shape: two books with identical VaR can have wildly different losses beyond it, and VaR is blind to the difference by construction while ES reads the whole tail beyond the quantile. What ES does not buy you is escape from the estimation problem. ES is harder to backtest than VaR (it is a conditional expectation, not a hit-or-miss count), and on a short window it is dominated by a handful of observations, so its sampling error is larger. The honest framing for the committee: ES answers "how bad is bad," but the confidence interval around that answer is wider than the one around VaR, and both still assume the tail you have seen resembles the tail that is coming.
+VaR is the loss you will not exceed with probability p; ES is the average loss GIVEN you are in that tail. The committee wants ES for two concrete reasons. First, coherence: VaR is not subadditive, so a merged book can show higher VaR than the sum of its parts, which rewards hiding risk in separate silos -- ES is subadditive, so diversification never looks like a penalty. Second, tail shape: two books with identical VaR can have wildly different losses beyond it, and VaR is blind to the difference by construction while ES reads the whole tail beyond the quantile. What ES does not buy you is escape from the estimation problem. ES is harder to backtest than VaR (it is a conditional expectation, not a hit-or-miss count; the Acerbi-Szekely Z2 statistic is the standard answer), and on a short window it is dominated by a handful of observations, so its sampling error is larger. The estimator itself matters at that sample size. The empirical ES used here is Acerbi and Tasche (2002): the mean of the worst (1-c)n losses, with a fractional weight on the boundary observation when (1-c)n is not an integer. A naive "average of the losses beyond the VaR observation" that also includes the VaR observation reads low, by roughly 4% at n = 1000 and 17% on a 250-day window at 97.5%. The honest framing for the committee: ES answers "how bad is bad," but the confidence interval around that answer is wider than the one around VaR, and both still assume the tail you have seen resembles the tail that is coming.
 
-*In this library:* `risk/VarEngine.java` -- `deltaNormalEs`, `deltaGammaEs` and the ES field on `monteCarloVar`/`historicalVar` results; `risk/ExtremeValueTheory.java`'s `expectedShortfall` is the tail-fitted ES for when the window is too thin to average honestly.
+*In this library:* `risk/VarEngine.java` -- `deltaNormalEs`, `deltaGammaEs` and the ES field on `monteCarloVar`/`historicalVar` results, all empirical ES going through `risk/TailRisk.java` (Acerbi-Tasche); `risk/VarBacktest.java`'s `acerbiSzekelyZ2` with its published 5% and 0.01% thresholds; `risk/ExtremeValueTheory.java`'s `expectedShortfall` is the tail-fitted ES for when the window is too thin to average.
 
 ### 753. "Your options book's VaR looks tame. It is a short-straddle position. Explain why the number is a lie and give the cheapest honest fix."
 
@@ -21018,7 +21036,7 @@ You have hit the ghost effect, and no, risk is not lower. Historical simulation 
 
 That is extreme value theory's single job -- extrapolate beyond the sample, lawfully. Fitting a normal to the whole return series wastes almost all its information on the fat middle and gets the tail wrong by construction. Peaks-over-threshold does the opposite: pick a high threshold, keep only the exceedances over it, and fit a Generalized Pareto Distribution to those exceedances alone. The Pickands-Balkema-de Haan theorem says that for a very broad class of distributions the exceedances converge to a GPD regardless of the parent, so you get a principled tail shape from the tail data only. The shape parameter is the whole story: positive means heavy-tailed (a finite eight-sigma probability that is orders of magnitude above the normal's), zero is exponential, negative is bounded. Once fit, the GPD gives you VaR and ES at 99.9% even though your sample barely contains a 99% event. The discipline that keeps it honest: the method must REFUSE to answer when there are too few exceedances to fit, rather than returning a confident number from five data points.
 
-*In this library:* `risk/ExtremeValueTheory.java` -- `fitPot` fits the GPD by peaks-over-threshold and returns a `GpdFit` whose `var(p)` and `expectedShortfall(p)` extrapolate past the sample; it declines to fit when the exceedance count is too small.
+*In this library:* `risk/ExtremeValueTheory.java` -- `fitPot` fits the GPD by peaks-over-threshold and returns a `GpdFit` whose `var(p)` and `expectedShortfall(p)` extrapolate past the sample; it declines to fit when the exceedance count is too small. `fitPotMle` fits by maximum likelihood with standard errors (so the shape estimate comes with its uncertainty), and `meanExcess` gives the mean-excess plot used to choose the threshold.
 
 ### 756. "Two factors that never crashed together just crashed together. Correlation was 0.4. How can that be, and does switching copula change today's VaR?"
 
@@ -21048,7 +21066,7 @@ The negative component confirms the hedge is real, and the distinction from incr
 
 With 500 names and 250 days you have fewer observations than dimensions, so the sample covariance matrix is rank-deficient by construction -- it has zero eigenvalues, is not invertible, and any optimizer that inverts it (mean-variance, risk parity) blows up on the near-zero directions the sample wrongly calls riskless. Even where it is technically full rank the smallest eigenvalues are estimated with enormous error, and inversion amplifies exactly those. Ledoit-Wolf shrinks the noisy sample matrix toward a structured target -- typically a scaled identity or a constant-correlation matrix -- with an optimal, analytically derived shrinkage intensity that minimizes expected Frobenius distance to the true covariance. What it changes: it pulls the extreme eigenvalues in (the too-big ones down, the too-small ones up), which conditions the matrix so it inverts stably, and it trades a little bias for a large reduction in variance so out-of-sample the shrunk estimate beats the raw sample. The intensity is not a knob you tune to taste -- it is estimated from the data, larger when you have fewer observations relative to names, which is precisely the 500-on-250 case.
 
-*In this library:* `risk/CovarianceShrinkage.java` -- `ledoitWolf(returns)` returns the shrunk matrix and the estimated intensity; `shrink(returns)` is the convenience wrapper that hands back the conditioned covariance for the optimizer to invert.
+*In this library:* `risk/CovarianceShrinkage.java` -- `ledoitWolf(returns)` returns the shrunk matrix and the estimated intensity, `constantCorrelation(returns)` shrinks toward the constant-correlation target (Ledoit and Wolf 2004), and `shrink(returns)` is the convenience wrapper that hands back the conditioned covariance for the optimizer to invert.
 
 ### 761. "Last quarter the 99% VaR was fine every day, yet you breached it eleven times and lost more than the model ever warned. Is the model broken?"
 
@@ -21092,7 +21110,9 @@ Reverse stress solves the inverse problem: fix the loss and find the shock. The 
 
 Because sqrt(t) assumes every risk factor can be exited in the same 10 days, and that is false. FRTB assigns each factor a liquidity horizon -- how long it actually takes to hedge or unwind that exposure in stress -- and the horizons are bucketed at 10, 20, 40, 60 and 120 days: a large-cap equity is 10, a thinly-traded credit or exotic vol is 120. A single sqrt(t) scaling would either understate the illiquid factors (10-day scaling on something you cannot exit for four months) or overstate the liquid ones. The cascade handles the mixture: you compute ES over nested sets of factors, each set holding only the factors liquid enough for that horizon, and combine the incremental pieces as the square root of a sum of squared, horizon-scaled ES terms -- each term scaled by the square root of the horizon increment over the base 10 days. The effect is that illiquid factors get a longer effective holding period baked in, so the aggregate ES is larger than any flat-sqrt(t) number would give, and it is larger specifically because of the factors you cannot get out of quickly. That is the whole regulatory point: capital should reflect that you are stuck with some risk longer than others.
 
-*In this library:* `risk/FrtbEs.java` -- `es975` is the base 97.5% ES, `liquidityHorizonEs(esByHorizon, horizons)` runs the cascade using the `LH_10`..`LH_120` bucket constants, scaling each increment by sqrt of the horizon step over 10.
+One more FRTB piece sits underneath each ES term: it is calibrated to a stress period, not to the current window. Because full history for every factor rarely reaches back to 2007-2008, BCBS MAR33 uses a reduced set of factors with long history: ES = ES_R,S x max(1, ES_F,C / ES_R,C), the reduced-set ES in the stress period scaled up by how much the full set exceeds the reduced set today (never scaled down), and the reduced set must explain at least 75% of the full-set current ES. Worked example: ES_F,C = 100, ES_R,C = 80, ES_R,S = 150 gives 150 x 1.25 = 187.5. A shortcut that scales today's full-set ES by a stressed-over-current ratio floored at 1 is not the rule and gives a different number.
+
+*In this library:* `risk/FrtbEs.java` -- `es975` is the base 97.5% ES (Acerbi-Tasche estimator), `stressCalibratedEs(esCurrentFull, esStressedReduced, esCurrentReduced)` applies the MAR33 ratio and throws when the reduced set covers less than `MIN_REDUCED_SET_COVERAGE` (0.75), and `liquidityHorizonEs(esByHorizon, horizons)` runs the cascade using the `LH_10`..`LH_120` bucket constants, scaling each increment by sqrt of the horizon step over 10.
 
 ### 768. "This morning the Basel traffic light went amber. Walk me through what that means and what changes on the desk today."
 
@@ -21214,7 +21234,7 @@ Duration matches a single number -- sensitivity to a PARALLEL shift of the whole
 
 A lognormal (Black) model assumes the underlying rate is lognormally distributed, which bakes in that the rate is strictly positive -- the model is built around log(rate), and once the rate or the strike goes to zero or below, the log is undefined and the pricer returns NaN. That is not a bug to patch; it is the model telling you its core assumption -- rates cannot be negative -- has been violated by reality. The choice you now make is the distributional one: move to a NORMAL (Bachelier) vol model, which assumes the rate itself is normally distributed and is perfectly happy with negative rates and negative strikes because it never takes a log. The cost is that normal vol quotes are in absolute (basis-point) terms rather than relative (percentage) terms, so your whole vol surface, your smile, and your risk numbers change units and you must reconcile the two conventions across the desk. The common middle ground is the SHIFTED-lognormal model: add a fixed positive shift to the rate so rate-plus-shift stays positive, keep the lognormal machinery, and quote a shift alongside the vol. The underlying point for the desk conversation: negative rates are a statement about the support of the distribution, and you pick the model whose support actually contains the rates the market is printing -- normal or shifted-lognormal, not plain Black.
 
-*In this library:* `rates/ShortRateModels.java` -- the Gaussian `vasicekBond` and curve-fitting `hullWhiteBond` both admit negative rates by construction, which is why a Gaussian/normal framework is the natural home once the lognormal assumption breaks.
+*In this library:* `rates/RatesOptions.java` -- `RatesOptions.VolModel` with `lognormal()`, `shiftedLognormal(shift)` and `normal()`; `swaption`, `capFloor` and `swaptionImpliedVol` take a `VolModel`, accept negative rates and strikes under the normal and shifted models, and return the implied vol in that model's units. `pricing/Bachelier.java` is the normal model itself (price, delta, vega, implied normal vol; Bachelier 1900). On the short-rate side, `rates/ShortRateModels.java`'s Gaussian `vasicekBond` and curve-fitting `hullWhiteBond` both admit negative rates by construction.
 
 ### 788. "A junior bootstrapped the curve and the 10-year discount factor came out above the 5-year. Impossible. Where is the order-of-operations bug?"
 
@@ -21250,9 +21270,9 @@ Long inventory means you want to SELL, so you skew both quotes DOWN: make your a
 
 ### 793. "The hedge optimizer did not converge this morning and it THREW instead of returning a hedge. Defend that design choice."
 
-Defend it hard, because the alternative is worse. The hedge optimizer minimizes the book's residual risk (plus a trading-cost penalty) by iterating -- a Gauss-Seidel style solve that contracts toward the optimal hedge over many passes. On a badly conditioned covariance or a pathological factor-loading matrix that contraction can be extremely slow, and there is a cap on iterations. The design choice is that hitting the cap without converging THROWS rather than returning the best-so-far vector, and the reason is that a silent max-iteration exit would return a plausible-looking hedge that is grossly unconverged -- numerically it has the shape of an answer, it just is not the right one, and nothing downstream can tell. A hedge that is quietly wrong is more dangerous than no hedge: the desk would put on the trade, believe it is flat, and carry unhedged risk it does not know about. Throwing forces a human to look -- recondition the covariance, check the inputs, widen the iteration budget deliberately -- instead of trading on a number the solver itself does not trust. The general principle: when a numerical routine cannot deliver the property it promises (a converged optimum), it must fail loudly, because in risk a confident wrong number costs more than an honest error.
+Defend it hard, because the alternative is worse. The hedge optimizer minimizes the book's residual risk (plus a trading-cost penalty) by iterating -- a Gauss-Seidel style solve that contracts toward the optimal hedge over many passes. On a badly conditioned covariance or a pathological factor-loading matrix that contraction can be extremely slow, so every 50 sweeps the solver tries to finish exactly: it solves the optimality conditions on the current support and sign pattern (with a tiny ridge so collinear instruments have a unique answer) and accepts the result if the subgradient condition holds off the support. That makes near-collinear books converge; a run that still fails within the iteration cap is genuinely pathological. The design choice is that hitting the cap without converging THROWS rather than returning the best-so-far vector, and the reason is that a silent max-iteration exit would return a plausible-looking hedge that is grossly unconverged -- numerically it has the shape of an answer, it just is not the right one, and nothing downstream can tell. A hedge that is quietly wrong is more dangerous than no hedge: the desk would put on the trade, believe it is flat, and carry unhedged risk it does not know about. Throwing forces a human to look -- recondition the covariance, check the inputs, widen the iteration budget deliberately -- instead of trading on a number the solver itself does not trust. The general principle: when a numerical routine cannot deliver the property it promises (a converged optimum), it must fail loudly, because in risk a confident wrong number costs more than an honest error.
 
-*In this library:* `crb/HedgeOptimizer.java` -- `hedge(exposures, covariance, ...)` iterates up to `MAX_ITERATIONS` (20,000) and throws if it has not converged; the inline note states the reasoning -- a silent max-iteration exit would return a grossly unconverged hedge.
+*In this library:* `crb/HedgeOptimizer.java` -- `hedge(exposures, covariance, ...)` runs coordinate descent with a periodic exact support solve, iterates up to `MAX_ITERATIONS` (20,000) and throws if it has not converged; the inline note states the reasoning -- a silent max-iteration exit would return a grossly unconverged hedge.
 
 ### 794. "The auto-hedger fired, but the exposure it needs to hedge is past a hard limit. What happens -- does it just hedge harder?"
 
@@ -21274,7 +21294,7 @@ The diversification benefit is the gap between the sum of the desks' standalone 
 
 ### 797. "End of day. You checkpoint the risk book so tomorrow does not start blind. What gets saved, what deliberately does not, and why atomically?"
 
-What gets saved is the LEARNED state -- everything the models built up over time that would take days to relearn: the internalization engine's running rates and warehoused notional, the PnL ledger's cumulative captures, calibrated model parameters, factor mappings. That is the intelligence a desk that restarts from zero every morning trades half-blind without until it has rebuilt it. What deliberately does NOT come back is intraday state -- today's running position totals, a pending fixing, a half-filled hedge, a transient spike -- because that belonged to yesterday's session and today's book is a fresh mark; restoring it would double-count or resurrect stale exposure. So the restore is honest about time: learned state persists across days, session state resets. The save is atomic -- written to a temp file then renamed over the old one -- because a checkpoint half-written when the process dies mid-save would corrupt the ONE file the whole desk depends on to start tomorrow. With atomic rename, a crash during the save leaves either the complete new file or the intact previous one, never a truncated hybrid; yesterday's checkpoint survives any failure of today's save. The two properties together -- learned-not-intraday, and atomic -- are what make it production-grade rather than a toy serialize.
+What gets saved is the LEARNED state -- everything the models built up over time that would take days to relearn: the internalization engine's running rates and warehoused notional, the PnL ledger's cumulative captures, calibrated model parameters, factor mappings. That is the intelligence a desk that restarts from zero every morning trades half-blind without until it has rebuilt it. What deliberately does NOT come back is intraday state -- today's running position totals, a pending fixing, a half-filled hedge, a transient spike -- because that belonged to yesterday's session and today's book is a fresh mark; restoring it would double-count or resurrect stale exposure. So the restore is honest about time: learned state persists across days, session state resets. The save is atomic -- written to a temp file, forced to the device, renamed over the old one, and the directory forced -- because a checkpoint half-written when the process dies mid-save would corrupt the ONE file the whole desk depends on to start tomorrow. With atomic rename, a crash during the save leaves either the complete new file or the intact previous one, never a truncated hybrid; yesterday's checkpoint survives any failure of today's save. The two properties together -- learned-not-intraday, and atomic -- are what separate it from a plain serialize.
 
 *In this library:* `persist/Checkpoint.java` -- `writer(path)`/`reader(path)` with per-model `section(name, body)` blocks and `requireVersion`; each learning model (e.g. `crb/InternalizationEngine.java`, `crb/CrbPnlLedger.java`) implements `writeState`/`readState` to save learned-not-intraday state, and the writer's atomic temp-then-rename is why a crash cannot corrupt yesterday's file.
 
@@ -21288,7 +21308,7 @@ The ledger decomposes CRB economics into signed components that must sum to the 
 
 The aggregator is the slow, firm-wide observer: it sums exposures across every desk's risk gate every few milliseconds and trips a firm-level kill when total gross notional crosses the ceiling -- the hot trading paths only ever READ one boolean, so safety is global without slowing anyone down. When a gross breach fires, the aggregator flips that firm-wide trip, and every desk's gate sees the tripped flag and stops sending risk-increasing orders. The interaction with an existing ops-hold is additive, and that is the whole point: the ops-hold is a targeted, human-initiated stop on ONE desk (a data issue, a manual intervention), while the aggregator trip is an automatic, firm-wide stop on ALL desks. They do not conflict or override each other -- both are blocks, and an order must pass BOTH to proceed, so the effect is the union of the two halts. The held desk stays held for its own reason; the firm-wide trip additionally halts everyone including that desk. Neither clearing lifts the other: releasing the ops-hold does not un-trip the aggregator, and the gross exposure coming back under the ceiling does not clear the ops-hold. This is deliberate defense in depth -- two independent kill mechanisms at two scopes, each fail-safe, so a breach is stopped even if one control was already engaged for something else.
 
-*In this library:* `trading/GlobalRiskAggregator.java` -- constructed over the desks' `HftRiskGate`s with a `maxGrossNotional`, it exposes `grossNotional()`, `isTripped()` and `tripCount()`; the firm-wide trip and a per-desk ops-hold are independent blocks an order must clear both of.
+*In this library:* `trading/GlobalRiskAggregator.java` -- created with `GlobalRiskAggregator.start(gates, maxGrossNotional, resumeFraction, pollIntervalNanos)` over the desks' `HftRiskGate`s, it exposes `grossNotional()`, `isTripped()`, `unpricedSymbols()` and `tripCount()`; the firm-wide trip and a per-desk ops-hold are independent blocks an order must clear both of, and a trip also makes each gateway send a cancel-all to its venue.
 
 ### 800. "You add a whole new asset class to the CRB. The factor registry has to grow. What breaks if you get this wrong, and what must stay stable?"
 
