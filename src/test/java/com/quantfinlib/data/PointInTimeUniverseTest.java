@@ -83,7 +83,7 @@ class PointInTimeUniverseTest {
         // As of t=40 both listed names are members; the never-added one is not.
         assertEquals(2, StockScreener.membersAsOf(all, u, 40).size());
         // As of t=60 only the survivor remains — dead tickers stay in the
-        // snapshot list (that's the point) but drop out of the screen.
+        // snapshot list (by design) but drop out of the screen.
         List<StockSnapshot> later = StockScreener.membersAsOf(all, u, 60);
         assertEquals(1, later.size());
         assertEquals("AAA", later.get(0).symbol());
