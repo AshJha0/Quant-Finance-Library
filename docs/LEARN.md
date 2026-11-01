@@ -8023,16 +8023,16 @@ occupied level is a word scan with `Long.numberOfTrailingZeros`, checking
 64 levels per instruction. Against that, a TreeMap gives O(log n) pointer
 chasing through scattered heap nodes, allocates on insert, and boxes
 Double keys -- fine for research (this library's readable book uses
-exactly that), fatal at venue speed. The measured gap is
-the argument: this design runs ~204 ns median per operation and 10M+
-fills/sec across a 20,001-level band. The tradeoff you must volunteer:
+exactly that), fatal at venue speed. The measured gap between the two
+books is the argument (see [BENCHMARKS.md](BENCHMARKS.md)). The
+trade-off to state:
 the band is fixed at construction -- prices outside it are rejected
 (`REJECT_OUT_OF_BAND`), which is also how real engines behave.
 
 *In this library:* `orderbook/HftOrderBook.java` (dense integer-tick ladder
 + per-side occupancy bitmaps; the javadoc is the design document),
 `orderbook/OrderBook.java` (the TreeMap version, kept as the readable
-specification), numbers in `docs/ULTRA_LOW_LATENCY.md`.
+specification), numbers in [BENCHMARKS.md](BENCHMARKS.md).
 
 ### 256. "Why intrusive linked lists and node pools for the orders, instead of an ArrayDeque per level?"
 
@@ -8188,9 +8188,10 @@ which converts "the fuzzer failed once" from a nightmare into a unit test.
 (100k ops, the LinkedHashMap reference model, and the invariant checks
 "example-based tests can miss").
 
-### 262. "You measured ~10M fills per second. Do the arithmetic that makes that credible -- or incredible."
+### 262. "A book benchmark reports 10M fills per second. Do the arithmetic that makes that credible -- or incredible."
 
-Sanity-check it against the nanosecond budget, which is the only way to hear a throughput claim. 10M fills/sec means 100 ns per fill.
+Sanity-check it against the nanosecond budget, which is the only sound
+way to hear a throughput claim. 10M fills/sec means 100 ns per fill.
 What must happen in a fill: bitmap scan to the best level (a couple of
 instructions when the touch is cached in `bestBidIdx`/`bestAskIdx`),
 read the queue head node (one indexed load into parallel arrays), compare
@@ -8201,17 +8202,16 @@ near-perfect cache locality -- 100 ns (400-500 cycles) is comfortable,
 not miraculous. The number is credible precisely
 because the design removed everything that costs unpredictable time
 (allocation, pointer chasing, tree rebalancing, virtual dispatch through
-listener lists). The companion measurements triangulate it: ~204 ns
-median per mixed operation (70/20/10 add/cancel/aggress -- adds and
-cancels do map work fills don't), and 7M+ add/cancel ops/sec across a
-20,001-level band. If someone claims 10M fills/sec from a TreeMap book,
+listener lists). Companion measurements should triangulate it: a mixed
+add/cancel/aggress workload is slower per operation than pure fills,
+because adds and cancels do id-map work that fills do not. If someone claims 10M fills/sec from a TreeMap book,
 the same arithmetic convicts them: log2(1000 levels) pointer-chased hops
 at ~100 ns cache-miss each blows the budget before matching begins.
 
-*In this library:* `docs/ULTRA_LOW_LATENCY.md` (204 ns/op, 10M+ fills/s,
-7M+ add-cancel/s, measured by `HftBookBenchmark` and re-stated in
-`docs/DIAGRAMS.md`); the design that makes the budget close is
-`orderbook/HftOrderBook.java`.
+*In this library:* the measured figures from `HftBookBenchmark` (in
+the examples jar) are in [BENCHMARKS.md](BENCHMARKS.md); the benchmark
+times operations in 128-op batches so the clock read does not dominate.
+The design that makes the budget close is `orderbook/HftOrderBook.java`.
 
 ### 263. "You are building the participant side, not the exchange. Which book responsibilities do you keep, which do you drop, and what do you gain?"
 
@@ -8586,19 +8586,29 @@ by construction; deterministic caller-supplied clock),
 `trading/HftQuoter.java` (conflation as the demand-side fix),
 `execution/` venue-quality machinery for the routing answer.
 
-### 276. "Tick to two-sided quote in 592 nanoseconds. Decompose the pipeline and tell me where the time goes."
+### 276. "Tick to two-sided quote in a few hundred nanoseconds. Decompose the pipeline and tell me where the time goes."
 
-The loop is: tick in -> mid -> inventory skew -> tick-grid snap -> two
-orders out through the risk gate and gateway, all primitive arithmetic,
-zero allocation per tick. Decompose the measured 592 ns p50: the tick
-arrives over the SPSC ring (~40 ns publish + consumer handoff), the
-quote math itself is trivial (skew = -position x skewPerUnit; bid =
-mid - halfSpread + skew rounded DOWN to the grid; ask = mid +
-halfSpread + skew rounded UP -- note the asymmetric rounding keeps both
-sides passive), the tick-schedule snap is a small binary search, each
-side passes the ~3 ns risk gate, and each side is published into the
-order ring. Two sides means the back half runs twice -- which is why
-tick-to-QUOTE (592 ns) costs more than tick-to-ORDER (504 ns). The
+The loop is: market data in -> fair price -> inventory skew -> tick-grid
+snap -> order messages out through the risk gate and gateway, all
+primitive arithmetic, zero allocation per update. The time splits into
+the handoff over the SPSC ring from the feed thread, the quote math
+(trivial: skew = -position x skewPerUnit; bid = fair - halfSpread + skew
+rounded down to the grid; ask = fair + halfSpread + skew rounded up --
+the asymmetric rounding keeps both sides passive), the tick-schedule
+snap (a small binary search), the risk check per side, and the publish
+into the order ring per side. Two sides means the back half runs
+twice, which is why tick-to-quote costs more than tick-to-order; the
+measured split is in [BENCHMARKS.md](BENCHMARKS.md). The fair price is
+the mid of the BBO delivered through `onQuote`; trade prints are used
+only until a book exists. The quoter keeps at most one working bid and
+one working offer per symbol and requotes by cancel/replace. If the
+previous order is still pending or has a cancel or replace in flight,
+the update waits for the venue's answer and is counted as deferred. A
+quoter that sends a fresh pair on every tick stacks orders and builds
+an inventory the skew never sees, because the resting orders are not
+yet positions. Market-data sanity is part of the loop: a NaN or
+non-positive fair price is ignored, a crossed or locked BBO pulls both
+quotes, and a side that would cross the BBO is not quoted. The other
 non-obvious features are what make it deployable rather than a demo:
 conflation -- venues throttle quote updates and stale requotes waste
 the wire, so a re-quote is suppressed unless the mid moved minMove or
@@ -8609,9 +8619,9 @@ the inventory loop closes through the risk gate's position (updated by
 fills via onFill), so the quoter cannot out-trade its own limits.
 
 *In this library:* `trading/HftQuoter.java` (the pipeline, the skew
-formula, conflation and per-symbol config are all in the javadoc),
-measured numbers in `docs/ULTRA_LOW_LATENCY.md` (tick-to-two-sided-quote
-p50 592 ns, p99 912 ns).
+formula, working-order tracking, the market-data checks, conflation and
+per-symbol config are all in the javadoc); measured numbers in
+[BENCHMARKS.md](BENCHMARKS.md).
 
 ### 277. "Your quoter accumulated +1,400 lots against a band of 1,000. The auto-hedger fires. How big is the hedge -- and why NOT hedge to flat?"
 
@@ -8626,18 +8636,24 @@ spread paid -- a hedge is a taker, it COSTS the spread your quotes
 earn); it avoids ping-ponging around zero (hedge to flat, get filled
 on your bid, hedge again -- you would churn your own P&L away); and it
 matches how dealer books actually run inventory. The second control is
-the cooldown: positions only update when fills CONFIRM via onFill, so
-without a minimum interval between hedges, the hedger would see the
-still-breached position on the next tick -- while the first hedge is
-in flight -- and stack a second order, then a third; the cooldown
-holds fire until the ack loop catches up. Sequencing detail: the
-hedger registers on the bus AFTER the strategy/quoter listeners, so it
-reacts to the same tick they acted on. For an options book, feed it
+working-hedge tracking: positions only update when fills arrive, so a
+hedger that looks only at position sees the still-breached position on
+the next tick, while the first hedge is in flight, and sends a second
+order for the same excess, then a third. A time cooldown does not fix
+this, because a slow venue can take longer than any cooldown. So at
+most one hedge per symbol is working: no new hedge is considered until
+the venue has finished with the previous one (filled, IOC remainder
+cancelled, or rejected), and only then after a minimum interval. The
+hedge is an immediate-or-cancel order priced at the opposite touch, so
+it is marketable when sent and can never rest. Sequencing detail: the
+hedger registers on the bus after the quoter, so it reacts to the same
+event the quoter acted on. For an options book, feed it
 delta instead of raw inventory -- the band logic is identical.
 
 *In this library:* `trading/AutoHedger.java` (band, hedge-to-band
-rationale, cooldown-vs-in-flight-fills, listener ordering -- all in the
-javadoc), positions via `trading/HftRiskGate.onFill`.
+rationale, one working IOC hedge per symbol at the opposite touch,
+`hedgesWithoutTouch()` when no BBO is available, listener ordering --
+all in the javadoc), positions via `trading/HftRiskGate.onFill`.
 
 ### 278. "Derive where a market maker's TRUE mid sits when they are long inventory. What does Avellaneda-Stoikov actually give you?"
 
@@ -8675,9 +8691,12 @@ construction: the strategy and risk-gate code paths are the production
 classes, not reimplementations -- every order passes the pre-trade
 checker first and rejected orders never reach the market, exactly like
 production (so a strategy that only works when risk is off gets caught
-in paper, which is the whole point); fill mechanics are quote-driven --
-market orders fill at the touch, resting limits fill when the market
-CROSSES them; and accounting is complete -- signed positions with
+in paper); fill mechanics are quote-driven -- market orders fill at
+the touch up to the displayed size and the rest is cancelled, resting
+limits fill when a later quote crosses them, and displayed size is
+consumed so two orders cannot take the same liquidity; order states
+follow the same state machine as the live gateway; and accounting is
+complete -- signed positions with
 average cost, cash, realized/unrealized P&L, commission, mark-to-market
 equity, readable as an internally consistent snapshot from another
 thread. Unfaithful, and you must say so: no queue position
@@ -8691,8 +8710,10 @@ P&L at all -- it is proof the plumbing (signals -> orders -> risk ->
 fills -> positions -> dashboard) runs whole days without error.
 
 *In this library:* `trading/PaperTradingGateway.java` (quote-driven
-fills, real `risk/PreTradeLimitChecker` in the path, full account
-snapshot; thread-safe snapshot for dashboards), the queue-position gap
+fills limited by displayed size through `onQuote` with sizes, the
+shared `OrderStateMachine`, real `risk/PreTradeLimitChecker` in the
+path, full account snapshot; thread-safe snapshot for dashboards,
+execution listeners called outside the lock), the queue-position gap
 is what `microstructure/QueuePositionEstimator.java` models when you
 need it.
 
@@ -8737,21 +8758,22 @@ shard count, and shards cannot contend because there is nothing to
 contend ON. Symbols work as the partition key because most strategy
 state is per-symbol; the exception -- a synthetic cross needing two
 legs -- is handled by registering a symbol on MULTIPLE shards, which
-costs one extra ring publish (~40 ns) per tick to duplicate the leg's
-feed: paying a copy to preserve isolation is the shared-nothing move
-in miniature. The measured result on a 12-logical-core desktop, 300
-symbols quoted two-sided: 1 shard = 4.3M ticks/s, 2 shards = 6.2M
-(+46%), 4 shards plateau at 6.7M -- and the reading of each
-number matters: +46% not +100% because the box has finite cores and
-one producer; the plateau is core oversubscription (8 spinning threads
-plus the producer), NOT contention -- cross-shard drops stayed near
-zero. On pinned dedicated cores, scaling approaches k-times. What
-sharding does not solve -- firm-wide risk -- is the next
+costs one extra ring publish per tick to duplicate the leg's feed:
+paying a copy to preserve isolation is the shared-nothing move in
+miniature. Reading a scaling measurement needs care. Two shards rarely
+give twice the throughput on a desktop, because the box has finite
+cores and a single producer feeds every shard; a plateau at four
+shards on a machine with a dozen logical cores is usually core
+oversubscription (eight spinning threads plus the producer), not
+contention, and you tell the two apart by checking that cross-shard
+drops stay near zero. On pinned dedicated cores, scaling approaches
+k-times. The measured figures are in [BENCHMARKS.md](BENCHMARKS.md).
+What sharding does not solve -- firm-wide risk -- is the next
 question.
 
 *In this library:* `trading/ShardedTradingEngine.java` (the facade,
-multi-shard symbol registration, per-shard `bus(int)` attachment),
-measurements and their interpretation in `docs/ULTRA_LOW_LATENCY.md`.
+multi-shard symbol registration, per-shard `bus(int)` attachment,
+`publishMissMask` reporting which shards missed a tick).
 
 ### 282. "Your first sharding benchmark showed 2 shards SLOWER than 1. The fix was deleting one line. What was it?"
 
@@ -8773,33 +8795,37 @@ your benchmark adds to the hot path is part of the system under test,
 and a profiler-friendly design exposes per-shard counters it can sum
 cold. And "shared-nothing means nothing": the discipline fails on the
 LAST shared byte, not the first -- the same reason the ring buffers
-here pad producer and consumer sequences onto separate cache lines.
+here keep producer and consumer sequences on separate cache lines.
 
 *In this library:* the war story is written up in
 `docs/ULTRA_LOW_LATENCY.md` (sharding section) and `docs/LEARN.md`
-section 18; the padding discipline lives in `marketdata/TickRingBuffer.java`
-/ `trading/OrderRingBuffer.java` ("cache-line padding prevents false
-sharing").
+section 18; the spacing discipline lives in
+`marketdata/StridedSequences.java` (counters in one `long[]` with a
+128-byte stride, so the layout does not depend on JVM field order),
+used by `marketdata/TickRingBuffer.java` and
+`trading/OrderRingBuffer.java`.
 
 ### 283. "Firm-wide exposure spans all shards, but shards share nothing. Reconcile that without slowing the hot path."
 
 Split the requirement by latency class, because it IS two requirements.
 Per-order enforcement (this order would breach) must be nanosecond-fast
-and needs only per-shard state -- the shard's own gate does it in ~3 ns.
+and needs only per-shard state -- the shard's own gate does it.
 Firm-wide limits (total gross notional across everything) need
 cross-shard VISIBILITY but not per-order LATENCY: a firm cap is a
 circuit breaker, and a breach detected within a millisecond is
 operationally identical to one detected within a nanosecond. So the
 aggregator runs as a slow observer: a monitor thread polls every
-shard's gate, summing |position| x referencePrice -- and here is the
-elegant part -- reading state the gates ALREADY publish with
+shard's gate, summing worst-case gross notional (positions plus
+working orders, times the reference price), and reading state the gates ALREADY publish with
 release/acquire semantics for their own correctness, so aggregation
 adds zero new synchronization to any hot path; the VarHandle work done
 for the quoter's benefit is exactly what makes cross-thread reads free.
-On breach, one kill boolean per gate is released; each shard's check
+On breach, one kill flag per gate is released; each shard's check
 reads it as a single acquire load -- a plain load on x86 -- as its very
-first test. So the hot path's total price for firm-wide safety is one
-already-cached boolean read per order. The javadoc names the trade:
+first test, and each gateway on the gate sends a cancel-all to its
+venue. A symbol with exposure and no reference price trips the breaker
+too, because unmeasured exposure is not zero exposure. So the hot path's
+total price for firm-wide safety is one already-cached read per order. The javadoc names the trade:
 detection latency equals the poll interval (default 1 ms), and that is
 how real risk stacks layer it -- fast local gates, slow global
 breakers, hysteresis on the way back.
@@ -9023,32 +9049,32 @@ above), over `persist/Checkpoint.java` and the learning models'
 ### 291. "The desk wants to quote 1,200 symbols next quarter. Size the system -- from measured numbers, not vendor claims."
 
 Capacity planning is arithmetic over measured per-unit costs plus
-headroom -- never extrapolation from marketing. Start from
-this library's committed measurements: one shard sustains 4.3M
-ticks/s quoting 300 symbols two-sided on a 12-core desktop; 2 shards
-= 6.2M; 4 plateau at 6.7M because 8 spinning threads oversubscribe
-the box -- so the FIRST sizing conclusion is about cores, not
-software: each shard needs a dedicated core pair, and the plateau
-tells you when a box is full. Demand side: estimate peak tick rate
+headroom -- never extrapolation from marketing. Start from the
+library's measured per-shard throughput and its shard-scaling curve
+([BENCHMARKS.md](BENCHMARKS.md)). The first sizing conclusion is about
+cores, not software: each shard runs spinning threads and needs
+dedicated cores, and the point where adding shards stops helping tells
+you when a box is full. Demand side: estimate peak tick rate
 per symbol at the open (not the daily average -- capacity is bought
 for the worst minute, and opens run 10x+ average), say 1,200 symbols
 x a few thousand ticks/s peak = order of a few million ticks/s.
 Supply side: divide by measured per-shard throughput ON THE TARGET
-HARDWARE -- rerun the probe there, since the 4.3M is one desktop's
-number -- then apply a utilization ceiling (~50%, because Q286 taught
+HARDWARE -- rerun the probe there, since a desktop measurement says
+little about a server -- then apply a utilization ceiling (~50%, because Q286 taught
 that saturation behavior is drops, and you want budget for the day
 volatility doubles). Cross-check the latency budget separately:
-throughput headroom does not buy back the 592 ns quote path, but
+throughput headroom does not shorten the tick-to-quote path, but
 queueing delay explodes near saturation, so the utilization ceiling
-protects p99 too. Then verify in CI forever: the throughput floors
-(set ~20x under measured) catch the regression that silently halves
-your capacity plan. The method is the answer: measure per-unit,
+protects p99 too. Then keep a tripwire: throughput floors set well
+under the measured numbers, run regularly, catch the regression that
+silently halves your capacity plan. The method is the answer: measure per-unit,
 model peak demand, divide, halve, keep a tripwire.
 
-*In this library:* `docs/ULTRA_LOW_LATENCY.md` (the shard scaling
-numbers and their interpretation), `trading/ShardedTradingEngine.java`
-(the unit of scaling), `LoadAndSoakTest` (the floors that keep the
-plan true), `docs/DIAGRAMS.md` (the measured-numbers map).
+*In this library:* [BENCHMARKS.md](BENCHMARKS.md) (the shard scaling
+numbers), `trading/ShardedTradingEngine.java` (the unit of scaling),
+`LoadAndSoakTest` (the floors; it is tagged `load`, so it runs under
+`./mvnw -Pfull test` and in the nightly workflow, not in the default
+build).
 
 ---
 
