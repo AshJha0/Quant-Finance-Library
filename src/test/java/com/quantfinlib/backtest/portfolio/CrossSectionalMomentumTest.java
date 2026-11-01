@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Point-in-time cross-sectional momentum: ranks only the members alive at
  * each rebalance timestamp, longs winners / shorts losers dollar-neutrally,
- * and — run end-to-end on the survivorship-aware engine — shows the naive
+ * and, run end-to-end on the survivorship-aware engine, shows the naive
  * universe overstating the strategy.
  */
 class CrossSectionalMomentumTest {
@@ -131,8 +131,8 @@ class CrossSectionalMomentumTest {
         // Long-winner/short-loser makes money in both runs on this tape...
         assertTrue(unbiased.equityCurve()[BARS - 1] > 1_000_000);
         assertTrue(naive.equityCurve()[BARS - 1] > 1_000_000);
-        // ...but the naive run keeps the doomed short alive and books MORE
-        // profit than the honest run: survivorship bias, quantified again.
+        // ...but the naive run keeps the doomed short alive and books more
+        // profit than the point-in-time run: survivorship bias, quantified again.
         assertTrue(naive.equityCurve()[BARS - 1] > unbiased.equityCurve()[BARS - 1],
                 "naive=" + naive.equityCurve()[BARS - 1]
                         + " unbiased=" + unbiased.equityCurve()[BARS - 1]);

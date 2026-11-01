@@ -24,13 +24,13 @@ import java.util.Map;
  *
  * <p><b>Why point-in-time matters here specifically</b>: momentum is the
  * factor survivorship bias flatters most. The stocks that delisted are
- * disproportionately the past losers a short book would have held — remove
+ * disproportionately the past losers a short book would have held. Remove
  * them from the universe and the short side looks artificially safe, while
  * the long side never picks a name that was about to be acquired away.
  * Ranking over {@code universe.isMember(symbol, now)} and running on the
  * {@linkplain PortfolioBacktester survivorship-aware overload} closes both
  * gaps (a {@code null} universe reproduces the naive everything-always-
- * tradeable behavior — useful for measuring the bias).</p>
+ * tradeable behavior, which is useful for measuring the bias).</p>
  *
  * <p>Candidates also need {@code lookback} bars of history at the rebalance
  * bar; earlier bars produce an empty book (the engine holds cash).</p>
