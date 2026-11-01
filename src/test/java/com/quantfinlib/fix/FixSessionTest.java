@@ -245,7 +245,7 @@ class FixSessionTest {
     @Test
     void resendRequestIsServicedWhileAnInboundGapIsStillOpen() throws Exception {
         // BUG PIN: gap recovery depends on the peer's ResendRequest being
-        // serviced even while OUR OWN inbound gap is still unresolved — a
+        // serviced even while our own inbound gap is still unresolved — a
         // RESEND_REQUEST must never be dropped by the seq > expected branch.
         connect(30);
         client.sendNewOrderSingle("ord-1", "EURUSD", Side.BUY, 100, 1.0851,

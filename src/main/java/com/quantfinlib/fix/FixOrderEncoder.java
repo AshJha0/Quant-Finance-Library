@@ -12,7 +12,7 @@ import java.time.format.DateTimeFormatter;
  * whole order lifecycle stays allocation-free. It is — the hot-lane counterpart of
  * the String-based {@link NewOrderSingle}/{@link FixMessage} codec, for
  * venues that only speak FIX (where the {@code sbe} binary adapters aren't
- * an option, order entry IS the FIX edge, and per-order String building
+ * an option, order entry is the FIX edge, and per-order String building
  * would put allocation back on the measured path).
  *
  * <p>Techniques, all standard in commercial garbage-free FIX engines:</p>
