@@ -7,11 +7,14 @@ import java.util.Arrays;
  * interpolation, implied rate differentials, and covered-interest-parity
  * checks against deposit rates.
  *
- * <p>Thread safety: {@link #addPoint} is synchronized and publishes a new
+ * <p>Thread safety: {@link #addPoint} serialises writers on a private lock and publishes a new
  * immutable pillar array through a volatile field (copy on write), so
  * readers on other threads never see a half-updated curve and never block.</p>
  */
 public final class ForwardCurve {
+
+    /** Private monitor for lifecycle and registration; never exposed to callers. */
+    private final Object lock = new Object();
 
     private static final class Pillars {
         private final double[] tenors;
@@ -73,35 +76,37 @@ public final class ForwardCurve {
     }
 
     /** Adds (or replaces) an outright forward at {@code tenorYears > 0}. */
-    public synchronized ForwardCurve addPoint(double tenorYears, double outrightForward) {
-        if (!(tenorYears > 0) || !Double.isFinite(tenorYears)) {
-            throw new IllegalArgumentException("tenor must be positive and finite");
+    public ForwardCurve addPoint(double tenorYears, double outrightForward) {
+        synchronized (lock) {
+            if (!(tenorYears > 0) || !Double.isFinite(tenorYears)) {
+                throw new IllegalArgumentException("tenor must be positive and finite");
+            }
+            if (!(outrightForward > 0) || !Double.isFinite(outrightForward)) {
+                throw new IllegalArgumentException("outright forward must be positive and finite");
+            }
+            Pillars p = pillars;
+            int idx = Arrays.binarySearch(p.tenors, tenorYears);
+            double[] ts;
+            double[] fs;
+            if (idx >= 0) {
+                ts = p.tenors;
+                fs = p.outrights.clone();
+                fs[idx] = outrightForward;
+            } else {
+                int at = -idx - 1;
+                int n = p.tenors.length;
+                ts = new double[n + 1];
+                fs = new double[n + 1];
+                System.arraycopy(p.tenors, 0, ts, 0, at);
+                System.arraycopy(p.outrights, 0, fs, 0, at);
+                ts[at] = tenorYears;
+                fs[at] = outrightForward;
+                System.arraycopy(p.tenors, at, ts, at + 1, n - at);
+                System.arraycopy(p.outrights, at, fs, at + 1, n - at);
+            }
+            pillars = new Pillars(ts, fs);
+            return this;
         }
-        if (!(outrightForward > 0) || !Double.isFinite(outrightForward)) {
-            throw new IllegalArgumentException("outright forward must be positive and finite");
-        }
-        Pillars p = pillars;
-        int idx = Arrays.binarySearch(p.tenors, tenorYears);
-        double[] ts;
-        double[] fs;
-        if (idx >= 0) {
-            ts = p.tenors;
-            fs = p.outrights.clone();
-            fs[idx] = outrightForward;
-        } else {
-            int at = -idx - 1;
-            int n = p.tenors.length;
-            ts = new double[n + 1];
-            fs = new double[n + 1];
-            System.arraycopy(p.tenors, 0, ts, 0, at);
-            System.arraycopy(p.outrights, 0, fs, 0, at);
-            ts[at] = tenorYears;
-            fs[at] = outrightForward;
-            System.arraycopy(p.tenors, at, ts, at + 1, n - at);
-            System.arraycopy(p.outrights, at, fs, at + 1, n - at);
-        }
-        pillars = new Pillars(ts, fs);
-        return this;
     }
 
     public double spot() {

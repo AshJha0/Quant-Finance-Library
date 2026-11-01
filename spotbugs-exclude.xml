@@ -201,4 +201,12 @@
         <Class name="com.quantfinlib.report.PdfReportExporter"/>
         <Bug pattern="VA_FORMAT_STRING_USES_NEWLINE"/>
     </Match>
+    <!-- Marsaglia polar method: each pass accepts with probability pi/4, so
+         the rejection loop terminates almost surely. SpotBugs cannot see that
+         the random draws change on every iteration. -->
+    <Match>
+        <Class name="com.quantfinlib.hedging.HedgingSimulator"/>
+        <Method name="gaussian"/>
+        <Bug pattern="IL_INFINITE_LOOP"/>
+    </Match>
 </FindBugsFilter>
