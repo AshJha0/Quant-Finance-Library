@@ -25213,8 +25213,8 @@ shared counter where there should be a per-shard cache-line-spaced one. Measure
 per segment, compare to budget; the one over budget is the regression. Guessing
 across three subsystems is how you spend a week.
 
-*In this library:* the segment budgets in the "500ns after BUY" walkthrough
-(Part II section 17); the allocation-counter tests that catch a feed-side leak.
+*In this library:* the per-stage latency breakdown in Part II section 16 (Measuring latency)
+and the order path in section 17; the allocation-counter tests that catch a feed-side leak.
 
 ### 967. "A checkpoint restore changed model, scorecard, and session behavior at once. What happened?"
 
