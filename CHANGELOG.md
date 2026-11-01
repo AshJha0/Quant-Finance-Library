@@ -204,6 +204,17 @@ Major release. It corrects several pricing, risk and backtesting results, makes 
 - `HiccupMonitor.spinning(...)` samples with a busy `nanoTime` loop; the default park mode is documented as timer-bound on Windows.
 - Benchmarks print the clock step, run open-loop fixed-rate passes with intended-start timestamps next to the closed-loop ones, measure the risk gate over 1,024 random symbols with an independent collar reference, and time order-book operations in 128-op batches. JMH `CoreBenchmarks` run 3 forks, 5 warm-up and 10 measurement iterations and add `riskGateCheckRandomSymbols`.
 - Zero-allocation tests in the trading, market-data, order-book and execution packages assert exactly zero bytes after warm-up, with a bounded retry.
+- SpotBugs `EI_EXPOSE_REP`/`EI_EXPOSE_REP2` are no longer excluded globally (277 findings before). Result types copy arrays and collections on construction and hand out elements (`x(i)`), lengths and copies (`xCopy()`); the 51 records with array components (47 public, 4 internal) are final classes with content equality (Error Prone `ArrayRecordComponent`: 0). The only remaining matches are per method in `spotbugs-exclude.xml`, each with a reason: flyweight `wrap` methods, injected collaborators and recorded failures.
+- `BarSeries` column arrays no longer escape: `closesCopy()` and the other column copies, `copyClosesInto`; the class is `@Immutable`.
+- `HftOrderGateway` execution-report and venue-thread counters moved from adjacent `AtomicLong`s to padded `StridedSequences` slots (single-writer opaque increments on the venue thread, atomic adds for reports), removing false sharing and lock-prefixed increments on the venue thread.
+- `HftOrderGateway`, `HftMarketDataBus`, `ShardedTradingEngine`, `AsyncTickCapture`, `BinaryMarketDataClient` and `WebSocketFeed` wait through a pluggable `IdleStrategy` instead of hard-coded `onSpinWait`/`parkNanos`; every polling thread is created by a replaceable `ThreadFactory`.
+- `BinaryMarketDataClient` and `BinaryOrderReceiver` count decoded, dropped and skipped messages with single-writer opaque increments on padded slots instead of `AtomicLong.incrementAndGet` per message.
+- `GlobalRiskAggregator` sweeps without allocating (reused scratch, indexed loop instead of an iterator) and accepts a `ThreadFactory`.
+- `CentralRiskBook` keys desks, equity symbols and FX pairs by dense ids resolved once; booking no longer builds factor-name strings, boxes NDF notionals or looks up a `TreeMap` per flow, and the String-keyed methods are allocation-free after the first booking of a name. Factor registration order, serialized state and reports are unchanged.
+- `CrbAutoHedger.check` returns a shared empty array when no hedge is due; `Vpin` advances its ring without a modulo.
+- `LatencyRecorder` bucket arithmetic uses shifts and masks.
+- Benchmarks run with the recommended JDK 25 flags (`-XX:+UseZGC -XX:+UseCompactObjectHeaders -XX:+AlwaysPreTouch -XX:+PerfDisableSharedMem`, fixed heap) in the workflow and the JMH forks; `docs/ULTRA_LOW_LATENCY.md` section 8 lists them.
+
 
 #### Added
 - `HftOrderGateway.cancel`, `replace`, `cancelAll`, execution-report methods (`onAck`, `onReject`, `onFill`, `onCanceled`, `onReplaced`, `onCancelReject`), order queries, ack-timeout scan and an optional `OrderThrottle`.
@@ -212,6 +223,11 @@ Major release. It corrects several pricing, risk and backtesting results, makes 
 - `Nbbo` per-venue update times and `expireStale` with a maximum quote age.
 - `ShardedTradingEngine.publishMissMask` reporting which shards missed a tick; each shard's bus kills its gate on a listener failure.
 - `HftMarketDataBus.onListenerFailure`, `isHealthy`, `failure`, `listenerErrorCount`.
+- `util.IdleStrategy` (busy spin, yield, fixed park, spin-yield-park back-off), `util.ThreadPlacement` (named daemon factories with an on-start placement hook; `taskset`/`isolcpus` notes), `util.NanoClock`, `util.ValueArrays`, `util.Immutable`.
+- `HftOrderGateway.threadFactory`, `clock`; `HftMarketDataBus.threadFactory` and an `IdleStrategy` constructor; `ShardedTradingEngine` constructor with a per-thread `Supplier<IdleStrategy>`; `GlobalRiskAggregator.start(..., ThreadFactory)`.
+- `CentralRiskBook.deskId`, `equityHandle`, `fxPairHandle` and int-keyed booking overloads; `InternalizationEngine.internalize` with `lastRouted()` and `lastImprovementBps()` (no result object).
+- `HotPathAllocationTest` (exactly zero bytes for idle strategies, FIX encoder read-out, MoldUDP64 header encoding, tick-file writing across block flushes, CRB booking, VPIN, auto-hedger idle check, internalization, aggregator reads, streaming indicators, latency recording) and `ValueClassCopyContractTest` (copy-in, copy-out and content equality for every former array record).
+
 
 ### FIX, feeds, SBE and persistence
 
@@ -249,6 +265,10 @@ Major release. It corrects several pricing, risk and backtesting results, makes 
 - QFLT tick files are written as version 2: header with clock domain (`TickFileWriter.ClockDomain`) and an epoch/monotonic anchor, records grouped in CRC-32C blocks, file forced on close. Version-1 files are still read.
 - Tests that measured allocation now require exactly zero bytes (smallest of five runs) instead of under 100 KB.
 - FIX session tests that slept or depended on the wall clock were replaced by deterministic scenarios on a manual clock.
+- `FixOrderEncoder` no longer exposes its buffer: `copyInto`, `writeTo(ByteBuffer)`, `byteAt`, `toByteArray` replace `buffer()`/`offset()`; `FixExecReportView.byteAt` replaces `buffer()`.
+- `TickFileWriter` reuses its frame header, trailer and CRC32C and writes from direct buffers, so a steady tick stream allocates nothing per 64 KiB block.
+- `MoldUdp64Receiver.encodeHeader`/`encodeRequest` write the space-padded session in place instead of through `String.format`; sessions over 10 characters are rejected.
+
 
 #### Added
 - `FixClock` and `FixSession.overStream(...)`: a thread-free session over any transport, driven by `onBytes` and `onTimer`, for custom transports and deterministic tests.

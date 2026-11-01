@@ -1,5 +1,6 @@
 package com.quantfinlib.feed;
 
+import com.quantfinlib.util.IdleStrategy;
 import com.quantfinlib.marketdata.HftMarketDataBus;
 
 import java.io.IOException;
@@ -68,6 +69,7 @@ public final class WebSocketFeed implements AutoCloseable {
     private final HftMarketDataBus bus;
     private final HttpClient httpClient;
     private final Map<String, Integer> symbolIds = new ConcurrentHashMap<>();
+    private final IdleStrategy retryIdle = IdleStrategy.backoff(100, 0, 10_000, 10_000);
     private final CountDownLatch firstConnection = new CountDownLatch(1);
     private final AtomicLong messagesReceived = new AtomicLong();
     private final AtomicLong tradesPublished = new AtomicLong();
@@ -329,13 +331,9 @@ public final class WebSocketFeed implements AutoCloseable {
             return true;
         }
         long deadline = System.nanoTime() + publishRetryNanos;
-        int spins = 0;
+        retryIdle.reset();   // guarded by publishLock, like the rest of this method
         while (System.nanoTime() - deadline < 0) {
-            if (++spins < 100) {
-                Thread.onSpinWait();
-            } else {
-                LockSupport.parkNanos(10_000);
-            }
+            retryIdle.idle();
             if (bus.publish(id, price, size, ts)) {
                 return true;
             }

@@ -69,10 +69,29 @@ public final class GlobalRiskAggregator implements AutoCloseable {
      */
     public static GlobalRiskAggregator start(List<HftRiskGate> gates, double maxGrossNotional,
                                              double resumeFraction, long pollIntervalNanos) {
+        return start(gates, maxGrossNotional, resumeFraction, pollIntervalNanos,
+                com.quantfinlib.util.ThreadPlacement.daemon("global-risk-aggregator"));
+    }
+
+    private final int[] unpricedScratch = new int[1];   // guarded by this
+
+    /**
+     * As {@link #start(List, double, double, long)}, creating the monitor
+     * thread with {@code threadFactory} (naming, CPU placement).
+     *
+     * @param gates             every shard's gate
+     * @param maxGrossNotional  firm-wide cap on worst-case gross notional
+     * @param resumeFraction    resume trading below cap times this
+     * @param pollIntervalNanos monitor cadence
+     * @param threadFactory     creates the monitor thread
+     * @return the running aggregator
+     */
+    public static GlobalRiskAggregator start(List<HftRiskGate> gates, double maxGrossNotional,
+                                             double resumeFraction, long pollIntervalNanos,
+                                             java.util.concurrent.ThreadFactory threadFactory) {
         GlobalRiskAggregator a = new GlobalRiskAggregator(gates, maxGrossNotional,
                 resumeFraction, pollIntervalNanos);
-        Thread t = new Thread(a::monitorLoop, "global-risk-aggregator");
-        t.setDaemon(true);
+        Thread t = threadFactory.newThread(a::monitorLoop);
         a.monitor = t;
         t.start();
         return a;
@@ -87,7 +106,7 @@ public final class GlobalRiskAggregator implements AutoCloseable {
 
     /** One monitor step; also callable directly (tests, manual checks). */
     synchronized void sweep() {
-        int[] unpriced = new int[1];
+        int[] unpriced = unpricedScratch;   // reused: one sweep per poll, no garbage
         double gross = grossNotional(unpriced);
         lastGross = gross;
         lastUnpriced = unpriced[0];
@@ -115,13 +134,15 @@ public final class GlobalRiskAggregator implements AutoCloseable {
     }
 
     /** Worst-case gross notional over every gate; unpriced exposed symbols excluded. */
-    public double grossNotional() {
-        return grossNotional(new int[1]);
+    public synchronized double grossNotional() {
+        return grossNotional(unpricedScratch);
     }
 
     private double grossNotional(int[] unpriced) {
+        unpriced[0] = 0;
         double gross = 0;
-        for (HftRiskGate gate : gates) {
+        for (int g = 0; g < gates.size(); g++) {
+            HftRiskGate gate = gates.get(g);
             int n = gate.symbolCapacity();
             for (int s = 0; s < n; s++) {
                 long position = gate.position(s);

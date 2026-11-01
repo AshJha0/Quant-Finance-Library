@@ -554,7 +554,7 @@ var maxSharpe = new PortfolioOptimizer(mu, cov).maxSharpe(0.03);
 // 2. Risk parity: trusts mu NOT AT ALL (used only for reporting);
 //    every asset contributes the same share of portfolio variance.
 var riskParity = RiskParityOptimizer.equalRiskContribution(mu, cov);
-double[] rc = RiskParityOptimizer.riskContributions(riskParity.weights(), cov);
+double[] rc = RiskParityOptimizer.riskContributions(riskParity.weightsCopy(), cov);
 // each rc[i] == 1/3 — that IS the definition.
 
 // 3. Black-Litterman: start from what the MARKET must believe (reverse-
@@ -567,9 +567,9 @@ double[] posterior = BlackLitterman.posteriorReturns(0.025, cov, pi,
         new double[]{0.001});                     // ...held with this much doubt
 var bl = new PortfolioOptimizer(posterior, cov).maxSharpe(0.03);
 
-System.out.println("max Sharpe : " + Arrays.toString(maxSharpe.weights()));
-System.out.println("risk parity: " + Arrays.toString(riskParity.weights()));
-System.out.println("BL + view  : " + Arrays.toString(bl.weights()));
+System.out.println("max Sharpe : " + Arrays.toString(maxSharpe.weightsCopy()));
+System.out.println("risk parity: " + Arrays.toString(riskParity.weightsCopy()));
+System.out.println("BL + view  : " + Arrays.toString(bl.weightsCopy()));
 ```
 
 They differ because they price estimation error differently. Max-Sharpe
@@ -603,7 +603,7 @@ var wf = WalkForwardAnalyzer.analyze(series, grid, factory, config,
 
 // (b) Deflated Sharpe: winner's Sharpe vs the best of 9 zero-skill trials.
 double[] eq = Backtester.run(factory.create(ranked.getFirst().params()),
-        series, config).equityCurve();
+        series, config).equityCurveCopy();
 double[] winnerReturns = new double[eq.length - 1];
 for (int t = 1; t < eq.length; t++) winnerReturns[t - 1] = eq[t] / eq[t - 1] - 1;
 double dsr = GridSearchOptimizer.deflatedSharpeOfWinner(ranked, winnerReturns, 252);
@@ -613,7 +613,7 @@ double dsr = GridSearchOptimizer.deflatedSharpeOfWinner(ranked, winnerReturns, 2
 double[][] variantReturns = new double[eq.length - 1][ranked.size()];
 for (int j = 0; j < ranked.size(); j++) {
     double[] e = Backtester.run(factory.create(ranked.get(j).params()),
-            series, config).equityCurve();
+            series, config).equityCurveCopy();
     for (int t = 1; t < e.length; t++) variantReturns[t - 1][j] = e[t] / e[t - 1] - 1;
 }
 var pbo = OverfitProbability.cscvSharpe(variantReturns, 8);
@@ -813,7 +813,7 @@ var alloc = ComponentVar.allocate(w, cov, 0.99);
 System.out.printf("portfolio VaR $%,.0f%n", alloc.portfolioVar());
 for (int i = 0; i < w.length; i++) {
     System.out.printf("%-12s component $%,12.0f  marginal %.4f  closing moves VaR $%,.0f%n",
-            desk[i], alloc.components()[i], alloc.marginals()[i],
+            desk[i], alloc.components(i), alloc.marginals(i),
             -ComponentVar.incremental(w, cov, 0.99, i));
 }
 // Components sum EXACTLY to portfolio VaR -- no diversification residual
@@ -828,7 +828,7 @@ double[] mu = {0.08, 0.07, 0.05};
 var raw = new PortfolioOptimizer(mu, cov).maxSharpe(0.03);
 var shrunk = new PortfolioOptimizer(mu, lw.matrix()).maxSharpe(0.03);
 System.out.printf("delta=%.2f  raw %s  shrunk %s%n", lw.intensity(),
-        Arrays.toString(raw.weights()), Arrays.toString(shrunk.weights()));
+        Arrays.toString(raw.weightsCopy()), Arrays.toString(shrunk.weightsCopy()));
 ```
 
 Component VaR is the risk-budget number (who owns today's risk), marginal
@@ -1081,7 +1081,7 @@ The batch `Indicators` compute twenty-plus studies as whole arrays for research,
 
 ```java
 BarSeries s = CsvBarLoader.load(Path.of("bars.csv"), "SPY");
-double[] close = s.closes();
+double[] close = s.closesCopy();
 
 // Batch: one call each -- sma/ema/wma, rsi, roc, momentum, macd, stochasticRsi,
 // williamsR, cci, atr, adx, bollinger, keltner, donchian, obv, vwap, cmf,
@@ -1106,7 +1106,7 @@ for (int i = 0; i < s.size(); i++) {
 }
 int last = s.size() - 1;
 System.out.printf("EMA batch %.4f = stream %.4f, MACD batch %.4f = stream %.4f%n",
-        ema20[last], ema.value(), macd.line()[last], macdLive.line());
+        ema20[last], ema.value(), macd.line(last), macdLive.line());
 ```
 
 The parity is exact, not approximate: the streaming EMA seeds with the SMA of its first `period` values, the streaming RSI uses the same Wilder smoothing, and the streaming MACD composes the same seeded EMAs -- so the loop above reproduces the batch arrays value for value, warm-up NaNs included. The one contract to respect is VWAP's input: the batch version feeds the typical price `(high + low + close) / 3`, so the streaming one must too. Use batch arrays for research and the `dsl` rules (recipe 35), and the streaming classes inside live strategies on the HFT bus where recomputing an array per tick is not an option.
@@ -1117,7 +1117,7 @@ The parity is exact, not approximate: the streaming EMA seeds with the SMA of it
 
 ```java
 BarSeries series = CsvBarLoader.load(Path.of("bars.csv"), "SPY");
-double[] close = series.closes();
+double[] close = series.closesCopy();
 double[] fast = Indicators.ema(close, 12);
 double[] slow = Indicators.ema(close, 26);
 double[] rsi = Indicators.rsi(close, 14);
@@ -1236,10 +1236,10 @@ RegimeDetector.RegimeModel model = RegimeDetector.fit(returns, 200);
 
 // State 1 is always the high-volatility regime, by construction.
 System.out.printf("calm vol %.1f%%, turbulent vol %.1f%% (annualized)%n",
-        model.stdDevs()[0] * Math.sqrt(252) * 100,
-        model.stdDevs()[1] * Math.sqrt(252) * 100);
+        model.stdDevs(0) * Math.sqrt(252) * 100,
+        model.stdDevs(1) * Math.sqrt(252) * 100);
 System.out.printf("today: regime %d, P(turbulent) %.2f%n",
-        model.currentRegime(), model.currentProbabilities()[1]);
+        model.currentRegime(), model.currentProbabilities(1));
 System.out.printf("expected persistence: calm %.0f days, turbulent %.0f days%n",
         model.expectedDuration(0), model.expectedDuration(1));
 
@@ -1342,7 +1342,7 @@ Determinism under parallelism is the engineering point: each path derives its ow
 Build one format-agnostic `Report` of titled sections -- key-value blocks, tables, inline SVG charts -- and export the same model to HTML, PDF, XLSX and CSV.
 
 ```java
-double[] equity = CsvBarLoader.load(Path.of("fund_nav.csv"), "FUND").closes();
+double[] equity = CsvBarLoader.load(Path.of("fund_nav.csv"), "FUND").closesCopy();
 
 Map<String, String> headline = new LinkedHashMap<>();    // insertion order kept
 headline.put("AUM", "$412M");
@@ -2673,9 +2673,9 @@ var p = new AlmgrenChriss.Params(
 var t = AlmgrenChriss.optimalTrajectory(p);
 System.out.printf("kappa %.3f, E[cost] %.0f, sd(cost) %.0f%n",
         t.kappa(), t.expectedCost(), Math.sqrt(t.costVariance()));
-for (int j = 0; j < t.trades().length; j++) {
+for (int j = 0; j < t.tradesLength(); j++) {
     System.out.printf("day %d: sell %.0f, hold %.0f%n",
-            j + 1, t.trades()[j], t.holdings()[j + 1]);
+            j + 1, t.trades(j), t.holdings(j + 1));
 }
 
 // The efficient frontier: expected cost vs risk across urgencies.
@@ -2822,8 +2822,8 @@ FxVolSurface surface = FxVolSurface.builder()
 
 // The solved pillar: [10dP, 25dP, ATM, 25dC, 10dC] strikes, low to high.
 FxVolSurface.SmilePillar p = surface.pillar(1);
-for (int i = 0; i < p.strikes().length; i++) {
-    System.out.printf("K=%.4f vol=%.2f%%%n", p.strikes()[i], p.vols()[i] * 100);
+for (int i = 0; i < p.strikesLength(); i++) {
+    System.out.printf("K=%.4f vol=%.2f%%%n", p.strikes(i), p.vols(i) * 100);
 }
 
 // Lookups anywhere on the surface (allocation-free after build):
@@ -3338,9 +3338,9 @@ treatment: a profile is decoration until its t-stat says otherwise.
 // exposures[t][asset][factor]: loadings KNOWN at t (NaN = not in the
 // cross-section); forwardReturns[t][asset]: realized AFTER t.
 var fm = FamaMacBeth.fit(exposures, forwardReturns);
-for (int k = 0; k < fm.premia().length; k++) {
+for (int k = 0; k < fm.premiaLength(); k++) {
     System.out.printf("factor %d: premium %.4f/period (t=%.2f)%n",
-            k, fm.premia()[k], fm.tStats()[k]);
+            k, fm.premia(k), fm.tStats(k));
 }
 System.out.printf("intercept %.4f (t=%.2f) over %d cross-sections%n",
         fm.interceptMean(), fm.interceptTStat(), fm.periodsUsed());
@@ -3712,7 +3712,7 @@ The batch `Indicators` compute whole-array studies for research; `StreamingIndic
 
 ```java
 BarSeries s = CsvBarLoader.load(Path.of("bars.csv"), "SPY");
-double[] close = s.closes();
+double[] close = s.closesCopy();
 
 double[] sma20 = Indicators.sma(close, 20);
 double[] ema20 = Indicators.ema(close, 20);
@@ -3734,7 +3734,7 @@ for (int i = 0; i < s.size(); i++) {
 int last = s.size() - 1;
 System.out.printf("SMA %.6f=%.6f  EMA %.6f=%.6f  RSI %.4f=%.4f  MACD %.6f=%.6f%n",
         sma20[last], sma.value(), ema20[last], ema.value(),
-        rsi14[last], rsi.value(), macd.line()[last], macdLive.line());
+        rsi14[last], rsi.value(), macd.line(last), macdLive.line());
 ```
 
 Five streaming twins cover the studies a live strategy actually recomputes every tick -- SMA, EMA, RSI, MACD, VWAP -- and each seeds identically to its batch sibling (the EMA off an SMA of its first `period` values, the RSI with Wilder smoothing), so the printed pairs match value for value including the warm-up NaNs. The one input contract is VWAP's: the batch version feeds the typical price `(high + low + close) / 3`, so the streaming one must too -- `bar(i).typicalPrice()` is that number by definition. Keep the twenty-plus batch studies for research and the `dsl` rules of recipe 111; reach for the streaming five inside the HFT loop where an array-per-tick is not an option.
@@ -3745,7 +3745,7 @@ Five streaming twins cover the studies a live strategy actually recomputes every
 
 ```java
 BarSeries series = CsvBarLoader.load(Path.of("bars.csv"), "SPY");
-double[] close = series.closes();
+double[] close = series.closesCopy();
 double[] sma50 = Indicators.sma(close, 50);
 double[] sma200 = Indicators.sma(close, 200);
 double[] rsi14 = Indicators.rsi(close, 14);
@@ -3861,10 +3861,10 @@ RegimeDetector.RegimeModel model = RegimeDetector.fit(returns, 200);
 
 // State 1 is always the high-volatility regime, by construction.
 System.out.printf("calm vol %.1f%%, turbulent vol %.1f%% (annualized)%n",
-        model.stdDevs()[0] * Math.sqrt(252) * 100,
-        model.stdDevs()[1] * Math.sqrt(252) * 100);
+        model.stdDevs(0) * Math.sqrt(252) * 100,
+        model.stdDevs(1) * Math.sqrt(252) * 100);
 System.out.printf("today: regime %d, P(turbulent) %.2f%n",
-        model.currentRegime(), model.currentProbabilities()[1]);
+        model.currentRegime(), model.currentProbabilities(1));
 System.out.printf("persistence: calm %.0f days, turbulent %.0f days%n",
         model.expectedDuration(0), model.expectedDuration(1));
 
@@ -6551,7 +6551,7 @@ ComponentVar.Allocation a = ComponentVar.allocate(weights, cov, 0.99);
 System.out.printf("portfolio VaR %.4f%n", a.portfolioVar());
 for (int i = 0; i < weights.length; i++) {
     System.out.printf("asset %d: component %.4f  marginal %.4f%n",
-            i, a.components()[i], a.marginals()[i]);
+            i, a.components(i), a.marginals(i));
 }
 // components sum to portfolioVar -- the additive split a committee can defend.
 
@@ -6588,7 +6588,7 @@ double[][] cov = s.matrix();
 // Now optimize on the STABLE matrix, not the sample one:
 double[] mu = /* expected returns */;
 var opt = new PortfolioOptimizer(mu, cov).maxSharpe(0.03);
-System.out.println("weights: " + Arrays.toString(opt.weights()));
+System.out.println("weights: " + Arrays.toString(opt.weightsCopy()));
 ```
 
 The sample covariance is the maximally overfit estimate: with N assets and
@@ -6644,9 +6644,9 @@ in one tail.
 SignalEvaluator.QuantileReport q =
         SignalEvaluator.quantileReturns(ctx, mom, 130, 21, 5);   // quintiles
 
-for (int i = 0; i < q.meanReturns().length; i++) {
+for (int i = 0; i < q.meanReturnsLength(); i++) {
     System.out.printf("Q%d  mean fwd %.4f  (n=%d)%n",
-            i + 1, q.meanReturns()[i], q.counts()[i]);
+            i + 1, q.meanReturns(i), q.counts(i));
 }
 // The top-minus-bottom return per period -- the tradeable long/short:
 System.out.printf("long/short spread per 21d: %.4f%n", q.spread());
@@ -6672,9 +6672,9 @@ double[][][] exposures = /* your point-in-time loadings, >= 12 periods */;
 double[][]   fwd       = /* aligned forward returns; NaN = not in that date */;
 
 FamaMacBeth.Result fm = FamaMacBeth.fit(exposures, fwd);
-for (int k = 0; k < fm.premia().length; k++) {
+for (int k = 0; k < fm.premiaLength(); k++) {
     System.out.printf("factor %d: premium %.4f/period  t=%.2f%n",
-            k, fm.premia()[k], fm.tStats()[k]);
+            k, fm.premia(k), fm.tStats(k));
 }
 // The intercept is the tell: a significant mean means the factors leave
 // returns UNEXPLAINED (an alpha, or a missing factor).
@@ -6702,8 +6702,8 @@ long[]   days    = /* aligned epoch-millis timestamps */;
 CalendarAnomalies.DayOfWeekProfile dow = CalendarAnomalies.dayOfWeek(returns, days);
 for (int d = 0; d < 5; d++) {                       // Mon=0 .. Fri=4
     System.out.printf("%s mean %.4f t=%.2f (n=%d)%n",
-            java.time.DayOfWeek.of(d + 1), dow.meanReturn()[d], dow.tStat()[d],
-            dow.count()[d]);
+            java.time.DayOfWeek.of(d + 1), dow.meanReturn(d), dow.tStat(d),
+            dow.count(d));
 }
 
 // The turn-of-month window: last 1 trading day + first 3 vs everything else.
@@ -6813,7 +6813,7 @@ GridSearchOptimizer.Candidate winner = ranked.getFirst();
 
 // The winner's own per-period returns, from its equity curve:
 double[] eq = Backtester.run(factory.create(winner.params()),
-        series, BacktestConfig.defaults()).equityCurve();
+        series, BacktestConfig.defaults()).equityCurveCopy();
 double[] wr = new double[eq.length - 1];
 for (int t = 1; t < eq.length; t++) wr[t - 1] = eq[t] / eq[t - 1] - 1;
 
@@ -6845,7 +6845,7 @@ List<PurgedKFold.Split> splits = PurgedKFold.splits(n, 5, labelHorizon, embargo)
 for (PurgedKFold.Split s : splits) {
     // train the model on s.trainIndices(), score on [s.testFrom(), s.testTo())
     System.out.printf("fold %d: test [%d,%d)  train n=%d%n",
-            s.fold(), s.testFrom(), s.testTo(), s.trainIndices().length);
+            s.fold(), s.testFrom(), s.testTo(), s.trainIndicesLength());
 }
 ```
 
@@ -6867,7 +6867,7 @@ the probability of backtest overfitting.
 double[][] variantReturns = new double[bars][ranked.size()];
 for (int j = 0; j < ranked.size(); j++) {
     double[] e = Backtester.run(factory.create(ranked.get(j).params()),
-            series, BacktestConfig.defaults()).equityCurve();
+            series, BacktestConfig.defaults()).equityCurveCopy();
     for (int t = 1; t < e.length; t++)
         variantReturns[t - 1][j] = e[t] / e[t - 1] - 1;
 }
@@ -6969,7 +6969,7 @@ the LENGTH of a drawdown as its depth -- the time under water is when
 investors leave. `DrawdownAnalytics` returns every episode, both dimensions.
 
 ```java
-double[] equity = result.equityCurve();
+double[] equity = result.equityCurveCopy();
 DrawdownAnalytics.Result dd = DrawdownAnalytics.analyze(equity);
 
 System.out.printf("max depth %.1f%%  max duration %d bars  time under water %.0f%%%n",
@@ -7133,7 +7133,7 @@ PortfolioBacktester.Result r = PortfolioBacktester.run(
         strategy, priceData, cfg, universe, divs);
 
 System.out.printf("CAGR-equity final %.0f  costs %.0f  dividends %.0f  events %d%n",
-        r.equityCurve()[r.equityCurve().length - 1], r.totalCosts(),
+        r.equityCurve(r.equityCurveLength() - 1), r.totalCosts(),
         r.dividendCashCredited(), r.lifecycleEventsApplied());
 ```
 
@@ -7241,7 +7241,7 @@ PortfolioOptimizer.Allocation ms = new PortfolioOptimizer(mu, cov).maxSharpe(0.0
 
 // Ignores mu -- equal risk contribution; each name is 1/3 of variance.
 PortfolioOptimizer.Allocation rp = RiskParityOptimizer.equalRiskContribution(mu, cov);
-double[] rc = RiskParityOptimizer.riskContributions(rp.weights(), cov);
+double[] rc = RiskParityOptimizer.riskContributions(rp.weightsCopy(), cov);
 
 // Starts from the market's implied views, tilts by one explicit opinion.
 double[] pi = BlackLitterman.impliedEquilibriumReturns(2.5, cov, new double[]{0.5, 0.3, 0.2});
@@ -7274,7 +7274,7 @@ PortfolioOptimizer.Allocation a = new ConstrainedPortfolioOptimizer(mu, cov)
         .withTurnoverPenalty(current, 0.001)          // 10bps per unit turnover
         .maxSharpe(0.03);
 
-System.out.println(java.util.Arrays.toString(a.weights()));   // sums to 1, within bounds
+System.out.println(java.util.Arrays.toString(a.weightsCopy()));   // sums to 1, within bounds
 ```
 
 The turnover penalty makes the optimizer trade expected gain against the real
@@ -7391,7 +7391,7 @@ System.out.println(decay.format());
 // e.g. h=1:0.05 h=5:0.04 ... | half-life=18.4 bars
 
 // Attribution: regress the book's returns on known factor streams.
-double[] port = AlphaReport.returnsOf(r.netEquity());   // portfolio per-bar returns
+double[] port = AlphaReport.returnsOf(r.netEquityCopy());   // portfolio per-bar returns
 double[][] factorReturns = { marketRet, valueRet, sizeRet };
 AlphaReport.Attribution attr = AlphaReport.attribute(port, factorReturns,
         List.of("MKT", "HML", "SMB"));
@@ -7933,7 +7933,7 @@ PortfolioBacktester.Result r = PortfolioBacktester.run(book, crossAsset,
 
 System.out.printf("cross-asset momentum: Sharpe %.2f  maxDD via analytics next%n",
         r.metrics().sharpeRatio());
-DrawdownAnalytics.Result dd = DrawdownAnalytics.analyze(r.equityCurve());
+DrawdownAnalytics.Result dd = DrawdownAnalytics.analyze(r.equityCurveCopy());
 System.out.printf("time under water %.0f%%%n", dd.timeUnderWater() * 100);
 ```
 

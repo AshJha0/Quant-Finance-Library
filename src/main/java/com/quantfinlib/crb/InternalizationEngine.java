@@ -41,6 +41,9 @@ public final class InternalizationEngine {
      * @param improvementShare fraction of the half spread returned to a
      *                         risk-reducing client, in [0, 1]
      */
+    private double lastRouted;
+    private double lastImprovementBps;
+
     public InternalizationEngine(double warehouseLimit, double improvementShare) {
         if (!(warehouseLimit > 0) || warehouseLimit == Double.POSITIVE_INFINITY) {
             throw new IllegalArgumentException("warehouseLimit must be positive and finite");
@@ -62,6 +65,22 @@ public final class InternalizationEngine {
      *                      what internalizing saves, &gt; 0
      */
     public Decision decide(double bookNet, double flow, double halfSpreadBps) {
+        double internalized = internalize(bookNet, flow, halfSpreadBps);
+        return new Decision(internalized, lastRouted, lastImprovementBps);
+    }
+
+    /**
+     * The same decision as {@link #decide} without the result object: returns
+     * the internalized notional and leaves the routed notional and the price
+     * improvement in {@link #lastRouted()} and {@link #lastImprovementBps()}.
+     * Allocates nothing, for a per-flow loop.
+     *
+     * @param bookNet       the book's current net on the flow's factor (signed)
+     * @param flow          incoming client flow (signed, non-zero)
+     * @param halfSpreadBps the street's half spread for this risk, &gt; 0
+     * @return signed notional internalized
+     */
+    public double internalize(double bookNet, double flow, double halfSpreadBps) {
         if (!Double.isFinite(bookNet) || !Double.isFinite(flow) || flow == 0) {
             throw new IllegalArgumentException("bookNet/flow must be finite, flow non-zero");
         }
@@ -91,7 +110,27 @@ public final class InternalizationEngine {
         double routed = flow - internalized;
         internalizedNotional += Math.abs(internalized);
         routedNotional += Math.abs(routed);
-        return new Decision(internalized, routed, improvement);
+        lastRouted = routed;
+        lastImprovementBps = improvement;
+        return internalized;
+    }
+
+    /**
+     * Routed notional of the last {@link #internalize} or {@link #decide} call.
+     *
+     * @return signed notional sent to the street
+     */
+    public double lastRouted() {
+        return lastRouted;
+    }
+
+    /**
+     * Price improvement of the last {@link #internalize} or {@link #decide} call.
+     *
+     * @return improvement in bps
+     */
+    public double lastImprovementBps() {
+        return lastImprovementBps;
     }
 
     /** Fraction of decided notional the book kept (0 before any flow). */
