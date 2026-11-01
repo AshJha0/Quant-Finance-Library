@@ -1,5 +1,6 @@
 package com.quantfinlib.hedging;
 
+import com.quantfinlib.risk.TailRisk;
 import com.quantfinlib.util.MathUtils;
 
 import java.util.Arrays;
@@ -58,19 +59,26 @@ public final class HedgingErrorDistribution {
         return (double) losses / sortedPnls.length;
     }
 
-    /** Hedging VaR: loss at the given confidence, as a positive number (0 if a gain). */
+    /**
+     * Hedging VaR: loss at the given confidence as a positive number (0 if a
+     * gain), the lower empirical quantile of {@code −P&L} ({@link TailRisk}).
+     */
     public double valueAtRisk(double confidence) {
-        return Math.max(0, -percentile(1 - confidence));
+        return Math.max(0, TailRisk.varSorted(losses(), confidence));
     }
 
-    /** Expected loss beyond the VaR quantile, as a positive number. */
+    /** Expected shortfall of {@code −P&L} (Acerbi-Tasche, {@link TailRisk}), positive. */
     public double conditionalValueAtRisk(double confidence) {
-        int tail = Math.max(1, (int) Math.floor((1 - confidence) * sortedPnls.length));
-        double sum = 0;
-        for (int i = 0; i < tail; i++) {
-            sum += sortedPnls[i];
+        return Math.max(0, TailRisk.expectedShortfallSorted(losses(), confidence));
+    }
+
+    private double[] losses() {
+        int n = sortedPnls.length;
+        double[] l = new double[n];
+        for (int i = 0; i < n; i++) {
+            l[i] = -sortedPnls[n - 1 - i];
         }
-        return Math.max(0, -sum / tail);
+        return l;
     }
 
     /** Replication error as a fraction of the premium (std / premium). */

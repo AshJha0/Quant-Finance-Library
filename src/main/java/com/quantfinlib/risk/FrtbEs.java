@@ -9,7 +9,7 @@ package com.quantfinlib.risk;
  * anchored to a STRESSED period:
  *
  * <pre>  ES = √( Σⱼ [ ESⱼ · √((LHⱼ − LHⱼ₋₁)/10) ]² )      (the LH cascade)
- *  IMCC = ES_current · (ES_stressed,reduced / ES_current,reduced)</pre>
+ *  ES   = ES_R,S · max(1, ES_F,C / ES_R,C)                    (MAR33.5)</pre>
  *
  * <p><b>Styled after BCBS MAR33, not certified</b> — the same honesty
  * stance as the LULD and ESMA-tick implementations elsewhere in this
@@ -34,7 +34,13 @@ public final class FrtbEs {
     private FrtbEs() {
     }
 
-    /** ES at 97.5% of a loss sample (positive losses), the FRTB tail measure. */
+    /**
+     * ES at 97.5% of a loss sample (positive losses), the FRTB tail
+     * measure, using the Acerbi-Tasche estimator of {@link TailRisk}
+     * (floored at zero). On a 250-day window the tail holds 6.25
+     * observations: the worst six at full weight plus a quarter of the
+     * seventh, divided by 6.25.
+     */
     public static double es975(double[] losses) {
         return VarEngine.tail(losses, 0.975).expectedShortfall();
     }
@@ -70,13 +76,31 @@ public final class FrtbEs {
         return Math.sqrt(sumSq);
     }
 
+    /** Minimum share of full-set current ES the reduced set must explain (MAR33.5(2)). */
+    public static final double MIN_REDUCED_SET_COVERAGE = 0.75;
+
     /**
-     * The stressed-calibration multiplier (MAR33.6): current full-factor
-     * ES scaled by the reduced-factor-set ratio between the stressed
-     * period and today. The reduced set exists because stressed-period
-     * data rarely covers every factor; the ratio transports the stress.
-     * The regulatory floor: the ratio is at least 1 — a calmer-than-
-     * today stressed period must not DISCOUNT capital.
+     * Stressed calibration of the IMA expected shortfall (BCBS MAR33.5):
+     *
+     * <pre>  ES = ES_R,S · max(1, ES_F,C / ES_R,C)</pre>
+     *
+     * where ES_R,S is the ES of the reduced factor set over the stressed
+     * 12-month period, ES_F,C the ES of the full factor set over the current
+     * 12 months, and ES_R,C the ES of the reduced set over the current
+     * period. The stressed reduced-set ES is the base; the full/reduced
+     * ratio, measured today, scales it up for the factors the stress period
+     * does not cover, and that ratio is floored at 1. The reduced set must
+     * explain at least 75% of the full-set current ES
+     * ({@code ES_R,C >= 0.75 · ES_F,C}); a set that does not is rejected.
+     *
+     * <p>Example: ES_F,C = 100, ES_R,C = 80, ES_R,S = 150 gives
+     * 150 · 1.25 = 187.5.</p>
+     *
+     * @param esCurrentFull     ES_F,C
+     * @param esStressedReduced ES_R,S
+     * @param esCurrentReduced  ES_R,C, must be &gt; 0
+     * @throws IllegalArgumentException if an input is negative or not finite,
+     *                                  or the reduced set explains less than 75%
      */
     public static double stressCalibratedEs(double esCurrentFull, double esStressedReduced,
                                             double esCurrentReduced) {
@@ -86,8 +110,11 @@ public final class FrtbEs {
             throw new IllegalArgumentException(
                     "ES inputs must be non-negative and finite (current reduced > 0)");
         }
-        double ratio = Math.max(1, esStressedReduced / esCurrentReduced);
-        return esCurrentFull * ratio;
+        if (esCurrentReduced < MIN_REDUCED_SET_COVERAGE * esCurrentFull) {
+            throw new IllegalArgumentException("reduced factor set explains "
+                    + esCurrentReduced / esCurrentFull + " of full-set current ES; MAR33.5 needs >= 0.75");
+        }
+        return esStressedReduced * Math.max(1, esCurrentFull / esCurrentReduced);
     }
 
     /**

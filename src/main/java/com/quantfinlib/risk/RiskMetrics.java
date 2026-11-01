@@ -25,6 +25,9 @@ public final class RiskMetrics {
     /**
      * Historical Value at Risk at the given confidence level (e.g. 0.95).
      * Returned as a positive loss fraction; 0 if the quantile is a gain.
+     * Uses the linearly interpolated return percentile
+     * ({@link MathUtils#percentile}); {@link TailRisk#varSorted} gives the
+     * lower empirical quantile that pairs with the ES estimator.
      */
     public static double historicalVar(double[] returns, double confidence) {
         double q = MathUtils.percentile(returns, 1 - confidence);
@@ -40,19 +43,17 @@ public final class RiskMetrics {
     }
 
     /**
-     * Conditional VaR / Expected Shortfall: mean loss beyond the VaR threshold.
+     * Conditional VaR / expected shortfall of a return series as a positive
+     * loss fraction (0 if the tail is a gain): the Acerbi-Tasche tail mean
+     * of the losses {@code −r} over the worst {@code (1−c)·n} periods, with
+     * the fractional boundary weight described in {@link TailRisk}.
      */
     public static double conditionalVar(double[] returns, double confidence) {
-        double threshold = MathUtils.percentile(returns, 1 - confidence);
-        double sum = 0;
-        int count = 0;
-        for (double r : returns) {
-            if (r <= threshold) {
-                sum += r;
-                count++;
-            }
+        double[] losses = new double[returns.length];
+        for (int i = 0; i < returns.length; i++) {
+            losses[i] = -returns[i];
         }
-        return count == 0 ? 0 : Math.max(0, -sum / count);
+        return Math.max(0, TailRisk.of(losses, confidence).expectedShortfall());
     }
 
     /** Alias for {@link #conditionalVar}. */
