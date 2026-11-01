@@ -135,9 +135,9 @@ sequenceDiagram
     participant Drop as 4. Index drops
     participant Reb as 5. Rebalance fill
 
-    Bar->>Div: ex-dates ≤ t: position × amount<br/>(holder of record at prior close; shorts pay)
+    Bar->>Div: ex-dates ≤ t: position × amount<br/>(holder of record at prior close, shorts pay)
     Bar->>Mrg: target to cash + acquirer shares<br/>(before delistings, so conversions land first)
-    Bar->>Del: position × lastClose × (1 + delistingReturn)<br/>(−100% = wiped out; Shumway −30% default)
+    Bar->>Del: position × lastClose × (1 + delistingReturn)<br/>(−100% = wiped out, Shumway −30% default)
     Bar->>Drop: still listed but out of the index:<br/>forced sale at this bar's close (fee charged)
     Bar->>Reb: weights decided at the previous close fill at this open<br/>(non-members capped at 0, dead names untradeable) via TradeCostModel
     Note over Div,Reb: symbols processed in sorted order:<br/>same inputs, same result, any JVM
@@ -1887,7 +1887,7 @@ infinite shock.
 
 The capital measure that replaced 10-day VaR: ES at 97.5%, scaled across
 liquidity horizons and calibrated to a stressed period, with the Basel
-traffic light watching the model's exceptions from the side (BCBS MAR33
+traffic light watching the model's exceptions from the side (BCBS MAR33.4-33.6
 for the ES, MAR32 for backtesting and P&L attribution).
 
 ```mermaid
@@ -1895,8 +1895,8 @@ flowchart TD
     LOSSES46["desk loss samples,<br/>10-day base horizon"]
     ES46["FrtbEs.es975 per factor subset:<br/>ES at 97.5%, Acerbi-Tasche estimator<br/>(250 days: worst six losses plus<br/>a quarter of the seventh, / 6.25)"]
     LH46["liquidity horizons LH_10 ... LH_120:<br/>how long each factor class takes<br/>to exit under stress: 10d major<br/>FX/rates, up to 120d exotic credit;<br/>esByHorizon[j] = ES with only<br/>factors of LH >= horizons[j] shocked"]
-    CASC46["FrtbEs.liquidityHorizonEs (MAR33.5):<br/>ES = sqrt( sum_j [ ES_j x<br/>sqrt((LH_j - LH_j-1)/10) ]^2 )"]
-    STRESS46["FrtbEs.stressCalibratedEs (MAR33):<br/>ES = ES_R,S x max(1, ES_F,C / ES_R,C)<br/>reduced set over the stressed period,<br/>scaled by full/reduced measured today;<br/>rejected if ES_R,C below 75% of ES_F,C"]
+    CASC46["FrtbEs.liquidityHorizonEs (MAR33.4):<br/>ES = sqrt( sum_j [ ES_j x<br/>sqrt((LH_j - LH_j-1)/10) ]^2 )"]
+    STRESS46["FrtbEs.stressCalibratedEs (MAR33.5-33.6):<br/>ES = ES_R,S x max(1, ES_F,C / ES_R,C)<br/>reduced set over the stressed period,<br/>scaled by full/reduced measured today;<br/>rejected if ES_R,C below 75% of ES_F,C"]
     CAP46(["the capital number<br/>(not implemented: desk approvals,<br/>NMRF capital, the SA floor)"])
 
     BT46["VarBacktest: Kupiec POF +<br/>Christoffersen independence +<br/>conditional coverage, with p-values;<br/>acerbiSzekelyZ2 for ES"]
@@ -1913,7 +1913,7 @@ flowchart TD
 ```
 
 The cascade is the subtle part and `liquidityHorizonEs` implements it
-exactly as MAR33.5 writes it: `esByHorizon[0]` is the full factor set at
+exactly as MAR33.4 writes it: `esByHorizon[0]` is the full factor set at
 LH 10, each later entry re-computes ES with only the slower factors still
 shocked, and the square-root-of-time weights apply to the differences
 between consecutive horizons. The stressed calibration takes as its base
@@ -3894,7 +3894,7 @@ this drills into.
 
 Diagram 46 walked the whole FRTB capital measure; this zooms into its one
 subtle box: how an ES computed at a 10-day base horizon is stretched across
-liquidity horizons. `FrtbEs.liquidityHorizonEs` implements MAR33.5 exactly,
+liquidity horizons. `FrtbEs.liquidityHorizonEs` implements MAR33.4 exactly,
 and the arithmetic rewards being read slowly.
 
 ```mermaid

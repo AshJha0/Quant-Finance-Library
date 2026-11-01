@@ -491,7 +491,7 @@ var plat = PnlAttribution.test(hypotheticalPnl, riskTheoreticalPnl);
 
 The formulas here are pinned by hand-computed tests in
 `MarketRiskTest`/`MarketRiskPricingTest`. `FrtbEs.liquidityHorizonEs`
-cascades ES across liquidity horizons per MAR33; for the stressed
+cascades ES across liquidity horizons per MAR33.4; for the stressed
 calibration see recipe 97.
 
 ## 17. Defend a quote against toxic flow (VPIN, skew, post-or-cross)
@@ -3055,7 +3055,7 @@ double oneTouch = TouchOption.oneTouch(s, 1.12, r, q, vol, t, 1_000_000);
 double noTouch = TouchOption.noTouch(s, 1.12, r, q, vol, t, 1_000_000);
 // oneTouch + noTouch = discounted payout, always.
 
-// Barriers (Reiner-Rubinstein 1991 formulas; Haug 2007, section 4.17):
+// Barriers (Reiner-Rubinstein 1991 formulas; Haug 2007, section 4.17.1):
 double ki = BarrierOption.downAndInCall(s, 1.10, 1.05, r, q, vol, t);
 double ko = BarrierOption.downAndOutCall(s, 1.10, 1.05, r, q, vol, t);
 
@@ -3444,9 +3444,9 @@ decides whether the model keeps its internal-model approval.
 // then only the factors needing >= 20 days to exit, then >= 60.
 double[] esByHorizon = {2_400_000, 1_100_000, 600_000};
 int[] horizons = {10, 20, 60};
-double es = FrtbEs.liquidityHorizonEs(esByHorizon, horizons);   // MAR33.5
+double es = FrtbEs.liquidityHorizonEs(esByHorizon, horizons);   // MAR33.4
 
-// Stressed calibration (MAR33): ES = ES_R,S * max(1, ES_F,C / ES_R,C).
+// Stressed calibration (MAR33.5-33.6): ES = ES_R,S * max(1, ES_F,C / ES_R,C).
 // es is ES_F,C (full set, current); the reduced set must explain >= 75% of
 // it (ES_R,C >= 0.75 * ES_F,C), otherwise the call throws.
 double imcc = FrtbEs.stressCalibratedEs(es, esStressedReduced, esCurrentReduced);
@@ -6702,9 +6702,9 @@ approval.
 ```java
 double[] esByHorizon = {2_400_000, 1_100_000, 600_000};   // 10d ES per LH subset
 int[] horizons = {10, 20, 60};
-double es = FrtbEs.liquidityHorizonEs(esByHorizon, horizons);       // MAR33.5 cascade
+double es = FrtbEs.liquidityHorizonEs(esByHorizon, horizons);       // MAR33.4 cascade
 
-// Stressed calibration (MAR33): ES_R,S * max(1, ES_F,C / ES_R,C), with es as
+// Stressed calibration (MAR33.5-33.6): ES_R,S * max(1, ES_F,C / ES_R,C), with es as
 // ES_F,C (2.9M here), stressed reduced-set ES 3.0M, current reduced-set ES
 // 2.5M (>= 75% of 2.9M, so accepted): 3.0M * 1.16 = 3.48M.
 double imcc = FrtbEs.stressCalibratedEs(es, 3_000_000, 2_500_000);

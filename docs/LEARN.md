@@ -578,7 +578,7 @@ including the regulator's favorite inverted question "what move breaks
 us?" (`StressTester.reverseStress`, answered in closed form with an
 implausibility score in sigmas), and the Basel/FRTB layer
 (`FrtbEs`, `PnlAttribution`), styled after the regulation and tested on
-its arithmetic. `FrtbEs.stressCalibratedEs` follows BCBS MAR33: stressed
+its arithmetic. `FrtbEs.stressCalibratedEs` follows BCBS MAR33.5-33.6: stressed
 reduced-set ES scaled by `max(1, ES_full,current / ES_reduced,current)`,
 and it refuses a reduced set that explains less than 75% of current
 full-set ES. Regulatory model approval is a programme of work at a bank;
@@ -1637,7 +1637,7 @@ has constant volatility, so it's Gaussian and tractable (bond prices in
 closed form) but rates can go negative (a feature or a bug depending on the
 decade). CIR scales the noise by `√r`: volatility dies as the rate
 approaches zero, and if the Feller condition `2ab ≥ σ²` holds, the rate
-stays strictly positive: mean reversion pulls up faster than diffusion can
+stays strictly positive, because mean reversion pulls up faster than diffusion can
 push through zero. You care because it's a *parameter constraint you must
 check after calibration*: a fitted CIR that violates Feller will happily
 generate zero-touching paths in your simulation. Neither fits today's curve
@@ -1747,7 +1747,7 @@ helpers such as `downAndOutCall` throw.
 ### 11. "Why does Black-76 exist when Black-Scholes already does?"
 
 Because half the derivatives world is written on forwards, and a forward
-has no carry: it costs nothing to hold, so the drift drops out and the
+has no carry (it costs nothing to hold), so the drift drops out and the
 price is just the discounted Black formula on the forward itself:
 `call = df·[F·Φ(d1) − K·Φ(d2)]`. Mathematically it *is* Black-Scholes with
 spot = forward and carry = 0. It deserves its own name because the market
@@ -1796,8 +1796,8 @@ can be replicated by a static portfolio of OTM options weighted 1/K²
 plus delta hedging in the underlying. The fair variance strike is therefore
 readable directly off the option chain: no volatility model, no dynamics
 assumption beyond continuity. This is exactly the integral a VIX-style
-index computes: a VIX of 20 *is* a variance-swap strike of 0.04: one
-number, two names. Two consequences: a vol swap strike is *below*
+index computes: a VIX of 20 *is* a variance-swap strike of 0.04, one
+number under two names. Two consequences: a vol swap strike is *below*
 the square root of the variance strike (Jensen: √ is concave, so
 E[√v] < √E[v]; the gap is a convexity adjustment growing with vol-of-vol),
 and the 1/K² weighting means the strike loads heavily on deep OTM puts —
@@ -1916,7 +1916,7 @@ discrete trajectory, with the TWAP-recovery limit in a test;
 Three classical estimators, in rising data requirements. **Roll (1984)**:
 bid-ask bounce makes consecutive trade-price changes negatively
 autocorrelated; the implied effective spread is `2·√(−cov(Δp_t, Δp_{t−1}))`.
-**Corwin-Schultz**: two days' high-low ranges: the range contains both
+**Corwin-Schultz**: two days' high-low ranges. The range contains both
 variance (grows with time) and spread (doesn't), so comparing 1-day and
 2-day ranges separates them. **Amihud**: impact per currency unit traded,
 `mean(|return|/dollarVolume)`. For impact proper, Kyle's lambda is the
@@ -2195,7 +2195,7 @@ random insert/delete sequences against a reference `HashMap`.
 ### 33. "How does a real matching engine store the book? Not a TreeMap."
 
 A dense price ladder: prices become integer ticks, and the book is an
-array with one slot per tick: price lookup is an array index, O(1), no
+array with one slot per tick, so price lookup is an array index, O(1), no
 comparisons, no rebalancing, no node allocations. Sparsity is handled by
 **occupancy bitmaps**: one bit per price level per side, so "find the best
 bid" is a `Long.numberOfLeadingZeros` scan over a few machine words —
@@ -2416,7 +2416,7 @@ clothes; set the view confidence low and watch the tilt shrink.
 For a return stream with mean mu and variance sigma^2, maximizing the
 expected log growth rate g(f) = f * mu - f^2 * sigma^2 / 2 gives
 f* = mu / sigma^2. Worked number: an edge of 5% annualized on 20% vol
-gives f* = 0.05 / 0.04 = 1.25: Kelly says lever the strategy 1.25x.
+gives f* = 0.05 / 0.04 = 1.25, so Kelly says lever the strategy 1.25x.
 Full Kelly is optimal only asymptotically and only if mu and sigma are
 *known*. Neither holds. First, the drawdown profile is savage: full
 Kelly has a one-in-three chance of halving your capital before doubling
@@ -2579,8 +2579,8 @@ and autocorrelation, all of which the formula silently ignores. There
 are analytic corrections (Lo's adjustment, the Mertens variance with
 skew and kurtosis terms), but the bootstrap handles all of it at once
 by resampling the data you actually have. The key detail for time series: an i.i.d. bootstrap
-scrambles away the autocorrelation, so you must resample in blocks:
-the stationary block bootstrap draws blocks of random (geometric)
+scrambles away the autocorrelation, so you must resample in blocks.
+The stationary block bootstrap draws blocks of random (geometric)
 length, preserving local dependence while still mixing the sample.
 Concrete use: a strategy with Sharpe 1.2 over 3 years; the block
 bootstrap gives you the full sampling distribution, and the question becomes "is the 5th percentile of that distribution still
@@ -2637,8 +2637,8 @@ sample eigenvalues spread across a wide Marchenko-Pastur band). Large
 sample eigenvalues are biased up, small ones down, and the smallest
 directions look spuriously near-riskless. Feed that to an optimizer and
 it does the worst possible thing: it leverages hardest into exactly the
-directions whose risk is most underestimated: the error-maximizer
-problem, now with a mechanical cause. The fix is shrinkage: pull the
+directions whose risk is most underestimated. That is
+the error-maximizer problem, now with a mechanical cause. The fix is shrinkage: pull the
 sample matrix toward a structured target (constant-correlation or
 identity), with intensity chosen to minimize expected estimation error.
 Ledoit-Wolf makes that intensity itself estimable from the data, so
@@ -2692,10 +2692,10 @@ you earn the bond's yield and pay your funding (repo); with a 5y at
 4.0% funded at 3.0%, carry is ~100bp of running P&L. **Rolldown**: after
 a year your 5y is a 4y, and on an upward-sloping static curve the 4y
 point yields less (say 3.85%), so the bond reprices *up* as it rolls
-down the curve: roughly 15bp of yield times the then-4-year duration
+down the curve, worth roughly 15bp of yield times the then-4-year duration
 (~3.7), another ~55bp. Total ~1.55% for a scenario in which the curve
 does not move at all. The catch: "the curve stays where it is"
-is a *bet*, not a neutral assumption: the forwards already price the
+is a *bet*, not a neutral assumption, because the forwards already price the
 5y rate drifting up along the curve, and if forwards realize instead,
 carry-and-roll nets to approximately the repo rate and the trade earned
 nothing extra. So carry-and-rolldown analysis is really the statement
@@ -2809,7 +2809,7 @@ discounting at LIBOR was discounting at the wrong rate whenever
 collateral was involved. The economics that forced the change:
 collateralized swaps under a CSA earn/pay the overnight rate on posted
 collateral, so the correct funding rate for their cash flows is the
-OIS rate: discounting is a *funding* question, and the funding of a
+OIS rate. Discounting is a *funding* question, and the funding of a
 collateralized trade is overnight. The result is the multi-curve
 framework: one curve (OIS, now SOFR/ESTR-based) for discounting, built
 from OIS swaps; separate projection curves for each floating index
@@ -2868,7 +2868,7 @@ market's aggregated forecast that policy is currently tight enough to
 produce one. The empirical record is unusually strong for a single
 indicator: US 2s10s (or the 3m10y variant the Fed studies) inverted
 ahead of essentially every US recession since the late 1960s, with
-lead times of roughly 6 to 24 months: 2006 before 2008 being the
+lead times of roughly 6 to 24 months, 2006 before 2008 being the
 canonical case, and 2019 before the 2020 downturn a debatable one.
 Stating it requires the caveats: the term premium is not
 constant (QE-era distortions can invert measured spreads without the
@@ -2889,8 +2889,8 @@ from data rather than assumed).
 Because they are options on *different underlyings* with different
 optionality structure, even when the rates they reference overlap. A
 cap is a strip of independent caplets: each caplet is an option on one
-forward LIBOR/term-rate fixing, exercised (or not) period by period:
-a portfolio of options. A (European) payer swaption is one option on
+forward LIBOR/term-rate fixing, exercised (or not) period by period,
+so a cap is a portfolio of options. A (European) payer swaption is one option on
 the whole forward *swap* rate: an option on a portfolio (a basket of
 the same forwards, weighted by the annuity). Options on a basket are
 worth less than the basket of options, and the gap is governed by the
@@ -2959,8 +2959,8 @@ protection, because options pay off exactly when marginal utility is
 highest (crashes). The seller of that insurance earns a premium in
 ordinary times and delivers a large payment in disasters; the average
 gap of roughly 2-4 vol points on index options is the insurance
-margin. Why naive harvesting fails: the P&L profile is short-tail:
-years of steady income, then losses arriving in days. February 2018
+margin. Why naive harvesting fails: the P&L profile is short
+the tail, with years of steady income, then losses arriving in days. February 2018
 ("Volmageddon") is the cleanest exhibit: XIV, a short-VIX-futures
 product, had compounded gains for years and lost ~95% in one session
 when VIX spiked; short-vol funds in early 2020 repeated the lesson.
@@ -2992,8 +2992,8 @@ but happened in a day in 1987) so OTM options (both wings) are worth
 more than BS-at-ATM-vol says, bending the line up at the edges: a
 smile. **Asymmetry**: equity crashes are bigger and faster than
 rallies, and vol rises as markets fall (leverage effect), making OTM
-puts worth more than symmetric-distance calls: the smile becomes a
-skew, steep on the put side. History supports reading it as learned
+puts worth more than symmetric-distance calls, so the smile becomes
+a skew, steep on the put side. History supports reading it as learned
 crash-fear: pre-1987, index smiles were roughly flat; the skew
 appeared after the October 1987 crash and has never left; the market
 repriced the left tail permanently once it saw one. Model-language
@@ -3141,7 +3141,7 @@ K_var > sigma_ATM mechanically; a steeper skew widens the gap with
 no one mispricing anything. Rule of thumb desks quote: the variance
 strike sits near the ~30-delta-put vol rather than ATM. Second,
 convexity: variance-swap P&L is linear in *variance*, hence convex in
-*vol*: if vol doubles, the payout quadruples. A long variance
+*vol*. If vol doubles, the payout quadruples. A long variance
 position therefore benefits from vol-of-vol (Jensen), and the strike
 embeds a premium for that convexity; equivalently, a vol swap (linear
 in vol) strikes *below* sqrt(K_var), the difference growing with
@@ -3168,7 +3168,7 @@ Black-Scholes is approximately S x sigma x sqrt(T/(2*pi)) ~ 0.4 x S x
 sigma x sqrt(T) (expand N(d1) - N(d2) around d = 0), and the straddle
 is two legs. Here: 0.8 x 100 x 0.25 x 0.5 = $10. The reverse reading
 is the one traders actually use: a quoted straddle price *is* a vol
-quote: straddle / (0.8 x S x sqrt(T)) recovers implied vol in your
+quote, since straddle / (0.8 x S x sqrt(T)) recovers implied vol in your
 head, which is how you sanity-check a broker quote or read an
 earnings-move expectation off the screen (a $10 one-week straddle on
 a $200 stock: 10/(0.8 x 200 x sqrt(1/52)) ~ 45% vol, i.e. the market
@@ -3399,8 +3399,8 @@ tail you *did* observe (say, losses beyond the 95th percentile: ~125
 points, a real sample) and extrapolate along the fitted tail shape
 rather than along Gaussian fantasy. The shape parameter xi is the
 verdict on the question itself: xi = 0 gives thin exponential tails;
-equity-return fits typically give xi in the 0.2-0.4 range:
-power-law tails where the 1-in-1000 loss is perhaps 1.5-2x the
+equity-return fits typically give xi in the 0.2-0.4 range,
+which means power-law tails where the 1-in-1000 loss is perhaps 1.5-2x the
 1-in-20-year observed worst, not marginally above it. EVT also states
 its own limits: the confidence interval on the 99.9%
 estimate is wide and should be reported with it, and a fitted xi >= 1
@@ -3429,7 +3429,7 @@ designed: "China devalues 10%, oil +40%, credit gaps 200bp." Strengths:
 forward-looking, tailorable to current concentrations and current
 geopolitics. Blind spots: consistency (hand-picked shocks can violate
 every correlation, or worse, sneak in implicit hedges that mute the
-loss) and imagination: the committee stresses what it can conceive,
+loss) and imagination, since the committee stresses what it can conceive,
 and the 2008 lesson is that the killing scenario was in nobody's
 deck. **Reverse stress testing** closes exactly that gap: fix the
 loss that kills the firm and *solve* for the most probable scenario
@@ -3499,7 +3499,7 @@ its own slice, leverage against a handful of names; the concentration
 across brokers was invisible to every correlation matrix, and the
 unwind of one oversized position *created* the correlated crash in
 the others. Which is the second blind spot: at size, concentration
-*becomes* correlation: your own liquidation moves every name you
+*becomes* correlation, because your own liquidation moves every name you
 hold, so the calm-period correlations you measured are not the ones
 you die at. Practical rule: correlation risk answers "what if the
 market's joint behavior changes?"; concentration risk answers "what
@@ -3540,8 +3540,8 @@ tenor-bucketed factor) is the quick PFE approximation regulators
 and pre-trade checks use when full simulation is too slow.
 
 *In this library:* `risk/CounterpartyExposureTracker.java` --
-`currentExposure` (max(0, net MtM) per netting set: netting is in
-the definition), `potentialFutureExposure` and `addOnFactor` (the
+`currentExposure` (max(0, net MtM) per netting set, so netting is
+in the definition), `potentialFutureExposure` and `addOnFactor` (the
 tenor-bucketed add-on profile), `allExposures` for the
 per-counterparty rollup that a credit officer actually reads.
 
@@ -3559,7 +3559,7 @@ version: exposure and credit quality driven by a common macro factor;
 e.g., being owed money on received-fixed swaps by a leveraged
 borrower whose default probability rises in the same recession that
 drops rates and inflates your MtM. Where it bit: the monolines and
-AIG in 2008: banks bought protection on super-senior CDOs from
+AIG in 2008. Banks bought protection on super-senior CDOs from
 insurers whose own solvency was wired to the same housing factor;
 when the hedges finally paid, the sellers could not, and the "hedged"
 banks took CVA losses in the tens of billions (a large share of
@@ -3699,7 +3699,7 @@ Because exception *count* is only half the test; the other half is
 exception *timing*, and the count test itself has weak power. Start
 with Kupiec's proportion-of-failures test: 250 days at 99% expects
 2.5 exceptions; 5 looks high, but the likelihood-ratio test does not
-reject at 95% confidence: with so few expected events, the binomial
+reject at 95% confidence. With so few expected events, the binomial
 is noisy, and Kupiec at 250 days will wave through models that are
 materially wrong (this is a feature of the sample size, not the
 model: the Basel traffic-light zones exist precisely because the
@@ -3988,7 +3988,7 @@ with the drift adjustment and the two rates documented in the javadoc.
 ### 94. "Walk me through the lifecycle of a structured product from the dealer's side."
 
 Day one: structuring picks the payoff (say an autocallable on an index
-basket), pricing marks it with a margin: the note sells at 100 while
+basket), pricing marks it with a margin. The note sells at 100 while
 the hedge portfolio costs, say, 97.5, and that 2.5 is the day-one P&L
 the desk books against a lifetime of hedging obligations. At issuance
 the desk puts on the initial hedge: delta in futures, vega in listed or
@@ -4099,7 +4099,7 @@ zero rates (2010-2021) American and European puts were near-identical
 and desks stopped thinking about it; at 5% short rates a 1-year
 deep-ITM put's American premium is worth real basis points again. Calls
 facing large discrete dividends: the premium concentrates entirely at
-ex-dividend dates and is bounded by the dividends themselves: no
+ex-dividend dates and is bounded by the dividends themselves. No
 dividends, no premium, sell not exercise. Options on futures with
 futures-style vs equity-style margining: Black-76 assumptions shift and
 some exchanges' American options on futures carry almost no premium
@@ -4177,13 +4177,13 @@ check), `trading/HftOrderGateway.java`, `fix/NewOrderSingle.java` and
 
 ### 101. "Price-time vs pro-rata matching -- how does the allocation rule change behavior?"
 
-Price-time (FIFO) fills the oldest order at the best price first: queue
+Price-time (FIFO) fills the oldest order at the best price first. Queue
 position is everything, so it rewards being early, penalizes
 cancelling, and creates the latency race: the profitable skill is
 joining a new price level first and *leaving* a stale level first.
 Pro-rata (used in CME short-rate futures like SOFR, and options
 markets) allocates each incoming aggressor across resting orders in
-proportion to their size: time in queue barely matters, so it rewards
+proportion to their size. Time in queue barely matters, so it rewards
 *size* instead, and creates its own game: quote far more than you
 want, because you receive fills proportional to displayed size, then
 manage the overfill risk. The over-quoting equilibrium is well known
@@ -4411,10 +4411,10 @@ trader has no incentive to trade well, only to trade *like the
 average*, and large orders that themselves dominate volume drag the
 benchmark toward their own fills, making terrible executions look
 neutral. Close benchmark: gamed by concentrating your execution at the
-close: you nail the benchmark while worsening the very price you are
+close, where you nail the benchmark while worsening the very price you are
 benchmarked to, which is one reason closing auctions keep growing
-(Q102). Participation (POV) benchmarks: gamed by the cap itself:
-volume spikes drag your algo into trading exactly when everyone else
+(Q102). Participation (POV) benchmarks: gamed by the cap itself,
+because volume spikes drag your algo into trading exactly when everyone else
 is. The professional summary: every benchmark is a contract, and the
 algo optimizes the contract, not your P&L -- so serious desks evaluate
 on arrival-based shortfall decomposed into spread, impact, timing, and
@@ -4580,7 +4580,7 @@ handling instead of silently pre-adjusted files).
 Not until you correct for the search. The maximum of N independent
 noise Sharpes grows like sqrt(2 * ln N) / sqrt(T): over a few years of
 daily data, the best of 200 *pure-noise* backtests routinely shows a
-Sharpe well above 1: your 2 might be skill, but the burden of proof
+Sharpe well above 1. Your 2 might be skill, but the burden of proof
 scales with how hard you searched. This is data snooping / multiple
 testing, and finance is unusually exposed because the same few decades
 of returns get mined by everyone (Harvey, Liu and Zhu catalogued 300+
@@ -4618,8 +4618,8 @@ liquidity provision) have exactly the negative skew that makes their
 Sharpe estimates least reliable; a Sharpe of 1.5 from a
 negatively-skewed weekly strategy over three years can carry less
 evidence than 0.8 from a symmetric daily one over ten. Where it changes
-decisions in practice: allocation committees use it as a gate:
-a pod's backtest Sharpe of 2.5 from a 400-variant sweep can come out
+decisions in practice: allocation committees use it as a gate.
+A pod's backtest Sharpe of 2.5 from a 400-variant sweep can come out
 with a DSR indistinguishable from zero, killing the launch, while a
 modest but long, out-of-sample-consistent record clears the bar. It is
 the formalization of the folk wisdom "I don't believe backtested
@@ -4695,7 +4695,7 @@ smooth returns and died on one day in February 2018 (Q88); momentum
 posted decades of strength and then lost ~70% in three months in the
 2009 "momentum crash" as the junk rally inverted every trailing signal;
 carry trades earned steadily until 2008 unwound them in weeks. The
-research process answer: test across regimes explicitly: split
+research process answer: test across regimes explicitly, splitting
 performance by identified vol/rate/trend states rather than by
 calendar; if returns come from one state, you own a regime bet and
 should size and market it as one. Detect regimes with something (rolling vol buckets, HMM-style classifiers), stress the strategy on
@@ -4718,8 +4718,8 @@ roughly 5% a year before impact; this single line item kills most
 high-turnover retail backtests. Impact: the standard square-root law,
 cost ~ sigma * sqrt(Q / ADV) in volatility units, meaning trading 1% of
 daily volume in a 2%-vol stock costs on the order of a few basis
-points, and 10x the size costs sqrt(10) ~ 3.2x, not 10x: concave, but
-relentless. Slippage on the model's own assumptions: passive fills you
+points, and 10x the size costs sqrt(10) ~ 3.2x, not 10x, which is
+concave but relentless. Slippage on the model's own assumptions: passive fills you
 assumed at the touch actually fill with adverse selection (Q108).
 Capacity follows from inverting the impact term: as AUM grows, the
 strategy trades a larger fraction of ADV, impact rises with the square
@@ -4809,8 +4809,8 @@ use-after-free taking down a trading engine at 2pm) favor Java
 heavily. LMAX ran a retail FX exchange processing millions of events
 per second on a single-threaded Java business-logic core, and much of
 the industry's execution/OMS layer is JVM. The discipline that makes it
-work: treat the JVM as a capable machine you must not provoke: no
-allocation on the hot path, primitives and arrays instead of object
+work: treat the JVM as a capable machine you must not provoke, which
+means no allocation on the hot path, primitives and arrays instead of object
 graphs, warmed and JIT-stable code paths, cores pinned and isolated.
 Where the argument stops: the last microseconds. GC exists even if you
 never trigger it (Q124), object headers and pointer-chasing tax cache
@@ -4861,7 +4861,7 @@ recipe and the benchmark results under it).
 Mechanical sympathy (Martin Thompson's term, borrowed from racing) is
 writing code shaped like the hardware. Cache lines: memory moves in
 64-byte units, so data the hot path touches together should live
-together: a book level stored as parallel primitive arrays
+together. A book level stored as parallel primitive arrays
 (price[i], qty[i]) streams through the cache, while the same data as a
 linked list of Level objects is a pointer chase where every hop is a
 potential ~100ns cache miss; at millions of updates per second the
@@ -4872,7 +4872,7 @@ victim is a producer counter and consumer counter declared side by
 side in one class; the fix is padding each counter to its own line,
 which is why lock-free queues are full of otherwise-unused long fields.
 Branch prediction: a mispredicted branch costs ~15-20 cycles; hot loops
-should make branches boringly predictable: process the common message
+should make branches boringly predictable, so process the common message
 type in a straight line and let rare paths be the branch, avoid
 data-dependent branching in the inner loop (branchless min/max,
 arithmetic instead of if), and keep the hot path monomorphic so the JIT
@@ -4893,7 +4893,7 @@ claiming slots need CAS retry loops, and under contention every core is
 invalidating the same cache lines, so throughput can *fall* as you add
 producers; coordination cost, not work, dominates. An SPSC queue
 needs no CAS at all: one thread owns the head, one owns the tail, and
-correctness needs only ordered visibility: the producer writes data
+correctness needs only ordered visibility. The producer writes data
 then publishes the counter with a release store; the consumer reads the
 counter with an acquire load then reads data. Each counter has exactly
 one writer, so there is no contention by construction, and a good SPSC
@@ -4953,7 +4953,7 @@ spinning thread polls for packets, and data goes NIC-to-strategy with
 no kernel transition. One-way latencies drop from ~20-50us to low
 single digits, and, as important, the *variance* collapses because
 interrupts and scheduler noise leave the path. When you need it: when
-your edge is reaction time: market making and latency arbitrage where
+your edge is reaction time, as in market making and latency arbitrage where
 the race to cancel or take after a tick is won in microseconds; every
 serious HFT runs bypass plus pinned, isolated cores, and the next rungs
 (NIC-level timestamping, FPGA feed handlers, layer-1 switches) follow
@@ -5100,7 +5100,7 @@ buffer, no allocation (Q124), then applied to an L3 book keyed by order
 id. The hard parts are the failure modes. Sequencing: every message
 carries a sequence number; the handler must detect gaps instantly,
 because applying post-gap messages to a pre-gap book silently corrupts
-state: a missed delete leaves a ghost order at the top of your book
+state. A missed delete leaves a ghost order at the top of your book
 and your strategy quotes against liquidity that is not there.
 Recovery: on a gap, either request retransmission, or mark the book
 stale and rebuild from a snapshot channel while buffering the live
@@ -5317,7 +5317,7 @@ most of your liquid names' history; worse, the drops cluster on exactly
 the volatile days when some feed hiccuped, biasing vol estimates down.
 Union with forward-fill keeps every timestamp and carries each series'
 last observation forward: no data loss, but a stale price is now
-pretending to be fresh: correlations against the ffilled series are
+pretending to be fresh, and correlations against the ffilled series are
 biased toward zero, the small-cap looks artificially smooth, and a
 "portfolio return" on a day the small-cap did not trade is partly
 fiction. The workflow: intersect for anything estimating
@@ -5452,7 +5452,7 @@ and the determinism argument for the engine side in `docs/LEARN.md`
 ### 147. "Your vendor file is missing three days for one name. Fill, drop, or interpolate -- defend a policy."
 
 First, diagnose before treating: missing because the exchange was closed
-(not missing at all: align calendars), missing because the stock was
+(not missing at all, so align calendars), missing because the stock was
 halted (informative missingness: the gap is the event), or missing
 because the vendor dropped it (fixable upstream)? Then the options.
 Dropping the rows is acceptable for single-name statistics but poisons
@@ -5632,7 +5632,7 @@ bands around an EMA): when the Bollinger bands trade inside the Keltner
 channels, standard-deviation vol has compressed below true-range vol --
 the classic squeeze setup. Why bands work as an alerting tool: they are
 a z-score visualized, so price at the upper band means "two sigmas rich
-to the recent mean": useful mean-reversion context in ranges, and a
+to the recent mean", which is useful mean-reversion context in ranges, and a
 trap in trends, where price can ride the band for weeks. A desk uses
 the squeeze less as an entry and more as a regime gate: size up
 breakout systems and stand down mean-reversion when the bands pinch.
@@ -5824,7 +5824,7 @@ with your carefully chosen weights as decoration. Min-max normalization
 maps each criterion to [0,1] across the candidate set first, so a
 weight of 0.4 on value and 0.6 on momentum actually expresses relative
 importance. Now the breakage you accept. Relativity: scores are
-relative to this run's universe: the same stock scores differently in
+relative to this run's universe. The same stock scores differently in
 a different candidate list, which is fine for "pick the best twenty
 today" and wrong for tracking one name's score through time (use
 z-scores against a fixed history for that). Outlier sensitivity:
@@ -13604,7 +13604,7 @@ because its factors sit deep in the cascade -- capital finally prices the
 time it takes to get out, not just the volatility while you are in.
 
 *In this library:* `risk/FrtbEs.java` -- the five horizons as `LH_10`
-through `LH_120` constants, the MAR33.5 cascade formula implemented as
+through `LH_120` constants, the MAR33.4 cascade formula implemented as
 given in the javadoc.
 
 ### 458. "What is the PLAT test, and tell me about a bug class that only shows up in production P&L feeds."
@@ -20510,7 +20510,8 @@ largest (H > K for a call), so value is a tent that collapses to zero
 right at the barrier, delta flips sign, and gamma explodes near H.
 `BarrierOption.price` covers all eight single-barrier types with cash
 rebates using the Reiner-Rubinstein building blocks (Reiner and
-Rubinstein 1991, combined as in Haug 2007, table 4-13); for an
+Rubinstein 1991, combined as in Haug 2007, section 4.17.1, and pinned to
+Haug's table 4-13); for an
 up-and-out call with K < H the combination is A - B + C - D + F. (An
 earlier version threw on reverse barriers rather than price them; the
 regular-barrier convenience methods such as `downAndOutCall` now
@@ -26979,7 +26980,9 @@ the code returns the deterministic limits rather than NaN.
   for 1 to 5y, 7.5% beyond). An add-on table cannot see the correlation
   of offsetting trades. `risk/CounterpartyExposureTracker.java`
   (currentExposure, potentialFutureExposure, addOnFactor); Basel
-  Committee, current exposure method (1995 netting amendment).
+  Committee, current exposure method: BCBS 128 (June 2006), Annex 4,
+  section VII, paragraphs 91-96, with the 0.4 + 0.6 NGR netting rule
+  from the April 1995 amendment on potential exposure (BCBS 18).
 
 **Risk engines**
 
@@ -27031,7 +27034,8 @@ the code returns the deterministic limits rather than NaN.
   reduced-set ES in the current period, never scaled down. A reduced set
   that explains less than 75% of current full-set ES is rejected.
   `FrtbEs.stressCalibratedEs`, `FrtbEs.MIN_REDUCED_SET_COVERAGE`; BCBS
-  MAR33.5 to MAR33.7.
+  MAR33.5 (stress period, 75% test in MAR33.5(2)), MAR33.6 (formula and
+  floor at 1), MAR33.7 (choice of the stress period).
 - `dx* = -(L / (delta' Sigma delta)) Sigma delta`;
   `sigmas = L / sqrt(delta' Sigma delta)`. Reverse stress: the most
   probable factor move producing target loss L on a linear book lies
