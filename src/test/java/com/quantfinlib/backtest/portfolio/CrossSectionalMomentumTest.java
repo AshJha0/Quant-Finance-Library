@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Point-in-time cross-sectional momentum: ranks only the members alive at
  * each rebalance timestamp, longs winners / shorts losers dollar-neutrally,
- * and — run end-to-end on the survivorship-aware engine — shows the naive
+ * and, run end-to-end on the survivorship-aware engine, shows the naive
  * universe overstating the strategy.
  */
 class CrossSectionalMomentumTest {
