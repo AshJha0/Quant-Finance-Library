@@ -89,8 +89,8 @@ public final class FixOrderEncoder {
 
     /**
      * Encodes a limit NewOrderSingle into the reusable buffer. Zero
-     * allocation. The encoded message occupies {@code [offset(), offset() +
-     * length())} of {@link #buffer()} until the next encode.
+     * allocation. The encoded message occupies {@code length()} bytes, read with
+     * {@link #copyInto(byte[], int)} or {@link #writeTo(java.nio.ByteBuffer)} until the next encode.
      *
      * @param msgSeqNum      session sequence number (tag 34)
      * @param clOrdId        client order id, numeric (tag 11)
@@ -288,14 +288,51 @@ public final class FixOrderEncoder {
     // Buffer access (valid until the next encode)
     // ------------------------------------------------------------------
 
-    /** The reusable buffer holding the last encoded message. */
-    public byte[] buffer() {
-        return buffer;
+    /**
+     * Copies the last encoded message into a caller-owned array without allocating.
+     * The internal buffer is reused by the next encode and is never handed out.
+     *
+     * @param dst       destination array
+     * @param dstOffset index in {@code dst} of the first byte written
+     * @return the number of bytes copied, {@link #length()}
+     */
+    public int copyInto(byte[] dst, int dstOffset) {
+        System.arraycopy(buffer, start, dst, dstOffset, length());
+        return length();
     }
 
-    /** Start offset of the last message within {@link #buffer()}. */
-    public int offset() {
-        return start;
+    /**
+     * Puts the last encoded message into {@code dst} at its position (relative
+     * put, advances the position). Zero allocation; a direct buffer handed to a
+     * socket channel avoids a further copy in the JDK.
+     *
+     * @param dst destination with at least {@link #length()} bytes remaining
+     * @return the number of bytes written
+     */
+    public int writeTo(java.nio.ByteBuffer dst) {
+        dst.put(buffer, start, length());
+        return length();
+    }
+
+    /**
+     * Byte {@code i} of the last encoded message, {@code 0 <= i < length()}.
+     *
+     * @param i index within the message
+     * @return the byte
+     */
+    public byte byteAt(int i) {
+        return buffer[start + i];
+    }
+
+    /**
+     * A fresh copy of the last encoded message (allocates; for tests and logging).
+     *
+     * @return the message bytes
+     */
+    public byte[] toByteArray() {
+        byte[] out = new byte[length()];
+        copyInto(out, 0);
+        return out;
     }
 
     /** Length of the last message. */

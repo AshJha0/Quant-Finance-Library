@@ -16,8 +16,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * The shared cost seam: flat model reproduces the legacy commission exactly,
  * the institutional model charges size-dependent impact from the shared
- * estimator, and (the aim of the whole refactor) one PortfolioBacktester
- * run can now be survivorship-aware and execution-aware simultaneously.
+ * estimator, and — the point of the whole refactor — one PortfolioBacktester
+ * run can now be survivorship-aware AND execution-aware simultaneously.
  */
 class TradeCostModelTest {
 
@@ -66,7 +66,7 @@ class TradeCostModelTest {
                 new PortfolioBacktester.Config(1_000_000, 999 /* superseded */, 1, 252,
                         TradeCostModel.flat(10)));
         assertEquals(legacy.totalCosts(), modeled.totalCosts(), 1e-9);
-        assertEquals(legacy.equityCurve()[BARS - 1], modeled.equityCurve()[BARS - 1], 1e-9);
+        assertEquals(legacy.equityCurve(BARS - 1), modeled.equityCurve(BARS - 1), 1e-9);
     }
 
     @Test
@@ -96,7 +96,7 @@ class TradeCostModelTest {
     @Test
     void oneRunIsSurvivorshipAwareAndExecutionAwareTogether() {
         // The combination the review flagged as impossible: lifecycle events
-        // (a delisting) and institutional costs (impact on a thin name) in
+        // (a delisting) AND institutional costs (impact on a thin name) in
         // the same PortfolioBacktester run.
         Map<String, BarSeries> data = Map.of(
                 "ALIVE", series("ALIVE", 0.001, 50_000),
@@ -123,7 +123,7 @@ class TradeCostModelTest {
         assertTrue(r.totalCosts() > 1_000_000 * 4.0 / 1e4 * 0.9,
                 "costs=" + r.totalCosts());
         // Equity reflects both: the DOOM wipeout and the cost drag.
-        assertTrue(r.equityCurve()[BARS - 1] < 520_000, // ~half book gone + costs
-                "final=" + r.equityCurve()[BARS - 1]);
+        assertTrue(r.equityCurve(BARS - 1) < 520_000, // ~half book gone + costs
+                "final=" + r.equityCurve(BARS - 1));
     }
 }

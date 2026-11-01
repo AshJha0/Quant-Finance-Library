@@ -41,7 +41,70 @@ final class GarchEstimation {
         double logLik(double[] theta, double[] r, double[] perObs);
     }
 
-    record Estimate(double[] theta, double logLikelihood, double[] se, double[] robustSe) {
+    static final class Estimate {
+        private final double[] theta;
+        private final double logLikelihood;
+        private final double[] se;
+        private final double[] robustSe;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         */
+        Estimate(double[] theta, double logLikelihood, double[] se, double[] robustSe) {
+            this.theta = theta;
+            this.logLikelihood = logLikelihood;
+            this.se = se;
+            this.robustSe = robustSe;
+        }
+
+        /** {@code theta}. */
+        double[] theta() {
+            return theta;
+        }
+
+        /** {@code logLikelihood}. */
+        double logLikelihood() {
+            return logLikelihood;
+        }
+
+        /** {@code se}. */
+        double[] se() {
+            return se;
+        }
+
+        /** {@code robustSe}. */
+        double[] robustSe() {
+            return robustSe;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Estimate o)) {
+                return false;
+            }
+            return java.util.Arrays.equals(theta, o.theta)
+                    && Double.compare(logLikelihood, o.logLikelihood) == 0
+                    && java.util.Arrays.equals(se, o.se)
+                    && java.util.Arrays.equals(robustSe, o.robustSe);
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + java.util.Arrays.hashCode(theta);
+            h = 31 * h + Double.hashCode(logLikelihood);
+            h = 31 * h + java.util.Arrays.hashCode(se);
+            h = 31 * h + java.util.Arrays.hashCode(robustSe);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "Estimate[" + "theta=" + java.util.Arrays.toString(theta) + ", " + "logLikelihood=" + logLikelihood + ", " + "se=" + java.util.Arrays.toString(se) + ", " + "robustSe=" + java.util.Arrays.toString(robustSe) + "]";
+        }
     }
 
     static Estimate estimate(Model model, double[] r, double[][] startThetas) {
@@ -57,7 +120,7 @@ final class GarchEstimation {
                     u -> -model.logLik(model.toTheta(u), r, null), u0, 0.5, 1e-12, 200_000);
             if (res.value() < bestF) {
                 bestF = res.value();
-                bestU = res.x();
+                bestU = res.xCopy();
             }
         }
         if (bestU == null) {

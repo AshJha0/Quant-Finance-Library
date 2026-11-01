@@ -37,8 +37,70 @@ import java.util.List;
  */
 public final class CrbHedgeUniverse {
 
-    private record Instrument(String name, double costPerUnit,
-                              int[] factorIds, double[] perUnit) {
+    private static final class Instrument {
+        private final String name;
+        private final double costPerUnit;
+        private final int[] factorIds;
+        private final double[] perUnit;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         */
+        Instrument(String name, double costPerUnit, int[] factorIds, double[] perUnit) {
+            this.name = name;
+            this.costPerUnit = costPerUnit;
+            this.factorIds = factorIds;
+            this.perUnit = perUnit;
+        }
+
+        /** {@code name}. */
+        String name() {
+            return name;
+        }
+
+        /** {@code costPerUnit}. */
+        double costPerUnit() {
+            return costPerUnit;
+        }
+
+        /** {@code factorIds}. */
+        int[] factorIds() {
+            return factorIds;
+        }
+
+        /** {@code perUnit}. */
+        double[] perUnit() {
+            return perUnit;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Instrument o)) {
+                return false;
+            }
+            return java.util.Objects.equals(name, o.name)
+                    && Double.compare(costPerUnit, o.costPerUnit) == 0
+                    && java.util.Arrays.equals(factorIds, o.factorIds)
+                    && java.util.Arrays.equals(perUnit, o.perUnit);
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + java.util.Objects.hashCode(name);
+            h = 31 * h + Double.hashCode(costPerUnit);
+            h = 31 * h + java.util.Arrays.hashCode(factorIds);
+            h = 31 * h + java.util.Arrays.hashCode(perUnit);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "Instrument[" + "name=" + name + ", " + "costPerUnit=" + costPerUnit + ", " + "factorIds=" + java.util.Arrays.toString(factorIds) + ", " + "perUnit=" + java.util.Arrays.toString(perUnit) + "]";
+        }
     }
 
     private final FactorRegistry registry;

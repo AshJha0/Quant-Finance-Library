@@ -62,7 +62,7 @@ public final class RangeVolatility {
 
     /** Parkinson over a whole {@link BarSeries}. */
     public static double parkinson(BarSeries bars, double periodsPerYear) {
-        return parkinson(bars.highs(), bars.lows(), periodsPerYear);
+        return parkinson(bars.highsCopy(), bars.lowsCopy(), periodsPerYear);
     }
 
     /** Garman-Klass estimator, annualized. */
@@ -83,7 +83,7 @@ public final class RangeVolatility {
 
     /** Garman-Klass over a whole {@link BarSeries}. */
     public static double garmanKlass(BarSeries bars, double periodsPerYear) {
-        return garmanKlass(bars.opens(), bars.highs(), bars.lows(), bars.closes(), periodsPerYear);
+        return garmanKlass(bars.opensCopy(), bars.highsCopy(), bars.lowsCopy(), bars.closesCopy(), periodsPerYear);
     }
 
     /** Rogers-Satchell (drift-independent) estimator, annualized. */
@@ -100,7 +100,7 @@ public final class RangeVolatility {
 
     /** Rogers-Satchell over a whole {@link BarSeries}. */
     public static double rogersSatchell(BarSeries bars, double periodsPerYear) {
-        return rogersSatchell(bars.opens(), bars.highs(), bars.lows(), bars.closes(),
+        return rogersSatchell(bars.opensCopy(), bars.highsCopy(), bars.lowsCopy(), bars.closesCopy(),
                 periodsPerYear);
     }
 
@@ -143,7 +143,7 @@ public final class RangeVolatility {
 
     /** Yang-Zhang over a whole {@link BarSeries}. */
     public static double yangZhang(BarSeries bars, double periodsPerYear) {
-        return yangZhang(bars.opens(), bars.highs(), bars.lows(), bars.closes(), periodsPerYear);
+        return yangZhang(bars.opensCopy(), bars.highsCopy(), bars.lowsCopy(), bars.closesCopy(), periodsPerYear);
     }
 
     // ------------------------------------------------------------------

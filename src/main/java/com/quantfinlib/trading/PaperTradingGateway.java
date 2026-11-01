@@ -303,6 +303,9 @@ public final class PaperTradingGateway implements OrderGateway {
     /** One internally consistent view of the whole account (single lock acquisition). */
     public record AccountSnapshot(double cash, double equity, double realizedPnl,
                                   int rejectionCount, Map<String, Double> positions) {
+        public AccountSnapshot {
+            positions = java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(positions));
+        }
     }
 
     public synchronized AccountSnapshot snapshot() {

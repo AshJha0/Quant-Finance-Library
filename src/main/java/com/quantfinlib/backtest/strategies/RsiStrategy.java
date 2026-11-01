@@ -29,7 +29,7 @@ public final class RsiStrategy implements TradingStrategy {
 
     @Override
     public void init(BarSeries series) {
-        rsi = Indicators.rsi(series.closes(), period);
+        rsi = Indicators.rsi(series.closesCopy(), period);
     }
 
     @Override

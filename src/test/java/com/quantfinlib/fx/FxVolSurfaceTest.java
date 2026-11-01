@@ -65,15 +65,15 @@ class FxVolSurfaceTest {
                 .add(T, F, ATM, RR25, BF25).build();
         FxVolSurface.SmilePillar p = s.pillar(0);
         // Three pillars at 3M (no 10Δ): 25P, ATM, 25C, strikes ascending.
-        assertEquals(3, p.strikes().length);
-        double v25p = p.vols()[0];
-        double vAtm = p.vols()[1];
-        double v25c = p.vols()[2];
+        assertEquals(3, p.strikesLength());
+        double v25p = p.vols(0);
+        double vAtm = p.vols(1);
+        double v25c = p.vols(2);
         assertEquals(RR25, v25c - v25p, 1e-12);              // risk reversal
         assertEquals(BF25, (v25c + v25p) / 2 - vAtm, 1e-12); // butterfly
         assertEquals(ATM, vAtm, 1e-12);
         // Surface lookup at a pillar strike returns the pillar vol.
-        assertEquals(v25c, s.vol(T, p.strikes()[2]), 1e-10);
+        assertEquals(v25c, s.vol(T, p.strikes(2)), 1e-10);
         // Negative RR: put wing above call wing (EURUSD skew).
         assertTrue(v25p > v25c);
     }
@@ -82,10 +82,10 @@ class FxVolSurfaceTest {
     void tenDeltaWingsExtendTheSmile() {
         FxVolSurface s = surface();
         FxVolSurface.SmilePillar p = s.pillar(1);
-        assertEquals(5, p.strikes().length);
+        assertEquals(5, p.strikesLength());
         // Wing vols beyond the wings are flat (no explosive extrapolation).
-        assertEquals(p.vols()[0], s.vol(1.0, p.strikes()[0] * 0.90), 1e-10);
-        assertEquals(p.vols()[4], s.vol(1.0, p.strikes()[4] * 1.10), 1e-10);
+        assertEquals(p.vols(0), s.vol(1.0, p.strikes(0) * 0.90), 1e-10);
+        assertEquals(p.vols(4), s.vol(1.0, p.strikes(4) * 1.10), 1e-10);
     }
 
     @Test
@@ -181,8 +181,8 @@ class FxVolSurfaceTest {
         FxVolSurface s = FxVolSurface.builder().add(t, f, atm, rr, bfBroker).build();
         FxVolSurface.SmilePillar p = s.pillar(0);
         // Smile RR identity holds on the solved pillars.
-        assertEquals(rr, p.vols()[2] - p.vols()[0], 1e-12);
-        double bfSmile = (p.vols()[2] + p.vols()[0]) / 2 - p.vols()[1];
+        assertEquals(rr, p.vols(2) - p.vols(0), 1e-12);
+        double bfSmile = (p.vols(2) + p.vols(0)) / 2 - p.vols(1);
         assertEquals(s.smileButterfly25(0), bfSmile, 1e-12);
         // The market strangle: strikes at one vol atm + bf, priced at that vol...
         double vMs = atm + bfBroker;
@@ -243,7 +243,7 @@ class FxVolSurfaceTest {
                 .atmConvention(FxVolSurface.AtmConvention.FORWARD)
                 .deltaConvention(FxVolSurface.DeltaConvention.SPOT)
                 .add(T, F, dfF, ATM, RR25, BF25, Double.NaN, Double.NaN).build();
-        assertEquals(F, s.pillar(0).strikes()[1], 1e-15);
+        assertEquals(F, s.pillar(0).strikes(1), 1e-15);
         assertEquals(FxVolSurface.DeltaConvention.SPOT, s.deltaConvention());
     }
 }

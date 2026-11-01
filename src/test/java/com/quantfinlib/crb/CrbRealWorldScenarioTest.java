@@ -130,8 +130,8 @@ class CrbRealWorldScenarioTest {
                         new CrbRouter.DarkVenue("PRINT-POOL", 10_000_000, 1.0, 15),
                         new CrbRouter.DarkVenue("MIDPOINT", 6_000_000, 0.7, 1.2)},
                 0.5, 0.8);
-        assertEquals(4_200_000, alloc.dark()[1], 1e-6, "clean dark first");
-        assertEquals(0, alloc.dark()[0], 1e-9, "toxic pool priced out");
+        assertEquals(4_200_000, alloc.dark(1), 1e-6, "clean dark first");
+        assertEquals(0, alloc.dark(0), 1e-9, "toxic pool priced out");
         assertEquals(7_800_000, alloc.lit(), 1.0);
         ledger.onRoute(Math.abs(orders[0].notional()), alloc);
 
@@ -171,7 +171,7 @@ class CrbRealWorldScenarioTest {
         double[][] cov = {{1.44e-4, 0.3 * Math.sqrt(1.44e-4 * 3.6e-5)},
                 {0.3 * Math.sqrt(1.44e-4 * 3.6e-5), 3.6e-5}};
         StressTester.ReverseStress reverse = StressTester.reverseStress(liquid, cov, 2_000_000);
-        assertEquals(-2_000_000, StressTester.scenarioPnl(liquid, reverse.shocks()), 1e-6);
+        assertEquals(-2_000_000, StressTester.scenarioPnl(liquid, reverse.shocksCopy()), 1e-6);
         assertEquals(2_000_000 / VarEngine.portfolioStdev(liquid, cov),
                 reverse.mahalanobisSigmas(), 1e-9);
         assertTrue(reverse.mahalanobisSigmas() > 10,

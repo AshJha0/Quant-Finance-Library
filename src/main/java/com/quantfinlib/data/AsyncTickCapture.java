@@ -3,10 +3,13 @@ package com.quantfinlib.data;
 import com.quantfinlib.marketdata.HftMarketDataBus;
 import com.quantfinlib.marketdata.TickRingBuffer;
 import com.quantfinlib.marketdata.TickListener;
+import com.quantfinlib.util.IdleStrategy;
+import com.quantfinlib.util.ThreadPlacement;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Path;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -36,17 +39,22 @@ public final class AsyncTickCapture implements TickListener, AutoCloseable {
     private final TickFileWriter writer;
     private final HftMarketDataBus bus;
     private final Thread drainThread;
+    private final IdleStrategy idle;
     private final AtomicLong dropped = new AtomicLong();
     private volatile boolean running = true;
     private volatile Throwable failure;
 
     private AsyncTickCapture(HftMarketDataBus bus, Path file, int ringCapacity,
-                             TickFileWriter.ClockDomain domain) throws IOException {
+                             TickFileWriter.ClockDomain domain, IdleStrategy idle,
+                             ThreadFactory threadFactory) throws IOException {
+        if (idle == null || threadFactory == null) {
+            throw new IllegalArgumentException("idle strategy and thread factory are required");
+        }
         this.bus = bus;
+        this.idle = idle;
         this.writer = new TickFileWriter(file, domain);
         this.ring = new TickRingBuffer(ringCapacity);
-        this.drainThread = new Thread(this::drainLoop, "tick-capture-writer");
-        this.drainThread.setDaemon(true);
+        this.drainThread = threadFactory.newThread(this::drainLoop);
     }
 
     /** Creates the capture, subscribes it to every symbol, starts the writer. */
@@ -58,7 +66,28 @@ public final class AsyncTickCapture implements TickListener, AutoCloseable {
     /** As {@link #attach(HftMarketDataBus, Path, int)}, recording the timestamps' clock domain. */
     public static AsyncTickCapture attach(HftMarketDataBus bus, Path file, int ringCapacity,
                                           TickFileWriter.ClockDomain domain) throws IOException {
-        AsyncTickCapture capture = new AsyncTickCapture(bus, file, ringCapacity, domain);
+        return attach(bus, file, ringCapacity, domain,
+                IdleStrategy.backoff(0, 0, 10_000, 1_000_000), ThreadPlacement.daemon("tick-capture-writer"));
+    }
+
+    /**
+     * As {@link #attach(HftMarketDataBus, Path, int, TickFileWriter.ClockDomain)},
+     * with the writer thread's idle strategy and thread factory chosen by the caller.
+     *
+     * @param bus           bus to capture
+     * @param file          output file
+     * @param ringCapacity  hand-off ring size (power of two)
+     * @param domain        clock domain of the tick timestamps
+     * @param idle          what the writer thread does when the ring is empty (owned by it)
+     * @param threadFactory creates the writer thread (naming, CPU placement)
+     * @return the running capture
+     * @throws IOException if the file cannot be created
+     */
+    public static AsyncTickCapture attach(HftMarketDataBus bus, Path file, int ringCapacity,
+                                          TickFileWriter.ClockDomain domain, IdleStrategy idle,
+                                          ThreadFactory threadFactory) throws IOException {
+        AsyncTickCapture capture = new AsyncTickCapture(bus, file, ringCapacity, domain, idle,
+                threadFactory);
         bus.subscribeAll(capture);
         capture.drainThread.start();
         return capture;
@@ -84,11 +113,9 @@ public final class AsyncTickCapture implements TickListener, AutoCloseable {
         };
         try {
             while (running) {
-                if (ring.drainTo(sink, 4_096) == 0) {
-                    // Idle: yield rather than spin; the writer thread has no
-                    // latency budget, only the consumer thread does.
-                    java.util.concurrent.locks.LockSupport.parkNanos(100_000);
-                }
+                // The writer thread has no latency budget, only the bus
+                // consumer does; the default strategy parks with back-off.
+                idle.idle(ring.drainTo(sink, 4_096));
             }
             // Final drain so close() loses nothing that made it into the ring.
             while (ring.drainTo(sink, 4_096) > 0) {

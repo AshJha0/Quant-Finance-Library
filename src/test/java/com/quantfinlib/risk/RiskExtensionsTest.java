@@ -41,9 +41,9 @@ class RiskExtensionsTest {
             for (int a = 0; a < n; a++) {
                 for (int b = 0; b < n; b++) {
                     double truth = 0.01 * (1 + a % 3) * 0.01 * (1 + b % 3) * (a == b ? 1 : rho);
-                    double s = (zero.matrix()[a][b] - (a == b ? zero.intensity() * zero.target() : 0))
+                    double s = (zero.matrix(a, b) - (a == b ? zero.intensity() * zero.target() : 0))
                             / (1 - zero.intensity());
-                    lossShrunk += Math.pow(res.matrix()[a][b] - truth, 2);
+                    lossShrunk += Math.pow(res.matrix(a, b) - truth, 2);
                     lossSample += Math.pow(s - truth, 2);
                 }
             }

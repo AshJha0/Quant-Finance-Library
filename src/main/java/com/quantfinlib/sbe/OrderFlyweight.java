@@ -42,6 +42,15 @@ public final class OrderFlyweight {
     private ByteBuffer buffer;
     private int offset;
 
+    /**
+     * Positions this flyweight over {@code buffer} at {@code offset} (the header start).
+     * The buffer is not copied: the caller keeps ownership, and reads and
+     * writes through this flyweight go straight to its bytes.
+     *
+     * @param buffer the message buffer
+     * @param offset index of the header start
+     * @return this flyweight
+     */
     public OrderFlyweight wrap(ByteBuffer buffer, int offset) {
         this.buffer = buffer;
         this.offset = offset;

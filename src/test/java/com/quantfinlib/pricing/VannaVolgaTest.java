@@ -74,9 +74,9 @@ class VannaVolgaTest {
                 .add(T, S * Math.exp((R - Q) * T), 0.090, -0.008, 0.0025)
                 .build();
         FxVolSurface.SmilePillar p = surface.pillar(0);
-        VannaVolga fromSurface = VannaVolga.ofPillars(p.strikes(), p.vols(), R, Q, T);
+        VannaVolga fromSurface = VannaVolga.ofPillars(p.strikesCopy(), p.volsCopy(), R, Q, T);
         for (int i = 0; i < 3; i++) {
-            assertEquals(p.vols()[i], fromSurface.impliedVol(S, p.strikes()[i]), 1e-6);
+            assertEquals(p.vols(i), fromSurface.impliedVol(S, p.strikes(i)), 1e-6);
         }
         // The five-pillar overload reduces to the 25Δ triple.
         double[] five = {1.02, 1.05, 1.09, 1.13, 1.16};

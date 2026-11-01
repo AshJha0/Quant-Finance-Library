@@ -46,14 +46,14 @@ class GarchMleTest {
     void garchGaussianRecoversParametersWithinStandardErrors() {
         double[] r = garch(2e-6, 0.08, 0.90, 6000, 42, 0);
         Garch11.Fit f = Garch11.estimate(r, Innovation.GAUSSIAN);
-        double[] se = f.standardErrors();
+        double[] se = f.standardErrorsCopy();
         within3Se(2e-6, f.params().omega(), se[0], "omega");
         within3Se(0.08, f.params().alpha(), se[1], "alpha");
         within3Se(0.90, f.params().beta(), se[2], "beta");
         // A 6000-day sample pins alpha to about +-0.01: the old grid accepted +-0.06.
         assertTrue(se[1] < 0.02, "alpha SE " + se[1]);
         // Robust SEs are close to the information SEs when the model is right.
-        assertEquals(1, f.robustStandardErrors()[1] / se[1], 0.35);
+        assertEquals(1, f.robustStandardErrors(1) / se[1], 0.35);
         // The fit is the optimum: no small move in any parameter improves it.
         double ll = f.params().logLikelihood();
         double[] th = {f.params().omega(), f.params().alpha(), f.params().beta()};
@@ -93,7 +93,7 @@ class GarchMleTest {
     void garchStudentTRecoversTheDegreesOfFreedom() {
         double[] r = garch(2e-6, 0.08, 0.90, 6000, 7, 6);
         Garch11.Fit f = Garch11.estimate(r, Innovation.STUDENT_T);
-        double[] se = f.standardErrors();
+        double[] se = f.standardErrorsCopy();
         within3Se(6, f.nu(), se[3], "nu");
         within3Se(0.08, f.params().alpha(), se[1], "alpha");
         within3Se(0.90, f.params().beta(), se[2], "beta");
@@ -114,7 +114,7 @@ class GarchMleTest {
             h = w + (r[t] < 0 ? a + g : a) * r[t] * r[t] + b * h;
         }
         GjrGarch11.Fit f = GjrGarch11.estimate(r, Innovation.GAUSSIAN);
-        double[] se = f.standardErrors();
+        double[] se = f.standardErrorsCopy();
         within3Se(a, f.params().alpha(), se[1], "alpha");
         within3Se(g, f.params().gamma(), se[2], "gamma");
         within3Se(b, f.params().beta(), se[3], "beta");
@@ -135,7 +135,7 @@ class GarchMleTest {
             lnH = w + b * lnH + a * (Math.abs(z) - eAbs) + g * z;
         }
         Egarch11.Fit f = Egarch11.estimate(r, Innovation.GAUSSIAN);
-        double[] se = f.standardErrors();
+        double[] se = f.standardErrorsCopy();
         within3Se(a, f.params().alpha(), se[1], "alpha");
         within3Se(g, f.params().gamma(), se[2], "gamma");
         within3Se(b, f.params().beta(), se[3], "beta");

@@ -46,7 +46,7 @@ class IndicatorsTest {
         assertEquals(100.0, rsi[29], 1e-9);
 
         BarSeries s = TestData.gbmSeries("X", 300, 100, 0.05, 0.2, 1);
-        double[] r = Indicators.rsi(s.closes(), 14);
+        double[] r = Indicators.rsi(s.closesCopy(), 14);
         for (int i = 14; i < r.length; i++) {
             assertTrue(r[i] >= 0 && r[i] <= 100, "rsi out of range at " + i + ": " + r[i]);
         }
@@ -54,20 +54,20 @@ class IndicatorsTest {
 
     @Test
     void macdHistogramIsLineMinusSignal() {
-        double[] close = TestData.gbmSeries("X", 200, 100, 0.1, 0.2, 2).closes();
+        double[] close = TestData.gbmSeries("X", 200, 100, 0.1, 0.2, 2).closesCopy();
         Indicators.Macd m = Indicators.macd(close, 12, 26, 9);
         int last = close.length - 1;
-        assertFalse(Double.isNaN(m.signal()[last]));
-        assertEquals(m.line()[last] - m.signal()[last], m.histogram()[last], 1e-12);
+        assertFalse(Double.isNaN(m.signal(last)));
+        assertEquals(m.line(last) - m.signal(last), m.histogram(last), 1e-12);
     }
 
     @Test
     void bollingerBandsBracketMiddle() {
-        double[] close = TestData.gbmSeries("X", 100, 100, 0, 0.3, 3).closes();
+        double[] close = TestData.gbmSeries("X", 100, 100, 0, 0.3, 3).closesCopy();
         Indicators.Bollinger b = Indicators.bollinger(close, 20, 2);
         for (int i = 19; i < close.length; i++) {
-            assertTrue(b.upper()[i] >= b.middle()[i]);
-            assertTrue(b.lower()[i] <= b.middle()[i]);
+            assertTrue(b.upper(i) >= b.middle(i));
+            assertTrue(b.lower(i) <= b.middle(i));
         }
     }
 
@@ -86,9 +86,9 @@ class IndicatorsTest {
         BarSeries s = TestData.gbmSeries("X", 300, 100, 0.1, 0.25, 5);
         Indicators.Adx adx = Indicators.adx(s, 14);
         int last = s.size() - 1;
-        assertFalse(Double.isNaN(adx.adx()[last]));
-        assertTrue(adx.adx()[last] >= 0 && adx.adx()[last] <= 100);
-        assertTrue(adx.plusDi()[last] >= 0 && adx.minusDi()[last] >= 0);
+        assertFalse(Double.isNaN(adx.adx(last)));
+        assertTrue(adx.adx(last) >= 0 && adx.adx(last) <= 100);
+        assertTrue(adx.plusDi(last) >= 0 && adx.minusDi(last) >= 0);
     }
 
     @Test
@@ -109,8 +109,8 @@ class IndicatorsTest {
         // Strongly rising market: direction should end bullish.
         BarSeries s = TestData.gbmSeries("X", 400, 100, 0.5, 0.08, 7);
         Indicators.SuperTrend st = Indicators.superTrend(s, 10, 3);
-        assertEquals(1, st.direction()[s.size() - 1]);
-        assertFalse(Double.isNaN(st.value()[s.size() - 1]));
+        assertEquals(1, st.direction(s.size() - 1));
+        assertFalse(Double.isNaN(st.value(s.size() - 1)));
     }
 
     @Test
@@ -118,22 +118,22 @@ class IndicatorsTest {
         BarSeries s = TestData.gbmSeries("X", 300, 100, 0.1, 0.2, 8);
         Indicators.Ichimoku ich = Indicators.ichimoku(s, 9, 26, 52);
         int last = s.size() - 1;
-        assertFalse(Double.isNaN(ich.tenkan()[last]));
-        assertFalse(Double.isNaN(ich.kijun()[last]));
-        assertFalse(Double.isNaN(ich.senkouA()[last]));
-        assertFalse(Double.isNaN(ich.senkouB()[last]));
+        assertFalse(Double.isNaN(ich.tenkan(last)));
+        assertFalse(Double.isNaN(ich.kijun(last)));
+        assertFalse(Double.isNaN(ich.senkouA(last)));
+        assertFalse(Double.isNaN(ich.senkouB(last)));
         // chikou is close displaced backwards
-        assertEquals(s.close(last), ich.chikou()[last - 26], 1e-12);
+        assertEquals(s.close(last), ich.chikou(last - 26), 1e-12);
     }
 
     @Test
     void stochasticRsiWithinRange() {
-        double[] close = TestData.gbmSeries("X", 300, 100, 0.05, 0.25, 9).closes();
+        double[] close = TestData.gbmSeries("X", 300, 100, 0.05, 0.25, 9).closesCopy();
         Indicators.StochRsi sr = Indicators.stochasticRsi(close, 14, 14, 3, 3);
         int last = close.length - 1;
-        assertFalse(Double.isNaN(sr.k()[last]));
-        assertTrue(sr.k()[last] >= 0 && sr.k()[last] <= 100);
-        assertTrue(sr.d()[last] >= 0 && sr.d()[last] <= 100);
+        assertFalse(Double.isNaN(sr.k(last)));
+        assertTrue(sr.k(last) >= 0 && sr.k(last) <= 100);
+        assertTrue(sr.d(last) >= 0 && sr.d(last) <= 100);
     }
 
     @Test
@@ -150,9 +150,9 @@ class IndicatorsTest {
         BarSeries s = TestData.gbmSeries("X", 120, 100, 0.05, 0.2, 11);
         int last = s.size() - 1;
         Indicators.Keltner k = Indicators.keltner(s, 20, 10, 2);
-        assertTrue(k.upper()[last] > k.middle()[last] && k.middle()[last] > k.lower()[last]);
+        assertTrue(k.upper(last) > k.middle(last) && k.middle(last) > k.lower(last));
         Indicators.Donchian d = Indicators.donchian(s, 20);
-        assertTrue(d.upper()[last] >= d.middle()[last] && d.middle()[last] >= d.lower()[last]);
+        assertTrue(d.upper(last) >= d.middle(last) && d.middle(last) >= d.lower(last));
     }
 
     @Test

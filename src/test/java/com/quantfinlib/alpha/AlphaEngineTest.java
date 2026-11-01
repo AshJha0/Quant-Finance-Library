@@ -69,11 +69,11 @@ class AlphaEngineTest {
         double rp4 = -0.25 * (99.0 / 108 - 1) + 0.25 * 0;
         e3 *= 1 + rp4;
 
-        assertArrayEquals(new double[]{1, e1, e2, e3}, r.netEquity(), 1e-14);
+        assertArrayEquals(new double[]{1, e1, e2, e3}, r.netEquityCopy(), 1e-14);
         // Pinned values (computed independently in a separate script).
-        assertEquals(1.0189879951980791, r.netEquity()[1], 1e-13);
-        assertEquals(1.0177887154861944, r.netEquity()[2], 1e-13);
-        assertEquals(1.0169979154411763, r.netEquity()[3], 1e-13);
+        assertEquals(1.0189879951980791, r.netEquity(1), 1e-13);
+        assertEquals(1.0177887154861944, r.netEquity(2), 1e-13);
+        assertEquals(1.0169979154411763, r.netEquity(3), 1e-13);
         assertEquals((1.0 + traded) / 2 / 2, r.meanTurnover(), 1e-14);
         assertEquals((1.0 + traded) * 0.001, r.commissionDrag(), 1e-15);
     }
@@ -143,10 +143,10 @@ class AlphaEngineTest {
         for (FillPolicy p : FillPolicy.values()) {
             AlphaBacktester.Result r = AlphaBacktester.run(ctx, random,
                     new AlphaBacktester.Config(25, 3, 0, 0, 0, 0, 20, 252).withFillPolicy(p));
-            for (double e : r.grossEquity()) {
+            for (double e : r.grossEquityCopy()) {
                 assertEquals(1.0, e, 1e-15);
             }
-            for (double e : r.netEquity()) {
+            for (double e : r.netEquityCopy()) {
                 assertEquals(1.0, e, 1e-15);
             }
         }
@@ -174,7 +174,7 @@ class AlphaEngineTest {
                         .withFillPolicy(FillPolicy.CLOSE),
                 (c, s, t) -> new double[]{0.5, 0.5});
         // Buy-and-hold: final value = 0.5 a[40]/a[0] + 0.5 b[40]/b[0] = 1.
-        assertEquals(1.0, r.netEquity()[40], 1e-12);
+        assertEquals(1.0, r.netEquity(40), 1e-12);
         // The old fixed-weight arithmetic compounds (1 + 0.5*0.1 - 0.5*(1-1/1.1))
         // every bar, which is above 1 per pair of bars.
         double perBar = 1 + 0.5 * 0.1 + 0.5 * (1 / 1.1 - 1);
@@ -200,9 +200,9 @@ class AlphaEngineTest {
                     return w;
                 });
         // 50% in B; B delists at bar 5 at -30% of its last close: equity 0.85, then flat.
-        assertEquals(1.0, r.netEquity()[4], 1e-15);
-        assertEquals(0.85, r.netEquity()[5], 1e-15);
-        assertEquals(0.85, r.netEquity()[9], 1e-15);
+        assertEquals(1.0, r.netEquity(4), 1e-15);
+        assertEquals(0.85, r.netEquity(5), 1e-15);
+        assertEquals(0.85, r.netEquity(9), 1e-15);
     }
 
     @Test
@@ -218,8 +218,8 @@ class AlphaEngineTest {
                         .withFillPolicy(FillPolicy.CLOSE).withFinancing(252, 0.0252, 0.05),
                 (c, s, t) -> new double[]{0.5, -0.5});
         double perBar = 1 + 0.0001 - 0.00005;
-        assertEquals(Math.pow(perBar, 10), r.netEquity()[10], 1e-13);
-        assertEquals(1.0, r.grossEquity()[10], 1e-15);
+        assertEquals(Math.pow(perBar, 10), r.netEquity(10), 1e-13);
+        assertEquals(1.0, r.grossEquity(10), 1e-15);
         assertTrue(r.financingDrag() < 0, "the book earned net interest");
     }
 
@@ -238,8 +238,8 @@ class AlphaEngineTest {
         // Flat prices: impact is zero (zero vol), equity stays at 1. After each
         // of the first four fills the L1 gap is 0.4, 0.3, 0.2, 0.1; the fifth
         // fill completes the target and ends the tracking period.
-        assertEquals(1.0, r.netEquity()[r.netEquity().length - 1], 1e-15);
-        int bars = r.netEquity().length - 1;
+        assertEquals(1.0, r.netEquity(r.netEquityLength() - 1), 1e-15);
+        int bars = r.netEquityLength() - 1;
         double expectedGap = (0.4 + 0.3 + 0.2 + 0.1) / 2 / 4;
         assertEquals(expectedGap, r.meanTrackingGap(), 1e-12);
         assertTrue(bars > 5);
@@ -253,7 +253,7 @@ class AlphaEngineTest {
         PortfolioConstruction.Book book = PortfolioConstruction.zScoreBook(scores, 1.0, 0.10);
         assertEquals(0, book.net(), 1e-12);
         assertEquals(1.0, book.gross(), 1e-12);
-        for (double w : book.weights()) {
+        for (double w : book.weightsCopy()) {
             assertTrue(Math.abs(w) <= 0.10 + 1e-12);
         }
         assertFalse(book.grossShortfall());
@@ -307,7 +307,7 @@ class AlphaEngineTest {
                         Double.POSITIVE_INFINITY},
                 TurnoverAwareOptimizer.Settings.of(2.0, 0));
         assertTrue(r.converged());
-        assertArrayEquals(expected, r.weights(), 1e-7);
+        assertArrayEquals(expected, r.weightsCopy(), 1e-7);
     }
 
     @Test
@@ -327,11 +327,11 @@ class AlphaEngineTest {
                 dollar, caps, trade, TurnoverAwareOptimizer.Settings.of(1.0, 0.05));
         assertTrue(free.converged() && sticky.converged());
         assertTrue(free.equalityResidual() < 1e-6 && sticky.equalityResidual() < 1e-6);
-        for (double w : free.weights()) {
+        for (double w : free.weightsCopy()) {
             assertTrue(Math.abs(w) <= 0.15 + 1e-12);
         }
         // A penalty larger than any marginal alpha keeps the old book.
-        assertArrayEquals(prev, sticky.weights(), 1e-6);
+        assertArrayEquals(prev, sticky.weightsCopy(), 1e-6);
         assertTrue(free.turnover() > 0.01);
         // Optimality check of the free solution by perturbation along the
         // dollar-neutral directions: no feasible small move improves it.
@@ -341,7 +341,7 @@ class AlphaEngineTest {
                 if (i == j) {
                     continue;
                 }
-                double[] w = free.weights().clone();
+                double[] w = free.weightsCopy().clone();
                 w[i] += 1e-4;
                 w[j] -= 1e-4;
                 if (Math.abs(w[i]) > 0.15 || Math.abs(w[j]) > 0.15) {

@@ -1,13 +1,15 @@
 package com.quantfinlib.sbe;
 
+import com.quantfinlib.marketdata.StridedSequences;
 import com.quantfinlib.orderbook.Side;
 import com.quantfinlib.trading.OrderListener;
+import com.quantfinlib.util.ThreadPlacement;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.ReadableByteChannel;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.ThreadFactory;
 
 /**
  * Venue side of the binary order channel: decodes {@link OrderFlyweight}
@@ -24,31 +26,51 @@ public final class BinaryOrderReceiver implements AutoCloseable {
     private final ByteBuffer buffer;
     private final OrderFlyweight order = new OrderFlyweight();
     private final int[] kind = new int[1];
-    private final Thread readerThread;
+    private Thread readerThread;
+    private ThreadFactory threadFactory = ThreadPlacement.daemon("binary-order-receiver");
     private volatile boolean running = true;
-    private final AtomicLong ordersReceived = new AtomicLong();
-    private final AtomicLong skippedMessages = new AtomicLong();
+    // Reader-thread counters: single writer, opaque increments on padded slots.
+    private static final int RECEIVED = 0;
+    private static final int SKIPPED = 1;
+    private final StridedSequences counters = new StridedSequences(2);
     private volatile String failureReason;
 
     public BinaryOrderReceiver(ReadableByteChannel channel, OrderListener listener) {
         this.channel = channel;
         this.listener = listener;
         this.buffer = ByteBuffer.allocateDirect(1 << 14).order(ByteOrder.LITTLE_ENDIAN);
-        this.readerThread = new Thread(this::readLoop, "binary-order-receiver");
-        readerThread.setDaemon(true);
     }
 
-    public void start() {
+    /**
+     * Replaces the factory that creates the reader thread (naming, CPU
+     * placement; see {@link ThreadPlacement}). Call before {@link #start()}.
+     *
+     * @param factory thread factory
+     * @return this receiver
+     */
+    public synchronized BinaryOrderReceiver threadFactory(ThreadFactory factory) {
+        if (factory == null) {
+            throw new IllegalArgumentException("factory is required");
+        }
+        this.threadFactory = factory;
+        return this;
+    }
+
+    public synchronized void start() {
+        if (readerThread != null) {
+            return;
+        }
+        readerThread = threadFactory.newThread(this::readLoop);
         readerThread.start();
     }
 
     public long ordersReceived() {
-        return ordersReceived.get();
+        return counters.getOpaque(RECEIVED);
     }
 
     /** Frames of other templates, skipped by block length. */
     public long skippedMessages() {
-        return skippedMessages.get();
+        return counters.getOpaque(SKIPPED);
     }
 
     /** Non-null once the reader stopped on a protocol or I/O error. */
@@ -81,7 +103,7 @@ public final class BinaryOrderReceiver implements AutoCloseable {
                         order.wrap(buffer, position);
                         listener.onOrder(order.orderId(), order.symbolId(), order.side(),
                                 order.quantity(), order.price(), order.timestampNanos());
-                        ordersReceived.incrementAndGet();
+                        counters.incrementOpaque(RECEIVED);
                     } else if (k == -2) {
                         listener.onOrder(buffer.getLong(position + SbeFrames.V1_ORDER_ID),
                                 buffer.getInt(position + SbeFrames.V1_ORDER_SYMBOL),
@@ -90,9 +112,9 @@ public final class BinaryOrderReceiver implements AutoCloseable {
                                 buffer.getLong(position + SbeFrames.V1_ORDER_QTY),
                                 buffer.getDouble(position + SbeFrames.V1_ORDER_PRICE),
                                 buffer.getLong(position + SbeFrames.V1_ORDER_TS));
-                        ordersReceived.incrementAndGet();
+                        counters.incrementOpaque(RECEIVED);
                     } else {
-                        skippedMessages.incrementAndGet();
+                        counters.incrementOpaque(SKIPPED);
                     }
                     buffer.position(position + length);
                 }

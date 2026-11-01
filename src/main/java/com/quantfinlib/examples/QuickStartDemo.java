@@ -89,7 +89,7 @@ public final class QuickStartDemo {
         BarSeries equity = series[1];
 
         // ---- 9. Technical indicators ---------------------------------
-        double[] close = equity.closes();
+        double[] close = equity.closesCopy();
         double[] rsi = Indicators.rsi(close, 14);
         System.out.printf("RSI(14) last = %.1f, ATR(14) last = %.3f%n",
                 rsi[rsi.length - 1], Indicators.atr(equity, 14)[equity.size() - 1]);
@@ -147,7 +147,7 @@ public final class QuickStartDemo {
 
         // ---- 8. Monte Carlo simulation -------------------------------
         SimulationResult sim = new MonteCarloSimulator(7).simulatePortfolio(
-                1_000_000, maxSharpe.weights(), dailyMeans(returns), dailyCov, 252, 50_000);
+                1_000_000, maxSharpe.weightsCopy(), dailyMeans(returns), dailyCov, 252, 50_000);
         System.out.println(sim);
 
         // ---- 7. Stock screener ---------------------------------------
@@ -266,7 +266,7 @@ public final class QuickStartDemo {
 
         // ---- 18. Cointegration gate for pairs trades --------------------
         CointegrationTest.EngleGrangerResult eg = CointegrationTest.engleGranger(
-                series[2].closes(), series[1].closes());
+                series[2].closesCopy(), series[1].closesCopy());
         System.out.printf("Engle-Granger %s vs %s: adf t=%.2f, cointegrated@5%%=%b%n",
                 symbols[2], symbols[1], eg.adfTStatistic(), eg.cointegrated5pct());
 
@@ -339,12 +339,12 @@ public final class QuickStartDemo {
                 .addPortfolioSummary(portfolio)
                 .addStrategyPerformance(dslResult)
                 .addEquityCurveChart("Equity Curve: " + dslResult.strategyName(),
-                        dslResult.equityCurve())
-                .addDrawdownChart("Drawdown", dslResult.equityCurve())
+                        dslResult.equityCurveCopy())
+                .addDrawdownChart("Drawdown", dslResult.equityCurveCopy())
                 .addRiskAnalysis(risk)
                 .addAllocation(java.util.Map.of(
-                        symbols[0], maxSharpe.weights()[0], symbols[1], maxSharpe.weights()[1],
-                        symbols[2], maxSharpe.weights()[2], symbols[3], maxSharpe.weights()[3]))
+                        symbols[0], maxSharpe.weights(0), symbols[1], maxSharpe.weights(1),
+                        symbols[2], maxSharpe.weights(2), symbols[3], maxSharpe.weights(3)))
                 .addMonteCarlo(sim)
                 .addTradeHistory(dslResult.trades())
                 .addTechnicalSummary(equity)

@@ -28,8 +28,8 @@ public final class EmaCrossStrategy implements TradingStrategy {
 
     @Override
     public void init(BarSeries series) {
-        fast = Indicators.ema(series.closes(), fastPeriod);
-        slow = Indicators.ema(series.closes(), slowPeriod);
+        fast = Indicators.ema(series.closesCopy(), fastPeriod);
+        slow = Indicators.ema(series.closesCopy(), slowPeriod);
     }
 
     @Override

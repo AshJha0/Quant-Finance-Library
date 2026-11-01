@@ -51,8 +51,80 @@ public final class CrbRouter {
      * array passed in; {@code expectedCostBps} is the blended expected
      * cost of the whole allocation.
      */
-    public record Allocation(double internal, double[] dark, double lit,
-                             double expectedCostBps) {
+    public static final class Allocation {
+        private final double internal;
+        private final double[] dark;
+        private final double lit;
+        private final double expectedCostBps;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         */
+        public Allocation(double internal, double[] dark, double lit, double expectedCostBps) {
+            this.internal = internal;
+            this.dark = dark == null ? null : dark.clone();
+            this.lit = lit;
+            this.expectedCostBps = expectedCostBps;
+        }
+
+        /** {@code internal}. */
+        public double internal() {
+            return internal;
+        }
+
+        /** Element {@code i} of {@code dark}. */
+        public double dark(int i) {
+            return dark[i];
+        }
+
+        /** Length of {@code dark}. */
+        public int darkLength() {
+            return dark.length;
+        }
+
+        /** A fresh copy of {@code dark}. */
+        public double[] darkCopy() {
+            return dark == null ? null : dark.clone();
+        }
+
+        /** {@code lit}. */
+        public double lit() {
+            return lit;
+        }
+
+        /** {@code expectedCostBps}. */
+        public double expectedCostBps() {
+            return expectedCostBps;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Allocation o)) {
+                return false;
+            }
+            return Double.compare(internal, o.internal) == 0
+                    && java.util.Arrays.equals(dark, o.dark)
+                    && Double.compare(lit, o.lit) == 0
+                    && Double.compare(expectedCostBps, o.expectedCostBps) == 0;
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + Double.hashCode(internal);
+            h = 31 * h + java.util.Arrays.hashCode(dark);
+            h = 31 * h + Double.hashCode(lit);
+            h = 31 * h + Double.hashCode(expectedCostBps);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "Allocation[" + "internal=" + internal + ", " + "dark=" + java.util.Arrays.toString(dark) + ", " + "lit=" + lit + ", " + "expectedCostBps=" + expectedCostBps + "]";
+        }
     }
 
     private CrbRouter() {

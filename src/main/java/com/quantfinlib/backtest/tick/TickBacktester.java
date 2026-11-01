@@ -119,9 +119,99 @@ public final class TickBacktester implements TickFileReader.ReplayHandler, TickT
         }
     }
 
-    public record TickBacktestResult(String strategyName, List<Execution> fills,
-                                     double[] sampledEquity, double finalEquity,
-                                     long ticksProcessed, PerformanceMetrics metrics) {
+    public static final class TickBacktestResult {
+        private final String strategyName;
+        private final List<Execution> fills;
+        private final double[] sampledEquity;
+        private final double finalEquity;
+        private final long ticksProcessed;
+        private final PerformanceMetrics metrics;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         */
+        public TickBacktestResult(String strategyName, List<Execution> fills, double[] sampledEquity,
+                double finalEquity, long ticksProcessed, PerformanceMetrics metrics) {
+            this.strategyName = strategyName;
+            this.fills = List.copyOf(fills);
+            this.sampledEquity = sampledEquity == null ? null : sampledEquity.clone();
+            this.finalEquity = finalEquity;
+            this.ticksProcessed = ticksProcessed;
+            this.metrics = metrics;
+        }
+
+        /** {@code strategyName}. */
+        public String strategyName() {
+            return strategyName;
+        }
+
+        /** {@code fills}. */
+        public List<Execution> fills() {
+            return fills;
+        }
+
+        /** Element {@code i} of {@code sampledEquity}. */
+        public double sampledEquity(int i) {
+            return sampledEquity[i];
+        }
+
+        /** Length of {@code sampledEquity}. */
+        public int sampledEquityLength() {
+            return sampledEquity.length;
+        }
+
+        /** A fresh copy of {@code sampledEquity}. */
+        public double[] sampledEquityCopy() {
+            return sampledEquity == null ? null : sampledEquity.clone();
+        }
+
+        /** {@code finalEquity}. */
+        public double finalEquity() {
+            return finalEquity;
+        }
+
+        /** {@code ticksProcessed}. */
+        public long ticksProcessed() {
+            return ticksProcessed;
+        }
+
+        /** {@code metrics}. */
+        public PerformanceMetrics metrics() {
+            return metrics;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof TickBacktestResult o)) {
+                return false;
+            }
+            return java.util.Objects.equals(strategyName, o.strategyName)
+                    && java.util.Objects.equals(fills, o.fills)
+                    && java.util.Arrays.equals(sampledEquity, o.sampledEquity)
+                    && Double.compare(finalEquity, o.finalEquity) == 0
+                    && ticksProcessed == o.ticksProcessed
+                    && java.util.Objects.equals(metrics, o.metrics);
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + java.util.Objects.hashCode(strategyName);
+            h = 31 * h + java.util.Objects.hashCode(fills);
+            h = 31 * h + java.util.Arrays.hashCode(sampledEquity);
+            h = 31 * h + Double.hashCode(finalEquity);
+            h = 31 * h + Long.hashCode(ticksProcessed);
+            h = 31 * h + java.util.Objects.hashCode(metrics);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "TickBacktestResult[" + "strategyName=" + strategyName + ", " + "fills=" + fills + ", " + "sampledEquity=" + java.util.Arrays.toString(sampledEquity) + ", " + "finalEquity=" + finalEquity + ", " + "ticksProcessed=" + ticksProcessed + ", " + "metrics=" + metrics + "]";
+        }
     }
 
     private static final double PRICE_EPS = 1e-9;

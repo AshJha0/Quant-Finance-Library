@@ -60,7 +60,9 @@ public final class FixExecReportView {
     /**
      * Parses one framed message in place. Returns {@code true} when it is
      * an ExecutionReport (35=8); other message types return {@code false}
-     * and leave the getters undefined. Zero allocation.
+     * and leave the getters undefined. Zero allocation. The buffer is not
+     * copied: the caller keeps ownership and must not overwrite those bytes
+     * while reading through this view.
      */
     public boolean wrap(byte[] buffer, int offset, int length) {
         this.buf = buffer;
@@ -264,9 +266,15 @@ public final class FixExecReportView {
         return textLength;
     }
 
-    /** The wrapped buffer, for reading the in-place byte fields. */
-    public byte[] buffer() {
-        return buf;
+    /**
+     * Byte {@code i} of the wrapped buffer, for reading in-place byte fields
+     * at the offsets reported by this view. The buffer itself is not handed out.
+     *
+     * @param i absolute index in the wrapped buffer
+     * @return the byte
+     */
+    public byte byteAt(int i) {
+        return buf[i];
     }
 
     /** Text(58) as a String (allocates; for logging rejects, not the fill path). */
@@ -356,7 +364,7 @@ public final class FixExecReportView {
             if (!view.hasExecId()) {
                 return true;
             }
-            return firstSeen(view.buffer(), view.execIdOffset(), view.execIdLength());
+            return firstSeen(view.buf, view.execIdOffset(), view.execIdLength());
         }
 
         /** As {@link #firstSeen(FixExecReportView)} for raw ExecID bytes. */

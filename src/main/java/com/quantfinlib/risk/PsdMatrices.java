@@ -1,5 +1,7 @@
 package com.quantfinlib.risk;
 
+import com.quantfinlib.util.ValueArrays;
+
 /**
  * Factorisation and repair of symmetric positive semi-definite matrices:
  * the one place in the risk, simulation and copula code that decides what a
@@ -40,7 +42,72 @@ public final class PsdMatrices {
     }
 
     /** Eigenvalues (descending) and matching unit eigenvectors {@code vectors[k]}. */
-    public record Eigen(double[] values, double[][] vectors) {
+    public static final class Eigen {
+        private final double[] values;
+        private final double[][] vectors;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         */
+        public Eigen(double[] values, double[][] vectors) {
+            this.values = values == null ? null : values.clone();
+            this.vectors = ValueArrays.copy(vectors);
+        }
+
+        /** Element {@code i} of {@code values}. */
+        public double values(int i) {
+            return values[i];
+        }
+
+        /** Length of {@code values}. */
+        public int valuesLength() {
+            return values.length;
+        }
+
+        /** A fresh copy of {@code values}. */
+        public double[] valuesCopy() {
+            return values == null ? null : values.clone();
+        }
+
+        /** Element {@code [i][j]} of {@code vectors}. */
+        public double vectors(int i, int j) {
+            return vectors[i][j];
+        }
+
+        /** Number of rows of {@code vectors}. */
+        public int vectorsRows() {
+            return vectors.length;
+        }
+
+        /** A deep copy of {@code vectors}. */
+        public double[][] vectorsCopy() {
+            return ValueArrays.copy(vectors);
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Eigen o)) {
+                return false;
+            }
+            return java.util.Arrays.equals(values, o.values)
+                    && java.util.Arrays.deepEquals(vectors, o.vectors);
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + java.util.Arrays.hashCode(values);
+            h = 31 * h + java.util.Arrays.deepHashCode(vectors);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "Eigen[" + "values=" + java.util.Arrays.toString(values) + ", " + "vectors=" + java.util.Arrays.deepToString(vectors) + "]";
+        }
     }
 
     /**
@@ -201,11 +268,11 @@ public final class PsdMatrices {
         Eigen e = symmetricEigen(a);
         double[][] out = new double[n][n];
         for (int k = 0; k < n; k++) {
-            double lam = e.values()[k];
+            double lam = e.values(k);
             if (lam <= 0) {
                 continue;
             }
-            double[] vk = e.vectors()[k];
+            double[] vk = e.vectors[k];
             for (int i = 0; i < n; i++) {
                 double vi = lam * vk[i];
                 for (int j = 0; j < n; j++) {

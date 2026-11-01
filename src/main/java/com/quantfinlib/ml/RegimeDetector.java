@@ -1,6 +1,7 @@
 package com.quantfinlib.ml;
 
 import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.util.ValueArrays;
 
 import java.util.SplittableRandom;
 
@@ -29,19 +30,181 @@ import java.util.SplittableRandom;
  */
 public final class RegimeDetector {
 
-    public record RegimeModel(
-            double[] means,                      // per-state mean return
-            double[] stdDevs,                    // per-state volatility (state 1 = high vol)
-            double[][] transition,               // transition[i][j] = P(next=j | now=i)
-            double logLikelihood,
-            double[] smoothedHighVolProbability, // P(high vol at t | all data): ex post only
-            double[] filteredHighVolProbability, // P(high vol at t | data up to t): causal
-            double[] currentProbabilities,       // filtered P(state | data up to T)
-            int currentRegime) {                 // argmax of currentProbabilities
+    public static final class RegimeModel {
+        private final double[] means;
+        private final double[] stdDevs;
+        private final double[][] transition;
+        private final double logLikelihood;
+        private final double[] smoothedHighVolProbability;
+        private final double[] filteredHighVolProbability;
+        private final double[] currentProbabilities;
+        private final int currentRegime;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         *
+         * @param means per-state mean return
+         * @param stdDevs per-state volatility (state 1 = high vol)
+         * @param transition transition[i][j] = P(next=j | now=i)
+         * @param smoothedHighVolProbability P(high vol at t | all data): ex post only
+         * @param filteredHighVolProbability P(high vol at t | data up to t): causal
+         * @param currentProbabilities filtered P(state | data up to T)
+         */
+        public RegimeModel(double[] means, double[] stdDevs, double[][] transition, double logLikelihood,
+                double[] smoothedHighVolProbability, double[] filteredHighVolProbability,
+                double[] currentProbabilities, int currentRegime) {
+            this.means = means == null ? null : means.clone();
+            this.stdDevs = stdDevs == null ? null : stdDevs.clone();
+            this.transition = ValueArrays.copy(transition);
+            this.logLikelihood = logLikelihood;
+            this.smoothedHighVolProbability = smoothedHighVolProbability == null ? null : smoothedHighVolProbability.clone();
+            this.filteredHighVolProbability = filteredHighVolProbability == null ? null : filteredHighVolProbability.clone();
+            this.currentProbabilities = currentProbabilities == null ? null : currentProbabilities.clone();
+            this.currentRegime = currentRegime;
+        }
+
+        /** Element {@code i} of {@code means} (per-state mean return). */
+        public double means(int i) {
+            return means[i];
+        }
+
+        /** Length of {@code means}. */
+        public int meansLength() {
+            return means.length;
+        }
+
+        /** A fresh copy of {@code means}. */
+        public double[] meansCopy() {
+            return means == null ? null : means.clone();
+        }
+
+        /** Element {@code i} of {@code stdDevs} (per-state volatility (state 1 = high vol)). */
+        public double stdDevs(int i) {
+            return stdDevs[i];
+        }
+
+        /** Length of {@code stdDevs}. */
+        public int stdDevsLength() {
+            return stdDevs.length;
+        }
+
+        /** A fresh copy of {@code stdDevs}. */
+        public double[] stdDevsCopy() {
+            return stdDevs == null ? null : stdDevs.clone();
+        }
+
+        /** Element {@code [i][j]} of {@code transition} (transition[i][j] = P(next=j | now=i)). */
+        public double transition(int i, int j) {
+            return transition[i][j];
+        }
+
+        /** Number of rows of {@code transition}. */
+        public int transitionRows() {
+            return transition.length;
+        }
+
+        /** A deep copy of {@code transition}. */
+        public double[][] transitionCopy() {
+            return ValueArrays.copy(transition);
+        }
+
+        /** {@code logLikelihood}. */
+        public double logLikelihood() {
+            return logLikelihood;
+        }
+
+        /** Element {@code i} of {@code smoothedHighVolProbability} (P(high vol at t | all data): ex post only). */
+        public double smoothedHighVolProbability(int i) {
+            return smoothedHighVolProbability[i];
+        }
+
+        /** Length of {@code smoothedHighVolProbability}. */
+        public int smoothedHighVolProbabilityLength() {
+            return smoothedHighVolProbability.length;
+        }
+
+        /** A fresh copy of {@code smoothedHighVolProbability}. */
+        public double[] smoothedHighVolProbabilityCopy() {
+            return smoothedHighVolProbability == null ? null : smoothedHighVolProbability.clone();
+        }
+
+        /** Element {@code i} of {@code filteredHighVolProbability} (P(high vol at t | data up to t): causal). */
+        public double filteredHighVolProbability(int i) {
+            return filteredHighVolProbability[i];
+        }
+
+        /** Length of {@code filteredHighVolProbability}. */
+        public int filteredHighVolProbabilityLength() {
+            return filteredHighVolProbability.length;
+        }
+
+        /** A fresh copy of {@code filteredHighVolProbability}. */
+        public double[] filteredHighVolProbabilityCopy() {
+            return filteredHighVolProbability == null ? null : filteredHighVolProbability.clone();
+        }
+
+        /** Element {@code i} of {@code currentProbabilities} (filtered P(state | data up to T)). */
+        public double currentProbabilities(int i) {
+            return currentProbabilities[i];
+        }
+
+        /** Length of {@code currentProbabilities}. */
+        public int currentProbabilitiesLength() {
+            return currentProbabilities.length;
+        }
+
+        /** A fresh copy of {@code currentProbabilities}. */
+        public double[] currentProbabilitiesCopy() {
+            return currentProbabilities == null ? null : currentProbabilities.clone();
+        }
+
+        /** {@code currentRegime}. */
+        public int currentRegime() {
+            return currentRegime;
+        }
+
+                 // argmax of currentProbabilities
 
         /** Expected persistence of a regime in periods: 1 / (1 - p_stay). */
         public double expectedDuration(int state) {
             return 1 / (1 - transition[state][state]);
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof RegimeModel o)) {
+                return false;
+            }
+            return java.util.Arrays.equals(means, o.means)
+                    && java.util.Arrays.equals(stdDevs, o.stdDevs)
+                    && java.util.Arrays.deepEquals(transition, o.transition)
+                    && Double.compare(logLikelihood, o.logLikelihood) == 0
+                    && java.util.Arrays.equals(smoothedHighVolProbability, o.smoothedHighVolProbability)
+                    && java.util.Arrays.equals(filteredHighVolProbability, o.filteredHighVolProbability)
+                    && java.util.Arrays.equals(currentProbabilities, o.currentProbabilities)
+                    && currentRegime == o.currentRegime;
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + java.util.Arrays.hashCode(means);
+            h = 31 * h + java.util.Arrays.hashCode(stdDevs);
+            h = 31 * h + java.util.Arrays.deepHashCode(transition);
+            h = 31 * h + Double.hashCode(logLikelihood);
+            h = 31 * h + java.util.Arrays.hashCode(smoothedHighVolProbability);
+            h = 31 * h + java.util.Arrays.hashCode(filteredHighVolProbability);
+            h = 31 * h + java.util.Arrays.hashCode(currentProbabilities);
+            h = 31 * h + Integer.hashCode(currentRegime);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "RegimeModel[" + "means=" + java.util.Arrays.toString(means) + ", " + "stdDevs=" + java.util.Arrays.toString(stdDevs) + ", " + "transition=" + java.util.Arrays.deepToString(transition) + ", " + "logLikelihood=" + logLikelihood + ", " + "smoothedHighVolProbability=" + java.util.Arrays.toString(smoothedHighVolProbability) + ", " + "filteredHighVolProbability=" + java.util.Arrays.toString(filteredHighVolProbability) + ", " + "currentProbabilities=" + java.util.Arrays.toString(currentProbabilities) + ", " + "currentRegime=" + currentRegime + "]";
         }
     }
 
@@ -262,14 +425,14 @@ public final class RegimeDetector {
         double[][] la = new double[2][2];
         for (int i = 0; i < 2; i++) {
             for (int j = 0; j < 2; j++) {
-                la[i][j] = Math.log(model.transition()[i][j]);
+                la[i][j] = Math.log(model.transition(i, j));
             }
         }
         double[] v = new double[2];
         int[][] back = new int[n][2];
         for (int j = 0; j < 2; j++) {
-            v[j] = Math.log(0.5) + logDensity(returns[0], model.means()[j],
-                    model.stdDevs()[j] * model.stdDevs()[j]);
+            v[j] = Math.log(0.5) + logDensity(returns[0], model.means(j),
+                    model.stdDevs(j) * model.stdDevs(j));
         }
         for (int t = 1; t < n; t++) {
             double[] next = new double[2];
@@ -277,8 +440,8 @@ public final class RegimeDetector {
                 double s0 = v[0] + la[0][j];
                 double s1 = v[1] + la[1][j];
                 back[t][j] = s1 > s0 ? 1 : 0;
-                next[j] = Math.max(s0, s1) + logDensity(returns[t], model.means()[j],
-                        model.stdDevs()[j] * model.stdDevs()[j]);
+                next[j] = Math.max(s0, s1) + logDensity(returns[t], model.means(j),
+                        model.stdDevs(j) * model.stdDevs(j));
             }
             v = next;
         }

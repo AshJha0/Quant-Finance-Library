@@ -1,6 +1,7 @@
 package com.quantfinlib.optimization;
 
 import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.util.ValueArrays;
 
 /**
  * Black-Litterman expected returns: start from the market-implied equilibrium
@@ -24,7 +25,91 @@ import com.quantfinlib.util.MathUtils;
 public final class BlackLitterman {
 
     /** Posterior mean, posterior covariance of the mean M, and Σ + M. */
-    public record Posterior(double[] mean, double[][] meanCovariance, double[][] returnCovariance) {
+    public static final class Posterior {
+        private final double[] mean;
+        private final double[][] meanCovariance;
+        private final double[][] returnCovariance;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         */
+        public Posterior(double[] mean, double[][] meanCovariance, double[][] returnCovariance) {
+            this.mean = mean == null ? null : mean.clone();
+            this.meanCovariance = ValueArrays.copy(meanCovariance);
+            this.returnCovariance = ValueArrays.copy(returnCovariance);
+        }
+
+        /** Element {@code i} of {@code mean}. */
+        public double mean(int i) {
+            return mean[i];
+        }
+
+        /** Length of {@code mean}. */
+        public int meanLength() {
+            return mean.length;
+        }
+
+        /** A fresh copy of {@code mean}. */
+        public double[] meanCopy() {
+            return mean == null ? null : mean.clone();
+        }
+
+        /** Element {@code [i][j]} of {@code meanCovariance}. */
+        public double meanCovariance(int i, int j) {
+            return meanCovariance[i][j];
+        }
+
+        /** Number of rows of {@code meanCovariance}. */
+        public int meanCovarianceRows() {
+            return meanCovariance.length;
+        }
+
+        /** A deep copy of {@code meanCovariance}. */
+        public double[][] meanCovarianceCopy() {
+            return ValueArrays.copy(meanCovariance);
+        }
+
+        /** Element {@code [i][j]} of {@code returnCovariance}. */
+        public double returnCovariance(int i, int j) {
+            return returnCovariance[i][j];
+        }
+
+        /** Number of rows of {@code returnCovariance}. */
+        public int returnCovarianceRows() {
+            return returnCovariance.length;
+        }
+
+        /** A deep copy of {@code returnCovariance}. */
+        public double[][] returnCovarianceCopy() {
+            return ValueArrays.copy(returnCovariance);
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Posterior o)) {
+                return false;
+            }
+            return java.util.Arrays.equals(mean, o.mean)
+                    && java.util.Arrays.deepEquals(meanCovariance, o.meanCovariance)
+                    && java.util.Arrays.deepEquals(returnCovariance, o.returnCovariance);
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + java.util.Arrays.hashCode(mean);
+            h = 31 * h + java.util.Arrays.deepHashCode(meanCovariance);
+            h = 31 * h + java.util.Arrays.deepHashCode(returnCovariance);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "Posterior[" + "mean=" + java.util.Arrays.toString(mean) + ", " + "meanCovariance=" + java.util.Arrays.deepToString(meanCovariance) + ", " + "returnCovariance=" + java.util.Arrays.deepToString(returnCovariance) + "]";
+        }
     }
 
     private BlackLitterman() {
@@ -55,7 +140,7 @@ public final class BlackLitterman {
     public static double[] posteriorReturns(double tau, double[][] covariance,
                                             double[] equilibriumReturns,
                                             double[][] p, double[] q, double[] omegaDiag) {
-        return posterior(tau, covariance, equilibriumReturns, p, q, omegaDiag).mean();
+        return posterior(tau, covariance, equilibriumReturns, p, q, omegaDiag).meanCopy();
     }
 
     /** Full posterior: mean, covariance of the mean and covariance of returns. */

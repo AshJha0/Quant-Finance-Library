@@ -58,6 +58,9 @@ public final class DrawdownAnalytics {
      */
     public record Result(double maxDepth, int maxDuration, double timeUnderWater,
                          List<Drawdown> episodes) {
+        public Result {
+            episodes = List.copyOf(episodes);
+        }
     }
 
     private DrawdownAnalytics() {

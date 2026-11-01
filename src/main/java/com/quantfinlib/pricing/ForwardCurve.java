@@ -13,7 +13,52 @@ import java.util.Arrays;
  */
 public final class ForwardCurve {
 
-    private record Pillars(double[] tenors, double[] outrights) {
+    private static final class Pillars {
+        private final double[] tenors;
+        private final double[] outrights;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         */
+        Pillars(double[] tenors, double[] outrights) {
+            this.tenors = tenors;
+            this.outrights = outrights;
+        }
+
+        /** {@code tenors}. */
+        double[] tenors() {
+            return tenors;
+        }
+
+        /** {@code outrights}. */
+        double[] outrights() {
+            return outrights;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Pillars o)) {
+                return false;
+            }
+            return java.util.Arrays.equals(tenors, o.tenors)
+                    && java.util.Arrays.equals(outrights, o.outrights);
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + java.util.Arrays.hashCode(tenors);
+            h = 31 * h + java.util.Arrays.hashCode(outrights);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "Pillars[" + "tenors=" + java.util.Arrays.toString(tenors) + ", " + "outrights=" + java.util.Arrays.toString(outrights) + "]";
+        }
     }
 
     private final double spot;

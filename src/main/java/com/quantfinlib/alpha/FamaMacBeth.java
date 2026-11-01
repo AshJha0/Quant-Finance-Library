@@ -38,18 +38,146 @@ import com.quantfinlib.util.MathUtils;
  */
 public final class FamaMacBeth {
 
-    /**
-     * @param premia         mean per-period premium per factor
-     * @param tStats         Newey-West t-stat per factor
-     * @param interceptMean  mean per-period intercept (should be near 0)
-     * @param interceptTStat its Newey-West t-stat
-     * @param periodsUsed    cross-sections that had enough assets
-     * @param naiveTStats    iid t-stats per factor, for comparison
-     * @param hacLags        Bartlett lag used per factor
-     */
-    public record Result(double[] premia, double[] tStats, double interceptMean,
-                         double interceptTStat, int periodsUsed, double[] naiveTStats,
-                         int[] hacLags) {
+    public static final class Result {
+        private final double[] premia;
+        private final double[] tStats;
+        private final double interceptMean;
+        private final double interceptTStat;
+        private final int periodsUsed;
+        private final double[] naiveTStats;
+        private final int[] hacLags;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         *
+         * @param premia mean per-period premium per factor
+         * @param tStats Newey-West t-stat per factor
+         * @param interceptMean mean per-period intercept (should be near 0)
+         * @param interceptTStat its Newey-West t-stat
+         * @param periodsUsed cross-sections that had enough assets
+         * @param naiveTStats iid t-stats per factor, for comparison
+         * @param hacLags Bartlett lag used per factor
+         */
+        public Result(double[] premia, double[] tStats, double interceptMean, double interceptTStat,
+                int periodsUsed, double[] naiveTStats, int[] hacLags) {
+            this.premia = premia == null ? null : premia.clone();
+            this.tStats = tStats == null ? null : tStats.clone();
+            this.interceptMean = interceptMean;
+            this.interceptTStat = interceptTStat;
+            this.periodsUsed = periodsUsed;
+            this.naiveTStats = naiveTStats == null ? null : naiveTStats.clone();
+            this.hacLags = hacLags == null ? null : hacLags.clone();
+        }
+
+        /** Element {@code i} of {@code premia} (mean per-period premium per factor). */
+        public double premia(int i) {
+            return premia[i];
+        }
+
+        /** Length of {@code premia}. */
+        public int premiaLength() {
+            return premia.length;
+        }
+
+        /** A fresh copy of {@code premia}. */
+        public double[] premiaCopy() {
+            return premia == null ? null : premia.clone();
+        }
+
+        /** Element {@code i} of {@code tStats} (Newey-West t-stat per factor). */
+        public double tStats(int i) {
+            return tStats[i];
+        }
+
+        /** Length of {@code tStats}. */
+        public int tStatsLength() {
+            return tStats.length;
+        }
+
+        /** A fresh copy of {@code tStats}. */
+        public double[] tStatsCopy() {
+            return tStats == null ? null : tStats.clone();
+        }
+
+        /** {@code interceptMean} (mean per-period intercept (should be near 0)). */
+        public double interceptMean() {
+            return interceptMean;
+        }
+
+        /** {@code interceptTStat} (its Newey-West t-stat). */
+        public double interceptTStat() {
+            return interceptTStat;
+        }
+
+        /** {@code periodsUsed} (cross-sections that had enough assets). */
+        public int periodsUsed() {
+            return periodsUsed;
+        }
+
+        /** Element {@code i} of {@code naiveTStats} (iid t-stats per factor, for comparison). */
+        public double naiveTStats(int i) {
+            return naiveTStats[i];
+        }
+
+        /** Length of {@code naiveTStats}. */
+        public int naiveTStatsLength() {
+            return naiveTStats.length;
+        }
+
+        /** A fresh copy of {@code naiveTStats}. */
+        public double[] naiveTStatsCopy() {
+            return naiveTStats == null ? null : naiveTStats.clone();
+        }
+
+        /** Element {@code i} of {@code hacLags} (Bartlett lag used per factor). */
+        public int hacLags(int i) {
+            return hacLags[i];
+        }
+
+        /** Length of {@code hacLags}. */
+        public int hacLagsLength() {
+            return hacLags.length;
+        }
+
+        /** A fresh copy of {@code hacLags}. */
+        public int[] hacLagsCopy() {
+            return hacLags == null ? null : hacLags.clone();
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Result o)) {
+                return false;
+            }
+            return java.util.Arrays.equals(premia, o.premia)
+                    && java.util.Arrays.equals(tStats, o.tStats)
+                    && Double.compare(interceptMean, o.interceptMean) == 0
+                    && Double.compare(interceptTStat, o.interceptTStat) == 0
+                    && periodsUsed == o.periodsUsed
+                    && java.util.Arrays.equals(naiveTStats, o.naiveTStats)
+                    && java.util.Arrays.equals(hacLags, o.hacLags);
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + java.util.Arrays.hashCode(premia);
+            h = 31 * h + java.util.Arrays.hashCode(tStats);
+            h = 31 * h + Double.hashCode(interceptMean);
+            h = 31 * h + Double.hashCode(interceptTStat);
+            h = 31 * h + Integer.hashCode(periodsUsed);
+            h = 31 * h + java.util.Arrays.hashCode(naiveTStats);
+            h = 31 * h + java.util.Arrays.hashCode(hacLags);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "Result[" + "premia=" + java.util.Arrays.toString(premia) + ", " + "tStats=" + java.util.Arrays.toString(tStats) + ", " + "interceptMean=" + interceptMean + ", " + "interceptTStat=" + interceptTStat + ", " + "periodsUsed=" + periodsUsed + ", " + "naiveTStats=" + java.util.Arrays.toString(naiveTStats) + ", " + "hacLags=" + java.util.Arrays.toString(hacLags) + "]";
+        }
     }
 
     private FamaMacBeth() {
@@ -123,7 +251,7 @@ public final class FamaMacBeth {
             }
             double[] lambda;
             try {
-                lambda = Ols.fit(x, y, 0).coefficients();
+                lambda = Ols.fit(x, y, 0).coefficientsCopy();
             } catch (IllegalArgumentException collinear) {
                 continue; // a collinear cross-section prices nothing that period
             }

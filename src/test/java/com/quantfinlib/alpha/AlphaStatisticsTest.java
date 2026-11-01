@@ -190,12 +190,12 @@ class AlphaStatisticsTest {
         }
         Ols.Fit fit = Ols.fit(x, y, 0);
         // slope = Sxy/Sxx = (7.8 + 2.1 + 0 + 2.1 + 7.8)/10 = 1.98; intercept = 5 - 1.98*2 = 1.04
-        assertEquals(1.98, fit.coefficients()[1], 1e-12);
-        assertEquals(1.04, fit.coefficients()[0], 1e-12);
+        assertEquals(1.98, fit.coefficients(1), 1e-12);
+        assertEquals(1.04, fit.coefficients(0), 1e-12);
         // residuals: 0.06, -0.12, 0.00, 0.12, -0.06 -> SSR = 0.036; sigma2 = 0.036/3
         double sigma2 = 0.036 / 3;
-        assertEquals(Math.sqrt(sigma2 / 10), fit.standardErrors()[1], 1e-12);
-        assertEquals(Math.sqrt(sigma2 * (1.0 / 5 + 4.0 / 10)), fit.standardErrors()[0], 1e-12);
+        assertEquals(Math.sqrt(sigma2 / 10), fit.standardErrors(1), 1e-12);
+        assertEquals(Math.sqrt(sigma2 * (1.0 / 5 + 4.0 / 10)), fit.standardErrors(0), 1e-12);
         assertThrows(IllegalArgumentException.class,
                 () -> Ols.fit(new double[][]{{1, 1}, {1, 1}, {1, 1}}, new double[]{1, 2, 3}, 0));
     }
@@ -282,11 +282,11 @@ class AlphaStatisticsTest {
             return out;
         };
         AlphaReport.LagDecay d = AlphaReport.lagIcProfile(ctx, f, 0, 8);
-        assertTrue(d.meanIcs()[0] > d.meanIcs()[3], "IC must decay with lag");
+        assertTrue(d.meanIcs(0) > d.meanIcs(3), "IC must decay with lag");
         assertEquals(-1 / Math.log(phi), d.tauBars(), 0.6);
         assertTrue(d.format().contains("half-life"));
         // Signal autocorrelation at lag 1 is about phi (rank version of it).
-        assertEquals(phi, d.signalAutocorrelation()[0], 0.05);
+        assertEquals(phi, d.signalAutocorrelation(0), 0.05);
     }
 
     @Test
@@ -410,9 +410,9 @@ class AlphaStatisticsTest {
             }
         }
         FamaMacBeth.Result r = FamaMacBeth.fit(x, y, h, false);
-        assertTrue(Math.abs(r.tStats()[0]) < Math.abs(r.naiveTStats()[0]) / 1.8,
-                "HAC t " + r.tStats()[0] + " vs iid " + r.naiveTStats()[0]);
-        assertTrue(r.hacLags()[0] >= h - 1);
+        assertTrue(Math.abs(r.tStats(0)) < Math.abs(r.naiveTStats(0)) / 1.8,
+                "HAC t " + r.tStats(0) + " vs iid " + r.naiveTStats(0));
+        assertTrue(r.hacLags(0) >= h - 1);
     }
 
     @Test
@@ -442,7 +442,7 @@ class AlphaStatisticsTest {
         for (AlphaValidation.Fold f : r.folds()) {
             oos += f.outOfSampleObservations();
         }
-        assertEquals(oos, r.outOfSampleIcSeries().length);
+        assertEquals(oos, r.outOfSampleIcSeriesLength());
     }
 
     @Test
@@ -468,7 +468,7 @@ class AlphaStatisticsTest {
             });
         }
         AlphaValidation.SensitivityResult r = AlphaValidation.parameterSensitivity(ctx, sweep, 5, 0);
-        double[] m = r.meanIcs();
+        double[] m = r.meanIcsCopy();
         int best = 0;
         for (int i = 1; i < m.length; i++) {
             if (m[i] > m[best]) {

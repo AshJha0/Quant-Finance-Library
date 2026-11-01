@@ -168,11 +168,118 @@ public final class PortfolioBacktester {
      * {@code dividendCashCredited} and {@code lifecycleEventsApplied} are
      * populated by the survivorship-aware overload (zero otherwise).
      */
-    public record Result(double[] equityCurve, PerformanceMetrics metrics,
-                         double totalCosts, double totalTurnoverNotional,
-                         Map<String, Double> finalPositions,
-                         double dividendCashCredited, int lifecycleEventsApplied,
-                         double financingCost) {
+    public static final class Result {
+        private final double[] equityCurve;
+        private final PerformanceMetrics metrics;
+        private final double totalCosts;
+        private final double totalTurnoverNotional;
+        private final Map<String, Double> finalPositions;
+        private final double dividendCashCredited;
+        private final int lifecycleEventsApplied;
+        private final double financingCost;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         */
+        public Result(double[] equityCurve, PerformanceMetrics metrics, double totalCosts,
+                double totalTurnoverNotional, Map<String, Double> finalPositions,
+                double dividendCashCredited, int lifecycleEventsApplied, double financingCost) {
+            this.equityCurve = equityCurve == null ? null : equityCurve.clone();
+            this.metrics = metrics;
+            this.totalCosts = totalCosts;
+            this.totalTurnoverNotional = totalTurnoverNotional;
+            this.finalPositions = java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(finalPositions));
+            this.dividendCashCredited = dividendCashCredited;
+            this.lifecycleEventsApplied = lifecycleEventsApplied;
+            this.financingCost = financingCost;
+        }
+
+        /** Element {@code i} of {@code equityCurve}. */
+        public double equityCurve(int i) {
+            return equityCurve[i];
+        }
+
+        /** Length of {@code equityCurve}. */
+        public int equityCurveLength() {
+            return equityCurve.length;
+        }
+
+        /** A fresh copy of {@code equityCurve}. */
+        public double[] equityCurveCopy() {
+            return equityCurve == null ? null : equityCurve.clone();
+        }
+
+        /** {@code metrics}. */
+        public PerformanceMetrics metrics() {
+            return metrics;
+        }
+
+        /** {@code totalCosts}. */
+        public double totalCosts() {
+            return totalCosts;
+        }
+
+        /** {@code totalTurnoverNotional}. */
+        public double totalTurnoverNotional() {
+            return totalTurnoverNotional;
+        }
+
+        /** {@code finalPositions}. */
+        public Map<String, Double> finalPositions() {
+            return finalPositions;
+        }
+
+        /** {@code dividendCashCredited}. */
+        public double dividendCashCredited() {
+            return dividendCashCredited;
+        }
+
+        /** {@code lifecycleEventsApplied}. */
+        public int lifecycleEventsApplied() {
+            return lifecycleEventsApplied;
+        }
+
+        /** {@code financingCost}. */
+        public double financingCost() {
+            return financingCost;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Result o)) {
+                return false;
+            }
+            return java.util.Arrays.equals(equityCurve, o.equityCurve)
+                    && java.util.Objects.equals(metrics, o.metrics)
+                    && Double.compare(totalCosts, o.totalCosts) == 0
+                    && Double.compare(totalTurnoverNotional, o.totalTurnoverNotional) == 0
+                    && java.util.Objects.equals(finalPositions, o.finalPositions)
+                    && Double.compare(dividendCashCredited, o.dividendCashCredited) == 0
+                    && lifecycleEventsApplied == o.lifecycleEventsApplied
+                    && Double.compare(financingCost, o.financingCost) == 0;
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + java.util.Arrays.hashCode(equityCurve);
+            h = 31 * h + java.util.Objects.hashCode(metrics);
+            h = 31 * h + Double.hashCode(totalCosts);
+            h = 31 * h + Double.hashCode(totalTurnoverNotional);
+            h = 31 * h + java.util.Objects.hashCode(finalPositions);
+            h = 31 * h + Double.hashCode(dividendCashCredited);
+            h = 31 * h + Integer.hashCode(lifecycleEventsApplied);
+            h = 31 * h + Double.hashCode(financingCost);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "Result[" + "equityCurve=" + java.util.Arrays.toString(equityCurve) + ", " + "metrics=" + metrics + ", " + "totalCosts=" + totalCosts + ", " + "totalTurnoverNotional=" + totalTurnoverNotional + ", " + "finalPositions=" + finalPositions + ", " + "dividendCashCredited=" + dividendCashCredited + ", " + "lifecycleEventsApplied=" + lifecycleEventsApplied + ", " + "financingCost=" + financingCost + "]";
+        }
     }
 
     /** Same-bar processing order for terminal events (see the run loop). */

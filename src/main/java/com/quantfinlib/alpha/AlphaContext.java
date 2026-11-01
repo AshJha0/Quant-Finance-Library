@@ -66,7 +66,7 @@ public final class AlphaContext {
 
     private AlphaContext(List<String> symbols, BarSeries[] series, Fundamentals[] fundamentals,
                          FundamentalsHistory history, PointInTimeUniverse universe, int bars) {
-        this.symbols = symbols;
+        this.symbols = List.copyOf(symbols);
         this.series = series;
         this.fundamentals = fundamentals;
         this.history = history;
