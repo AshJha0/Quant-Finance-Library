@@ -82,36 +82,20 @@ public final class HftRiskGate {
             MethodHandles.arrayElementVarHandle(double[].class);
     private static final VarHandle BOOLEANS =
             MethodHandles.arrayElementVarHandle(boolean[].class);
-    private static final VarHandle MAX_ORDER_QTY;
-    private static final VarHandle MAX_ORDER_NOTIONAL;
-    private static final VarHandle MAX_POSITION;
-    private static final VarHandle COLLAR_PCT;
-    private static final VarHandle MAX_DAILY_NOTIONAL;
-    private static final VarHandle MAX_DAILY_ORDERS;
-    private static final VarHandle MAX_DAILY_LOSS;
-    private static final VarHandle DUP_WINDOW;
-    private static final VarHandle REQUIRE_REF;
     private static final VarHandle DAILY_NOTIONAL;
     private static final VarHandle DAILY_ORDERS;
     private static final VarHandle DAILY_PNL;
     private static final VarHandle KILL_EPOCH;
+    private static final VarHandle LIMITS;
 
     static {
         try {
             MethodHandles.Lookup l = MethodHandles.lookup();
-            MAX_ORDER_QTY = l.findVarHandle(HftRiskGate.class, "maxOrderQuantity", long.class);
-            MAX_ORDER_NOTIONAL = l.findVarHandle(HftRiskGate.class, "maxOrderNotional", double.class);
-            MAX_POSITION = l.findVarHandle(HftRiskGate.class, "maxPositionQuantity", long.class);
-            COLLAR_PCT = l.findVarHandle(HftRiskGate.class, "priceCollarPct", double.class);
-            MAX_DAILY_NOTIONAL = l.findVarHandle(HftRiskGate.class, "maxDailyNotional", double.class);
-            MAX_DAILY_ORDERS = l.findVarHandle(HftRiskGate.class, "maxDailyOrders", long.class);
-            MAX_DAILY_LOSS = l.findVarHandle(HftRiskGate.class, "maxDailyLoss", double.class);
-            DUP_WINDOW = l.findVarHandle(HftRiskGate.class, "duplicateWindowNanos", long.class);
-            REQUIRE_REF = l.findVarHandle(HftRiskGate.class, "requireReference", boolean.class);
             DAILY_NOTIONAL = l.findVarHandle(HftRiskGate.class, "dailyNotional", double.class);
             DAILY_ORDERS = l.findVarHandle(HftRiskGate.class, "dailyOrders", long.class);
             DAILY_PNL = l.findVarHandle(HftRiskGate.class, "dailyPnl", double.class);
             KILL_EPOCH = l.findVarHandle(HftRiskGate.class, "killEpoch", long.class);
+            LIMITS = l.findVarHandle(HftRiskGate.class, "limits", Limits.class);
         } catch (ReflectiveOperationException e) {
             throw new ExceptionInInitializerError(e);
         }
@@ -131,16 +115,43 @@ public final class HftRiskGate {
     private final double[] lastPrice;
     private final long[] lastNanos;
 
-    // Limits: accessed only through their VarHandles (acquire/release).
-    @SuppressWarnings("unused") private long maxOrderQuantity = Long.MAX_VALUE;
-    @SuppressWarnings("unused") private double maxOrderNotional = Double.MAX_VALUE;
-    @SuppressWarnings("unused") private long maxPositionQuantity = Long.MAX_VALUE;
-    @SuppressWarnings("unused") private double priceCollarPct = Double.MAX_VALUE;
-    @SuppressWarnings("unused") private double maxDailyNotional = Double.MAX_VALUE;
-    @SuppressWarnings("unused") private long maxDailyOrders = Long.MAX_VALUE;
-    @SuppressWarnings("unused") private double maxDailyLoss = Double.MAX_VALUE;
-    @SuppressWarnings("unused") private long duplicateWindowNanos;
-    @SuppressWarnings("unused") private boolean requireReference;
+    /**
+     * Every limit in one immutable object, published by a release store and
+     * read by one acquire load per check, so a check sees one complete set
+     * of limits: never some fields from before a change and some from after.
+     */
+    private static final class Limits {
+        final long maxOrderQuantity;
+        final double maxOrderNotional;
+        final long maxPositionQuantity;
+        final double priceCollarPct;
+        final double maxDailyNotional;
+        final long maxDailyOrders;
+        final double maxDailyLoss;
+        final long duplicateWindowNanos;
+        final boolean requireReference;
+
+        Limits(long maxOrderQuantity, double maxOrderNotional, long maxPositionQuantity,
+               double priceCollarPct, double maxDailyNotional, long maxDailyOrders,
+               double maxDailyLoss, long duplicateWindowNanos, boolean requireReference) {
+            this.maxOrderQuantity = maxOrderQuantity;
+            this.maxOrderNotional = maxOrderNotional;
+            this.maxPositionQuantity = maxPositionQuantity;
+            this.priceCollarPct = priceCollarPct;
+            this.maxDailyNotional = maxDailyNotional;
+            this.maxDailyOrders = maxDailyOrders;
+            this.maxDailyLoss = maxDailyLoss;
+            this.duplicateWindowNanos = duplicateWindowNanos;
+            this.requireReference = requireReference;
+        }
+    }
+
+    private static final Limits NO_LIMITS = new Limits(Long.MAX_VALUE, Double.MAX_VALUE,
+            Long.MAX_VALUE, Double.MAX_VALUE, Double.MAX_VALUE, Long.MAX_VALUE, Double.MAX_VALUE,
+            0, false);
+
+    // Limits: accessed only through LIMITS (acquire/release); setters copy on write.
+    @SuppressWarnings("unused") private Limits limits = NO_LIMITS;
     // Daily state.
     @SuppressWarnings("unused") private double dailyNotional;
     @SuppressWarnings("unused") private long dailyOrders;
@@ -169,35 +180,53 @@ public final class HftRiskGate {
     // ------------------------------------------------------------------
 
     public HftRiskGate maxOrderQuantity(long qty) {
-        MAX_ORDER_QTY.setRelease(this, qty);
+        Limits cur;
+        do {
+            cur = (Limits) LIMITS.getAcquire(this);
+        } while (!LIMITS.compareAndSet(this, cur, new Limits(qty, cur.maxOrderNotional, cur.maxPositionQuantity, cur.priceCollarPct, cur.maxDailyNotional, cur.maxDailyOrders, cur.maxDailyLoss, cur.duplicateWindowNanos, cur.requireReference)));
         return this;
     }
 
     public HftRiskGate maxOrderNotional(double notional) {
-        MAX_ORDER_NOTIONAL.setRelease(this, notional);
+        Limits cur;
+        do {
+            cur = (Limits) LIMITS.getAcquire(this);
+        } while (!LIMITS.compareAndSet(this, cur, new Limits(cur.maxOrderQuantity, notional, cur.maxPositionQuantity, cur.priceCollarPct, cur.maxDailyNotional, cur.maxDailyOrders, cur.maxDailyLoss, cur.duplicateWindowNanos, cur.requireReference)));
         return this;
     }
 
     public HftRiskGate maxPositionQuantity(long qty) {
-        MAX_POSITION.setRelease(this, qty);
+        Limits cur;
+        do {
+            cur = (Limits) LIMITS.getAcquire(this);
+        } while (!LIMITS.compareAndSet(this, cur, new Limits(cur.maxOrderQuantity, cur.maxOrderNotional, qty, cur.priceCollarPct, cur.maxDailyNotional, cur.maxDailyOrders, cur.maxDailyLoss, cur.duplicateWindowNanos, cur.requireReference)));
         return this;
     }
 
     /** Fat-finger guard versus the reference price (0.02 = 2 %). */
     public HftRiskGate priceCollarPct(double pct) {
-        COLLAR_PCT.setRelease(this, pct);
+        Limits cur;
+        do {
+            cur = (Limits) LIMITS.getAcquire(this);
+        } while (!LIMITS.compareAndSet(this, cur, new Limits(cur.maxOrderQuantity, cur.maxOrderNotional, cur.maxPositionQuantity, pct, cur.maxDailyNotional, cur.maxDailyOrders, cur.maxDailyLoss, cur.duplicateWindowNanos, cur.requireReference)));
         return this;
     }
 
     /** Cap on cumulative accepted notional since the last {@link #resetDaily}. */
     public HftRiskGate maxDailyNotional(double notional) {
-        MAX_DAILY_NOTIONAL.setRelease(this, notional);
+        Limits cur;
+        do {
+            cur = (Limits) LIMITS.getAcquire(this);
+        } while (!LIMITS.compareAndSet(this, cur, new Limits(cur.maxOrderQuantity, cur.maxOrderNotional, cur.maxPositionQuantity, cur.priceCollarPct, notional, cur.maxDailyOrders, cur.maxDailyLoss, cur.duplicateWindowNanos, cur.requireReference)));
         return this;
     }
 
     /** Cap on accepted orders since the last {@link #resetDaily}. */
     public HftRiskGate maxDailyOrders(long orders) {
-        MAX_DAILY_ORDERS.setRelease(this, orders);
+        Limits cur;
+        do {
+            cur = (Limits) LIMITS.getAcquire(this);
+        } while (!LIMITS.compareAndSet(this, cur, new Limits(cur.maxOrderQuantity, cur.maxOrderNotional, cur.maxPositionQuantity, cur.priceCollarPct, cur.maxDailyNotional, orders, cur.maxDailyLoss, cur.duplicateWindowNanos, cur.requireReference)));
         return this;
     }
 
@@ -206,7 +235,10 @@ public final class HftRiskGate {
      * pushed daily P&amp;L falls below {@code -loss}.
      */
     public HftRiskGate maxDailyLoss(double loss) {
-        MAX_DAILY_LOSS.setRelease(this, loss);
+        Limits cur;
+        do {
+            cur = (Limits) LIMITS.getAcquire(this);
+        } while (!LIMITS.compareAndSet(this, cur, new Limits(cur.maxOrderQuantity, cur.maxOrderNotional, cur.maxPositionQuantity, cur.priceCollarPct, cur.maxDailyNotional, cur.maxDailyOrders, loss, cur.duplicateWindowNanos, cur.requireReference)));
         return this;
     }
 
@@ -217,7 +249,10 @@ public final class HftRiskGate {
      * applies it.
      */
     public HftRiskGate duplicateWindowNanos(long nanos) {
-        DUP_WINDOW.setRelease(this, nanos);
+        Limits cur;
+        do {
+            cur = (Limits) LIMITS.getAcquire(this);
+        } while (!LIMITS.compareAndSet(this, cur, new Limits(cur.maxOrderQuantity, cur.maxOrderNotional, cur.maxPositionQuantity, cur.priceCollarPct, cur.maxDailyNotional, cur.maxDailyOrders, cur.maxDailyLoss, nanos, cur.requireReference)));
         return this;
     }
 
@@ -227,7 +262,22 @@ public final class HftRiskGate {
      * skipping the collar (fail closed). Default false.
      */
     public HftRiskGate requireReferencePrice(boolean require) {
-        REQUIRE_REF.setRelease(this, require);
+        Limits cur;
+        do {
+            cur = (Limits) LIMITS.getAcquire(this);
+        } while (!LIMITS.compareAndSet(this, cur, new Limits(cur.maxOrderQuantity, cur.maxOrderNotional, cur.maxPositionQuantity, cur.priceCollarPct, cur.maxDailyNotional, cur.maxDailyOrders, cur.maxDailyLoss, cur.duplicateWindowNanos, require)));
+        return this;
+    }
+
+    /**
+     * Replaces every limit at once: a concurrent {@link #check} sees either
+     * all the previous limits or all of {@code config}, never a mix.
+     */
+    public HftRiskGate limits(LimitsConfig config) {
+        LIMITS.setRelease(this, new Limits(config.maxOrderQuantity(), config.maxOrderNotional(),
+                config.maxPositionQuantity(), config.priceCollarPct(), config.maxDailyNotional(),
+                config.maxDailyOrders(), config.maxDailyLoss(), config.duplicateWindowNanos(),
+                config.requireReferencePrice()));
         return this;
     }
 
@@ -316,6 +366,7 @@ public final class HftRiskGate {
 
     private int evaluate(int symbolId, Side side, long quantity, long exposure, double price,
                          long timestampNanos, boolean newOrder) {
+        Limits lim = (Limits) LIMITS.getAcquire(this);   // one consistent set
         if ((boolean) BOOLEANS.getAcquire(killed, 0)) {
             return reject(REJECT_KILLED);
         }
@@ -326,22 +377,22 @@ public final class HftRiskGate {
         if (!(price > 0.0) || price == Double.POSITIVE_INFINITY) {
             return reject(REJECT_PRICE);
         }
-        if (quantity <= 0 || quantity > (long) MAX_ORDER_QTY.getAcquire(this)) {
+        if (quantity <= 0 || quantity > lim.maxOrderQuantity) {
             return reject(REJECT_QUANTITY);
         }
         double notional = quantity * price;
-        if (notional > (double) MAX_ORDER_NOTIONAL.getAcquire(this)) {
+        if (notional > lim.maxOrderNotional) {
             return reject(REJECT_NOTIONAL);
         }
         if (newOrder
-                && (long) DAILY_ORDERS.getAcquire(this) >= (long) MAX_DAILY_ORDERS.getAcquire(this)) {
+                && (long) DAILY_ORDERS.getAcquire(this) >= lim.maxDailyOrders) {
             return reject(REJECT_DAILY_ORDERS);
         }
         if ((double) DAILY_NOTIONAL.getAcquire(this) + exposure * price
-                > (double) MAX_DAILY_NOTIONAL.getAcquire(this)) {
+                > lim.maxDailyNotional) {
             return reject(REJECT_DAILY_NOTIONAL);
         }
-        if (-(double) DAILY_PNL.getAcquire(this) >= (double) MAX_DAILY_LOSS.getAcquire(this)) {
+        if (-(double) DAILY_PNL.getAcquire(this) >= lim.maxDailyLoss) {
             return reject(REJECT_DAILY_LOSS);
         }
         long sign = side.sign();
@@ -353,24 +404,24 @@ public final class HftRiskGate {
         // worst-case position without flipping its sign: refusing the order
         // that de-risks an over-cap book is wrong, but a "reduce" that
         // flips +1600 through zero to -1400 is a new over-cap short.
-        long cap = (long) MAX_POSITION.getAcquire(this);
+        long cap = lim.maxPositionQuantity;
         if (Math.abs(projected) > cap
                 && (Math.abs(projected) >= Math.abs(base) || (projected ^ base) < 0)) {
             return reject(REJECT_POSITION);
         }
-        double collar = (double) COLLAR_PCT.getAcquire(this);
+        double collar = lim.priceCollarPct;
         if (collar != Double.MAX_VALUE) {
             double ref = (double) DOUBLES.getAcquire(referencePrices, symbolId);
             if (!Double.isNaN(ref)) {
                 if (Math.abs(price - ref) > ref * collar) {
                     return reject(REJECT_PRICE_COLLAR);
                 }
-            } else if ((boolean) REQUIRE_REF.getAcquire(this)) {
+            } else if (lim.requireReference) {
                 return reject(REJECT_NO_REFERENCE);
             }
         }
         if (timestampNanos != Long.MIN_VALUE) {
-            long window = (long) DUP_WINDOW.getAcquire(this);
+            long window = lim.duplicateWindowNanos;
             if (window > 0
                     && lastQty[symbolId] == quantity
                     && lastPrice[symbolId] == price
@@ -457,7 +508,47 @@ public final class HftRiskGate {
     }
 
     public long maxPositionQuantity() {
-        return (long) MAX_POSITION.getAcquire(this);
+        return ((Limits) LIMITS.getAcquire(this)).maxPositionQuantity;
+    }
+
+    /** Current maximum order quantity. */
+    public long maxOrderQuantity() {
+        return ((Limits) LIMITS.getAcquire(this)).maxOrderQuantity;
+    }
+
+    /** Current maximum order notional. */
+    public double maxOrderNotional() {
+        return ((Limits) LIMITS.getAcquire(this)).maxOrderNotional;
+    }
+
+    /** Current price collar as a fraction of the reference price. */
+    public double priceCollarPct() {
+        return ((Limits) LIMITS.getAcquire(this)).priceCollarPct;
+    }
+
+    /** Current cap on cumulative daily notional. */
+    public double maxDailyNotional() {
+        return ((Limits) LIMITS.getAcquire(this)).maxDailyNotional;
+    }
+
+    /** Current cap on daily accepted orders. */
+    public long maxDailyOrders() {
+        return ((Limits) LIMITS.getAcquire(this)).maxDailyOrders;
+    }
+
+    /** Current daily loss limit (positive amount). */
+    public double maxDailyLoss() {
+        return ((Limits) LIMITS.getAcquire(this)).maxDailyLoss;
+    }
+
+    /** Current duplicate-order window in nanoseconds; 0 when disabled. */
+    public long duplicateWindowNanos() {
+        return ((Limits) LIMITS.getAcquire(this)).duplicateWindowNanos;
+    }
+
+    /** Whether a collar without a reference price fails closed. */
+    public boolean requireReferencePrice() {
+        return ((Limits) LIMITS.getAcquire(this)).requireReference;
     }
 
     public static String reasonName(int code) {
