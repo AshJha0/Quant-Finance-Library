@@ -44,13 +44,23 @@ public final class MarketImpactPredictor {
     /**
      * Probability a marketable order of {@code orderQty} sweeps beyond the
      * visible contra depth at the touch: logistic in the size/depth ratio,
-     * 0.5 exactly when the order equals the visible depth.
+     * 0.5 exactly when the order equals the visible depth. The slope 4 is a
+     * modelling choice, not an estimate; calibrate it on your own fills with
+     * {@link #sweepProbability(long, long, double)}.
      */
     public static double sweepProbability(long orderQty, long visibleContraDepth) {
+        return sweepProbability(orderQty, visibleContraDepth, 4);
+    }
+
+    /** As {@link #sweepProbability(long, long)} with an explicit logistic slope &gt; 0. */
+    public static double sweepProbability(long orderQty, long visibleContraDepth, double slope) {
+        if (!(slope > 0) || slope == Double.POSITIVE_INFINITY) {
+            throw new IllegalArgumentException("slope must be positive and finite");
+        }
         if (visibleContraDepth <= 0) {
             return 1;
         }
         double ratio = (double) orderQty / visibleContraDepth;
-        return 1.0 / (1 + Math.exp(-4 * (ratio - 1)));
+        return 1.0 / (1 + Math.exp(-slope * (ratio - 1)));
     }
 }

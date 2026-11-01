@@ -44,12 +44,26 @@ public final class GradientBoostedRegressor {
         double[] pred = new double[n];
         Arrays.fill(pred, baseline);
 
+        // Sort order of each feature depends only on x: compute it once.
+        int features = x[0].length;
+        int[][] orders = new int[features][n];
+        double[] keys = new double[n];
+        for (int f = 0; f < features; f++) {
+            for (int i = 0; i < n; i++) {
+                if (x[i].length != features || !Double.isFinite(x[i][f])) {
+                    throw new IllegalArgumentException("ragged or non-finite feature at row " + i);
+                }
+                keys[i] = x[i][f];
+                orders[f][i] = i;
+            }
+            com.quantfinlib.util.MathUtils.pairSort(keys, orders[f]);
+        }
         double[] residual = new double[n];
         for (int r = 0; r < rounds; r++) {
             for (int i = 0; i < n; i++) {
                 residual[i] = y[i] - pred[i];
             }
-            Stump best = bestStump(x, residual);
+            Stump best = bestStump(x, residual, orders);
             if (best == null) {
                 break;
             }
@@ -94,7 +108,7 @@ public final class GradientBoostedRegressor {
     // ------------------------------------------------------------------
 
     /** Finds the SSE-optimal stump over all features via sorted prefix sums. */
-    private static Stump bestStump(double[][] x, double[] residual) {
+    private static Stump bestStump(double[][] x, double[] residual, int[][] orders) {
         int n = residual.length;
         int features = x[0].length;
         double totalSum = 0;
@@ -105,13 +119,8 @@ public final class GradientBoostedRegressor {
         double bestGain = 1e-12;
         Stump best = null;
 
-        Integer[] order = new Integer[n];
         for (int f = 0; f < features; f++) {
-            final int ff = f;
-            for (int i = 0; i < n; i++) {
-                order[i] = i;
-            }
-            Arrays.sort(order, (a, b) -> Double.compare(x[a][ff], x[b][ff]));
+            int[] order = orders[f];
 
             double leftSum = 0;
             for (int k = 0; k < n - 1; k++) {
