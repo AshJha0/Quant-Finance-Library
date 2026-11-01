@@ -1,0 +1,125 @@
+# Benchmarks
+
+This is the only place in the repository that quotes performance numbers. Other documents link here.
+
+## What these numbers are, and what they are not
+
+The numbers below come from one Windows laptop. They show orders of magnitude and the shape of the latency distribution. They are not a statement of what the library achieves on a tuned trading server.
+
+Three properties of the machine limit what the numbers mean:
+
+- **Clock resolution.** `System.nanoTime()` on Windows advances in steps of about 100 ns. Every latency below about 1 µs is therefore quantised to multiples of 100 ns. `LatencyRecorder` reports each percentile as the upper bound of its histogram bucket (`p50<=501ns` means the median sample was at most 501 ns), never as a bucket midpoint.
+- **Scheduler and timer.** Windows has no core isolation, and its timer tick is 1 to 15.6 ms. The platform hiccup monitor in every run shows stalls of up to about 20 ms. These stalls dominate the open-loop tails.
+- **Hybrid CPU.** The Core 5 120U mixes performance and efficiency cores and was running on its default power plan. Threads that land on an efficiency core run slower, which is the main reason the three runs differ by up to 2x.
+
+A Linux machine with isolated cores, the `performance` governor and the settings in [ULTRA_LOW_LATENCY.md](ULTRA_LOW_LATENCY.md) section 9 would give much tighter tails. No such machine was available for this release.
+
+## Closed loop and open loop
+
+Each latency benchmark reports two measurements.
+
+- **Closed loop:** one message in flight. The next message is sent only after the previous one is consumed. This shows the cost of the path itself, but it hides queueing: if the consumer stalls, the producer stops sending, so the stall delays one sample instead of many. This is coordinated omission.
+- **Open loop:** messages are sent at a fixed rate, and each latency is measured from the time the message was due to be sent, not from when it was actually sent. A stall then shows up in every message that queued behind it. This is the number that matters for a system that cannot pause its inputs.
+
+The gap between the two, for example a 401 ns closed-loop p99 against a 149 µs open-loop p99 in the market-data benchmark, is the effect of coordinated omission on this machine.
+
+## Environment
+
+| Item | Value |
+|---|---|
+| Date | 2026-11-01 |
+| Code | branch `v2-hardening`, commit `cff580b` (the 2.0.0 release candidate) |
+| CPU | Intel Core 5 120U, 10 cores / 12 threads (hybrid P and E cores) |
+| Memory | 16 GB |
+| OS | Windows 11 Home, build 26200, default power plan |
+| JDK | Temurin 25.0.5+8 LTS |
+| JVM flags | `-Xms1g -Xmx1g -XX:+UseZGC -XX:+UseCompactObjectHeaders -XX:+AlwaysPreTouch -XX:+PerfDisableSharedMem` |
+| Runs | 3 runs of each benchmark, machine otherwise idle |
+| Clock step | about 100 ns, measured by `LatencyRecorder` |
+
+## Results
+
+Each cell shows min / median / max across the three runs.
+
+### Market data bus: `HftLatencyBenchmark`
+
+Publish a tick into the SPSC ring and run a strategy (two EMAs and an RSI) on the consumer thread.
+
+| Measure | Min | Median | Max |
+|---|---|---|---|
+| Throughput, million ticks/s | 7.9 | 8.2 | 15.0 |
+| Closed loop p50 | 200 ns | 401 ns | 401 ns |
+| Closed loop p99 | 401 ns | 803 ns | 2.42 µs |
+| Closed loop p99.9 | 603 ns | 1.81 µs | 4.70 µs |
+| Open loop at 500,000 ticks/s, p50 | 401 ns | 501 ns | 703 ns |
+| Open loop at 500,000 ticks/s, p99 | 74.75 µs | 148.48 µs | 2.75 ms |
+| Open loop at 500,000 ticks/s, p99.9 | 288.77 µs | 647.17 µs | 4.36 ms |
+
+No ticks were lost in any run: the producer waits on a full ring instead of dropping.
+
+### Order path: `HftOrderBenchmark`
+
+| Measure | Min | Median | Max |
+|---|---|---|---|
+| Risk gate check, ns (reciprocal throughput, 1,024 random symbols) | 38.8 | 39.9 | 39.9 |
+| Submit to venue thread, closed loop p50 | 501 ns | 501 ns | 501 ns |
+| Submit to venue thread, closed loop p99 | 903 ns | 1.21 µs | 2.61 µs |
+| Submit to venue thread, closed loop p99.9 | 2.11 µs | 9.86 µs | 12.61 µs |
+| Open loop at 200,000 orders/s, p50 | 603 ns | 603 ns | 703 ns |
+| Open loop at 200,000 orders/s, p99 | 692 µs | 2.39 ms | 3.92 ms |
+| Tick to order end to end, closed loop p50 | 903 ns | 903 ns | 903 ns |
+| Tick to order end to end, closed loop p99 | 1.50 µs | 1.61 µs | 1.61 µs |
+| Tick to order end to end, closed loop p99.9 | 24.06 µs | 49.41 µs | 54.78 µs |
+| Throughput, million orders/s | 2.5 | 2.6 | 3.1 |
+
+The risk-gate figure is reciprocal throughput: many independent checks overlapped by the CPU, with symbol ids spread across 1,024 cache lines. It is not the latency of one isolated check. v1.x quoted about 3 ns for the same gate, measured on one symbol with constant arguments. The v2 gate also checks price validity, resting-order exposure, throttles and daily limits.
+
+### Market maker: `HftQuoterBenchmark`
+
+Tick in, two-sided quote out through cancel/replace, risk gate and gateway.
+
+| Measure | Min | Median | Max |
+|---|---|---|---|
+| Closed loop tick to quote p50 | 903 ns | 1.10 µs | 1.10 µs |
+| Closed loop tick to quote p99 | 1.30 µs | 1.50 µs | 1.61 µs |
+| Closed loop tick to quote p99.9 | 21.38 µs | 26.37 µs | 60.93 µs |
+| Open loop at 100,000 ticks/s, p50 | 1.21 µs | 1.30 µs | 1.30 µs |
+| Open loop at 100,000 ticks/s, p99 | 36.61 µs | 1.73 ms | 2.67 ms |
+
+### Matching engine: `HftBookBenchmark`
+
+Price-time `HftOrderBook`, single thread. Per-operation latency is the mean of 128-operation batches, so the 100 ns clock step does not dominate it.
+
+| Measure | Min | Median | Max |
+|---|---|---|---|
+| Passive add/cancel, million ops/s | 4.8 | 7.1 | 8.9 |
+| Matching, million ops/s | 6.6 | 12.0 | 13.1 |
+| Matching, million fills/s | 5.7 | 10.4 | 11.3 |
+| Per-op p50 | 103 ns | 114 ns | 180 ns |
+| Per-op p99 | 230 ns | 317 ns | 583 ns |
+| Per-op p99.9 | 839 ns | 1.27 µs | 1.54 µs |
+
+## How to reproduce
+
+```bash
+./mvnw -DskipTests compile
+JVM="-Xms1g -Xmx1g -XX:+UseZGC -XX:+UseCompactObjectHeaders -XX:+AlwaysPreTouch -XX:+PerfDisableSharedMem"
+java $JVM -cp target/classes com.quantfinlib.examples.HftLatencyBenchmark
+java $JVM -cp target/classes com.quantfinlib.examples.HftOrderBenchmark
+java $JVM -cp target/classes com.quantfinlib.examples.HftQuoterBenchmark
+java $JVM -cp target/classes com.quantfinlib.examples.HftBookBenchmark
+```
+
+The JMH microbenchmarks (`src/test/java/com/quantfinlib/bench/CoreBenchmarks.java`, three forks, five warm-up and ten measurement iterations) run with:
+
+```bash
+./mvnw test-compile exec:java -Dexec.mainClass=com.quantfinlib.bench.BenchRunner \n    -Dexec.classpathScope=test -Dexec.args=CoreBenchmarks
+```
+
+They were not run for this release; their numbers are not quoted.
+
+The `Benchmarks (Linux)` workflow runs the same four programs on a GitHub-hosted runner. Shared runners have noisy neighbours, so treat those numbers as a smoke test.
+
+## Updating this page
+
+Re-run all four benchmarks three times on an idle machine before each release, and replace the tables, the environment block and the commit hash. Do not copy a number from this page into another document; link here instead.
