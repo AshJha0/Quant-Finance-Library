@@ -6,6 +6,7 @@ import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,12 +21,20 @@ import java.util.Optional;
  * trimmed extract both load. Everything is held in memory; the full file has millions of
  * rows, so filter it first if memory matters. The header names follow the golden-copy CSV
  * layout; this class was checked only against a hand-made fixture (own test).</p>
+ *
+ * <p>Since 3.0.0 the optional columns {@code Registration.InitialRegistrationDate},
+ * {@code Registration.LastUpdateDate} and {@code Entity.EntityStatus} are read when present,
+ * so {@link #validityOn} returns the dates and entity status that the ESMA LEI rules
+ * (CON-040 to CON-270) test. The GLEIF CDF specification is not on disk; the three column
+ * names are the library's understanding of the golden-copy header (unconfirmed).</p>
  */
 public final class GleifGoldenCopyLeiRegistry implements LeiRegistry {
     private final Map<String, LeiRecord> records;
+    private final Map<String, LeiValidity> validity;
 
-    private GleifGoldenCopyLeiRegistry(Map<String, LeiRecord> records) {
+    private GleifGoldenCopyLeiRegistry(Map<String, LeiRecord> records, Map<String, LeiValidity> validity) {
         this.records = records;
+        this.validity = validity;
     }
 
     /**
@@ -58,15 +67,26 @@ public final class GleifGoldenCopyLeiRegistry implements LeiRegistry {
         int iLei = Csv.require(h, "LEI");
         int iName = Csv.require(h, "Entity.LegalName");
         int iStatus = Csv.require(h, "Registration.RegistrationStatus");
+        int iInitial = Csv.optional(h, "Registration.InitialRegistrationDate");
+        int iUpdated = Csv.optional(h, "Registration.LastUpdateDate");
+        int iEntity = Csv.optional(h, "Entity.EntityStatus");
         Map<String, LeiRecord> m = new HashMap<>();
+        Map<String, LeiValidity> v = new HashMap<>();
         for (List<String> row = Csv.next(in); row != null; row = Csv.next(in)) {
             String lei = Csv.get(row, iLei);
             if (lei.isEmpty()) {
                 continue;
             }
-            m.put(lei, new LeiRecord(lei, Csv.get(row, iName), LeiStatus.parse(Csv.get(row, iStatus))));
+            LeiStatus status = LeiStatus.parse(Csv.get(row, iStatus));
+            m.put(lei, new LeiRecord(lei, Csv.get(row, iName), status));
+            if (iInitial >= 0 || iUpdated >= 0 || iEntity >= 0) {
+                // Only INACTIVE marks the entity inactive; a blank or other value keeps 2.4 behaviour.
+                boolean active = !"INACTIVE".equalsIgnoreCase(Csv.get(row, iEntity));
+                v.put(lei, new LeiValidity(status, Csv.date(Csv.get(row, iInitial)), active,
+                        Csv.date(Csv.get(row, iUpdated))));
+            }
         }
-        return new GleifGoldenCopyLeiRegistry(Map.copyOf(m));
+        return new GleifGoldenCopyLeiRegistry(Map.copyOf(m), Map.copyOf(v));
     }
 
     /**
@@ -81,5 +101,19 @@ public final class GleifGoldenCopyLeiRegistry implements LeiRegistry {
     @Override
     public Optional<LeiRecord> lookup(String lei) {
         return Optional.ofNullable(records.get(lei));
+    }
+
+    /**
+     * The file's current data with its dates and entity status, as TRI paragraph 25 asks
+     * (latest reference data, checked for validity on the trading date). The golden copy
+     * holds one current record per LEI, so {@code date} does not select a historic version.
+     */
+    @Override
+    public Optional<LeiValidity> validityOn(String lei, LocalDate date) {
+        LeiValidity v = validity.get(lei);
+        if (v != null) {
+            return Optional.of(v);
+        }
+        return lookup(lei).map(r -> LeiValidity.statusOnly(r.status()));
     }
 }

@@ -6,6 +6,7 @@ import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -16,8 +17,15 @@ import java.util.Optional;
  * authority at {@code https://www.iso20022.org/market-identifier-codes}.
  *
  * <p>Columns read, by header name: {@code MIC}, {@code OPERATING MIC},
- * {@code MARKET NAME-INSTITUTION DESCRIPTION}, {@code STATUS}. Checked only against a
- * hand-made fixture with that header (own test).</p>
+ * {@code MARKET NAME-INSTITUTION DESCRIPTION}, {@code STATUS}, and when present
+ * {@code ISO COUNTRY CODE (ISO 3166)}, {@code MARKET CATEGORY CODE}, {@code CREATION DATE}
+ * and {@code EXPIRY DATE} (dates as {@code yyyyMMdd} or {@code yyyy-MM-dd}). The optional
+ * columns feed {@link #country}, {@link #isSystematicInternaliser} (category {@code SINT})
+ * and the date test in {@link #isActiveOn}, which the ESMA rules CON-072, CON-162, CON-360
+ * (MIC active on the trading date), CON-411 and CON-610 (EEA venue or SI) need. The
+ * column names follow the registration authority's CSV layout as the library understands
+ * it; the ISO 10383 file is not on disk, so they were checked only against a hand-made
+ * fixture (own test, unconfirmed). A file without the optional columns loads as in 2.4.</p>
  */
 public final class Iso10383MicRegistry implements MicRegistry {
     private final Map<String, MicRecord> records;
@@ -57,6 +65,10 @@ public final class Iso10383MicRegistry implements MicRegistry {
         int iOp = Csv.require(h, "OPERATING MIC");
         int iName = Csv.require(h, "MARKET NAME-INSTITUTION DESCRIPTION");
         int iStatus = Csv.require(h, "STATUS");
+        int iCountry = Csv.optional(h, "ISO COUNTRY CODE (ISO 3166)");
+        int iCategory = Csv.optional(h, "MARKET CATEGORY CODE");
+        int iCreated = Csv.optional(h, "CREATION DATE");
+        int iExpiry = Csv.optional(h, "EXPIRY DATE");
         Map<String, MicRecord> m = new HashMap<>();
         for (List<String> row = Csv.next(in); row != null; row = Csv.next(in)) {
             String mic = Csv.get(row, iMic);
@@ -64,7 +76,8 @@ public final class Iso10383MicRegistry implements MicRegistry {
                 continue;
             }
             m.put(mic, new MicRecord(mic, Csv.get(row, iOp), Csv.get(row, iName),
-                    MicStatus.parse(Csv.get(row, iStatus))));
+                    MicStatus.parse(Csv.get(row, iStatus)), Csv.get(row, iCountry), Csv.get(row, iCategory),
+                    Csv.date(Csv.get(row, iCreated)), Csv.date(Csv.get(row, iExpiry))));
         }
         return new Iso10383MicRegistry(Map.copyOf(m));
     }
@@ -81,5 +94,27 @@ public final class Iso10383MicRegistry implements MicRegistry {
     @Override
     public Optional<MicRecord> lookup(String mic) {
         return Optional.ofNullable(records.get(mic));
+    }
+
+    /** From the record's dates when the file has them, else from the current status. */
+    @Override
+    public boolean isActiveOn(String mic, LocalDate date) {
+        MicRecord r = records.get(mic);
+        return r != null && r.isActiveOn(date);
+    }
+
+    /** The ISO 3166 code from the file, empty when the column or value is missing. */
+    @Override
+    public Optional<String> country(String mic) {
+        MicRecord r = records.get(mic);
+        return r == null || r.country().isEmpty() ? Optional.empty() : Optional.of(r.country());
+    }
+
+    /** Market category {@code SINT}; empty when the column or value is missing. */
+    @Override
+    public Optional<Boolean> isSystematicInternaliser(String mic) {
+        MicRecord r = records.get(mic);
+        return r == null || r.marketCategory().isEmpty() ? Optional.empty()
+                : Optional.of(r.isSystematicInternaliser());
     }
 }

@@ -310,3 +310,18 @@ java -cp quant-finance-library-2.4.0.jar:quant-finance-library-2.4.0-examples.ja
 Numbers (apart from the rounding-level exposure note in section 6),
 conventions, the stable package list in `docs/STABILITY.md`, and every package
 name other than `reporting` and the tick-file types.
+
+## 12. RTS 22 reference data and validation
+
+These changes are in the `reporting` package (renamed in section 7) and change
+results, not just imports.
+
+| 2.4 | 3.0 | What to do |
+|---|---|---|
+| Loaders read status only | `GleifGoldenCopyLeiRegistry`, `FirdsInstrumentRegistry` and `Iso10383MicRegistry` also read dates, country, SI category and the commodity flag when the file has those columns | Expect the dated rules (CON-360, CON-411, CON-640, the LEI date checks) to fire with the same files |
+| `validateEsmaRules` | adds CON-330, CON-410, CON-470 | Fix the report, or filter the code if you knowingly send it |
+| `new MicRecord(mic, op, name, status)` | still compiles; canonical form has country, category, creation and expiry date | Record patterns with four components must list eight |
+| `new InstrumentRecord(isin, name, cfi, venues)` | still compiles; canonical form adds admission windows and the commodity flag | Same for record patterns |
+| `new ReferenceData(leis, ins, mics, ccys, ctys, preEuro)` | still compiles; canonical form adds `cfiCodes` for CON-430 | Supply your ISO 10962 table with `withCfiCodes` to run CON-430 |
+| Field 33 or 51 percentage, yield or basis points could not be written | `PCTG:`, `YLD:`, `BSPS:` prefixes (`PriceNotation`) | Only if you price bonds in percent |
+| CON-023 to CON-025, pending workflow, auth.031 not available | `Rts22StatusTracker`, `StatusAdvice`, `BusinessHeader` | Optional; seed the tracker with `restore` from your store of accepted reports |

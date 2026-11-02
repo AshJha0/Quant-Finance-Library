@@ -10797,9 +10797,11 @@ The registries load the public files you download yourself: the GLEIF golden
 copy (or `GleifApiLeiRegistry` for single lookups over HTTPS), an ESMA FIRDS
 FULINS file and the ISO 10383 MIC list. The checker refuses a report whose LEI
 is unknown or lapsed, whose ISIN is not in FIRDS, or whose MIC is unknown or
-inactive, and forwards the rest. The field keys depend on the report type. The
-loaders read status only; registration dates, country and venue flags are not
-parsed, which limits the dated ESMA rules of recipe 353.
+inactive, and forwards the rest. The field keys depend on the report type.
+Since 3.0 the loaders also read registration dates and entity status (GLEIF),
+admission dates and the commodity flag (FIRDS), and country, SI category and
+creation and expiry dates (ISO 10383) when the file has those columns, which is
+what the dated ESMA rules of recipe 353 need.
 
 ## 349. CAT and EMIR Refit reports
 
@@ -10895,15 +10897,14 @@ String file = Rts22TransactionReport.toSubmissionXml(List.of(rep),
     submittingLei, "FR", "FILE0001", Instant.parse("2026-11-02T10:15:30Z"));
 ```
 
-`validateWithReferenceData` runs 36 ESMA content rules that need registries,
+`validateWithReferenceData` runs the ESMA content rules that need registries,
 for example that a counterparty LEI was not retired on the trading date (CON-160
-accepts a lapsed LEI) and that the ISIN was admitted on the venue. The registries
-that ship read status only, so only the status checks bite; supply richer
-reference data for the dated rules. `toSubmissionXml` writes the head.003
+accepts a lapsed LEI) and that the ISIN was admitted on the venue. With the 3.0
+loaders the dated rules run too. CON-430 runs when you pass your ISO 10962 table
+with `refs.withCfiCodes(cfiSet::contains)`. `toSubmissionXml` writes the head.003
 envelope with the head.001 header (sender LEI, authority country, file id,
 creation time to the second) around auth.016 (ESMA65-8-2356 paras 124 to 132).
-CON-330, CON-331, CON-430, the seven-day pending workflow and auth.031 feedback
-are not implemented.
+Recipe 355 covers the pending workflow and the feedback file.
 
 ## 354. Moving off MathUtils
 
@@ -10918,3 +10919,26 @@ double beta = Numerics.decayFactor(dtNanos, halfLifeNanos);
 `util.MathUtils` is deprecated for removal in 2.4.0. Every method delegates to
 one of these, so the switch changes no result. docs/MIGRATION_3.0.md section 4
 has the full table.
+
+## 355. Pending reports, field 2 history and the auth.031 feedback
+
+```java
+Rts22StatusTracker nca = new Rts22StatusTracker();
+RecordOutcome o = nca.submit(rep, LocalDate.of(2026, 11, 3), refs);   // ACPT, PDNG or RJCT
+List<RecordOutcome> changed = nca.revalidate(LocalDate.of(2026, 11, 5), refsOfThatDay);
+StatusAdvice advice = StatusAdvice.of("FILE0001", List.of(o), false);
+BusinessHeader sent = new BusinessHeader(submittingLei, "FR", "FILE0001", "auth.016.001.01", sentAt);
+String feedback = advice.toFeedbackXml(
+    new BusinessHeader("FR", submittingLei, "FDBK0001", StatusAdvice.MESSAGE_DEFINITION, now).relatedTo(sent));
+StatusAdvice.Parsed back = StatusAdvice.parse(feedback);  // back.header().related() is the file you sent
+```
+
+The tracker does what the authority does across files. A transaction reference
+(field 2) can be reused only after the report that used it is cancelled
+(CON-023); a cancellation needs a live report (CON-024, CON-025); the key is
+field 4 plus field 2. A report whose only fault is an ISIN missing from FIRDS
+is PDNG, not rejected, and `revalidate` returns it as ACPT once the instrument
+appears, or RJCT once more than 7 calendar days have passed (ESMA65-8-2356
+paras 20, 28, 53 and 70 to 72). Any other error rejects at once. Use it to
+predict the authority's answer, and `StatusAdvice.parse` to read the real one:
+its `Rltd` header names the file the feedback is about (para 101).

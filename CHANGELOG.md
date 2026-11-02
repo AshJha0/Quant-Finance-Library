@@ -6,6 +6,20 @@ Entries for 1.x releases are archived in [docs/history/CHANGELOG-1.x.md](docs/hi
 
 ## [Unreleased]
 
+### Added (MiFIR RTS 22, `reporting` package; renamed `regreporting` in 3.0)
+
+- `Rts22StatusTracker`: the state a competent authority keeps across files. Field 2 history per executing entity gives CON-023 (reference reused before cancellation), CON-024 (nothing to cancel) and CON-025 (already cancelled), keyed on field 4 plus field 2 (ESMA65-8-2356 para 70). A report whose only errors are CON-411 or CON-471 is pending; `revalidate` repeats the reference-data rules daily and accepts it, rejects it on any other error, or rejects it once more than 7 calendar days have passed since reception (paras 20, 28, 53; CON-411 error text). Cancelling a pending report aborts it (para 72). Published reference; that a pending report blocks reuse of its reference under CON-023 is the library's reading.
+- `StatusAdvice`: reads and writes the auth.031.001.01 feedback file (paras 100 to 106): file status, file-level rules, per-status statistics and `RcrdSts` entries keyed by field 4 plus field 2. `StatusAdvice.of` derives ACPT, PART or RJCT from a list of `RecordOutcome`s (para 105). `BusinessHeader` carries the head.001 header with its `Rltd` element (para 101); `toFeedbackXml` writes the head.003 envelope. Both validate against the ESMA auth.031 1.1.0 and head.001/head.003 XSDs in a test when `QFL_ESMA_AUTH031_XSD`, `QFL_ESMA_HEAD001_XSD` and `QFL_ESMA_HEAD003_XSD` are set.
+- `RecordStatus` (ACPT, PDNG, RCVD, RJCT) and `RecordOutcome`.
+- `PriceNotation`: field 33 and 51 values prefixed `PCTG:`, `YLD:` or `BSPS:` are written as `Pctg`, `Yld` or `BsisPts` (RTS 22 Annex I Table 2 field 33; auth.016 `SecuritiesTransactionPrice2Choice`).
+- Content rules: CON-330 (data only, debt CFI in field 43) and CON-331 (debt CFI in FIRDS): no percentage price when field 30 is in units; CON-410 and CON-470: ISO 6166 check digit of fields 41 and 47; CON-430: field 43 must be an ISO 10962:2015 CFI, run when the caller supplies the table through `ReferenceData.withCfiCodes` (the ISO tables are not free to redistribute). ESMA65-8-2594 Annex 1 v1.7, published reference.
+- Loaders: `GleifGoldenCopyLeiRegistry` reads `Registration.InitialRegistrationDate`, `Registration.LastUpdateDate` and `Entity.EntityStatus`; `GleifApiLeiRegistry.validityOn` reads the same three from the API; `FirdsInstrumentRegistry` reads `CmmdtyDerivInd` and per-venue `AdmssnApprvlDtByIssr`, `ReqForAdmssnDt`, `FrstTradDt`, `TermntnDt`; `Iso10383MicRegistry` reads country, market category (`SINT` for an SI), creation and expiry dates. With these files every reference-data rule of 2.4 now runs. The column and element names are the library's understanding of each layout: the GLEIF, FIRDS and ISO 10383 specifications are not on disk (unconfirmed). Using the earliest of the three FIRDS start dates as the start of the admission window, and reading an ISO 10383 expiry date as the first day the MIC is invalid, are the library's readings.
+
+### Changed (RTS 22)
+
+- `MicRecord`, `InstrumentRecord` and `ReferenceData` gain components; the 2.4 constructors remain, but record patterns and `equals` see the new components.
+- `validateEsmaRules` reports CON-330, CON-410 and CON-470, and the shipped loaders now feed the dated rules (CON-360, CON-411, CON-640 and the LEI date checks) when the files carry the columns. A report that passed in 2.4 can fail in 3.0 with the same files.
+
 ## [2.4.0] - 2026-11-02
 
 Minor release. No 2.3 public signature in a stable package is removed or changed (japicmp against 2.3.0), and no result changes unless you opt in. 2.4.0 deprecates for removal every member that 3.0 takes out, so compiling with `-Xlint:removal` lists the lines to change; [docs/MIGRATION_2.4.md](docs/MIGRATION_2.4.md) covers this release and [docs/MIGRATION_3.0.md](docs/MIGRATION_3.0.md) is the draft plan for 3.0.

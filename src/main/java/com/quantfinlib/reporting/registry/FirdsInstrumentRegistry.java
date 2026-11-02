@@ -4,17 +4,18 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import com.quantfinlib.reporting.registry.CodeRegistry.Window;
+import java.time.LocalDate;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamConstants;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Offline instrument registry loaded from ESMA FIRDS full reference-data files
@@ -28,6 +29,15 @@ import javax.xml.stream.XMLStreamReader;
  * venues are merged. DTDs and external entities are disabled. The element paths follow the
  * FIRDS file layout; this class was checked only against a hand-made fixture (own test),
  * not a full ESMA file.</p>
+ *
+ * <p>Since 3.0.0 it also reads {@code FinInstrmGnlAttrbts/CmmdtyDerivInd} (the commodity
+ * derivative indicator that CON-640 tests) and, per venue, {@code AdmssnApprvlDtByIssr},
+ * {@code ReqForAdmssnDt}, {@code FrstTradDt} and {@code TermntnDt}. The instrument is taken
+ * to be in the reference data for a venue from the earliest of the first three dates to the
+ * termination date, both inclusive. That window is the library's reading of "present in
+ * reference data for the trading date" (CON-411, CON-471): ESMA's FIRDS reporting
+ * instructions are not on disk, so the element names and the choice of start date are
+ * unconfirmed. A venue with none of the dates is present on every date, as in 2.4.</p>
  */
 public final class FirdsInstrumentRegistry implements InstrumentRegistry {
     private final Map<String, InstrumentRecord> records;
@@ -80,10 +90,32 @@ public final class FirdsInstrumentRegistry implements InstrumentRegistry {
         return Optional.ofNullable(records.get(isin));
     }
 
+    /** Window-aware: the instrument is known on a date if any venue window contains it. */
+    @Override
+    public boolean isKnownOn(String isin, LocalDate date) {
+        InstrumentRecord r = records.get(isin);
+        return r != null && r.isKnownOn(date);
+    }
+
+    /** Window-aware: the venue's admission window must contain the date. */
+    @Override
+    public boolean isAdmittedOn(String isin, String mic, LocalDate date) {
+        InstrumentRecord r = records.get(isin);
+        return r != null && r.isAdmittedOn(mic, date);
+    }
+
+    /** The {@code CmmdtyDerivInd} value from the file, empty when absent. */
+    @Override
+    public Optional<Boolean> isCommodityDerivative(String isin) {
+        InstrumentRecord r = records.get(isin);
+        return r == null ? Optional.empty() : Optional.ofNullable(r.commodityDerivative());
+    }
+
     private static final class Builder {
         private final Map<String, String> names = new HashMap<>();
         private final Map<String, String> cfis = new HashMap<>();
-        private final Map<String, Set<String>> venues = new HashMap<>();
+        private final Map<String, Boolean> commodity = new HashMap<>();
+        private final Map<String, Map<String, Window>> venues = new HashMap<>();
 
         void add(InputStream in) throws IOException {
             XMLInputFactory f = XMLInputFactory.newFactory();
@@ -101,57 +133,124 @@ public final class FirdsInstrumentRegistry implements InstrumentRegistry {
             }
         }
 
-        private void parse(XMLStreamReader r) throws XMLStreamException {
+        private void parse(XMLStreamReader r) throws XMLStreamException, IOException {
             Deque<String> path = new ArrayDeque<>();
-            String isin = "";
-            String name = "";
-            String cfi = "";
-            Set<String> mics = new HashSet<>();
+            Rec rec = new Rec();
             while (r.hasNext()) {
                 int ev = r.next();
                 if (ev == XMLStreamConstants.START_ELEMENT) {
                     String ln = r.getLocalName();
                     String parent = path.isEmpty() ? "" : path.peek();
                     if ("RefData".equals(ln)) {
-                        isin = "";
-                        name = "";
-                        cfi = "";
-                        mics = new HashSet<>();
-                    } else if ("FinInstrmGnlAttrbts".equals(parent) && "Id".equals(ln)) {
-                        isin = r.getElementText().trim();
+                        rec = new Rec();
+                    } else if ("FinInstrmGnlAttrbts".equals(parent) && rec.general(ln, r)) {
                         continue;
-                    } else if ("FinInstrmGnlAttrbts".equals(parent) && "FullNm".equals(ln)) {
-                        name = r.getElementText().trim();
-                        continue;
-                    } else if ("FinInstrmGnlAttrbts".equals(parent) && "ClssfctnTp".equals(ln)) {
-                        cfi = r.getElementText().trim();
-                        continue;
-                    } else if ("TradgVnRltdAttrbts".equals(parent) && "Id".equals(ln)) {
-                        mics.add(r.getElementText().trim());
+                    } else if ("TradgVnRltdAttrbts".equals(ln)) {
+                        rec.venue = new Venue();
+                    } else if ("TradgVnRltdAttrbts".equals(parent) && rec.venue != null
+                            && rec.venue.read(ln, r)) {
                         continue;
                     }
                     path.push(ln);
                 } else if (ev == XMLStreamConstants.END_ELEMENT) {
                     String ln = path.pop();
-                    if ("RefData".equals(ln) && !isin.isEmpty()) {
-                        names.putIfAbsent(isin, name);
-                        if (!cfi.isEmpty()) {
-                            cfis.putIfAbsent(isin, cfi);
+                    Venue v = rec.venue;
+                    if ("TradgVnRltdAttrbts".equals(ln) && v != null) {
+                        if (!v.mic.isEmpty()) {
+                            rec.venues.put(v.mic, InstrumentRecord.widen(rec.venues.get(v.mic), v.window()));
                         }
-                        venues.computeIfAbsent(isin, k -> new HashSet<>()).addAll(mics);
+                        rec.venue = null;
+                    } else if ("RefData".equals(ln) && !rec.isin.isEmpty()) {
+                        store(rec);
                     }
                 }
             }
         }
 
+        private void store(Rec rec) {
+            names.putIfAbsent(rec.isin, rec.name);
+            if (!rec.cfi.isEmpty()) {
+                cfis.putIfAbsent(rec.isin, rec.cfi);
+            }
+            Boolean c = rec.commodity;
+            if (c != null) {
+                commodity.putIfAbsent(rec.isin, c);
+            }
+            Map<String, Window> m = venues.computeIfAbsent(rec.isin, k -> new HashMap<>());
+            for (Map.Entry<String, Window> e : rec.venues.entrySet()) {
+                m.put(e.getKey(), InstrumentRecord.widen(m.get(e.getKey()), e.getValue()));
+            }
+        }
+
         FirdsInstrumentRegistry build() {
             Map<String, InstrumentRecord> m = new HashMap<>();
-            for (Map.Entry<String, Set<String>> e : venues.entrySet()) {
+            for (Map.Entry<String, Map<String, Window>> e : venues.entrySet()) {
                 String k = e.getKey();
                 m.put(k, new InstrumentRecord(k, names.getOrDefault(k, ""), cfis.getOrDefault(k, ""),
-                        e.getValue()));
+                        e.getValue().keySet(), e.getValue(), commodity.get(k)));
             }
             return new FirdsInstrumentRegistry(Map.copyOf(m));
+        }
+    }
+
+    /** One {@code RefData} element being read. */
+    private static final class Rec {
+        String isin = "";
+        String name = "";
+        String cfi = "";
+        @Nullable Boolean commodity;
+        @Nullable Venue venue;
+        final Map<String, Window> venues = new HashMap<>();
+
+        /** Reads a known {@code FinInstrmGnlAttrbts} child; returns false for any other. */
+        boolean general(String ln, XMLStreamReader r) throws XMLStreamException {
+            switch (ln) {
+                case "Id" -> isin = r.getElementText().trim();
+                case "FullNm" -> name = r.getElementText().trim();
+                case "ClssfctnTp" -> cfi = r.getElementText().trim();
+                case "CmmdtyDerivInd" -> commodity = "true".equalsIgnoreCase(r.getElementText().trim());
+                default -> {
+                    return false;
+                }
+            }
+            return true;
+        }
+    }
+
+    /** One {@code TradgVnRltdAttrbts} element being read. */
+    private static final class Venue {
+        String mic = "";
+        @Nullable LocalDate approval;
+        @Nullable LocalDate request;
+        @Nullable LocalDate firstTrade;
+        @Nullable LocalDate termination;
+
+        /** Reads a known child element; returns false for any other element. */
+        boolean read(String ln, XMLStreamReader r) throws XMLStreamException, IOException {
+            switch (ln) {
+                case "Id" -> mic = r.getElementText().trim();
+                case "AdmssnApprvlDtByIssr" -> approval = Csv.date(r.getElementText());
+                case "ReqForAdmssnDt" -> request = Csv.date(r.getElementText());
+                case "FrstTradDt" -> firstTrade = Csv.date(r.getElementText());
+                case "TermntnDt" -> termination = Csv.date(r.getElementText());
+                default -> {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /** From the earliest of the three start dates to the termination date, both inclusive. */
+        Window window() {
+            LocalDate from = earlier(earlier(approval, request), firstTrade);
+            return new Window(from, termination);
+        }
+
+        private static @Nullable LocalDate earlier(@Nullable LocalDate a, @Nullable LocalDate b) {
+            if (a == null) {
+                return b;
+            }
+            return b == null || !b.isBefore(a) ? a : b;
         }
     }
 }

@@ -54,6 +54,16 @@ final class EsmaRules {
         if ("CANC".equals(v(REPORT_STATUS))) {
             return;
         }
+        // CON-410 (rule 130) and CON-470 (rule 150): ISO 6166 check digit of fields 41 and 47.
+        String isin = v(INSTRUMENT_ID);
+        if (isin.length() == 12 && !ReportingIdentifiers.isValidIsin(isin)) {
+            err("CON-410", "field 41 ISIN " + isin + " fails the ISO 6166 check digit");
+        }
+        for (String u : Auth016Writer.list(v(UNDERLYING_INSTRUMENT_ID))) {
+            if (u.length() == 12 && !ReportingIdentifiers.isValidIsin(u)) {
+                err("CON-470", "field 47 ISIN " + u + " fails the ISO 6166 check digit");
+            }
+        }
         String venue = v(VENUE);
         boolean offVenue = "XOFF".equals(venue) || "XXXX".equals(venue);
         String cap = v(TRADING_CAPACITY);
@@ -103,10 +113,11 @@ final class EsmaRules {
             err("XSD", "field 59 is mandatory for a new report (ExctgPrsn); use NORE when the client decided");
         }
         String px = v(PRICE);
-        if (!px.isEmpty() && !"PNDG".equals(px) && !"NOAP".equals(px) && !has(PRICE_CURRENCY)) {
+        if (!px.isEmpty() && PriceNotation.of(px) == PriceNotation.MONETARY && !has(PRICE_CURRENCY)) {
             err("XSD", "a monetary price (field 33) needs field 34");
         }
-        if (has(STRIKE_PRICE) && !"PNDG".equals(v(STRIKE_PRICE)) && !has(STRIKE_PRICE_CURRENCY)) {
+        if (has(STRIKE_PRICE) && PriceNotation.of(v(STRIKE_PRICE)) == PriceNotation.MONETARY
+                && !has(STRIKE_PRICE_CURRENCY)) {
             err("XSD", "a monetary strike price (field 51) needs field 52");
         }
         if (has(UP_FRONT_PAYMENT) && !has(UP_FRONT_PAYMENT_CURRENCY)) {
@@ -231,6 +242,15 @@ final class EsmaRules {
         }
     }
 
+    /**
+     * The condition of CON-330 and CON-331: a debt CFI ({@code D*****}), quantity in units
+     * (no field 31, so auth.016 {@code Qty/Unit}) and a percentage price in field 33.
+     */
+    static boolean unitDebtPercentage(Rts22TransactionReport r, String cfi) {
+        return cfi(cfi, "D*****") && r.get(QUANTITY_CURRENCY).isEmpty()
+                && PriceNotation.of(r.get(PRICE)) == PriceNotation.PERCENTAGE;
+    }
+
     private void instrument() {
         if (!has(INSTRUMENT_FULL_NAME) || !has(INSTRUMENT_CLASSIFICATION) || !has(PRICE_MULTIPLIER)
                 || (!has(UNDERLYING_INSTRUMENT_ID) && !has(UNDERLYING_INDEX_NAME)) || !has(DELIVERY_TYPE)) {
@@ -254,6 +274,12 @@ final class EsmaRules {
                 "H*****", "J*****");
         mandatory("CON-550", EXPIRY_DATE, c, "O*****", "F*****", "JC**F*");
         forbidden("CON-551", EXPIRY_DATE, c, "E*****", "C*****", "D*****");
+
+        // CON-330 (rule 260): debt CFI in field 43, quantity in units -> price not a percentage.
+        if (unitDebtPercentage(r, c)) {
+            err("CON-330", "price notation is incorrect: field 33 is a percentage but field 30 is in units"
+                    + " for the debt instrument with CFI " + c);
+        }
 
         String ot = v(OPTION_TYPE);
         String want = cfi(c, "OC****", "H**A**", "H**B**", "RW**C*", "H**C**") ? "CALL"

@@ -2510,10 +2510,41 @@ field 16; with status LAPSED it passes, because CON-160 accepts a lapsed LEI.
 *In this library:* `Rts22TransactionReport.validateWithReferenceData` (36 CON
 rules), `toSubmissionXml`, and in `reporting/registry/` the types
 `ReferenceData`, `LeiValidity` and `CodeRegistry`, plus dated default methods on
-the three registries. The shipped GLEIF, FIRDS and ISO 10383 loaders do not
-parse dates, country or venue flags, so with them only the status checks run.
-Not implemented: CON-330, CON-331, CON-430, the seven-day pending workflow,
-field 2 history, auth.031 feedback and the header's `Rltd` element. Recipe 353.
+the three registries. Since 3.0 the shipped GLEIF, FIRDS and ISO 10383 loaders
+also read dates, country, SI category and the commodity flag when the file has
+those columns, so every rule runs on the public files. CON-430 needs an ISO
+10962 table, which you supply. Recipe 353.
+
+### 17h. Pending reports, field 2 history and the feedback file
+
+A competent authority remembers. It knows which transaction references a firm
+has used, whether each was cancelled, and which reports are waiting for an
+instrument that FIRDS has not published yet. A report is not simply right or
+wrong on arrival; it can be pending for a week.
+
+Formally (ESMA65-8-2356 and ESMA65-8-2594 Annex 1 v1.7; published reference):
+the record key is field 4 followed by field 2 (para 70). A new report is
+rejected under CON-023 while the last accepted report with that key is not a
+cancellation; a cancellation is rejected under CON-024 when there is nothing to
+cancel and CON-025 when it was already cancelled. When the only errors are
+CON-411 or CON-471 the authority answers PDNG and repeats instrument validation
+daily until the seventh calendar day after reception, then accepts or rejects
+(para 20(c)); any other error rejects at once (para 20(e)). Cancelling a
+pending report aborts it (para 72). The answer comes back as an auth.031 status
+advice with ACPT, PART or RJCT for the file and an entry per record, whose
+business application header points at the submitted file through `Rltd`
+(paras 101 to 106).
+
+Worked example (scenario 3 of para 79, own test `Rts22StatusTrackerTest`).
+TXN162 arrives on T+1 for an ISIN not yet in FIRDS: PDNG with CON-411. Its
+cancellation on T+2 is accepted and the queue empties; TXN162 can then be sent
+again. Had the instrument stayed missing, revalidation on day 8 after reception
+would reject it with CON-411.
+
+*In this library:* `Rts22StatusTracker` (`submit`, `revalidate`, `restore`),
+`StatusAdvice` (`of`, `toXml`, `toFeedbackXml`, `parse`), `BusinessHeader`,
+`RecordOutcome`, `RecordStatus`. That a pending report blocks reuse of its
+reference under CON-023 is the library's reading of para 71. Recipe 355.
 
 ### 18. Scaling out and staying safe
 

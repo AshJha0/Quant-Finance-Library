@@ -2,6 +2,9 @@ package com.quantfinlib.reporting.registry;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -75,6 +78,30 @@ final class Csv {
     }
 
     static String get(List<String> row, int i) {
-        return i < row.size() ? row.get(i).trim() : "";
+        return i >= 0 && i < row.size() ? row.get(i).trim() : "";
+    }
+
+    /** Column index of an optional column, or -1 when the header lacks it. */
+    static int optional(Map<String, Integer> h, String name) {
+        return h.getOrDefault(name.toUpperCase(Locale.ROOT), -1);
+    }
+
+    /**
+     * Parses a date written {@code yyyy-MM-dd}, {@code yyyyMMdd}, or an ISO date-time whose
+     * first ten characters are the date (time and zone ignored). Empty gives null.
+     */
+    static @Nullable LocalDate date(String s) throws IOException {
+        String t = s.trim();
+        if (t.isEmpty()) {
+            return null;
+        }
+        try {
+            if (t.length() == 8 && t.chars().allMatch(Character::isDigit)) {
+                return LocalDate.parse(t, DateTimeFormatter.BASIC_ISO_DATE);
+            }
+            return LocalDate.parse(t.length() > 10 ? t.substring(0, 10) : t);
+        } catch (DateTimeParseException e) {
+            throw new IOException("unparsable date '" + s + "'", e);
+        }
     }
 }

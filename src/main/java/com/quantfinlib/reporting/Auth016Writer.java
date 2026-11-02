@@ -248,9 +248,16 @@ final class Auth016Writer {
             close("NoPric");
         } else {
             open("Pric");
-            open("MntryVal");
-            signedAmount(value, ccy);
-            close("MntryVal");
+            switch (PriceNotation.of(value)) {
+                case PERCENTAGE -> leaf("Pctg", PriceNotation.number(value));
+                case YIELD -> leaf("Yld", PriceNotation.number(value));
+                case BASIS_POINTS -> leaf("BsisPts", PriceNotation.number(value));
+                default -> {
+                    open("MntryVal");
+                    signedAmount(value, ccy);
+                    close("MntryVal");
+                }
+            }
             close("Pric");
         }
         close(tag);

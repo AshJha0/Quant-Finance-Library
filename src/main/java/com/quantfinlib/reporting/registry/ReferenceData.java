@@ -1,6 +1,7 @@
 package com.quantfinlib.reporting.registry;
 
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * The reference data the ESMA MiFIR validation rules need, bundled for
@@ -14,13 +15,43 @@ import java.util.Set;
  * @param countries ISO 3166 list (CON-071, CON-080 and the other country rules)
  * @param preEuroCurrencies legacy currencies that the rules for fields 31, 44 and 45 also
  *        accept (null means none)
- * @since 2.4.0
+ * @param cfiCodes the CFI codes allowed by ISO 10962:2015, for CON-430 (null skips the
+ *        rule). The ISO 10962 tables are licensed by ISO and not shipped, so the caller
+ *        supplies the test, for example a set lookup built from their own copy.
+ * @since 2.4.0 ({@code cfiCodes} since 3.0.0)
  */
 public record ReferenceData(LeiRegistry leis, InstrumentRegistry instruments, MicRegistry mics,
-        CodeRegistry currencies, CodeRegistry countries, Set<String> preEuroCurrencies) {
+        CodeRegistry currencies, CodeRegistry countries, Set<String> preEuroCurrencies,
+        Predicate<String> cfiCodes) {
     /** Copies the pre-euro set. */
     public ReferenceData {
         preEuroCurrencies = preEuroCurrencies == null ? Set.of() : Set.copyOf(preEuroCurrencies);
+    }
+
+    /**
+     * The 2.4 shape, without a CFI table (CON-430 is skipped).
+     *
+     * @param leis LEI registry, or null
+     * @param instruments instrument registry, or null
+     * @param mics MIC registry, or null
+     * @param currencies ISO 4217 list, or null
+     * @param countries ISO 3166 list, or null
+     * @param preEuroCurrencies legacy currencies accepted for fields 31, 44 and 45, or null
+     */
+    public ReferenceData(LeiRegistry leis, InstrumentRegistry instruments, MicRegistry mics,
+            CodeRegistry currencies, CodeRegistry countries, Set<String> preEuroCurrencies) {
+        this(leis, instruments, mics, currencies, countries, preEuroCurrencies, null);
+    }
+
+    /**
+     * A copy with a CFI table for CON-430.
+     *
+     * @param allowed the ISO 10962 test
+     * @return the new bundle
+     */
+    public ReferenceData withCfiCodes(Predicate<String> allowed) {
+        return new ReferenceData(leis, instruments, mics, currencies, countries, preEuroCurrencies,
+                java.util.Objects.requireNonNull(allowed, "allowed"));
     }
 
     /**

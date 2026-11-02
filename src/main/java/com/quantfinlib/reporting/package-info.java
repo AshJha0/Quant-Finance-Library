@@ -13,9 +13,17 @@
  * auth.016.001.01_ESMAUG_Reporting_1.1.0, with fields placed as in section 6 of
  * the ESMA technical reporting instructions (ESMA65-8-2356). Output passes the
  * ESMA XSD in an own test (run with {@code QFL_ESMA_XSD} pointing at the XSD; the
- * schema is SWIFT MyStandards licensed and is not shipped). The business
- * application header and envelope are not written. CSV and a simple XML
- * rendering remain for inspection.
+ * schema is SWIFT MyStandards licensed and is not shipped).
+ * {@code toSubmissionXml} wraps it in the head.003 envelope with the head.001
+ * business application header. CSV and a simple XML rendering remain for
+ * inspection.
+ *
+ * <p>Since 3.0.0, {@link com.quantfinlib.reporting.Rts22StatusTracker} keeps the
+ * state a competent authority keeps across files (field 2 history, CON-023 to
+ * CON-025, and the seven-day queue of reports pending instrument reference data),
+ * and {@link com.quantfinlib.reporting.StatusAdvice} reads and writes the auth.031
+ * feedback file, including the header's {@code Rltd} reference to the submitted
+ * file ({@link com.quantfinlib.reporting.BusinessHeader}).
  *
  * <p>The flat 65-field layout loses some type information the message needs.
  * The writer recovers it by these rules, which callers must respect:
@@ -35,8 +43,9 @@
  *   <li>Field 30 is in units unless field 31 is set, then a nominal value in
  *       that currency. Fields 33 and 51 are monetary prices in the currency of
  *       34 or 52 (negative values get {@code Sgn false}), or {@code PNDG} /
- *       {@code NOAP} for no price. Percentage, yield and basis-point prices are
- *       not supported.</li>
+ *       {@code NOAP} for no price. Since 3.0.0 a value prefixed {@code PCTG:},
+ *       {@code YLD:} or {@code BSPS:} is written as {@code Pctg}, {@code Yld} or
+ *       {@code BsisPts} ({@link com.quantfinlib.reporting.PriceNotation}).</li>
  *   <li>Field 41 alone gives {@code FinInstrm/Id}. When field 42 or 43 is set
  *       the full description ({@code FinInstrm/Othr}) is written instead, with
  *       field 41 as the optional ISIN inside it. Field 47 may hold several ISINs

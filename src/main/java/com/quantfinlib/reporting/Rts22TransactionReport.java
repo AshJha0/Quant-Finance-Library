@@ -139,7 +139,7 @@ public final class Rts22TransactionReport implements TransactionReport {
             errs.add(tag(Rts22Field.TRADING_DATE_TIME) + " '" + ts + "' is not YYYY-MM-DDThh:mm:ss[.f]Z UTC");
         }
         for (Rts22Field f : List.of(Rts22Field.QUANTITY, Rts22Field.PRICE)) {
-            String v = get(f);
+            String v = f == Rts22Field.PRICE ? PriceNotation.number(get(f)) : get(f);
             if (!v.isBlank() && !DECIMAL.matcher(v).matches()) {
                 errs.add(tag(f) + " '" + v + "' is not a plain decimal");
             }
@@ -192,8 +192,11 @@ public final class Rts22TransactionReport implements TransactionReport {
      * CON-030 (XOFF/XXXX part only), 073, 074, 110, 122, 123, 150, 163, 164, 200,
      * 212, 213, 240, 251, 290, 361 (XXXX needs the full description), 362, 372
      * (XOFF/XXXX part), 431, 441, 450, 480, 481, 490, 500, 501, 502, 510, 511,
-     * 530, 531, 540, 541, 542, 550, 551, 552, 560, 570, 571, 572, 574, 591 and
-     * 610 (XOFF/XXXX part). The CFI-based rules apply when field 43 is populated,
+     * 530, 531, 540, 541, 542, 550, 551, 552, 560, 570, 571, 572, 574, 591,
+     * 610 (XOFF/XXXX part) and, since 3.0.0, 330 (a debt CFI in field 43 with the
+     * quantity in units must not have a percentage price; see {@link PriceNotation}),
+     * 410 and 470 (ISO 6166 check digit of fields 41 and 47; other lengths are left to
+     * the XSD). The CFI-based rules apply when field 43 is populated,
      * that is, when the report carries its own instrument description. Messages
      * starting {@code XSD} are element cardinalities of the auth.016 usage
      * guideline that the flat field layout cannot enforce (field 59 is mandatory,
@@ -202,8 +205,8 @@ public final class Rts22TransactionReport implements TransactionReport {
      *
      * <p>Not checked here, because they need data outside the report: LEI status in
      * GLEIF, MIC and SI status, country and currency validity on the trading date,
-     * instrument presence in FIRDS (these are in {@link #validateWithReferenceData}), uniqueness and cancellation history of field
-     * 2, and the date the file reaches the NCA. Cancellations are only checked
+     * instrument presence in FIRDS (these are in {@link #validateWithReferenceData}),
+     * uniqueness and cancellation history of field 2 (in {@link Rts22StatusTracker}), and the date the file reaches the NCA. Cancellations are only checked
      * for field 2, since auth.016 carries just fields 2, 4 and 6 for them.
      *
      * <p>Worked example ({@code Rts22EsmaRulesTest}, own test): a DEAL fill built
@@ -268,17 +271,20 @@ public final class Rts22TransactionReport implements TransactionReport {
      *       CON-411 (field 41 in FIRDS for the venue, or for any EEA venue when off venue,
      *       on an SI or on a non-EEA venue), CON-471 (underlyings in field 47), and, from
      *       the FIRDS CFI, CON-351 (net amount for bonds), CON-381 (up-front payment for
-     *       CDS), CON-640 (commodity flag).</li>
+     *       CDS), CON-640 (commodity flag) and, since 3.0.0, CON-331 (no percentage price
+     *       for a debt instrument traded in units).</li>
+     *   <li>CFI table ({@code refs.cfiCodes()}, since 3.0.0): CON-430 (field 43 allowed by
+     *       ISO 10962:2015). The table is caller input; ISO does not publish it freely.</li>
      * </ul>
      * An NCA pends CON-411 and CON-471 for up to 7 days before rejecting; this method
-     * reports them at once and says so in the message. EEA membership of a venue comes
+     * reports them at once and says so in the message; {@link Rts22StatusTracker} runs
+     * the pending workflow itself. EEA membership of a venue comes
      * from {@link com.quantfinlib.reporting.registry.MicRegistry#country}; when it is not
      * known, the EEA-dependent parts of CON-411, CON-471 and CON-610 are skipped.
      * Cancellations get only CON-060.
      *
-     * <p>Not implemented: CON-330/331 (percentage prices are not representable here),
-     * CON-430 (needs the ISO 10962 table), the 7-day pending workflow, and rules on
-     * field 2 uniqueness and cancellation history.
+     * <p>The field 2 history rules CON-023, CON-024 and CON-025 and the 7-day pending
+     * workflow need state across reports and live in {@link Rts22StatusTracker}.
      *
      * <p>Worked example ({@code Rts22ReferenceRulesTest}, own test): a buy on XPAR whose
      * counterparty LEI has status RETIRED in the fixture registry fails CON-160 for
