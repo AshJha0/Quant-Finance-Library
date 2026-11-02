@@ -48,11 +48,12 @@
         <japicmp.version>0.26.5</japicmp.version>
         <pitest.version>1.30.1</pitest.version>
         <pitest.junit5.version>1.2.3</pitest.junit5.version>
-        <!-- API compatibility baseline: the released 2.4.0 library jar
-             (scripts/fetch-api-baseline.sh). 2.4.0 is one jar holding both
-             tiers; each module compares its own jar against it. -->
-        <api.baseline.version>2.4.0</api.baseline.version>
+        <!-- API compatibility baseline: the released 3.0.0 jars
+             (scripts/fetch-api-baseline.sh). From 3.0 the release is two
+             artifacts; each module compares its own jar with its own 3.0.0 jar. -->
+        <api.baseline.version>3.0.0</api.baseline.version>
         <api.baseline.jar>${user.home}/.m2/api-baseline/quant-finance-library-${api.baseline.version}.jar</api.baseline.jar>
+        <api.baseline.lowlatency.jar>${user.home}/.m2/api-baseline/quant-finance-library-lowlatency-${api.baseline.version}.jar</api.baseline.lowlatency.jar>
         <!-- Test tags: load (throughput/soak floors), timing (wall-clock or
              sleep-based assertions), socket (real loopback sockets). The
              default run skips load and timing because they are sensitive to

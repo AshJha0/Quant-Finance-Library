@@ -59,7 +59,7 @@
         </plugins>
     </build>
     <profiles>
-        <!-- Reference tier: compared with the 2.4.0 jar and reported only
+        <!-- Reference tier: compared with the released 3.0.0 low-latency jar and reported only
              (docs/STABILITY.md: formats and signatures may change in a minor).
              Report: lowlatency/target/japicmp/api-lowlatency.html. -->
         <profile>
@@ -73,7 +73,7 @@
                         <configuration>
                             <oldVersion>
                                 <file>
-                                    <path>${api.baseline.jar}</path>
+                                    <path>${api.baseline.lowlatency.jar}</path>
                                 </file>
                             </oldVersion>
                             <newVersion>
@@ -97,14 +97,7 @@
                                         <breakBuildOnBinaryIncompatibleModifications>false</breakBuildOnBinaryIncompatibleModifications>
                                         <breakBuildOnSourceIncompatibleModifications>false</breakBuildOnSourceIncompatibleModifications>
                                         <includes>
-                                            <include>com.quantfinlib.entitlements</include>
-                                            <include>com.quantfinlib.feed</include>
-                                            <include>com.quantfinlib.fix</include>
-                                            <include>com.quantfinlib.marketdata</include>
-                                            <include>com.quantfinlib.orderbook</include>
-                                            <include>com.quantfinlib.sbe</include>
-                                            <include>com.quantfinlib.trading</include>
-                                            <include>com.quantfinlib.util</include>
+                                            <include>com.quantfinlib.*</include>
                                         </includes>
                                     </parameter>
                                 </configuration>
