@@ -310,3 +310,11 @@ java -cp quant-finance-library-2.4.0.jar:quant-finance-library-2.4.0-examples.ja
 Numbers (apart from the rounding-level exposure note in section 6),
 conventions, the stable package list in `docs/STABILITY.md`, and every package
 name other than `reporting` and the tick-file types.
+
+Additions in the stable `risk` package need no migration: new methods on
+`FrtbDrcSecuritisation` (`kAPartlyUnknownW`, `secSaPermittedWithUnknownW`,
+`juniorUnratedFloor`, `decomposeIndex`, `offsetByReplication`,
+`checkSingleNameDecomposition`) and on `SaCcrHaircuts`
+(`fundHaircut10DayMandate`, `fundHaircut10DayLookThrough`). If you applied
+CRE41.9, CRE41.15 or the fund-haircut rule yourself before calling the 2.4
+methods, you can drop that code; results for the same inputs are the same.

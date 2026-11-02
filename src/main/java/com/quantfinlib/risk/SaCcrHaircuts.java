@@ -63,8 +63,10 @@ package com.quantfinlib.risk;
  * other exposure types 30 (published reference). Worked example (own
  * hand computation): 1,000 of a senior securitisation with SA risk
  * weight 50% and 4 years to run, held, same currency, 10 days: H = 12%,
- * C = 880. UCITS and mutual funds (highest haircut of what the fund can
- * hold, or look-through) are left to the caller. Research lane,
+ * C = 880. UCITS and mutual funds take the highest haircut of what the
+ * mandate allows ({@link #fundHaircut10DayMandate}) or, where the bank may
+ * look through, the weighted average of the holdings
+ * ({@link #fundHaircut10DayLookThrough}). Research lane,
  * deterministic.</p>
  */
 public final class SaCcrHaircuts {
@@ -244,6 +246,76 @@ public final class SaCcrHaircuts {
                 return new double[]{0.02, 0.04, 0.06, 0.12, 0.20}[b];
             default:
                 return new double[]{0.04, 0.12, 0.12, 0.24, 0.24}[b];
+        }
+    }
+
+    /**
+     * 10-day haircut on units of a UCITS or mutual fund under the mandate
+     * rule: the highest haircut that applies to any security the fund can
+     * invest in (CRE22.49 and CRE22.50, row "UCITS/mutual funds";
+     * published reference). The caller supplies the haircut of each
+     * instrument class in the mandate, from {@link #haircut10Day} or
+     * {@link #haircut10DayNoExternalRatings}. Eligibility is the caller's
+     * check: daily public price and a mandate limited to eligible
+     * instruments (CRE22.34(6), CRE22.45(3); hedging derivatives allowed by
+     * footnote 139).
+     *
+     * @param mandateHaircuts 10-day haircuts in [0, 1], at least one
+     * @return the largest of them
+     */
+    public static double fundHaircut10DayMandate(double... mandateHaircuts) {
+        java.util.Objects.requireNonNull(mandateHaircuts, "mandateHaircuts");
+        if (mandateHaircuts.length == 0) {
+            throw new IllegalArgumentException("need at least one haircut");
+        }
+        double max = 0;
+        for (double h : mandateHaircuts) {
+            checkHaircut(h);
+            max = Math.max(max, h);
+        }
+        return max;
+    }
+
+    /**
+     * 10-day haircut on fund units under the look-through approach: the
+     * weighted average of the haircuts of the instruments the fund holds,
+     * available only when the bank may apply the LTA for equity
+     * investments in funds (CRE22.49 and CRE22.50, row "UCITS/mutual
+     * funds"; published reference). Weights are the holdings' shares of
+     * fund value and must sum to 1 within 1e-9 (library reading: the text
+     * says "weighted average" without fixing the weights; value shares are
+     * the only weights under which the haircut matches the value at risk
+     * of the units).
+     *
+     * @param weights  holding weights, each at least 0
+     * @param haircuts 10-day haircut of each holding, in [0, 1]
+     * @return the weighted average haircut
+     */
+    public static double fundHaircut10DayLookThrough(double[] weights, double[] haircuts) {
+        java.util.Objects.requireNonNull(weights, "weights");
+        java.util.Objects.requireNonNull(haircuts, "haircuts");
+        if (weights.length == 0 || weights.length != haircuts.length) {
+            throw new IllegalArgumentException("need matching, non-empty weights and haircuts");
+        }
+        double sw = 0;
+        double h = 0;
+        for (int i = 0; i < weights.length; i++) {
+            if (!(weights[i] >= 0) || weights[i] == Double.POSITIVE_INFINITY) {
+                throw new IllegalArgumentException("weights must be >= 0 and finite");
+            }
+            checkHaircut(haircuts[i]);
+            sw += weights[i];
+            h += weights[i] * haircuts[i];
+        }
+        if (!(Math.abs(sw - 1) <= 1e-9)) {
+            throw new IllegalArgumentException("weights must sum to 1, got " + sw);
+        }
+        return h;
+    }
+
+    private static void checkHaircut(double h) {
+        if (!(h >= 0 && h <= 1)) {
+            throw new IllegalArgumentException("haircut must be in [0, 1], got " + h);
         }
     }
 

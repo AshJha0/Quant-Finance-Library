@@ -6,6 +6,17 @@ Entries for 1.x releases are archived in [docs/history/CHANGELOG-1.x.md](docs/hi
 
 ## [Unreleased]
 
+### Added (3.0.0, risk)
+
+- `risk.FrtbDrcSecuritisation.kAPartlyUnknownW` and `secSaPermittedWithUnknownW`: K_A when the delinquency status is unknown for up to 5% of the pool (CRE41.9); above 5% the method throws, since CRE41.10 requires 1250% (published reference).
+- `risk.FrtbDrcSecuritisation.juniorUnratedFloor`: an unrated junior tranche under rated seniors takes no less than the next more senior rated weight (CRE41.15, published reference).
+- `risk.FrtbDrcSecuritisation.decomposeIndex`, `offsetByReplication` and `checkSingleNameDecomposition`: decomposition offsets of MAR22.28, MAR22.30(1)-(3) and MAR22.39(2)-(3) (published reference; the thickness split for "decomposed proportionately" is the library's reading).
+- `risk.SaCcrHaircuts.fundHaircut10DayMandate` and `fundHaircut10DayLookThrough`: UCITS and mutual fund haircuts from the CRE22.49 and CRE22.50 tables (published reference; value weights in the look-through average are the library's reading).
+
+### Changed (3.0.0, risk)
+
+- `FrtbDrcSecuritisation.drcRiskWeight`: the 8% conversion is still not printed in MAR22, but its evidence class moves from unconfirmed to library reading, with the reasons in the javadoc (RBC20.1(3), MAR20.1, CRE41.4 footnote 211, MAR22.34(3)). Results unchanged.
+
 ## [2.4.0] - 2026-11-02
 
 Minor release. No 2.3 public signature in a stable package is removed or changed (japicmp against 2.3.0), and no result changes unless you opt in. 2.4.0 deprecates for removal every member that 3.0 takes out, so compiling with `-Xlint:removal` lists the lines to change; [docs/MIGRATION_2.4.md](docs/MIGRATION_2.4.md) covers this release and [docs/MIGRATION_3.0.md](docs/MIGRATION_3.0.md) is the draft plan for 3.0.

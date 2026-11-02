@@ -41,10 +41,17 @@ import java.util.Objects;
  * from it is taken as caller input in {@link NetJtd#riskWeight()}. The
  * banking-book weight is a multiple of exposure that includes the 8%
  * capital ratio (1250% means a deduction). Turning it into a DRC weight
- * per unit of JTD is done here by multiplying by 8% ({@link #drcRiskWeight});
- * the Basel text does not print that factor, so it is an interpretation,
- * and it is the one consistent with the 1250% weight producing a charge
- * equal to the full market value (the fair-value cap of MAR22.34(3)).
+ * per unit of JTD is done here by multiplying by 8% ({@link #drcRiskWeight}).
+ * Evidence class: <i>library reading</i>. MAR22.34 and MAR22.42 (checked
+ * against the consolidated Basel Framework text on disk) do not print the
+ * factor. The reading rests on three printed rules: RBC20.1(3) sets total
+ * capital at 8.0% of RWA, so a banking-book weight is RWA per unit of
+ * exposure; MAR20.1 turns market-risk capital into RWA by x12.5, the
+ * inverse of 8%, so DRC weights are capital per unit of JTD; and CRE41.4
+ * footnote 211 converts a risk weight to capital as "risk weight times
+ * 8%" inside K_SA. It is also the only factor that makes the 1250%
+ * weight a charge equal to the full market value, which matches the
+ * fair-value cap of MAR22.34(3).
  * Non-tranched CTP products use the non-securitisation weights of
  * MAR22.24 ({@link FrtbDrc.CreditQuality}), MAR22.43.</p>
  *
@@ -107,11 +114,127 @@ public final class FrtbDrcSecuritisation {
      * one-year scaling and three-month floor of MAR22.15 to MAR22.18
      * (MAR22.30, MAR22.39). Different tranches, pools, series or index
      * families must not be passed together (MAR22.29, MAR22.39(4)); a
-     * replication by decomposition (MAR22.28, MAR22.30(1)-(2), MAR22.39(2)-(3))
-     * is the caller's job before this call.
+     * replication by decomposition goes through {@link #decomposeIndex},
+     * {@link #offsetByReplication} or {@link #checkSingleNameDecomposition}
+     * first (MAR22.28, MAR22.30(1)-(3), MAR22.39(2)-(3)).
      */
     public static double netTranche(double[] grossJtd, double[] maturityYears) {
         return FrtbDrc.netObligor(grossJtd, maturityYears);
+    }
+
+    // ------------------------------------------------------ decomposition
+
+    /**
+     * Decomposes a non-tranched index position (or a basket of its names)
+     * into replicating tranches that span the whole structure, for
+     * offsetting against tranche positions (MAR22.28 non-CTP; MAR22.39(3)
+     * CTP). Tranche i gets jtd * (D_i - A_i). The split by thickness is a
+     * <i>library reading</i> of "decomposed proportionately": a full
+     * capital structure loses exactly what the index loses, and a notional
+     * share equal to thickness is the split under which the tranches sum
+     * back to the index. Names treated this way must be taken out of the
+     * non-securitisation DRC (MAR22.28, last sentence); that is the
+     * caller's job.
+     *
+     * @param jtd    signed JTD of the index position, finite
+     * @param attach attachment points, ascending, first 0
+     * @param detach detachment points, detach[i] = attach[i + 1], last 1
+     * @return one replicating JTD per tranche, same order
+     */
+    public static double[] decomposeIndex(double jtd, double[] attach, double[] detach) {
+        checkTiling(attach, detach, 0, 1);
+        if (!Double.isFinite(jtd)) {
+            throw new IllegalArgumentException("JTD must be finite");
+        }
+        double[] out = new double[attach.length];
+        for (int i = 0; i < out.length; i++) {
+            out[i] = jtd * (detach[i] - attach[i]);
+        }
+        return out;
+    }
+
+    /**
+     * Offset by replication within one index series or pool (MAR22.30(1),
+     * MAR22.39(3)). A tranche [A, D] with JTD {@code jtd} is split over the
+     * sub-tranches that tile it exactly, in proportion to thickness, and
+     * added to the JTD already held in each. A perfect replication leaves
+     * zeros. The text's example (MAR22.39(3)) is a long 10-15% tranche
+     * against shorts in 10-12% and 12-15%. The ordinary netting of
+     * {@link #netTranche} then applies per sub-tranche (MAR22.30(3)).
+     *
+     * @param attach      A of the tranche being replicated
+     * @param detach      D of the tranche being replicated
+     * @param jtd         signed JTD of that tranche, finite
+     * @param pieceAttach sub-tranche attachments, ascending, first = A
+     * @param pieceDetach sub-tranche detachments, contiguous, last = D
+     * @param pieceJtd    signed JTD already held in each sub-tranche
+     * @return residual signed JTD per sub-tranche
+     */
+    public static double[] offsetByReplication(double attach, double detach, double jtd,
+                                               double[] pieceAttach, double[] pieceDetach, double[] pieceJtd) {
+        if (!(attach >= 0 && detach > attach && detach <= 1)) {
+            throw new IllegalArgumentException("need 0 <= A < D <= 1");
+        }
+        checkTiling(pieceAttach, pieceDetach, attach, detach);
+        Objects.requireNonNull(pieceJtd, "pieceJtd");
+        if (pieceJtd.length != pieceAttach.length || !Double.isFinite(jtd)) {
+            throw new IllegalArgumentException("need one JTD per piece and a finite tranche JTD");
+        }
+        double t = detach - attach;
+        double[] out = new double[pieceJtd.length];
+        for (int i = 0; i < out.length; i++) {
+            out[i] = pieceJtd[i] + jtd * (pieceDetach[i] - pieceAttach[i]) / t;
+        }
+        return out;
+    }
+
+    /**
+     * Checks a valuation-model decomposition into single-name equivalents
+     * (MAR22.39(2)): allowed for vanilla securitisations only (exotics such
+     * as CDO-squared are prohibited) and the single-name amounts must be
+     * consistent with the undecomposed value. The text gives no number for
+     * "consistent", so the tolerance is a caller input.
+     *
+     * @param securitisationValue   undecomposed value of the securitisation
+     * @param singleNameEquivalents unconditional minus conditional-on-default value per name
+     * @param exotic                true for CDO-squared and other exotic structures
+     * @param tolerance             allowed absolute gap between the sum and the value, at least 0
+     * @return a copy of the single-name equivalents
+     * @throws IllegalArgumentException if exotic or the sum misses by more than {@code tolerance}
+     */
+    public static double[] checkSingleNameDecomposition(double securitisationValue, double[] singleNameEquivalents,
+                                                        boolean exotic, double tolerance) {
+        Objects.requireNonNull(singleNameEquivalents, "singleNameEquivalents");
+        if (exotic) {
+            throw new IllegalArgumentException("decomposing an exotic securitisation is prohibited (MAR22.39(2))");
+        }
+        if (!(tolerance >= 0)) {
+            throw new IllegalArgumentException("tolerance must be >= 0");
+        }
+        double sum = 0;
+        for (double v : singleNameEquivalents) {
+            sum += v;
+        }
+        if (!(Math.abs(sum - securitisationValue) <= tolerance)) {
+            throw new IllegalArgumentException("single-name equivalents do not sum to the securitisation value");
+        }
+        return singleNameEquivalents.clone();
+    }
+
+    private static void checkTiling(double[] a, double[] d, double lo, double hi) {
+        Objects.requireNonNull(a, "attach");
+        Objects.requireNonNull(d, "detach");
+        if (a.length == 0 || a.length != d.length) {
+            throw new IllegalArgumentException("need matching, non-empty attach and detach arrays");
+        }
+        if (a[0] != lo || d[d.length - 1] != hi) {
+            throw new IllegalArgumentException("pieces must start at A and end at D");
+        }
+        for (int i = 0; i < a.length; i++) {
+            if (!(d[i] > a[i]) || i > 0 && a[i] != d[i - 1]) {
+                throw new IllegalArgumentException("pieces must be contiguous with D > A");
+            }
+        }
     }
 
     // ------------------------------------------------------- risk weights
@@ -132,6 +255,72 @@ public final class FrtbDrcSecuritisation {
         return (1 - w) * kSa + 0.5 * w;
     }
 
+    /** Largest pool share, by EAD, with unknown delinquency status that still allows SEC-SA (CRE41.9, CRE41.10). */
+    public static final double MAX_UNKNOWN_W_SHARE = 0.05;
+
+    /**
+     * Whether SEC-SA may be used when the delinquency status is unknown for
+     * part of the pool: true when unknown EAD / total EAD is at most 5%
+     * (CRE41.9). When false the exposure takes 1250% (CRE41.10).
+     *
+     * @param eadKnown   EAD of subpool 1 (W known), at least 0
+     * @param eadUnknown EAD of subpool 2 (W unknown), at least 0; not both 0
+     * @return true if SEC-SA is still available
+     */
+    public static boolean secSaPermittedWithUnknownW(double eadKnown, double eadUnknown) {
+        return unknownShare(eadKnown, eadUnknown) <= MAX_UNKNOWN_W_SHARE;
+    }
+
+    /**
+     * K_A when W is unknown for part of the pool (CRE41.9):
+     * K_A = (EAD_known / EAD_total) * K_A^known + EAD_unknown / EAD_total,
+     * so the unknown subpool is charged at 100%. K_A^known is {@link #kA}
+     * computed on subpool 1 alone.
+     *
+     * @param kAKnown    K_A of subpool 1, in [0, 1]
+     * @param eadKnown   EAD of subpool 1, at least 0
+     * @param eadUnknown EAD of subpool 2, at least 0; not both 0
+     * @return the adjusted K_A
+     * @throws IllegalArgumentException if the unknown share exceeds 5%;
+     *         CRE41.10 then requires 1250%, which the caller applies
+     */
+    public static double kAPartlyUnknownW(double kAKnown, double eadKnown, double eadUnknown) {
+        if (!(kAKnown >= 0 && kAKnown <= 1)) {
+            throw new IllegalArgumentException("K_A of the known subpool must be in [0, 1]");
+        }
+        double share = unknownShare(eadKnown, eadUnknown);
+        if (share > MAX_UNKNOWN_W_SHARE) {
+            throw new IllegalArgumentException("W unknown for more than 5% of the pool: 1250% applies (CRE41.10)");
+        }
+        return (1 - share) * kAKnown + share;
+    }
+
+    private static double unknownShare(double eadKnown, double eadUnknown) {
+        if (!(eadKnown >= 0) || !(eadUnknown >= 0) || !Double.isFinite(eadKnown + eadUnknown)
+                || eadKnown + eadUnknown == 0) {
+            throw new IllegalArgumentException("EADs must be finite, >= 0 and not both 0");
+        }
+        return eadUnknown / (eadKnown + eadUnknown);
+    }
+
+    /**
+     * Second sentence of CRE41.15: an unrated junior tranche in a deal whose
+     * more senior tranches are rated, where no rating can be inferred for
+     * the junior one, takes no less than the weight of the next more senior
+     * rated tranche.
+     *
+     * @param secSaRiskWeight           the junior tranche's SEC-SA weight, a multiple
+     * @param nextSeniorRatedRiskWeight weight of the next more senior rated tranche, a multiple
+     * @return max of the two
+     */
+    public static double juniorUnratedFloor(double secSaRiskWeight, double nextSeniorRatedRiskWeight) {
+        if (!(secSaRiskWeight >= 0) || !(nextSeniorRatedRiskWeight >= 0)
+                || !Double.isFinite(secSaRiskWeight + nextSeniorRatedRiskWeight)) {
+            throw new IllegalArgumentException("risk weights must be >= 0 and finite");
+        }
+        return Math.max(secSaRiskWeight, nextSeniorRatedRiskWeight);
+    }
+
     /**
      * K_SSFA = (e^{a·u} − e^{a·l}) / (a·(u − l)) with a = −1/(p·K_A),
      * u = D − K_A, l = max(A − K_A, 0) (CRE41.11).
@@ -149,9 +338,9 @@ public final class FrtbDrcSecuritisation {
      * STC (CRE41.21). D ≤ K_A gives 1250% (CRE41.13(1)); A ≥ K_A gives
      * 12.5·K_SSFA (CRE41.13(2)); otherwise the weighted average of
      * CRE41.13(3). Floors: 15% (CRE41.15), 100% for a resecuritisation
-     * (CRE41.18), STC 10% senior and 15% non-senior (CRE41.22). The
-     * no-lower-than-next-senior-rated rule of CRE41.15 and the unknown-W
-     * adjustment of CRE41.9 are left to the caller.
+     * (CRE41.18), STC 10% senior and 15% non-senior (CRE41.22). For the
+     * unknown-W case pass K_A from {@link #kAPartlyUnknownW} (CRE41.9); for
+     * an unrated junior tranche apply {@link #juniorUnratedFloor} (CRE41.15).
      *
      * @param kA     K_A from {@link #kA}
      * @param attach A in [0, 1)
