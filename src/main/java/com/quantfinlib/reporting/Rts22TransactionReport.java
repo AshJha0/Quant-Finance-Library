@@ -200,9 +200,9 @@ public final class Rts22TransactionReport implements TransactionReport {
      * monetary prices need a currency, field 2 is {@code [A-Z0-9]{1,52}}, a full
      * instrument description needs fields 42, 43, 46, 47 or 48, and 56).
      *
-     * <p>Not checked, because they need data outside the report: LEI status in
+     * <p>Not checked here, because they need data outside the report: LEI status in
      * GLEIF, MIC and SI status, country and currency validity on the trading date,
-     * instrument presence in FIRDS, uniqueness and cancellation history of field
+     * instrument presence in FIRDS (these are in {@link #validateWithReferenceData}), uniqueness and cancellation history of field
      * 2, and the date the file reaches the NCA. Cancellations are only checked
      * for field 2, since auth.016 carries just fields 2, 4 and 6 for them.
      *
@@ -230,10 +230,100 @@ public final class Rts22TransactionReport implements TransactionReport {
     /**
      * Several reports as one auth.016.001.01 document, one {@code Tx} each, in
      * order. The business application header (head.001) and
-     * file envelope (head.003) are not written.
+     * file envelope (head.003) are not written here; {@link #toSubmissionXml} adds them.
      */
     public static String toAuth016Xml(List<Rts22TransactionReport> reports) {
         return Auth016Writer.document(List.copyOf(reports));
+    }
+
+    /**
+     * The ESMA validation rules that need reference data (ESMA65-8-2594 Annex 1, sheet
+     * TransactionDataValidations, v1.7). {@link #validateEsmaRules()} covers the
+     * data-only rules; call both for the full set this library implements.
+     *
+     * <p>In plain terms: an NCA rejects a report whose LEIs are not live in GLEIF on the
+     * trading date, whose ISIN is not in FIRDS for the venue, whose MIC was not active,
+     * or whose currency or country code was not valid on that date. This method runs
+     * those checks against the registries the caller supplies.
+     *
+     * <p>Rules run, each skipped when its registry in {@code refs} is null:
+     * <ul>
+     *   <li>LEI ({@code refs.leis()}): CON-040/041 (field 4; Lapsed is allowed only
+     *       when field 5 is false, or when the LEI is renewed by the submission date),
+     *       CON-060 (field 6, on the submission date), CON-070, CON-120, CON-160, CON-210
+     *       (fields 7, 12, 16, 21 when they hold an LEI; InitialRegistrationDate not checked
+     *       before 3 July 2018), CON-260, CON-270 (fields 26, 27). Status must be Issued,
+     *       Pending transfer or Pending archival, or Lapsed where allowed; the
+     *       InitialRegistrationDate on or before the date; the entity Active, or its
+     *       LastUpdateDate on or after the date.</li>
+     *   <li>Country ({@code refs.countries()}): CON-071, CON-121, CON-161, CON-211, CON-573,
+     *       CON-590 (country prefix of a national id) and CON-080, CON-170, CON-371,
+     *       CON-580, CON-600 (branch country fields).</li>
+     *   <li>Currency ({@code refs.currencies()}): CON-310, CON-340, CON-390, CON-440,
+     *       CON-451, CON-520, with the special codes (XAU, XXX and the others) rejected and
+     *       pre-euro codes accepted for fields 31, 44 and 45.</li>
+     *   <li>MIC ({@code refs.mics()}): CON-072, CON-162 (MIC as buyer or seller),
+     *       CON-360 (field 36), CON-610 (waiver on a non-EEA venue).</li>
+     *   <li>Instrument ({@code refs.instruments()}): CON-361 (XXXX for an ISIN in FIRDS),
+     *       CON-411 (field 41 in FIRDS for the venue, or for any EEA venue when off venue,
+     *       on an SI or on a non-EEA venue), CON-471 (underlyings in field 47), and, from
+     *       the FIRDS CFI, CON-351 (net amount for bonds), CON-381 (up-front payment for
+     *       CDS), CON-640 (commodity flag).</li>
+     * </ul>
+     * An NCA pends CON-411 and CON-471 for up to 7 days before rejecting; this method
+     * reports them at once and says so in the message. EEA membership of a venue comes
+     * from {@link com.quantfinlib.reporting.registry.MicRegistry#country}; when it is not
+     * known, the EEA-dependent parts of CON-411, CON-471 and CON-610 are skipped.
+     * Cancellations get only CON-060.
+     *
+     * <p>Not implemented: CON-330/331 (percentage prices are not representable here),
+     * CON-430 (needs the ISO 10962 table), the 7-day pending workflow, and rules on
+     * field 2 uniqueness and cancellation history.
+     *
+     * <p>Worked example ({@code Rts22ReferenceRulesTest}, own test): a buy on XPAR whose
+     * counterparty LEI has status RETIRED in the fixture registry fails CON-160 for
+     * field 16; with status LAPSED it passes, because CON-160 accepts a lapsed LEI.
+     *
+     * @param refs the reference data
+     * @param submissionDate the date the file is delivered to the NCA (CON-040, CON-060)
+     * @return rule violations, empty when none
+     * @since 2.4.0
+     */
+    public List<String> validateWithReferenceData(com.quantfinlib.reporting.registry.ReferenceData refs,
+            java.time.LocalDate submissionDate) {
+        return EsmaReferenceRules.check(this, refs, submissionDate);
+    }
+
+    /**
+     * Reports wrapped for submission to a competent authority or ARM: a head.003.001.01
+     * {@code BizData} envelope holding the head.001.001.01 Business Application Header
+     * ({@code Hdr/AppHdr}) and the auth.016.001.01 document ({@code Pyld/Document}),
+     * following sections 6.4 and 6.5 of the ESMA technical reporting instructions
+     * (ESMA65-8-2356, paragraphs 124 to 132).
+     *
+     * <p>{@code Fr} is the submitting entity LEI (which must equal field 6 of every
+     * report), {@code To} the two-letter country code of the competent authority,
+     * {@code MsgDefIdr} is {@code auth.016.001.01}, and {@code CreDt} is {@code created}
+     * in UTC to the second.
+     *
+     * <p>Worked example ({@code Auth016EnvelopeTest}, own test): one equity fill with
+     * authority FR, id {@code FILE0001} and time 2026-11-02T10:15:30.5Z gives
+     * {@code <CreDt>2026-11-02T10:15:30Z</CreDt>} and validates against the ESMA
+     * head.003, head.001 and auth.016 XSDs when they are supplied.
+     *
+     * @param reports the reports, at least one
+     * @param submittingLei LEI of the submitting entity
+     * @param ncaCountry ISO 3166 country code of the competent authority, e.g. {@code FR}
+     * @param businessMessageId the file identifier, 1 to 35 characters (rules set nationally)
+     * @param created creation time
+     * @return the XML file
+     * @throws IllegalArgumentException on an invalid LEI, country or id, or a field 6 mismatch
+     * @since 2.4.0
+     */
+    public static String toSubmissionXml(List<Rts22TransactionReport> reports, String submittingLei,
+            String ncaCountry, String businessMessageId, java.time.Instant created) {
+        return BusinessEnvelopeWriter.envelope(List.copyOf(reports), submittingLei, ncaCountry,
+                businessMessageId, created);
     }
 
     private void lei(List<String> errs, Rts22Field f, boolean mustBeLei) {
