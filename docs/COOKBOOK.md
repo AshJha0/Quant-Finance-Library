@@ -10546,11 +10546,16 @@ SaCcr.Result shared = SaCcr.oneMarginAgreementManyNettingSets(
 
 A basis trade sits in its own hedging set with half the supervisory factor and a
 volatility trade in its own set with five times the factor. `SaCcrHaircuts`
-applies the Basel II paragraph 151 haircut table, scaled to the holding period
-by the square root of time, plus the 8% currency-mismatch haircut. Held
+applies the Basel II supervisory haircut table (BCBS 128 para 151) by default, or
+the CRE22.49 table when you pass `SaCcrHaircuts.Table.CRE22`. Haircuts are scaled
+to the holding period by the square root of time (paras 168-169), plus the 8%
+currency-mismatch haircut (para 152; CRE22.52). Held
 collateral is reduced and posted collateral is increased. Several netting sets
 under one margin agreement, and sub-netting sets inside one agreement, have
-their own entry points. The CRE22 (2017) haircut table is not implemented.
+their own entry points. Since 2.3 `subNettingSets` takes the replacement cost
+per sub-netting set and sums it (BCBS 279 para 185), so a margined part worth -30
+no longer offsets an unmargined part worth +50. The CRE22.50 table and
+securitisation collateral are not implemented.
 
 ## 336. FRTB standardised approach, sensitivities-based method
 
@@ -10568,11 +10573,16 @@ double rrao = FrtbRrao.charge(0, 5_000_000);
 ```
 
 Weighted sensitivities aggregate within a bucket, then across buckets, under the
-three correlation scenarios, and the charge is the largest of the three. The
-classes follow BCBS d457 but are not certified. Several inputs are left to the
-caller and marked so in the javadoc: CSR inter-bucket correlations, GIRR
-inflation and basis correlations, equity repo, and securitisation. `FrtbNmrf`
-aggregates stress scenario charges for non-modellable risk factors (MAR33).
+three correlation scenarios, and the charge is the largest of the three. Across
+buckets `S_b` is the plain sum, clamped to `[-K_b, K_b]` only when the first pass
+goes negative under the root (MAR21.4(5)); curvature applies the scenario to the
+squared correlation (MAR21.101) and picks up or down per bucket (MAR21.5). The supervisory values carry
+MAR paragraph citations in the javadoc, including GIRR inflation and cross-currency
+correlations, equity repo, CSR index buckets and inter-bucket correlations, and
+securitisation non-CTP. The classes follow BCBS d457 but are not certified.
+`FrtbNmrf` aggregates stress scenario charges for non-modellable risk factors
+(MAR33.17, verified against the printed formula). Securitisation DRC is not
+implemented.
 
 ## 337. Removed in 2.3.0
 
@@ -10594,7 +10604,7 @@ The session writes the version's BeginString, and for FIXT.1.1 the
 DefaultApplVerID (tag 1137) on Logon. A group is written count tag first, then
 each instance starting with its delimiter tag. On receipt the dictionary for the
 session's version checks group order and counts and rejects with reason 15 or
-16. The order encoder on the hot path still writes FIX 4.4 only.
+16. From 2.3 the hot-path `FixOrderEncoder` also writes 4.2 and 5.0 SP2 (recipe 343).
 
 ## 339. An entitlement check before an order leaves
 
@@ -10629,8 +10639,9 @@ boolean isinOk = ReportingIdentifiers.isValidIsin("GB00B03MLX29");
 
 The builder fills the RTS 22 fields it can derive and checks LEI, ISIN and MIC
 by check digit and shape only. It does not look them up in GLEIF, FIRDS or
-ISO 10383. CSV and XML are for inspection: the XML is not the ESMA auth.016
-message and is not validated against its schema.
+ISO 10383; `ReferenceDataChecker` does that (recipe 348). `toAuth016Xml` writes
+the ESMA auth.016 message and `validateEsmaRules` runs the data-only ESMA rules
+(recipe 347).
 
 ## 341. Corporate events in a portfolio backtest
 
@@ -10670,4 +10681,145 @@ fill; `Sizing.lots(100)` rounds down to round lots. Every gateway fill reaches
 each registered `FillListener` with its execution id, and `LedgerFillListener`
 books it in the ledger. A listener that throws is counted in
 `fillListenerErrorCount` and does not stop the gateway. Busts and corrections
-are not handled.
+arrive from 2.3 (recipe 344).
+
+## 343. The hot-path order encoder in FIX 4.2 or 5.0 SP2
+
+```java
+FixOrderEncoder enc42 = new FixOrderEncoder("BUY", "SELL", 16, 512, FixVersion.FIX_4_2);
+FixOrderEncoder enc50 = new FixOrderEncoder("BUY", "SELL", 16, 512, FixVersion.FIX_5_0_SP2)
+    .applVerId("9");                                  // per-message ApplVerID(1128)
+enc50.registerSymbol(0, "VOD.L");
+FixExecReportView view = new FixExecReportView();
+if (view.wrap(bytes, 0, bytes.length)) {
+    byte normalised = view.execType();                // 4.4 meaning, even for a 4.2 report
+    byte onTheWire = view.rawExecType();              // what the venue actually sent
+}
+```
+
+The encoder writes the BeginString of its version and, under FIXT.1.1, an
+ApplVerID(1128) in every header when you set one; without it the session's
+DefaultApplVerID(1137) applies. It stays allocation-free in all three versions.
+The views detect the version from the BeginString and read repeating groups
+through `FixDictionary`. A FIX 4.2 execution report has no ExecType F; the view
+maps 4.2 ExecType 1/2 with ExecTransType 0 to F, so `execType()` means the same
+thing in every version. Use `rawExecType()` if you need the 4.2 value.
+
+## 344. Trade busts and corrections, gateway to ledger
+
+```java
+// the venue busts execution 1001 of order 7 (ExecType H)
+gateway.onTradeBust(7, 2001, 1001, 100, System.nanoTime());
+// the venue corrects execution 1002 from 100 @ 10.00 to 80 @ 10.02 (ExecType G)
+gateway.onTradeCorrect(7, 2002, 1002, 100, 80, 10.02, System.nanoTime());
+long busts = ledger.bustCount();
+List<DropCopyReconciler.Fill> live = ledger.effectiveFills();  // what survived
+DropCopyReconciler.Report rep = DropCopyReconciler.reconcile(ledger, dropCopy,
+    List.of(DropCopyReconciler.Adjustment.bust(2001, 1001),
+            DropCopyReconciler.Adjustment.correct(2002, 1002, 80, 10.02)), 1e-9);
+```
+
+A bust removes an execution; a correction replaces its quantity and price. The
+gateway adjusts the order's filled quantity and passes the event to each
+`FillListener` (`onBust`, `onCorrect`; both default to doing nothing).
+`PositionLedger` books an adjustment entry, keeps the original fill in its log,
+and rebuilds the affected book from the surviving fills, so average cost and
+realised P&L come out as if the busted trade had never happened. The
+reconciler compares effective fills on both sides and matches the two
+adjustment lists by execution id. The gateway does not reopen a filled order
+after a bust, and `PaperTradingGateway` does not produce busts.
+
+## 345. Foreign-currency swaps, a stochastic basis, and wrong-way bilateral CVA
+
+```java
+List<MultiCurrencyExposureSimulator.ForeignSwap> eurSwaps = List.of(
+    new MultiCurrencyExposureSimulator.ForeignSwap(0,
+        new ExposureSimulator.Swap(100, 0.026, true, 0, 5, 1),
+        MultiCurrencyExposureSimulator.Curve.of(eur)));
+MultiCurrencyExposureSimulator.BasisFactor basis =
+    new MultiCurrencyExposureSimulator.BasisFactor(0.1, 0.002, new double[]{0.3, 0, 0});
+ExposureProfile p = MultiCurrencyExposureSimulator.simulate(market, List.of(), eurSwaps,
+    List.of(), basis, null, dates, 10_000, 42L, 0);
+CvaApproximator.Bilateral b = CvaApproximator.bilateralWrongWay(p, cpty, 0.6, own, 0.6,
+    0.5, 0.0, ExposureProfile.Factor.FX);
+```
+
+A foreign swap is valued on its own currency's Hull-White curve and converted at
+the simulated spot. The basis factor is an extra mean-reverting spread added to
+the projection of domestic swaps; pass `null` and every path equals the 2.2
+result. `bilateralWrongWay` drives both hazards by the chosen factor and charges
+CVA or DVA on each path according to who defaults first. With `bCpty = bOwn = 0`
+it equals `bilateral`. Foreign swaps do not yet see the basis, and all domestic
+swaps share one basis factor.
+
+## 346. Swap-only ISDA rate curve for the CDS model
+
+```java
+LocalDate trade = LocalDate.of(2026, 11, 2);
+IsdaCurve zero = IsdaRateCurve.bootstrapSwaps(trade, List.of(
+    new IsdaRateCurve.Swap("2Y", 0.0310), new IsdaRateCurve.Swap("5Y", 0.0325),
+    new IsdaRateCurve.Swap("10Y", 0.0340)), BusinessCalendar.weekendsOnly());
+double check = IsdaRateCurve.parSwapValue(zero, trade,
+    new IsdaRateCurve.Swap("5Y", 0.0325), BusinessCalendar.weekendsOnly());   // about 0
+```
+
+After the 2022 move to risk-free rates the ISDA CDS standard model builds its
+discount curve from overnight index swaps only, with no money-market deposits.
+Each par swap reprices to zero on the bootstrapped curve. The library checks
+the bootstrap against the published ISDA test grids (own test).
+
+## 347. auth.016 output and the ESMA content rules
+
+```java
+List<String> problems = rep.validateEsmaRules();       // data-only ESMA rules
+String xml = Rts22TransactionReport.toAuth016Xml(List.of(rep));
+```
+
+`toAuth016Xml` writes auth.016.001.01 without the head.001 envelope.
+`validateEsmaRules` runs about 45 of ESMA's content rules that need only the
+report itself (code lists, conditional fields, identifier shapes). Rules that
+need reference data are left to `ReferenceDataChecker`. The tests validate the
+XML against ESMA's XSD when the environment variable `QFL_ESMA_XSD` points to it;
+the XSD is not redistributable and is not in the repository.
+
+## 348. Reference data: GLEIF, FIRDS and ISO 10383 before a report goes out
+
+```java
+LeiRegistry leis = GleifGoldenCopyLeiRegistry.load(Path.of("gleif-goldencopy-lei2.csv"));
+InstrumentRegistry isins = FirdsInstrumentRegistry.load(Path.of("FULINS_E_20261101_01of01.xml"));
+MicRegistry mics = Iso10383MicRegistry.load(Path.of("ISO10383_MIC.csv"));
+ReferenceDataChecker checker = new ReferenceDataChecker(leis, isins, mics,
+    Set.of("executingEntity"), Set.of("isin"), Set.of("venue"), downstreamSink);
+List<String> problems = checker.check(rep);
+```
+
+The registries load the public files you download yourself: the GLEIF golden
+copy (or `GleifApiLeiRegistry` for single lookups over HTTPS), an ESMA FIRDS
+FULINS file and the ISO 10383 MIC list. The checker refuses a report whose LEI
+is unknown or lapsed, whose ISIN is not in FIRDS, or whose MIC is unknown or
+inactive, and forwards the rest. The field keys depend on the report type.
+
+## 349. CAT and EMIR Refit reports
+
+```java
+CatEvent meno = CatEventBuilder.newOrder()
+    .reporter("ABCD", "ROE-1")
+    .orderKey("O-1", Instant.parse("2026-11-02T14:30:00Z"))
+    .eventTimestamp(Instant.parse("2026-11-02T14:30:00Z"))
+    .symbol("IBM").sidePriceQty("B", new BigDecimal("150.25"), new BigDecimal("100"))
+    .build();
+new CatJsonLinesSink(writer).submit(meno);
+
+String uti = EmirRefitReportBuilder.uti(executingLei, "T0001");
+EmirRefitReport emir = EmirRefitReportBuilder.of(EmirActionType.NEWT, EmirEventType.TRAD)
+    .counterparties(executingLei, otherLei, true)
+    .uti(uti)
+    .build();
+List<String> emirProblems = emir.validate();
+```
+
+The CAT builder covers new order, route, trade and fulfilment events (MENO, MEOR,
+MEOT, MEOF) and writes them as JSON lines with Eastern-time timestamps. The EMIR
+builder covers the Refit core fields, the UTI shape and the allowed pairs of
+action and event type. Both are indicative and not certified; EMIR has not been
+checked field by field against Regulation 2022/1860.

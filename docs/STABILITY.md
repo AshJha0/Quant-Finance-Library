@@ -60,9 +60,12 @@ audit trails, operational tooling).
 | `trading` | Risk gate, order gateway, order state machine, quoter, auto hedger, paper venue, sharding; from 2.1 `PositionLedger`, `DropCopyReconciler`, `LimitsConfig` and `LimitsManager`; from 2.2 `FillListener` and `LedgerFillListener` |
 | `marketdata` | Ring buffers, market-data bus, ITCH 5.0 codec, L3 book builder, NBBO |
 | `orderbook` | Reference matching engine (`OrderBook`), price-ladder engine (`HftOrderBook`) and call auctions (`AuctionBook`, from 2.1) |
-| `fix` | FIX 4.4 session, journal store, garbage-free encoders and views; from 2.1 session schedules (`FixSessionSchedule`, `FixSessionOptions`); from 2.2 FIX 4.2 and 5.0 SP2 (`FixVersion`) and repeating groups (`FixDictionary`, `FixGroupDef`, `FixGroup`) |
+| `fix` | FIX 4.4 session (4.2 and 5.0 SP2 from 2.2; the hot-path encoder and views in all three from 2.3), journal store, garbage-free encoders and views; from 2.1 session schedules (`FixSessionSchedule`, `FixSessionOptions`); from 2.2 FIX 4.2 and 5.0 SP2 (`FixVersion`) and repeating groups (`FixDictionary`, `FixGroupDef`, `FixGroup`) |
 | `entitlements` | Entitlement service and pre-trade check (2.2) |
-| `reporting` | MiFIR RTS 22 transaction report builder and identifier checks (2.2); not validated against the ESMA schema |
+| `reporting` | MiFIR RTS 22 transaction report builder and identifier checks (2.2); auth.016 output and data-only ESMA rules (2.3) |
+| `reporting.registry` | GLEIF, FIRDS and ISO 10383 reference data and a checking sink (2.3) |
+| `reporting.cat` | CAT order events as JSON lines (2.3); indicative, not certified |
+| `reporting.emir` | EMIR Refit core fields, UTI and action/event pairing (2.3); indicative, not checked against Regulation 2022/1860 |
 | `sbe` | SBE-style binary codecs (schema 2) and channel adapters |
 | `feed` | WebSocket feed, MoldUDP64 receiver |
 | `data` tick files | `TickFileWriter`, `TickFileReader`, `TickCapture`, `AsyncTickCapture` |

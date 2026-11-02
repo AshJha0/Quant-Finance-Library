@@ -6,9 +6,50 @@ Entries for 1.x releases are archived in [docs/history/CHANGELOG-1.x.md](docs/hi
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-11-02
+
+Minor release. No 2.2 public signature in a stable package is removed or changed (japicmp against 2.2.0). The reference package `risk.simm` is removed, and several results change because they disagreed with the cited text; [docs/MIGRATION_2.3.md](docs/MIGRATION_2.3.md) lists each change and how to keep the old behaviour where that is possible.
+
+### Added
+
+- Trade busts and corrections (ExecType H and G): `HftOrderGateway.onTradeBust` and `onTradeCorrect`; `FillListener.onBust` and `onCorrect` (default no-op, so 2.2 listeners compile unchanged); `PositionLedger.onBust`, `onCorrect`, `effectiveFills`, `adjustments`, `bustCount`, `correctionCount`, `rejectedAdjustmentCount` (adjustment entries in the log, book rebuilt from surviving fills); `DropCopyReconciler.Adjustment` and a `reconcile` overload that takes the drop copy's adjustments.
+- `fix.FixOrderEncoder` writes FIX 4.2, 4.4 and 5.0 SP2 (FIXT.1.1) through a version constructor, with a per-message ApplVerID(1128) (`applVerId`), and stays allocation-free. `FixExecReportView` and `FixMarketDataView` detect the version from BeginString, read groups through `FixDictionary` (optionally a venue dictionary), and read MDPriceLevel(1023). `FixExecReportView.rawExecType` returns the wire value.
+- `credit.IsdaRateCurve`: the swap-only ISDA CDS Standard Model RFR discount curve (`bootstrapSwaps`, `parSwapValue`), checked against the official ISDA SOFR test grids when `QFL_ISDA_GRID_DIR` is set (published reference).
+- `credit.MultiCurrencyExposureSimulator.ForeignSwap`, `BasisFactor` (opt-in stochastic projection basis for domestic swaps) and a ten-argument `simulate`; `CvaApproximator.bilateralWrongWay` (both hazards driven by a market factor, first to default per path). Without the new arguments results equal 2.2 path for path.
+- `risk.SaCcrHaircuts.Table` (`BASEL_II_2006`, the default, and `CRE22`, the CRE22.49 table) and a `haircut10Day` overload that takes it.
+- `risk.FrtbSa`: GIRR different-curve, inflation and cross-currency correlations, equity repo risk weights, CSR index buckets and inter-bucket correlations, the correlation trading portfolio, securitisation non-CTP, other-sector bucket aggregation, commodity inter-bucket correlations; up/down curvature with per-bucket selection. `FrtbDrc` obligor netting (`netObligor`). Every supervisory value cites its MAR paragraph.
+- `Rts22TransactionReport.toAuth016Xml` (ISO 20022 auth.016.001.01, validated against the ESMA XSD 1.1.0 in a test when `QFL_ESMA_XSD` is set; the XSD is not redistributed) and `validateEsmaRules` (about 45 data-only ESMA content rules).
+- `com.quantfinlib.reporting.registry`: `GleifGoldenCopyLeiRegistry`, `GleifApiLeiRegistry`, `FirdsInstrumentRegistry` (FULINS), `Iso10383MicRegistry` and `ReferenceDataChecker`, a sink that refuses lapsed LEIs, unknown ISINs and inactive MICs.
+- `com.quantfinlib.reporting.cat` (MENO, MEOR, MEOT, MEOF events as JSON lines) and `com.quantfinlib.reporting.emir` (EMIR Refit core fields, UTI, action and event pairing). Both are indicative and not certified; EMIR is not checked against Regulation 2022/1860.
+
+### Changed
+
+- `FixExecReportView.execType()` on a FIX 4.2 report returns the 4.4 meaning (ExecType 1 or 2 read as F; ExecTransType 1 and 2 read as H and G). `rawExecType()` gives the wire value.
+- `FixMarketDataView` ends the NoMDEntries group at the first field that is not a group member, as a counterparty engine with the same dictionary would. Pass a venue `FixDictionary` that declares extra member tags to keep them inside the entry.
+- `DropCopyReconciler.reconcile(PositionLedger, ...)` compares the ledger's effective fills (after busts and corrections). With nothing busted or corrected this is identical to 2.2.
+- The module now `requires transitive java.net.http` (a public `GleifApiLeiRegistry` constructor takes an `HttpClient`) and `requires java.xml`.
+
+### Fixed
+
+- `SaCcr.subNettingSets` takes the replacement cost per sub-netting set and sums it (BCBS 279 para 185). Results change when parts have opposite-sign values.
+- `FrtbSa` across-bucket aggregation uses the plain `S_b` first and the clamped alternative only when the first pass is negative (MAR21.4(5)); the order was reversed.
+- `FrtbSa` curvature applies the correlation scenario to the squared correlation (MAR21.101) and selects up or down per bucket (MAR21.5).
+- RTS 22: CONCAT national identifiers are no longer LEI-checked; field 41 is not always mandatory; code-list checks added; field 58 label corrected against Annex I.
+- BCBS 128 and CEM citations corrected (FX haircut add-on is para 152; scaling paras 168-169; CEM Annex 4 paras 92(i) and 96(iv)).
+
 ### Removed
 
-- `risk.simm` (SIMM-structured margin calculator) removed pending licensing review; ISDA requires a licence to use SIMM. See [docs/MIGRATION_2.3.md](docs/MIGRATION_2.3.md).
+- `risk.simm` (SIMM-structured margin calculator) and docs/SIMM.md, pending a licensing review; ISDA licenses SIMM for use. It was a reference package outside the compatibility gate. See [docs/MIGRATION_2.3.md](docs/MIGRATION_2.3.md).
+
+### Tests and quality
+
+- 1,825 tests in the full suite (1,745 in 2.2.0). New tests for busts, the three-version encoder, `IsdaRateCurve`, foreign swaps and the basis factor (including Monte Carlo martingale checks), bilateral wrong-way CVA against a brute-force simulation, CRE22 haircuts, FRTB paragraphs, auth.016 and the ESMA rules, registries, CAT and EMIR.
+- Mutation score: `rates` 78.1% to 88.8%, `credit` 85.3% to 85.9%.
+- SpotBugs 0, API compatibility against 2.2.0, cookbook snippets compiled by `scripts/check-cookbook.py`.
+
+### Docs
+
+- docs/MIGRATION_2.3.md; README, LEARN (sections 10o, 10f, 10g, 17c updated; new 10r, 10s, 10t, 17d, 17e, 17f), COOKBOOK (recipes 335, 336, 338, 340, 342 updated; new 343 to 349), DIAGRAMS (108 corrected; new 109 bust flow, 110 reports and reference data), ARCHITECTURE, STABILITY, MARKET_RISK, ULTRA_LOW_LATENCY, GETTING_STARTED and the site index.
 
 ## [2.2.0] - 2026-11-02
 
@@ -463,7 +504,8 @@ Major release. It corrects several pricing, risk and backtesting results, makes 
 - `sbe.MessageHeader`, `sbe.Decimal64`.
 - `TickFileReader.info` (version, clock domain, anchor) and `FileInfo.toEpochNanos`.
 
-[Unreleased]: https://github.com/AshJha0/Quant-Finance-Library/compare/v2.2.0...HEAD
+[Unreleased]: https://github.com/AshJha0/Quant-Finance-Library/compare/v2.3.0...HEAD
+[2.3.0]: https://github.com/AshJha0/Quant-Finance-Library/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/AshJha0/Quant-Finance-Library/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/AshJha0/Quant-Finance-Library/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/AshJha0/Quant-Finance-Library/compare/v1.17.0...v2.0.0

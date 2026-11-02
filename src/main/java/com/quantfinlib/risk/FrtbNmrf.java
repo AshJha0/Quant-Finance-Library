@@ -15,10 +15,8 @@ package com.quantfinlib.risk;
  * <pre>  SES = √(Σ ISES_credit,i²) + √(Σ ISES_equity,j²)
  *      + √((ρ Σ SES_k)² + (1 − ρ²) Σ SES_k²),   ρ = 0.6</pre>
  * (MAR33.17, d457). The separate roots for the credit (i = 1..L) and
- * equity (j = 1..K) groups are the library's reading of the text; the
- * printed formula is an image that has not been checked by eye. Of the
- * two possible readings this one is the conservative one: it is never
- * lower than putting both groups under a single root.
+ * equity (j = 1..K) groups are verified against the printed formula in
+ * MAR33.17 (d457).
  *
  * <p><b>Worked example</b> (own test): credit {3, 4}, equity {5},
  * others {10, 10}: √25 + √25 + √(144 + 0.64·200) = 5 + 5 + 16.4924 =

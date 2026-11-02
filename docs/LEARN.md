@@ -1323,10 +1323,10 @@ margin period, EPE falls to about 0.23 and CVA to about 0.015.
 `bilateral`, which conditions on who defaults first with independent
 defaults). `credit/MultiCurrencyExposureSimulator.java` adds multi-curve
 swaps with a fixed basis and several FX pairs with correlated Hull-White
-foreign rates. Not implemented: foreign-currency swaps, a stochastic
-basis, wrong-way risk together with bilateral CVA, and a single joint
-default time across buckets for wrong-way risk (each bucket has its own
-path driver). Recipes 305, 306 and 334.
+foreign rates; section 10s covers the 2.3 additions (foreign-currency
+swaps, a stochastic basis, wrong-way bilateral CVA). Not implemented: a
+stochastic basis for foreign swaps, and more than one basis factor.
+Recipes 305, 306, 334 and 345.
 
 ### 10g. SA-CCR: the regulatory exposure
 
@@ -1368,8 +1368,8 @@ the money, and `EAD = 1.4 x (60 + 346.8) = 569`.
 agreements that do not line up with netting sets, and
 `risk/SaCcrHaircuts.java` for the supervisory haircuts: the Basel II
 table (BCBS 128 para 151, 8% currency add-on para 152, square-root-of-time
-scaling paras 168-169) or the current CRE22.49 table. The tests reproduce
-Annex 4a Examples 1 to 5. Recipes 307, 308 and 335.
+scaling paras 168-169) or the current CRE22.49 table (section 10t). The
+tests reproduce Annex 4a Examples 1 to 5. Recipes 307, 308 and 335.
 
 ### 10h. Smiles without arbitrage: SVI and SSVI
 
@@ -1629,8 +1629,15 @@ Delta = sqrt( sum_b K_b^2 + sum_b sum_{c != b} gamma_bc S_b S_c )
 
 (BCBS d457, MAR21.4 to 21.5). The calculation is repeated with every
 `rho` and `gamma` scaled for low, medium and high correlation, and the
-capital is the largest of the three totals. Curvature uses the worse of
-an up and a down shock less the delta part, `CVR`.
+capital is the largest of the three totals. Across buckets the first
+pass uses `S_b = sum_k WS_k` as it stands; only when the sum under the
+root is negative does the calculation switch to the alternative
+`S_b = max(min(sum_k WS_k, K_b), -K_b)` (MAR21.4(5)). Until 2.3 the
+library clamped first, which understates offsetting buckets, so results
+for books with several buckets can change. Curvature takes the worse of an up
+and a down shock less the delta part, `CVR`, chooses up or down per
+bucket as MAR21.5 prescribes, and aggregates with squared correlations
+(MAR21.101).
 
 Worked example (own computation). Two GIRR sensitivities in one currency
 with weighted values 30 and -20 and a correlation of 0.6. Then
@@ -1644,10 +1651,13 @@ scenario, not the high one, can set the capital.
 `Equity`, `Commodity`, `Csr` parameter tables), `risk/FrtbDrc.java`
 (jump to default, hedge benefit ratio, bucket charge), `risk/FrtbRrao.java`
 and `risk/FrtbNmrf.java` (MAR33 stress scenario capital). The classes
-follow d457 but are not certified. The CSR risk weights are marked for
-checking against the text; CSR inter-bucket correlations, GIRR inflation
-and basis correlations, equity repo and securitisation are left to the
-caller. Recipe 336.
+follow d457 but are not certified. From 2.3 every supervisory value carries
+its MAR paragraph in the javadoc, including the CSR risk weights, CSR index
+buckets and inter-bucket correlations, GIRR inflation and cross-currency
+correlations, equity repo, CTP and securitisation non-CTP. NMRF uses
+separate roots for the credit and equity idiosyncratic groups, verified
+against the printed formula in MAR33.17. The default risk charge for
+securitisations is not implemented. Recipe 336.
 
 ### 10p. Removed in 2.3.0
 
@@ -1684,6 +1694,82 @@ split, regular and special dividends with a policy, spin-off, rights with
 takes a map of events as an opt-in overload; in it a merger assumes the
 holder elects cash on exactly the maximum fraction and no cost basis is
 kept. Recipe 341.
+
+### 10r. The ISDA rate curve from swaps only
+
+The ISDA CDS standard model needs a discount curve, and everyone must
+build it the same way or the upfront for the same quote differs between
+two dealers. Since the move to risk-free rates the standard curve is built
+from overnight index swaps only, with no money-market deposits.
+
+Formally, with trade date `T` and spot `S = T + 2` business days, a swap
+of tenor `m` months matures at `M = MF(S + m months)` and pays an annual
+fixed coupon with ACT/360 accruals. The zero rate at `t = (M - T)/365`
+solves `P(M) + c sum_k tau_k P(d_k) - P(S) = 0`, with the swaps solved
+shortest first and `r t` linear between knots.
+
+Worked example (own test). Trade date 2021-04-26, weekends-only calendar,
+so spot is 2021-04-28. A 6-month swap at 2% pays once, 183/360 of the
+coupon, and gives a zero rate of `ln(1 + 0.02 x 183/360) / (183/365)`,
+about 2.0175%. On the official ISDA SOFR test grids the curve reproduces
+cash settlement within 1e-6 USD on 10mm notional (published reference).
+
+*In this library:* `credit/IsdaRateCurve.java` (`bootstrapSwaps`,
+`parSwapValue`), returning an `IsdaCurve` for `IsdaCdsModel`. Recipe 346.
+
+### 10s. Foreign-currency swaps, a moving basis, and wrong-way bilateral CVA
+
+Three gaps in the 2.2 exposure model closed in 2.3. A swap in euros held
+by a dollar bank is exposed to both euro rates and EURUSD. The spread
+between the curve a swap projects on and the curve it discounts on is not
+fixed; it widens in stress. And a counterparty that tends to default when
+our exposure to it is high (wrong-way risk) matters for bilateral CVA too,
+where we may default first.
+
+Formally, a foreign swap is valued on its currency's Hull-White state and
+converted at the simulated spot, so `S_c(t) V_c(t)` discounted at the
+domestic bank account is a martingale. The basis is one factor,
+`dy_b = -a_b y_b dt + sigma_b dW_b`, added to the log projection ratio with
+the drift that keeps forward projection rates fair. For wrong-way
+bilateral CVA both hazards load on a market driver,
+`L_c = exp(alpha_i + b_c X_i)` and `L_o = exp(beta_i + b_o X_i)`, with
+`alpha_i`, `beta_i` solved so that each name's survival curve is matched
+on the simulated paths, and each path charges CVA or DVA according to who
+defaults first.
+
+Worked example (own arithmetic). With `sigma_b` = 0.3% and `a_b` = 0.5, a
+period fixing in five years has a log-basis standard deviation of
+`0.003 x sqrt(1 - e^-5)`, about 0.30%. With `b_c = b_o = 0` the wrong-way
+result equals plain `bilateral` to rounding (own test).
+
+*In this library:* `credit/MultiCurrencyExposureSimulator.java`
+(`ForeignSwap`, `BasisFactor`, the ten-argument `simulate`) and
+`credit/CvaApproximator.java` (`bilateralWrongWay`). Without the new
+arguments every path equals 2.2. Recipe 345.
+
+### 10t. CRE22 collateral haircuts and sub-netting sets
+
+Collateral the bank holds may lose value before it can be sold, so it
+counts for less than its market value. The Basel II table of 2006 and the
+current CRE22 table disagree: CRE22 has more maturity buckets and larger
+haircuts on equities and long corporate bonds.
+
+Formally, held collateral counts `X (1 - H - H_fx)` and posted collateral
+`-X (1 + H + H_fx)`, with `H_fx` = 8% on a currency mismatch (BCBS 128
+para 152; CRE22.52) and `H_N = H_10 sqrt(N/10)` (paras 168-169). For a
+netting set split by margin agreements, BCBS 279 para 185 applies the
+formula to each sub-netting set, replacement cost included, and sums.
+
+Worked example (own hand computation). 1,000 of A-rated corporate bonds
+with three years left, held, in another currency, 10-day period: Basel II
+gives `H` = 6% and `C = 1,000 x (1 - 0.06 - 0.08) = 860`; CRE22.49 gives
+`H` = 4% and `C = 880`. For sub-netting sets, a margined part with
+`V = -30` and floor 5 and an unmargined part with `V = 50` give
+`RC = 5 + 50 = 55`; netting the parts first, as 2.2 did, gave 20.
+
+*In this library:* `risk/SaCcrHaircuts.java` (`Table.BASEL_II_2006`, the
+default, and `Table.CRE22`) and `risk/SaCcr.subNettingSets`. The CRE22.50
+table and securitisation collateral are not implemented. Recipe 335.
 
 ### 11. Backtesting without fooling yourself
 
@@ -2280,10 +2366,84 @@ transaction report and checks the LEI, ISIN and MIC check digits.
 *In this library:* `fix/FixVersion.java`, `FixDictionary.java`,
 `FixGroupDef.java`, `FixGroup.java`, `FixSessionOptions.withVersion`;
 `entitlements/`; `trading/FillListener.java`, `LedgerFillListener.java`;
-`reporting/`. The hot-path order encoder writes FIX 4.4 only. The report
-builder checks shapes and check digits only; it does not look anything
-up in GLEIF, FIRDS or ISO 10383, and its XML is not the ESMA auth.016
-message. Recipes 338, 339, 340 and 342.
+`reporting/`. Section 17f covers the hot-path encoder in all three
+versions, 17d busts and corrections, and 17e the auth.016 message and the
+reference-data lookups. Recipes 338, 339, 340 and 342.
+
+### 17d. Trade busts and corrections
+
+A venue sometimes cancels a trade after the fact (a bust, for example a
+clearly erroneous trade) or changes its quantity or price (a correction).
+Every system downstream of the fill must undo or redo what it booked.
+
+Formally, an execution report with ExecType H (trade cancel) or G (trade
+correct) names the original execution in ExecRefID(19). After the
+adjustment the effective fill set is the original set without busted
+executions and with corrected ones replaced; positions, average cost and
+realised P&L must equal what booking only the effective fills would give.
+
+Worked example (own hand computation). Buy 100 at 10.00 and 100 at 12.00:
+position 200, average cost 11.00. Bust the second: position 100, average
+cost 10.00. Then correct the first to 80 at 10.02: position 80, average
+cost 10.02. The ledger keeps all three log entries and rebuilds the book
+from the surviving fills.
+
+*In this library:* `trading/HftOrderGateway.java` (`onTradeBust`,
+`onTradeCorrect`), `trading/FillListener.java` (`onBust`, `onCorrect`,
+default no-op), `trading/PositionLedger.java` (`onBust`, `onCorrect`,
+`effectiveFills`, `adjustments`) and `trading/DropCopyReconciler.java`
+(`Adjustment`, and a `reconcile` overload that takes the drop copy's
+adjustments). A FIX 4.2 report with ExecTransType 1 or 2 is read as H or
+G. The gateway does not reopen an order after a bust, and
+`PaperTradingGateway` produces none. Recipe 344.
+
+### 17e. Regulatory reports and reference data
+
+A transaction report is only as good as its identifiers. A check digit
+proves an LEI is well formed, not that the firm exists or that its
+registration is current. That needs the public registries.
+
+Formally, a MiFIR report is sent as ISO 20022 auth.016.001.01 and must pass
+the ESMA schema and ESMA's content rules (conditional fields, code lists,
+identifier shapes), and its LEIs must be in GLEIF with a maintained status,
+its ISINs in FIRDS, and its MICs active in ISO 10383. CAT (US) and EMIR
+Refit (EU derivatives) have their own field sets and action/event codes.
+
+Worked example. An RTS 22 report whose buyer LEI passes the ISO 17442
+check digits but has status LAPSED in the GLEIF golden copy passes
+`validate()` and is refused by `ReferenceDataChecker`. An EMIR report with
+action TERM and event TRAD fails `validate()`, because TERM only pairs with ETRM.
+
+*In this library:* `Rts22TransactionReport.toAuth016Xml` and
+`validateEsmaRules` (about 45 data-only rules; the ESMA XSD is checked in
+tests only when `QFL_ESMA_XSD` is set, since it cannot be redistributed),
+`reporting/registry/` (GLEIF golden copy and API, FIRDS FULINS, ISO 10383,
+`ReferenceDataChecker`), `reporting/cat/` and `reporting/emir/`. CAT and
+EMIR are indicative and not certified; EMIR has not been checked against
+Regulation 2022/1860 field by field. Rules that need reference data, the
+head.001 envelope and swap legs are not implemented. Recipes 347 to 349.
+
+### 17f. One order encoder, three FIX versions
+
+The allocation-free order encoder used to write FIX 4.4 only, so a 4.2
+broker or a 5.0 venue needed the slower general builder. In 2.3 the same
+encoder writes all three, and the readers on the other side translate
+version differences away.
+
+Formally, 4.2 and 4.4 differ in the header (BeginString) and in execution
+reports: 4.2 signals a fill with ExecType 1 or 2 and a bust or correction
+with ExecTransType(20) 1 or 2, while 4.4 uses ExecType F, H and G. Under
+FIX 5.0 SP2 the session is FIXT.1.1 and each application message may carry
+ApplVerID(1128); otherwise DefaultApplVerID(1137) from Logon applies.
+
+Worked example. A 4.2 report with `150=2|20=0` reads as `execType() == 'F'`
+and `rawExecType() == '2'`; with `20=1` it reads as `'H'`, a bust. A 5.0 SP2
+encoder with `applVerId("9")` writes `1128=9` in every header.
+
+*In this library:* `fix/FixOrderEncoder.java` (version constructor,
+`applVerId`), `fix/FixExecReportView.java` (`execType`, `rawExecType`) and
+`fix/FixMarketDataView.java`, which ends the NoMDEntries group at the first
+tag that is not a member. Recipe 343.
 
 ### 18. Scaling out and staying safe
 
