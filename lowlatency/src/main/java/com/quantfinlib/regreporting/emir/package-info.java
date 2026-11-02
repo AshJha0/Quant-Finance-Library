@@ -27,13 +27,19 @@
  * 2022-01, given a {@link com.quantfinlib.regreporting.emir.UtiHistory}, a receipt time, an
  * LEI registry and a {@link com.quantfinlib.regreporting.emir.CurrencyRegistry}.</p>
  *
- * <p><b>Still not checked in 3.1.0</b>, by either validator: the GLEIF branch tests
- * (EMIR-VR-1002-04 and the like; {@link com.quantfinlib.regreporting.registry.LeiRecord}
- * carries no entity category), EMIR-VR-1003-01 (needs the venue MIC of 2.41),
- * EMIR-VR-1008-02 and -1009-08, EMIR-VR-2001-03/04 (the UTI is the history key, so a
- * changed UTI cannot be seen), EMIR-VR-2042-03, EMIR-VR-2045-03/06/07/08,
- * EMIR-VR-2153-06/08 and the other "reported for that UTI" date rules. Fields outside the
- * populated subset (margins, collateral, leg 2, schedules, packages) are not checked.</p>
+ * <p><b>Added later in 3.1.0</b> (same opt-in validator): the GLEIF branch tests
+ * EMIR-VR-1002-04, 1003-05, 1004-04 and 1009-04 (from
+ * {@link com.quantfinlib.regreporting.registry.LeiRecord#entityCategory()}), EMIR-VR-1003-01
+ * (given an ISO 10383 registry and the venue under the builder key {@code venueOfExecution}),
+ * EMIR-VR-1008-02, EMIR-VR-2001-03 (given a caller trade key), EMIR-VR-2042-03,
+ * EMIR-VR-2044-04, EMIR-VR-2045-02/03/06/07/08 and EMIR-VR-2153-06/08 in their "reported for
+ * that UTI" form.</p>
+ *
+ * <p><b>Still not checked</b>, by either validator: EMIR-VR-1009-08 (client code prefix) and
+ * EMIR-VR-2001-04 (2.1 against 2.2 to 2.4), whose fields this package does not populate;
+ * third-country regulated markets in EMIR-VR-1003-01 (equivalence is not in ISO 10383).
+ * Fields outside the populated subset (margins, collateral, leg 2, schedules, packages) are
+ * not checked.</p>
  *
  * <p><b>3.0 notice.</b> Renamed to {@code com.quantfinlib.regreporting.emir} in 3.0
  * (the {@code report} and {@code reporting} names were one letter apart with
