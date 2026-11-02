@@ -3,7 +3,8 @@ name: Docs
 on:
   push:
     branches: [main]
-    tags: ['v*']
+    # No tag trigger: the github-pages environment deploys from main only, and
+    # the release merge to main already publishes the same site.
   workflow_dispatch:
 
 permissions:
