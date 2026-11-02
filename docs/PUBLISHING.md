@@ -97,8 +97,8 @@ JitPack builds from a tag on request, so a release is usable without further set
 
 <dependency>
   <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
-  <artifactId>quant-finance-library</artifactId>   <!-- or quant-finance-library-lowlatency -->
-  <version>v3.2.0</version>
+  <artifactId>quant-finance-library</artifactId>   <!-- or -io, -research, -lowlatency -->
+  <version>v4.0.0</version>
 </dependency>
 ```
 
@@ -108,7 +108,7 @@ artifactId (2.x was `com.github.AshJha0:Quant-Finance-Library`). Check a JitPack
 build of a test tag before the release tag.
 
 JitPack must build with JDK 25; `jitpack.yml` at the repository root selects
-`openjdk25` and runs `./mvnw install` on the reactor, which installs both modules.
+`openjdk25` and runs `./mvnw install` on the reactor, which installs all four modules (and the examples jar).
 
 ## Maven Central (not yet set up)
 

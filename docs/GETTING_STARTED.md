@@ -120,7 +120,7 @@ compile (they need `core/target/classes` on the class path too).
 
 ```bash
 ./mvnw -DskipTests compile
-java -cp core/target/classes:lowlatency/target/classes com.quantfinlib.examples.QuickStartDemo
+java -cp core/target/classes:io/target/classes:research/target/classes:lowlatency/target/classes com.quantfinlib.examples.QuickStartDemo
 ```
 
 `QuickStartDemo` runs offline. It walks through indicators, backtesting, risk,
@@ -128,7 +128,7 @@ optimisation, pricing, fixed income and a risk-gated paper-trading session on
 synthetic data.
 
 ```bash
-java -cp core/target/classes:lowlatency/target/classes com.quantfinlib.examples.LiveTradingDemo
+java -cp core/target/classes:io/target/classes:research/target/classes:lowlatency/target/classes com.quantfinlib.examples.LiveTradingDemo
 ```
 
 `LiveTradingDemo` needs internet access. It subscribes to the public Binance trade
@@ -149,9 +149,9 @@ a platform hiccup summary:
 
 ```bash
 ./mvnw -DskipTests compile
-java -Xms512m -Xmx512m -XX:+AlwaysPreTouch -cp core/target/classes:lowlatency/target/classes \
+java -Xms512m -Xmx512m -XX:+AlwaysPreTouch -cp core/target/classes:io/target/classes:research/target/classes:lowlatency/target/classes \
     com.quantfinlib.examples.HftLatencyBenchmark
-java -Xms512m -Xmx512m -XX:+AlwaysPreTouch -cp core/target/classes:lowlatency/target/classes \
+java -Xms512m -Xmx512m -XX:+AlwaysPreTouch -cp core/target/classes:io/target/classes:research/target/classes:lowlatency/target/classes \
     com.quantfinlib.examples.HftOrderBenchmark
 ```
 
@@ -211,8 +211,8 @@ it with the thread dump Surefire prints.
 from a Windows share). Run `chmod +x mvnw`, or `sh mvnw verify`.
 
 **`ClassNotFoundException: com.quantfinlib.examples...`** when running from the
-library jar. Demos are not in either library jar; use
-`core/target/classes:lowlatency/target/classes` or the `-examples` jar of the
+library jar. Demos are not in any library jar; use
+`core/target/classes:io/target/classes:research/target/classes:lowlatency/target/classes` or the `-examples` jar of the
 low-latency artifact.
 
 **`LiveTradingDemo` prints connection errors.** The demo needs outbound access to the

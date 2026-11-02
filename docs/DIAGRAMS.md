@@ -11,15 +11,15 @@ behaviour; performance figures are in [BENCHMARKS.md](BENCHMARKS.md).
 The design splits everything into a hot lane (zero allocation,
 single-producer/single-consumer, latency-budgeted) and a research lane
 (clarity first, allocation allowed). Knowing which lane a class is in tells
-you what to expect from it.
+you what to expect from it. Which jar each package ships in since 4.0 is section 113.
 
 ```mermaid
 flowchart LR
     subgraph IN["Data in"]
-        CSV["CSV / HTTP bars<br/>(data)"]
+        CSV["CSV / HTTP bars<br/>(io, -io jar)"]
         WS["WebSocket live<br/>(feed)"]
         SBE_IN["Binary SBE stream<br/>(sbe)"]
-        QFLT["QFLT tick files<br/>(data)"]
+        QFLT["QFLT tick files<br/>(marketdata.tick)"]
         UNIV["Universe CSV<br/>(io.UniverseCsvLoader)"]
     end
 
@@ -36,7 +36,7 @@ flowchart LR
         BT["backtest: bar / execution-aware /<br/>tick / portfolio+survivorship"]
         PRICE["pricing • fx • rates •<br/>volatility • hedging"]
         RISK["risk • optimization •<br/>ml • screener"]
-        REPORT["report: HTML/PDF/XLSX/CSV<br/>+ SVG charts • cli • dashboard"]
+        REPORT["report (-io jar): HTML/PDF/XLSX/CSV<br/>+ SVG charts • cli (examples) • dashboard"]
     end
 
     subgraph VENUEBOX["Venue side (both lanes)"]
@@ -4664,14 +4664,14 @@ can this tag be published (release).
 flowchart TD
     subgraph PR22["every push and PR (ci.yml)"]
         T22["tests, JDK 25 (3 OS)<br/>+ committed stand-ins:<br/>IsdaGoldenSubsetTest, EsmaXsdGoldenTest"]
-        API22["api-compat (japicmp)<br/>vs the 3.0.0 jars, no allow-list"]
+        API22["api-compat (japicmp)<br/>vs the 3.2.0 jars, report MAJOR;<br/>gate excludes the MIGRATION_4.0 rows only"]
     end
     subgraph NIGHT22["nightly.yml"]
         FULL22["full-tests<br/>(load, timing)"]
         AN22["analysis<br/>(SpotBugs, Error Prone)"]
         REF22["reference-files<br/>fetch ISDA grids + ESMA XSDs,<br/>check SHA-256 pins,<br/>QFL_REQUIRE_REFERENCE_FILES=true,<br/>fail on any skip"]
         FUZ22["fuzz<br/>-Pfuzz parser fuzz tests (200,000 cases),<br/>pricing properties (20,000 cases)"]
-        MUT22["mutation (core)<br/>mutation-lowlatency<br/>(regreporting, FIX codecs)<br/>floors: pit-thresholds.txt"]
+        MUT22["mutation (core)<br/>mutation-lowlatency<br/>(regreporting, FIX codecs)<br/>floors: pit-thresholds.txt;<br/>mutation-io-research (report only)"]
     end
     subgraph REL22["v* tag (release.yml)"]
         TG22["tag-guard<br/>no forced push, no existing release,<br/>no re-used tag name"]

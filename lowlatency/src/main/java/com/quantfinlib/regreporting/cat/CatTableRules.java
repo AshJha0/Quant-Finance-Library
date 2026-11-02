@@ -12,8 +12,8 @@ import java.util.function.UnaryOperator;
  * {@link CatEvent}), one row per type with the seq numbers of the fields in its table of CAT
  * Reporting Technical Specifications for Industry Members v4.1.0 r14. A seq of 0 means the
  * table has no such rule. The rows were transcribed from the price, initiator, senderType and
- * priceType descriptions of each table (pdftotext -raw; the script is in the QFL review notes,
- * v32_handback_cat.md). Package-private.
+ * priceType descriptions of each table (pdftotext -raw; the scripts are in scripts/cat-transcription, gen2.py and
+ * genjava.py). Package-private.
  */
 final class CatTableRules {
     /**

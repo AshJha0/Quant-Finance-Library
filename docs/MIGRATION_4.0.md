@@ -116,11 +116,88 @@ Everything else in the stable jar keeps its package, class and signature. In par
 the stable jar; the 3.1 draft of DESIGN_4.0 proposed moving them, and DESIGN_4.0 explains
 why they stay.
 
-## Worked example
+## Worked examples, before and after
 
-A user on 3.1 with `quant-finance-library` who loads bars from CSV and prices options:
+### A. A pricing user who also loads CSV bars
 
-1. On 3.2.0, change `import com.quantfinlib.data.CsvBarLoader;` to
-   `import com.quantfinlib.io.CsvBarLoader;`. It compiles with no removal warning.
-2. On 4.0.0, add the `quant-finance-library-io` dependency and
-   `requires com.quantfinlib.io;`. The pricing code is untouched.
+Before, on 3.1:
+
+```xml
+<dependency>
+  <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
+  <artifactId>quant-finance-library</artifactId>
+  <version>v3.1.0</version>
+</dependency>
+```
+
+```java
+import com.quantfinlib.data.CsvBarLoader;
+import com.quantfinlib.pricing.BlackScholes;
+
+BarSeries bars = CsvBarLoader.load(Path.of("bars.csv"), "SPY");
+```
+
+Step 1, on 3.2.0: change the import to `com.quantfinlib.io.CsvBarLoader`. It compiles
+with no removal warning, and the results are the same (the 3.2 `data` class delegated
+to it).
+
+Step 2, on 4.0.0: replace the dependency with the io artifact, which brings the stable
+jar with it, and add one `requires` line.
+
+```xml
+<dependency>
+  <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
+  <artifactId>quant-finance-library-io</artifactId>
+  <version>v4.0.0</version>
+</dependency>
+```
+
+```java
+// module-info.java
+module my.pricer {
+    requires com.quantfinlib.io;      // reads com.quantfinlib transitively
+}
+
+import com.quantfinlib.io.CsvBarLoader;     // unchanged since step 1
+import com.quantfinlib.pricing.BlackScholes; // unchanged
+```
+
+The pricing code is untouched.
+
+### B. A researcher using the DSL and a sample strategy
+
+Before, on 3.2:
+
+```java
+import com.quantfinlib.backtest.strategies.SmaCrossStrategy;
+import com.quantfinlib.dsl.Rules;
+import com.quantfinlib.dsl.StrategyBuilder;
+```
+
+with only `quant-finance-library` as a dependency. After, on 4.0.0, the imports are the
+same; the dependencies are the research artifact (row 6) for `dsl`, and either a copy
+of `SmaCrossStrategy` in your own code or the examples classifier jar (row 1) on the
+class path. A module that copied the strategy needs only
+`requires com.quantfinlib.research;`.
+
+### C. A trading-lane user with `fx.AggregatedBook` and tick files
+
+Before, on 3.1, with `quant-finance-library-lowlatency`:
+
+```java
+import com.quantfinlib.fx.AggregatedBook;
+import com.quantfinlib.marketdata.tick.TickFileReader;
+```
+
+After, on 4.0.0, the dependency is unchanged (it already pulls the stable jar):
+
+```java
+import com.quantfinlib.marketdata.AggregatedBook;          // row 2
+import com.quantfinlib.marketdata.tick.TickFileReader;     // row 3: same import, now in lowlatency
+```
+
+### D. A user of the removed swap pricer
+
+`rates.SwapPricer` is gone (row 8). MIGRATION_3.1.md section 1 shows the replacement
+with the convention-driven leg model, before and after.
+

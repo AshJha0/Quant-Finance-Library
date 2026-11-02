@@ -30,6 +30,9 @@ connectivity stack; see [docs/STABILITY.md](docs/STABILITY.md).
   and its siblings (30 stateful rules), and the 4.0 replacements: `io.*` for the
   `data` loaders and `marketdata.AggregatedBook`. The old types are deprecated for
   removal in 3.2 and removed in 4.0. [CHANGELOG.md](CHANGELOG.md) lists every change.
+- At 4.0.0 the full suite (`./mvnw verify -Pfull`) runs 2,174 tests (core 1,373,
+  io 27, research 7, lowlatency 767), 9 skipped for the same reasons as below. The 13 fewer than 3.2.0
+  are the tests of the four removed types; moved packages took their tests along.
 - At 3.2.0 the full suite (`./mvnw verify -Pfull`) runs 2,187 tests (core 1,467,
   lowlatency 720). 9 are skipped: 8 need optional external files or the
   network (ISDA grids, ESMA XSDs, the official CAT schema, the SIX CFI list,

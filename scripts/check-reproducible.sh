@@ -8,7 +8,7 @@ out="${TMPDIR:-/tmp}/qfl-repro.$$"
 mkdir -p "$out"
 build() {
   ./mvnw -B -q --no-transfer-progress clean package -DskipTests -Djacoco.skip=true "$@"
-  find core/target lowlatency/target -maxdepth 1 -name '*.jar' -print0 | sort -z \
+  find core/target io/target research/target lowlatency/target -maxdepth 1 -name '*.jar' -print0 | sort -z \
     | xargs -0 sha256sum
 }
 build "$@" > "$out/first.txt"

@@ -9,7 +9,9 @@ Reference docs live in [ARCHITECTURE.md](ARCHITECTURE.md); the visual map in
 [DIAGRAMS.md](DIAGRAMS.md). New to the concepts themselves (order books,
 market making, backtesting without look-ahead, zero-allocation Java)? Start
 with the tutorial in [LEARN.md](LEARN.md). All recipes assume the library on
-your classpath (Java 25; `./mvnw -DskipTests package`, or the release jar).
+your classpath (Java 25; `./mvnw -DskipTests package`, or the release jars).
+Since 4.0 the library is four jars plus an examples jar; recipes 485 to 489 say
+which one each package needs.
 Performance figures are not quoted here; see [BENCHMARKS.md](BENCHMARKS.md).
 
 ---
@@ -125,15 +127,15 @@ double smileVol = new VannaVolga(pillar.strikesCopy(), pillar.volsCopy(), 0.045,
 
 ```bash
 ./mvnw -q -DskipTests compile
-java -cp core/target/classes:lowlatency/target/classes com.quantfinlib.examples.LiveTradingDemo
+java -cp core/target/classes:io/target/classes:research/target/classes:lowlatency/target/classes com.quantfinlib.examples.LiveTradingDemo
 # then open http://localhost:8080 for live positions, P&L, fills, latency
 ```
 
 Real Binance trades feed a streaming EMA crossover, which trades on a paper
 venue shown on a dashboard bound to the loopback interface. Swap the
 strategy body in `LiveTradingDemo` for your own logic. The demos ship in the
-separate `examples` jar of the low-latency artifact, not in either library
-jar, so run them from `core/target/classes:lowlatency/target/classes` (`;` on
+separate `examples` jar of the low-latency artifact, not in any library
+jar, so run them from `core/target/classes:io/target/classes:research/target/classes:lowlatency/target/classes` (`;` on
 Windows) or that jar.
 
 ## 7. The fast-lane hot path (quote a market)
@@ -8827,7 +8829,7 @@ quietly pausing.
 # Size the heap for startup/setup allocation only, then forbid collection.
 java -XX:+UnlockExperimentalVMOptions -XX:+UseEpsilonGC -Xms8g -Xmx8g \
      -XX:+AlwaysPreTouch \
-     -cp core/target/classes:lowlatency/target/classes com.quantfinlib.examples.HftOrderBenchmark
+     -cp core/target/classes:io/target/classes:research/target/classes:lowlatency/target/classes com.quantfinlib.examples.HftOrderBenchmark
 ```
 
 ```java
@@ -10984,6 +10986,8 @@ has the full table.
 
 ## 355. Depending on the 3.x artifacts
 
+For 4.0, see recipes 485 to 489.
+
 ```xml
 <!-- stable tier: pricing, risk, research, backtesting -->
 <dependency>
@@ -11698,11 +11702,11 @@ tells you which desk process to look at first. Several files of one day: use
 ## 484. Move from `data.*` loaders to `io.*` (the 3.2 deprecation path)
 
 The plain idea: in 4.0 the three file and HTTP loaders leave the stable jar for
-`quant-finance-library-io`. 3.2 already ships them under their 4.0 package, so you can
-change the import now, while both work, and the 4.0 upgrade becomes a dependency change.
+`quant-finance-library-io`. 3.2 shipped them under their 4.0 package, so you could
+change the import while both worked, and the 4.0 upgrade became a dependency change.
 
-Formally: `data.CsvBarLoader`, `data.HttpBarFetcher` and `data.UniverseCsvLoader` are
-`@Deprecated(since = "3.2.0", forRemoval = true)` and delegate to `io.CsvBarLoader`,
+Formally: in 3.2, `data.CsvBarLoader`, `data.HttpBarFetcher` and `data.UniverseCsvLoader` were
+`@Deprecated(since = "3.2.0", forRemoval = true)` and delegated to `io.CsvBarLoader`,
 `io.HttpBarFetcher` and `io.UniverseCsvLoader`, which have the same methods. Results are
 identical. The rest of `data` (`PointInTimeUniverse`, the corporate-action classes,
 `SeriesAligner`) stays where it is.
@@ -11715,10 +11719,170 @@ BarSeries bars = CsvBarLoader.load(Path.of("bars.csv"), "SPY");
 PointInTimeUniverse universe = UniverseCsvLoader.load(Path.of("universe.csv"));
 ```
 
-Worked example: compile with `javac -Xlint:removal` (Maven:
+Worked example: on 3.2, compile with `javac -Xlint:removal` (Maven:
 `<compilerArgs><arg>-Xlint:removal</arg></compilerArgs>`). Every use of the old class
 is reported as "[removal] CsvBarLoader in com.quantfinlib.data has been deprecated and
 marked for removal" (the import line itself is not). Change the import to `io`,
-recompile, and the warnings go. On 4.0 add the
+recompile, and the warnings go. 4.0 removed the `data` classes; add the
 `quant-finance-library-io` dependency and `requires com.quantfinlib.io;`
 ([MIGRATION_4.0](MIGRATION_4.0.md) row 4).
+
+## 485. Depending on 4.0: the stable jar alone (4.0)
+
+The plain idea: if you price, build curves, compute risk, research factors or backtest
+on bars, the stable jar is all you need, and it brings nothing with it but `java.base`.
+
+Formally: artifact `quant-finance-library`, module `com.quantfinlib`. It requires only
+`java.base` (JSpecify is compile-time only), and from 4.0 it no longer pulls in
+`java.net.http`.
+
+```xml
+<dependency>
+  <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
+  <artifactId>quant-finance-library</artifactId>
+  <version>v4.0.0</version>
+</dependency>
+```
+
+```
+module my.pricer {
+    requires com.quantfinlib;
+}
+```
+
+```java
+double call = BlackScholes.price(OptionType.CALL, 100.0, 105.0, 0.03, 0.0, 0.2, 0.5);
+```
+
+Worked example: `jdeps --print-module-deps` on a program that uses only this jar
+prints `java.base`. If your code also used `java.net.http` and relied on 3.x core to
+bring it in, add `requires java.net.http;` (MIGRATION_4.0 row 7).
+
+## 486. Depending on 4.0: CSV and HTTP loaders, reports (4.0)
+
+The plain idea: loading bars from a file or URL and writing HTML, PDF, XLSX or CSV
+reports are input and output, so they live in their own jar.
+
+Formally: artifact `quant-finance-library-io`, module `com.quantfinlib.io`, tier
+incubating (docs/STABILITY.md). It holds `io` and `report` and requires the stable
+module transitively, so one dependency gives you both.
+
+```xml
+<dependency>
+  <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
+  <artifactId>quant-finance-library-io</artifactId>
+  <version>v4.0.0</version>
+</dependency>
+```
+
+```
+module my.research {
+    requires com.quantfinlib.io;      // reads com.quantfinlib transitively
+}
+```
+
+```java
+BarSeries bars = CsvBarLoader.load(Path.of("bars.csv"), "SPY");
+BacktestResult result = Backtester.run(strategy, bars, BacktestConfig.defaults());
+new ReportGenerator("SPY").addStrategyPerformance(result).toHtml(Path.of("spy.html"));
+```
+
+Worked example: a 3.2 user who already imports `com.quantfinlib.io.CsvBarLoader`
+(recipe 484) changes nothing in the code; the dependency above is the whole upgrade.
+
+## 487. Depending on 4.0: the strategy DSL (4.0)
+
+The plain idea: `StrategyBuilder` and `Rules` describe a strategy without writing a
+class. They are young, so they are incubating, in a jar of their own.
+
+Formally: artifact `quant-finance-library-research`, module `com.quantfinlib.research`,
+package `dsl`; requires the stable module transitively.
+
+```xml
+<dependency>
+  <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
+  <artifactId>quant-finance-library-research</artifactId>
+  <version>v4.0.0</version>
+</dependency>
+```
+
+```
+module my.rules {
+    requires com.quantfinlib.research;
+}
+```
+
+```java
+double[] fast = Indicators.ema(close, 12);
+double[] slow = Indicators.ema(close, 26);
+BacktestResult result = StrategyBuilder.named("EMA cross")
+        .enterWhen(Rules.crossAbove(fast, slow))
+        .exitWhen(Rules.crossBelow(fast, slow))
+        .build()
+        .backtest(series, 100_000);
+```
+
+Worked example: the imports stay `com.quantfinlib.dsl.*`; only the dependency and the
+`requires` line are new.
+
+## 488. Depending on 4.0: the trading lane (4.0)
+
+The plain idea: everything on the hot path, and since 4.0 also tick files, the tick
+backtester, RFQ and the cross-venue `AggregatedBook`, is in the low-latency jar.
+
+Formally: artifact `quant-finance-library-lowlatency`, module
+`com.quantfinlib.lowlatency`, tier reference. It requires the stable module and
+`java.net.http` transitively.
+
+```xml
+<dependency>
+  <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
+  <artifactId>quant-finance-library-lowlatency</artifactId>
+  <version>v4.0.0</version>
+</dependency>
+```
+
+```
+module my.desk {
+    requires com.quantfinlib.lowlatency;   // reads com.quantfinlib and java.net.http
+}
+```
+
+```java
+AggregatedBook book = new AggregatedBook(3);        // three venues
+book.onQuote(0, 1.0850, 1e6, 1.0852, 1e6);
+book.onQuote(1, 1.0851, 2e6, 1.0853, 1e6);
+double touch = book.spread();                       // 0.0001: venue 1 bid, venue 0 ask
+```
+
+Worked example: 3.x code with `import com.quantfinlib.fx.AggregatedBook;` changes the
+import to `com.quantfinlib.marketdata.AggregatedBook` (MIGRATION_4.0 row 2); code
+using `rfq`, `marketdata.tick` or `backtest.tick` keeps its imports and adds this
+dependency (row 3).
+
+## 489. Depending on 4.0: the command line and sample strategies (4.0)
+
+The plain idea: `cli` and the sample strategies such as `SmaCrossStrategy` are
+demonstrations, so since 4.0 they ship in the examples jar, with no stability promise.
+
+Formally: the `examples` classifier of `quant-finance-library-lowlatency`. It is not a
+JPMS module; put it on the class path with the io, research and lowlatency jars.
+
+```xml
+<dependency>
+  <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
+  <artifactId>quant-finance-library-lowlatency</artifactId>
+  <version>v4.0.0</version>
+  <classifier>examples</classifier>
+</dependency>
+```
+
+```java
+BacktestResult result = Backtester.run(
+        new SmaCrossStrategy(20, 50), series, BacktestConfig.defaults());
+```
+
+Worked example: to run the command line from a checkout,
+`java -cp "$QFL_CP" com.quantfinlib.cli.Main report --csv bars.csv --symbol SPY --out market.html` (GETTING_STARTED.md
+shows how to build `QFL_CP`). For production code, copy the strategy you need into your
+own project rather than depending on this jar.

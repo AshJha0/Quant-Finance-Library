@@ -119,10 +119,10 @@ Result: no regression; 2.1.0 is within run-to-run noise of 2.0.0, slightly faste
 ```bash
 ./mvnw -DskipTests compile
 JVM="-Xms1g -Xmx1g -XX:+UseZGC -XX:+UseCompactObjectHeaders -XX:+AlwaysPreTouch -XX:+PerfDisableSharedMem"
-java $JVM -cp core/target/classes:lowlatency/target/classes com.quantfinlib.examples.HftLatencyBenchmark
-java $JVM -cp core/target/classes:lowlatency/target/classes com.quantfinlib.examples.HftOrderBenchmark
-java $JVM -cp core/target/classes:lowlatency/target/classes com.quantfinlib.examples.HftQuoterBenchmark
-java $JVM -cp core/target/classes:lowlatency/target/classes com.quantfinlib.examples.HftBookBenchmark
+java $JVM -cp core/target/classes:io/target/classes:research/target/classes:lowlatency/target/classes com.quantfinlib.examples.HftLatencyBenchmark
+java $JVM -cp core/target/classes:io/target/classes:research/target/classes:lowlatency/target/classes com.quantfinlib.examples.HftOrderBenchmark
+java $JVM -cp core/target/classes:io/target/classes:research/target/classes:lowlatency/target/classes com.quantfinlib.examples.HftQuoterBenchmark
+java $JVM -cp core/target/classes:io/target/classes:research/target/classes:lowlatency/target/classes com.quantfinlib.examples.HftBookBenchmark
 ```
 
 The JMH microbenchmarks (`src/test/java/com/quantfinlib/bench/CoreBenchmarks.java`, three forks, five warm-up and ten measurement iterations) run with:

@@ -11,8 +11,8 @@
 ```bash
 git clone https://github.com/AshJha0/Quant-Finance-Library && cd Quant-Finance-Library
 ./mvnw package                     # needs JDK 25; builds and runs the default test suite
-java -cp core/target/classes:lowlatency/target/classes com.quantfinlib.examples.QuickStartDemo
-java -cp core/target/classes:lowlatency/target/classes com.quantfinlib.examples.LiveTradingDemo   # live Binance ticks, paper trading, browser dashboard
+java -cp core/target/classes:io/target/classes:research/target/classes:lowlatency/target/classes com.quantfinlib.examples.QuickStartDemo
+java -cp core/target/classes:io/target/classes:research/target/classes:lowlatency/target/classes com.quantfinlib.examples.LiveTradingDemo   # live Binance ticks, paper trading, browser dashboard
 ```
 
 **Read code in this order** (each step uses the previous ones):

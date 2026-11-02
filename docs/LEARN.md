@@ -141,6 +141,7 @@ land on the entry, one click from the section.
 - [19b. Can I trust the jar I downloaded? (3.1)](learn/04-technology.md#19b-can-i-trust-the-jar-i-downloaded-31)
 - <a id="20-modules-and-exceptions"></a>[20. Modules and exceptions](learn/04-technology.md#20-modules-and-exceptions)
 - [20b. The 4.0 module split (designed in 3.1, revised in 3.2, shipped in 4.0)](learn/04-technology.md#20b-the-40-module-split-designed-in-31-revised-in-32-shipped-in-40)
+- [20c. Which jar do I need? (4.0)](learn/04-technology.md#20c-which-jar-do-i-need-40)
 
 ### <a id="part-iii--your-learning-path"></a>[Part III — Your learning path](learn/05-learning-path.md#part-iii--your-learning-path)
 

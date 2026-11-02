@@ -1100,7 +1100,7 @@ A jar move cannot be `@Deprecated`: Java modules forbid one package in two jars,
 there was no new home to point at before 4.0 existed. Where 3.2 could add a replacement
 type, it did and deprecated the old one for removal: `io.CsvBarLoader` and two others
 replaced their `data` namesakes, and `marketdata.AggregatedBook` replaced
-`fx.AggregatedBook`. 4.0 removed those and the single-curve swap pricer. japicmp against 3.0.0 reports
+`fx.AggregatedBook`. 4.0 removed those and the single-curve swap pricer. japicmp against 3.2.0 reports
 the release as MAJOR, and a second japicmp run excludes exactly the MIGRATION_4.0 rows
 and fails on any other break.
 
@@ -1108,6 +1108,32 @@ Meanwhile 3.1 split the three largest classes internally. `Indicators`,
 `MultiCurrencyExposureSimulator` and `FixSession` are now facades over package-private
 classes, with identical public signatures (checked with japicmp against 3.0.0) and
 the unchanged test suite passing.
+
+### 20c. Which jar do I need? (4.0)
+
+The plain idea: start from the packages your code imports. Each package lives in
+exactly one jar, and every jar except the examples jar brings the stable jar with it,
+so you list only the most specialised one or two.
+
+Formally, the rule is a lookup from package to artifact:
+
+| You import | Artifact | `requires` |
+|---|---|---|
+| `pricing`, `rates`, `credit`, `risk`, `fx`, `volatility`, `alpha`, `backtest`, `execution`, `microstructure`, `data`, ... | `quant-finance-library` | `com.quantfinlib` |
+| `io`, `report` | `quant-finance-library-io` | `com.quantfinlib.io` |
+| `dsl` | `quant-finance-library-research` | `com.quantfinlib.research` |
+| `trading`, `marketdata` (incl. `marketdata.tick`, `AggregatedBook`), `orderbook`, `fix`, `sbe`, `feed`, `entitlements`, `regreporting`, `rfq`, `backtest.tick`, `util` | `quant-finance-library-lowlatency` | `com.quantfinlib.lowlatency` |
+| `cli`, `backtest.strategies`, `examples` | `quant-finance-library-lowlatency`, classifier `examples` | none (class path) |
+
+The stable jar requires only `java.base`. `ModuleGraphTest` checks that no package is
+in two modules and that the graph has no cycle, so the table cannot drift from the
+build. COOKBOOK recipes 485 to 489 have the dependency snippet for each row.
+
+Worked example: a desk tool that loads a CSV of bars, runs a `dsl` rule and sends
+orders through `trading.HftOrderGateway` imports `io`, `dsl` and `trading`. It needs
+three dependencies (`-io`, `-research`, `-lowlatency`) and three `requires` lines; the
+stable jar arrives with each of them. A pricing service that imports only `pricing` and
+`rates` needs one dependency and its module graph is `com.quantfinlib` plus `java.base`.
 
 ---
 
