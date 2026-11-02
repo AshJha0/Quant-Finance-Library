@@ -4596,7 +4596,7 @@ flowchart LR
     SUB_110["toSubmissionXml (2.4)<br/>head.003 envelope, head.001 header,<br/>auth.016 payload"]
     CAT_110["regreporting.cat<br/>CatEventBuilder (MENO/MEOR/MEOT/MEOF;<br/>MENQ/MONO/MOOR/MONQ, option lifecycle,<br/>supplements, multi-leg from 3.1)"]
     CSCH_110["CatSchema (3.1)<br/>JSON line vs schema file"]
-    LINK_110["CatLinkageChecker (3.1)<br/>Order/Trade/Fulfillment/Quote Keys<br/>across a batch or several files"]
+    LINK_110["CatLinkageChecker (3.1; LK06-LK09 4.0)<br/>Order/Trade/Fulfillment/Quote Keys<br/>across a batch or several files"]
     EMIR_110["regreporting.emir<br/>EmirRefitReportBuilder"]
     STATE_110["EmirStatefulValidator (3.1, opt-in)<br/>UTI history, receipt time,<br/>GLEIF status and branch, venue MIC,<br/>trade key, UTI dates, ISO 4217"]
     CHK_110["regreporting.registry<br/>ReferenceDataChecker"]
@@ -4748,8 +4748,10 @@ flowchart LR
 ```
 
 Every type gets the schema gate (CAT-S01 to S09) and the record rules its table
-prints (CAT-R22 price, CAT-R23 choices). Linkage (CAT-LK01 to LK05) covers the 19
-types of 3.1 only. Recipes 480 to 483, LEARN 17m.
+prints (CAT-R22 price, CAT-R23 choices). Linkage (CAT-LK01 to LK05) covered the 19
+types of 3.1 only in 3.2; from 4.0 CAT-LK06 to LK09 link the other 47 as well,
+and table numbers follow v4.2.0 r4; the eleven option and multi-leg quote types it drops
+are deprecated for removal in 5.0. Recipes 480 to 483 and 491 to 494, LEARN 17m and 17n.
 
 ## 115. The nightly reference-files job: fetch, pin, test (3.2)
 
@@ -4765,7 +4767,7 @@ flowchart TD
     CHK_115 -->|mismatch or download error| RED_115["job fails:<br/>a file was republished,<br/>review before re-pinning"]
     CHK_115 -->|match| ENV_115["export QFL_ISDA_GRID_DIR, QFL_ESMA_*_XSD,<br/>QFL_CAT_SCHEMA,<br/>QFL_REQUIRE_REFERENCE_FILES=true"]
     ENV_115 --> TST_115["IsdaGridVerificationTest, Auth016XmlTest,<br/>Auth016EnvelopeTest, StatusAdviceTest,<br/>EsmaXsdGoldenTest, IsdaGoldenSubsetTest,<br/>CatOfficialSchemaTest"]
-    DEL_115["cat-official-schema-deltas.txt<br/>accepted differences, each with a reason"] --> TST_115
+    DEL_115["cat-official-schema-deltas.txt<br/>accepted differences, each with a reason<br/>(empty since 4.0, CAT v4.2.0 r4)"] --> TST_115
     TST_115 --> SK_115{"any test skipped?"}
     SK_115 -->|yes| RED_115
     SK_115 -->|no| OK_115["green"]

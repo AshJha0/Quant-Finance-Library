@@ -8,13 +8,14 @@ Entries for 1.x releases are archived in [docs/history/CHANGELOG-1.x.md](docs/hi
 
 ## [4.0.0] - 2026-11-02
 
-Major release: the module split announced in 3.2.0. No number changes. Every move and removal below was announced, and every removed type deprecated with its replacement, in 3.2.0. [docs/MIGRATION_4.0.md](docs/MIGRATION_4.0.md) has one row per break with the import and dependency to change; japicmp against the 3.2.0 jars reports semver MAJOR, and its gate excludes exactly those rows and fails on anything else.
+Major release: the module split announced in 3.2.0, with CAT moved to IM Technical Specifications v4.2.0 r4 (CAT-LK06 to LK09) and EMIR-VR-1003-01 for third-country venues. No number changes. Every move and removal below was announced, and every removed type deprecated with its replacement, in 3.2.0. [docs/MIGRATION_4.0.md](docs/MIGRATION_4.0.md) has one row per break with the import and dependency to change; japicmp against the 3.2.0 jars reports semver MAJOR, and its gate excludes exactly those rows and fails on anything else.
 
 Owner decision, 2026-11-02: the revised design in [docs/DESIGN_4.0.md](docs/DESIGN_4.0.md) is accepted. The packages that stable code depends on (`execution`, `microstructure`, `persist`, `screener`, `ml` and most of `data`) stay in the stable jar, because moving them would create module cycles; `-research` holds only `dsl`.
 
 #### Added
 
 - CAT: `CatLinkageChecker` checks the 47 Table 59/60 option and multi-leg types that 3.2 record-checked only, each with the keys of its own table's linkage list: internal routes and child orders assign an Order Key and must name an order in scope by their Parent Order Key (CAT-LK06); modifications that carry a prior key link through it and assign a new one; route, internal-route, child-order, request, adjustment and effective events need their Order Key in scope (CAT-LK07), quote events their Quote Key (CAT-LK08), MOFA and MOAA their Fulfillment or Allocation Key (CAT-LK09). `rules()` 5 -> 9. Batches of the 3.1 types alone give the same issues. MIGRATION_4.0 row 9; COOKBOOK 491-494; LEARN 17m.
+- EMIR: `EmirStatefulValidator.withThirdCountryMarkets(ThirdCountryMarkets)`, with `ThirdCountryMarkets` and `InMemoryThirdCountryMarkets`. EMIR-VR-1003-01 now decides a venue outside the EEA when the caller supplies the list of third-country markets considered equivalent to a regulated market (EMIR Article 2a; ESMA74-362-2683, sheet Validations_Cpty_derivative, row 7, column AC, condition 1): listed on the date of 2.42 means 1.3 must be blank, otherwise populated. No list is bundled (ESMA publishes it; it is not on disk). Opt-in: without the list a non-EEA venue skips the rule, as in 3.x. Recipe 490, LEARN 17i.
 
 #### Deprecated
 
@@ -40,10 +41,6 @@ Owner decision, 2026-11-02: the revised design in [docs/DESIGN_4.0.md](docs/DESI
 - New tests: `ModuleGraphTest` fails on a module cycle or a package in two modules; the stable descriptor test fails if `jdeps` finds `java.net.http` or `jdk.httpserver` in core; descriptor tests for the two new modules.
 - CAT: the transcription follows CAT IM Technical Specifications v4.2.0 r4 (10/21/2026) instead of v4.1.0 r14. The bundled resource is `cat-im-schema-subset-4.2.0r4.json` (55 events; the 4.1.0r14 file is gone); the five MENQ RFQ fields v4.2.0 retires are dropped; rule citations, `CHECKED_AGAINST*` and the table in CAT-R22/R23 messages use v4.2.0 r4 numbers. Field content of the 55 events is unchanged from v4.1.0 r14. `scripts/cat-transcription/gen2.py` takes the version (and still re-derives the 3.2 file byte for byte with `4.1.0r14`); it now removes a page header that split the MOAA price sentence. The 16 lines of `cat-official-schema-deltas.txt` are resolved: the comparison with the official 4.2.0 schema finds no difference.
 - The japicmp baseline moves from 3.0.0 to 3.2.0 (`scripts/fetch-api-baseline.sh`).
-
-#### Added
-
-- EMIR: `EmirStatefulValidator.withThirdCountryMarkets(ThirdCountryMarkets)`, with `ThirdCountryMarkets` and `InMemoryThirdCountryMarkets`. EMIR-VR-1003-01 now decides a venue outside the EEA when the caller supplies the list of third-country markets considered equivalent to a regulated market (EMIR Article 2a; ESMA74-362-2683, sheet Validations_Cpty_derivative, row 7, column AC, condition 1): listed on the date of 2.42 means 1.3 must be blank, otherwise populated. No list is bundled (ESMA publishes it; it is not on disk). Opt-in: without the list a non-EEA venue skips the rule, as in 3.x. Recipe 490, LEARN 17i.
 
 #### Fixed
 
