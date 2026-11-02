@@ -106,7 +106,7 @@ jobs:
         run: |
           set -euo pipefail
           # writeGolden is the generator and is meant to skip; nothing else may.
-          skipped=$(grep -l '<skipped' core/target/surefire-reports/TEST-*.xml lowlatency/target/surefire-reports/TEST-*.xml                     | xargs -r grep -h -B1 '<skipped' | grep -o 'name="[^"]*"' | grep -v 'name="writeGolden' || true)
+          skipped=$(grep -l '<skipped' core/target/surefire-reports/TEST-*.xml lowlatency/target/surefire-reports/TEST-*.xml                     | xargs -r grep -h -B1 '<skipped' | grep -o '<testcase name="[^"]*"' | grep -v '"writeGolden"' || true)
           if [ -n "$skipped" ]; then echo "::error::skipped reference tests: $skipped"; exit 1; fi
 
   mutation:
