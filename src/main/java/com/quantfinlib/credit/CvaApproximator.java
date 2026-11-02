@@ -3,6 +3,7 @@ package com.quantfinlib.credit;
 import com.quantfinlib.rates.YieldCurve;
 import com.quantfinlib.util.MathUtils;
 
+import java.util.Arrays;
 import java.util.Objects;
 
 /**
@@ -308,6 +309,171 @@ public final class CvaApproximator {
             qo0 = qo;
         }
         return new Bilateral(lgd * c, ownLgd * d);
+    }
+
+    /**
+     * Bilateral CVA/DVA with wrong-way risk on both names and one
+     * path-consistent first-to-default (added in 2.3).
+     *
+     * <p><b>Plain idea.</b> Each name has a default intensity that rises
+     * or falls with the same market driver that moves the exposure. On a
+     * path, both names then have one default time each, the earlier one
+     * ends the contract, and only that default produces a loss (CVA) or a
+     * benefit (DVA). Positive {@code bCpty} on a driver that raises the
+     * exposure is wrong-way risk and raises the CVA (tested).</p>
+     *
+     * <p><b>Formal statement.</b> A driven-hazard model in the style of
+     * Hull and White, "CVA and wrong-way risk", Financial Analysts Journal
+     * 68(5), 2012 (their hazard-rate approach, with the hazard taken flat
+     * in each profile bucket). In bucket i, on path p, the integrated
+     * hazards are</p>
+     *
+     * <pre>
+     *   Lc_i(p) = exp(alpha_i + bCpty * X_i(p)),   Lo_i(p) = exp(beta_i + bOwn * X_i(p))
+     * </pre>
+     *
+     * <p>with X_i the profile's standardised driver (see
+     * {@link #cvaWrongWay(ExposureProfile, CreditCurve, double, double, ExposureProfile.Factor)}).
+     * alpha_i and beta_i are solved bucket by bucket so that the path average
+     * of {@code exp(-sum_{j<=i} L_j(p))} equals each name's curve survival
+     * Q(t_i): the marginal default curves are matched exactly on the
+     * simulated paths. Given the market path the two default times are
+     * independent (conditional independence is the stated copula; the
+     * names are dependent only through the common driver), so with
+     * Sc, So the path survivals to t_{i-1}:</p>
+     *
+     * <pre>
+     *   P(cpty first in bucket i | path) = Sc So Lc / (Lc + Lo) (1 - e^{-(Lc + Lo)})
+     *   CVA = LGD_c mean_p sum_i D E_i(p) P(cpty first in bucket i | p),  DVA likewise with D NE and Lo
+     * </pre>
+     *
+     * <p>With {@code bCpty = bOwn = 0} the hazards are the deterministic
+     * bucket hazards and the result equals
+     * {@link #bilateral(ExposureProfile, CreditCurve, double, CreditCurve, double)}
+     * to rounding (tested). A brute-force simulation of the two default
+     * times agrees within Monte Carlo error (tested, independent
+     * computation). Assumptions: hazards flat inside a bucket, default
+     * only matters at bucket granularity, no recovery or LGD randomness,
+     * and the driver is the profile's per-bucket X_i, so the dependence is
+     * on the factor level (uncollateralised) or its MPR increment (CSA).
+     * Worked example: a 10y payer swap with bCpty = 0.5 on the rates driver
+     * gives a CVA above the independent bilateral value (see
+     * BilateralWrongWayCvaTest for the numbers, own test).</p>
+     *
+     * @param profile      simulated exposure
+     * @param counterparty counterparty credit curve, survival &gt; 0 on the grid
+     * @param lgd          counterparty LGD in (0, 1]
+     * @param own          own credit curve, survival &gt; 0 on the grid
+     * @param ownLgd       own LGD in (0, 1]
+     * @param bCpty        counterparty hazard loading on the driver (finite)
+     * @param bOwn         own hazard loading on the driver (finite)
+     * @param driver       market factor that drives both hazards
+     * @return both legs
+     */
+    public static Bilateral bilateralWrongWay(ExposureProfile profile, CreditCurve counterparty, double lgd,
+                                              CreditCurve own, double ownLgd, double bCpty, double bOwn,
+                                              ExposureProfile.Factor driver) {
+        Objects.requireNonNull(profile, "profile");
+        Objects.requireNonNull(counterparty, "counterparty");
+        Objects.requireNonNull(own, "own");
+        Objects.requireNonNull(driver, "driver");
+        checkLgd(lgd);
+        checkLgd(ownLgd);
+        if (!Double.isFinite(bCpty) || !Double.isFinite(bOwn)) {
+            throw new IllegalArgumentException("hazard loadings must be finite");
+        }
+        int n = profile.paths(), m = profile.timesLength();
+        double[][] lc = drivenHazards(profile, counterparty, bCpty, driver);
+        double[][] lo = drivenHazards(profile, own, bOwn, driver);
+        double c = 0, d = 0;
+        for (int p = 0; p < n; p++) {
+            double sc = 1, so = 1;
+            for (int i = 0; i < m; i++) {
+                double a = lc[p][i], b = lo[p][i], s = a + b;
+                if (s > 0) {
+                    double pBoth = sc * so * -Math.expm1(-s);
+                    c += profile.discountedPositive(p, i) * a / s * pBoth;
+                    d += profile.discountedNegative(p, i) * b / s * pBoth;
+                }
+                sc *= Math.exp(-a);
+                so *= Math.exp(-b);
+            }
+        }
+        return new Bilateral(lgd * c / n, ownLgd * d / n);
+    }
+
+    /** Integrated bucket hazards L_i(p) = exp(alpha_i + b X_i(p)) matched to the curve survival. */
+    static double[][] drivenHazards(ExposureProfile profile, CreditCurve curve, double b,
+                                    ExposureProfile.Factor driver) {
+        int n = profile.paths(), m = profile.timesLength();
+        double[][] l = new double[n][m];
+        double[] surv = new double[n];
+        Arrays.fill(surv, 1);
+        double q0 = 1;
+        double[] x = new double[n];
+        for (int i = 0; i < m; i++) {
+            double q = curve.survivalProbability(profile.time(i));
+            if (!(q > 0)) {
+                throw new IllegalArgumentException("survival must be positive on the profile grid");
+            }
+            double base = Math.log(q0 / q);
+            if (base > 0) {
+                for (int p = 0; p < n; p++) {
+                    x[p] = b * profile.driver(p, i, driver);
+                }
+                double alpha = Math.log(base);
+                if (b != 0) {
+                    alpha = solveAlpha(surv, x, q, alpha);
+                }
+                for (int p = 0; p < n; p++) {
+                    l[p][i] = b == 0 ? base : Math.exp(alpha + x[p]);
+                    surv[p] *= Math.exp(-l[p][i]);
+                }
+            }
+            q0 = q;
+        }
+        return l;
+    }
+
+    /** Solves mean_p surv_p exp(-exp(alpha + x_p)) = target by safeguarded Newton. */
+    private static double solveAlpha(double[] surv, double[] x, double target, double start) {
+        int n = surv.length;
+        double lo = Double.NEGATIVE_INFINITY, hi = Double.POSITIVE_INFINITY, a = start;
+        for (int it = 0; it < 200; it++) {
+            double f = 0, fp = 0;
+            for (int p = 0; p < n; p++) {
+                double h = Math.exp(a + x[p]);
+                double e = surv[p] * Math.exp(-h);
+                f += e;
+                fp -= e * h;
+            }
+            f = f / n - target;
+            fp /= n;
+            if (Math.abs(f) <= 1e-15 * target) {
+                return a;
+            }
+            if (f > 0) {
+                lo = a;     // survival too high: raise alpha
+            } else {
+                hi = a;
+            }
+            double next = fp < 0 ? a - f / fp : Double.NaN;
+            if (!(next > lo && next < hi)) {
+                if (lo == Double.NEGATIVE_INFINITY) {
+                    next = hi - 1;
+                } else if (hi == Double.POSITIVE_INFINITY) {
+                    next = lo + 1;
+                } else {
+                    next = 0.5 * (lo + hi);
+                }
+            }
+            if (next == a) {
+                return a;
+            }
+            a = next;
+        }
+        throw new IllegalStateException("hazard calibration did not converge; target survival "
+                + target + " may be unreachable on these paths");
     }
 
     private static void checkLgd(double lgd) {

@@ -37,6 +37,7 @@ public final class ExposureProfile {
     private final double[] times;
     private final double[] p0;
     private final double[][] discPos;
+    private final double[][] discNeg;
     private final double[][] expo;
     private final double[][] driverRates;
     private final double[][] driverFx;
@@ -49,6 +50,7 @@ public final class ExposureProfile {
         this.times = times;
         this.p0 = p0;
         this.discPos = discPos;
+        this.discNeg = discNeg;
         this.expo = expo;
         this.driverRates = driverRates;
         this.driverFx = driverFx;
@@ -151,6 +153,11 @@ public final class ExposureProfile {
             prev = times[i];
         }
         return s / times[times.length - 1];
+    }
+
+    /** Discounted negative exposure (own-default side) on one path at one date. */
+    double discountedNegative(int path, int i) {
+        return discNeg[path][i];
     }
 
     /** Discounted positive exposure on one path at one date. */
