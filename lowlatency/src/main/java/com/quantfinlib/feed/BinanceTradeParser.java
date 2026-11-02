@@ -8,8 +8,10 @@ import java.util.StringJoiner;
  * Parser for Binance trade-stream JSON — both the raw single-stream form
  * ({@code {"e":"trade","s":"BTCUSDT","p":"50000.1","q":"0.05","T":169...}})
  * and the combined-stream wrapper ({@code {"stream":"btcusdt@trade","data":{...}}}).
- * Minimal flat-field extraction: no JSON library, no allocation beyond the
- * result.
+ * Minimal flat-field extraction with no JSON library. Not garbage-free: each
+ * message allocates the result plus short-lived strings (the field values,
+ * the lookup markers and, for the combined form, the payload substring), so
+ * keep it off the hot path; the allocation tests check that it allocates.
  */
 public final class BinanceTradeParser implements FeedParser {
     /** Creates an instance; the explicit form of the default constructor. */
