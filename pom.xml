@@ -3,7 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.quantfinlib</groupId>
     <artifactId>quant-finance-library</artifactId>
-    <version>2.1.0</version>
+    <version>2.2.0-SNAPSHOT</version>
     <packaging>jar</packaging>
     <name>Quant-Finance-Library</name>
     <description>Pure-JDK quantitative finance library: pricing, market risk, alpha research and backtesting, plus a reference low-latency trading lane.</description>
@@ -41,7 +41,7 @@
         <pitest.junit5.version>1.2.3</pitest.junit5.version>
         <!-- API compatibility baseline: the released 2.0.0 library jar, taken
              from the GitHub release assets (scripts/fetch-api-baseline.sh). -->
-        <api.baseline.version>2.0.0</api.baseline.version>
+        <api.baseline.version>2.1.0</api.baseline.version>
         <api.baseline.jar>${user.home}/.m2/api-baseline/quant-finance-library-${api.baseline.version}.jar</api.baseline.jar>
         <!-- Test tags: load (throughput/soak floors), timing (wall-clock or
              sleep-based assertions), socket (real loopback sockets). The
