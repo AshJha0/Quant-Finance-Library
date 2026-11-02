@@ -31,7 +31,49 @@ package com.quantfinlib.fix;
 public final class FixExecReportView {
     /** Creates an instance; the explicit form of the default constructor. */
     public FixExecReportView() {
+        this(null);
     }
+
+    /**
+     * A view whose repeating-group layout for messages of
+     * {@code dictionary.version()} comes from {@code dictionary} (for a venue
+     * that adds fields); other versions use {@link FixDictionary#forVersion}.
+     * The dictionary is consulted here, once, never on the wrap path.
+     *
+     * @param dictionary venue dictionary, or null for the standard ones
+     */
+    public FixExecReportView(FixDictionary dictionary) {
+        FixVersion[] all = FixVersion.values();
+        partyDelimiter = new int[all.length];
+        for (FixVersion v : all) {
+            FixDictionary d = dictionary != null && dictionary.version() == v
+                    ? dictionary : FixDictionary.forVersion(v);
+            FixGroupDef parties = d.group("8", FixDictionary.NO_PARTY_IDS);
+            partyDelimiter[v.ordinal()] = parties == null ? -1 : parties.delimiterTag();
+        }
+    }
+
+    /** ExecTransType(20) 0: a new execution (FIX 4.2). */
+    public static final byte EXEC_TRANS_NEW = '0';
+    /** ExecTransType 1: cancels a previously reported execution. */
+    public static final byte EXEC_TRANS_CANCEL = '1';
+    /** ExecTransType 2: corrects a previously reported execution. */
+    public static final byte EXEC_TRANS_CORRECT = '2';
+    /** ExecTransType 3: status, no new execution. */
+    public static final byte EXEC_TRANS_STATUS = '3';
+
+    private static final byte[] BEGIN_42 = {'F', 'I', 'X', '.', '4', '.', '2'};
+    private static final byte[] BEGIN_T11 = {'F', 'I', 'X', 'T', '.', '1', '.', '1'};
+
+    /** Per FixVersion ordinal: delimiter of NoPartyIDs(453) in 35=8, or -1 when undefined. */
+    private final int[] partyDelimiter;
+    private FixVersion version;
+    private byte rawExecType;
+    private byte execTransType;
+    private int noPartyIds;
+    private int partyInstances;
+    private int applVerIdOffset;
+    private int applVerIdLength;
 
 
     private static final byte SOH = 1;
@@ -93,6 +135,14 @@ public final class FixExecReportView {
         this.ordRejReason = -1;
         this.avgPxMantissa = 0;
         this.avgPxDecimals = 0;
+        this.version = FixVersion.FIX_4_4;
+        this.rawExecType = 0;
+        this.execTransType = 0;
+        this.noPartyIds = -1;
+        this.partyInstances = 0;
+        this.applVerIdOffset = -1;
+        this.applVerIdLength = 0;
+        int partyTag = partyDelimiter[FixVersion.FIX_4_4.ordinal()];
 
         int end = offset + length;
         int p = offset;
@@ -115,6 +165,21 @@ public final class FixExecReportView {
             p++; // skip SOH
 
             switch (tag) {
+                case 8 -> {
+                    version = beginStringVersion(buffer, valueStart, valueEnd);
+                    partyTag = partyDelimiter[version.ordinal()];
+                }
+                case FixVersion.APPL_VER_ID -> {
+                    applVerIdOffset = valueStart;
+                    applVerIdLength = valueEnd - valueStart;
+                }
+                case FixVersion.EXEC_TRANS_TYPE -> execTransType = buffer[valueStart];
+                case FixDictionary.NO_PARTY_IDS -> {
+                    if (partyTag >= 0) {
+                        noPartyIds = (int) Math.min(Integer.MAX_VALUE,
+                                FixParse.parseLongOrElse(buf, valueStart, valueEnd, -1));
+                    }
+                }
                 case FixMessage.MSG_TYPE -> {
                     // 35=8 and nothing else; a one-byte value is required.
                     execReport = valueEnd - valueStart == 1 && buffer[valueStart] == '8';
@@ -162,9 +227,17 @@ public final class FixExecReportView {
                     avgPxDecimals = FixParse.priceDecimals(buf, valueStart, valueEnd);
                 }
                 default -> {
-                    // Every other tag is skipped without materializing it.
+                    // Every other tag is skipped without materializing it;
+                    // a Parties delimiter counts one group instance.
+                    if (tag == partyTag && noPartyIds >= 0) {
+                        partyInstances++;
+                    }
                 }
             }
+        }
+        rawExecType = execType;
+        if (version == FixVersion.FIX_4_2) {
+            execType = (byte) normalize42(execType, execTransType);
         }
         return execReport;
     }
@@ -178,9 +251,111 @@ public final class FixExecReportView {
         return clOrdId;
     }
 
-    /** Tag 150 as its ASCII byte ('0' new, 'F' trade, '4' canceled, ...). */
+    /**
+     * Tag 150 as its ASCII byte ('0' new, 'F' trade, '4' canceled, ...), in
+     * FIX 4.4 semantics. A FIX 4.2 report is mapped automatically (see
+     * {@link #normalize42}); {@link #rawExecType()} keeps the wire value.
+     */
     public byte execType() {
         return execType;
+    }
+
+    /** Tag 150 exactly as received, before any FIX 4.2 mapping. */
+    public byte rawExecType() {
+        return rawExecType;
+    }
+
+    /** ExecTransType(20) as its ASCII byte; 0 when absent (always absent after 4.2). */
+    public byte execTransType() {
+        return execTransType;
+    }
+
+    /** Version named by BeginString(8); FIX 4.4 when the tag is absent or unknown. */
+    public FixVersion version() {
+        return version;
+    }
+
+    /** NoPartyIDs(453) as declared; -1 when absent or the version has no Parties (4.2). */
+    public int noPartyIds() {
+        return noPartyIds;
+    }
+
+    /** Parties instances present (delimiter PartyID(448) occurrences after 453). */
+    public int partyInstances() {
+        return partyInstances;
+    }
+
+    /** True when 453 was declared and the instances present disagree with it. */
+    public boolean partyCountMismatch() {
+        return noPartyIds >= 0 && noPartyIds != partyInstances;
+    }
+
+    /** True when the header carried a per-message ApplVerID(1128). */
+    public boolean hasApplVerId() {
+        return applVerIdOffset >= 0;
+    }
+
+    /** Offset of the ApplVerID(1128) bytes in the wrapped buffer (-1 when absent). */
+    public int applVerIdOffset() {
+        return applVerIdOffset;
+    }
+
+    /** Length of the ApplVerID(1128) bytes. */
+    public int applVerIdLength() {
+        return applVerIdLength;
+    }
+
+    /**
+     * Maps a FIX 4.2 (ExecType, ExecTransType) pair to the FIX 4.4 ExecType.
+     *
+     * <p>Plain idea: FIX 4.2 said what happened to the order in ExecType and
+     * what happens to an earlier execution in ExecTransType; 4.3 folded both
+     * into ExecType and dropped ExecTransType(20).
+     *
+     * <p>Formal statement (FIX 4.4 Vol 1 fields 20 and 150, and the FIX 4.3
+     * changes from 4.2; evidence class: published reference): ExecTransType 1
+     * (Cancel) becomes ExecType H (Trade Cancel), 2 (Correct) becomes G (Trade
+     * Correct), 3 (Status) becomes I (Order Status). With ExecTransType 0
+     * (New) or absent, ExecType 1 (Partial fill) and 2 (Fill) become F
+     * (Trade), the fill/partial distinction moving to OrdStatus(39). Every
+     * other value passes through.
+     *
+     * <p>Example: {@code 20=2|150=2} reads as {@code 'G'}; {@code 20=0|150=1}
+     * as {@code 'F'}; {@code 20=0|150=4} stays {@code '4'}.
+     *
+     * @param execType      wire ExecType(150)
+     * @param execTransType wire ExecTransType(20), 0 when absent
+     * @return the FIX 4.4 ExecType
+     */
+    public static char normalize42(byte execType, byte execTransType) {
+        return switch (execTransType) {
+            case EXEC_TRANS_CANCEL -> 'H';
+            case EXEC_TRANS_CORRECT -> 'G';
+            case EXEC_TRANS_STATUS -> 'I';
+            default -> FixVersion.FIX_4_2.normalizeExecType((char) execType);
+        };
+    }
+
+    private static FixVersion beginStringVersion(byte[] b, int from, int to) {
+        if (same(b, from, to, BEGIN_42)) {
+            return FixVersion.FIX_4_2;
+        }
+        if (same(b, from, to, BEGIN_T11)) {
+            return FixVersion.FIX_5_0_SP2;
+        }
+        return FixVersion.FIX_4_4;   // 4.4 and anything unrecognised
+    }
+
+    static boolean same(byte[] b, int from, int to, byte[] want) {
+        if (to - from != want.length) {
+            return false;
+        }
+        for (int i = 0; i < want.length; i++) {
+            if (b[from + i] != want[i]) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Tag 39 as its ASCII byte. */
