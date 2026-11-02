@@ -2464,7 +2464,10 @@ tests only when `QFL_ESMA_XSD` is set, since it cannot be redistributed),
 `reporting/registry/` (GLEIF golden copy and API, FIRDS FULINS, ISO 10383,
 `ReferenceDataChecker`), `reporting/cat/` and `reporting/emir/`. CAT and
 EMIR are indicative and not certified; EMIR has not been checked against
-Regulation 2022/1860 field by field. Section 17g covers the ESMA rules that
+Regulation 2022/1860 field by field. From 3.0, `EmirRefitReport.rules()` and
+`CatEvent.rules()` list each check with its citation and evidence class
+(`RuleProvenance`); all are unconfirmed or the library's own reading, and
+`CHECKED_AGAINST` says so. Section 17g covers the ESMA rules that
 need reference data and the submission envelope (2.4). Swap legs are not
 implemented. Recipes 347 to 349.
 

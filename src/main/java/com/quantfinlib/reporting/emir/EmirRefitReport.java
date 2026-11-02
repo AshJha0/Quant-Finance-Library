@@ -1,6 +1,8 @@
 package com.quantfinlib.reporting.emir;
 
 import com.quantfinlib.reporting.ReportingIdentifiers;
+import com.quantfinlib.reporting.RuleProvenance;
+import com.quantfinlib.reporting.RuleProvenance.Evidence;
 import com.quantfinlib.reporting.TransactionReport;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -13,6 +15,13 @@ import java.util.Set;
  * One EMIR Refit report built by {@link EmirRefitReportBuilder}. Regime
  * {@code "EMIR_REFIT"}; the reference is the UTI. Not certified against the ESMA schema
  * (see the package javadoc).
+ *
+ * <p>Every check made by {@link #validate()} is listed, with its citation and evidence
+ * class, by {@link #rules()}. None of them has been checked against the published text:
+ * neither Commission Implementing Regulation (EU) 2022/1860 nor the ESMA EMIR Refit
+ * validation rules are held in the library's source folder, so the citations are written
+ * from the Annex layout as remembered, and every rule is either {@code UNCONFIRMED} or a
+ * {@code LIBRARY_READING}. {@link #CHECKED_AGAINST} says the same in one line.</p>
  */
 public final class EmirRefitReport implements TransactionReport {
     /** Fields required on every report. */
@@ -33,10 +42,66 @@ public final class EmirRefitReport implements TransactionReport {
     private static final Set<String> DIRECTIONS = Set.of("BYER", "SLLR", "MAKE", "TAKE");
     private static final Set<String> VAL_METHODS = Set.of("MTMA", "MTMO", "CCPV");
 
+    /** What the checks in {@link #validate()} have been compared with. */
+    public static final String CHECKED_AGAINST = "not checked: Implementing Regulation (EU) 2022/1860 "
+            + "and the ESMA EMIR Refit validation rules are not on disk; every rule is UNCONFIRMED or LIBRARY_READING";
+
+    private static final String ANNEX = "Implementing Regulation (EU) 2022/1860, Annex, ";
+
+    private static final List<RuleProvenance> RULES = List.of(
+            new RuleProvenance("EMIR-R01", "reporting timestamp, counterparties, entity responsible, UTI and action "
+                    + "type are present", ANNEX + "Table 1 fields 1.1, 1.3, 1.4, 1.9; Table 2 fields 2.1, 2.151 "
+                    + "(numbers indicative)", Evidence.UNCONFIRMED),
+            new RuleProvenance("EMIR-R02", "action type is one of NEWT, MODI, CORR, TERM, EROR, REVI, VALU, POSC",
+                    ANNEX + "Table 2 field 2.151 (number indicative)", Evidence.UNCONFIRMED),
+            new RuleProvenance("EMIR-R03", "event type, when given, is one of the codes in EmirEventType",
+                    ANNEX + "Table 2 field 2.152 (number indicative)", Evidence.UNCONFIRMED),
+            new RuleProvenance("EMIR-R04", "event type is one this library pairs with the action type (EmirActionType)",
+                    "ESMA Guidelines on reporting under EMIR Refit, action/event combinations; a conservative subset, "
+                            + "stricter than the ESMA table where unsure", Evidence.LIBRARY_READING),
+            new RuleProvenance("EMIR-R05", "NEWT, MODI and CORR carry execution timestamp, effective date, asset "
+                    + "class, contract type, notional 1, notional currency 1 and direction",
+                    ANNEX + "Table 2 fields 2.42, 2.43, 2.11, 2.10, 2.55, 2.56; Table 1 field 1.17 "
+                            + "(numbers indicative)", Evidence.UNCONFIRMED),
+            new RuleProvenance("EMIR-R06", "VALU carries valuation amount, currency, timestamp and method",
+                    ANNEX + "Table 2 fields 2.21 to 2.24 (numbers indicative)", Evidence.UNCONFIRMED),
+            new RuleProvenance("EMIR-R07", "TERM carries an early termination date (an expiration date is accepted "
+                    + "instead)", ANNEX + "Table 2 fields 2.44, 2.45; accepting 2.44 alone is the library's reading "
+                    + "for a termination at maturity", Evidence.LIBRARY_READING),
+            new RuleProvenance("EMIR-R08", "counterparty and entity-responsible identifiers are LEIs with valid check "
+                    + "digits, except a natural-person other counterparty", "ISO 17442 (MOD 97-10 check digits); "
+                    + ANNEX + "Table 1 fields 1.3, 1.4, 1.9", Evidence.UNCONFIRMED),
+            new RuleProvenance("EMIR-R09", "UTI is 1 to 52 upper-case letters or digits",
+                    ANNEX + "Table 2 field 2.1 (number indicative)", Evidence.UNCONFIRMED),
+            new RuleProvenance("EMIR-R10", "asset class is COMM, CRDT, CURR, EQUI or INTR",
+                    ANNEX + "Table 2 field 2.11 (number indicative)", Evidence.UNCONFIRMED),
+            new RuleProvenance("EMIR-R11", "contract type is CFDS, FRAS, FUTR, FORW, OPTN, SPDB, SWAP, SWPT or OTHR",
+                    ANNEX + "Table 2 field 2.10 (number indicative)", Evidence.UNCONFIRMED),
+            new RuleProvenance("EMIR-R12", "direction is BYER, SLLR, MAKE or TAKE",
+                    ANNEX + "Table 1 field 1.17 (number indicative)", Evidence.UNCONFIRMED),
+            new RuleProvenance("EMIR-R13", "valuation method is MTMA, MTMO or CCPV",
+                    ANNEX + "Table 2 field 2.24 (number indicative)", Evidence.UNCONFIRMED),
+            new RuleProvenance("EMIR-R14", "notional and valuation currencies have ISO 4217 shape",
+                    "ISO 4217; " + ANNEX + "Table 2 fields 2.56, 2.22 (numbers indicative)", Evidence.UNCONFIRMED),
+            new RuleProvenance("EMIR-R15", "ISIN, when given, passes the ISO 6166 check digit",
+                    "ISO 6166; " + ANNEX + "Table 2 field 2.7 (number indicative)", Evidence.UNCONFIRMED),
+            new RuleProvenance("EMIR-R16", "notional 1 is a non-negative decimal of at most 18 digits and 5 decimals",
+                    ANNEX + "Table 2 field 2.55 (number indicative); the 18/5 format is not checked",
+                    Evidence.UNCONFIRMED));
+
     private final Map<String, String> fields;
 
     EmirRefitReport(Map<String, String> fields) {
         this.fields = Collections.unmodifiableMap(new LinkedHashMap<>(fields));
+    }
+
+    /**
+     * Every rule {@link #validate()} applies, in order, with its citation and evidence class.
+     *
+     * @return the rule catalogue (immutable)
+     */
+    public static List<RuleProvenance> rules() {
+        return RULES;
     }
 
     @Override

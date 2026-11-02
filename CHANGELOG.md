@@ -6,6 +6,25 @@ Entries for 1.x releases are archived in [docs/history/CHANGELOG-1.x.md](docs/hi
 
 ## [Unreleased]
 
+### Added (3.0.0)
+
+- `reporting.RuleProvenance` (record: rule id, rule text, citation, evidence class
+  `PUBLISHED_REFERENCE`, `LIBRARY_READING` or `UNCONFIRMED`).
+- `EmirRefitReport.rules()` and `CatEvent.rules()` list every check that
+  `validate()` makes (EMIR-R01 to R16, CAT-R01 to R08) with its citation, and
+  `CHECKED_AGAINST` on each class states the comparison in one line. Messages
+  from `validate()` are unchanged.
+
+### Not done, and known gaps (3.0.0)
+
+- EMIR Refit and CAT checks are **not checked** against the published texts.
+  Implementing Regulation (EU) 2022/1860, the ESMA EMIR Refit validation rules
+  and the CAT Reporting Technical Specifications for Industry Members are not in
+  the source folder, so every EMIR and CAT rule is `UNCONFIRMED`, apart from the
+  action/event pairing (EMIR-R04), TERM accepting an expiration date (EMIR-R07)
+  and the DEL exemption from errorROEID (CAT-R04), which are `LIBRARY_READING`.
+  No new EMIR or CAT rule was added for the same reason.
+
 ## [2.4.0] - 2026-11-02
 
 Minor release. No 2.3 public signature in a stable package is removed or changed (japicmp against 2.3.0), and no result changes unless you opt in. 2.4.0 deprecates for removal every member that 3.0 takes out, so compiling with `-Xlint:removal` lists the lines to change; [docs/MIGRATION_2.4.md](docs/MIGRATION_2.4.md) covers this release and [docs/MIGRATION_3.0.md](docs/MIGRATION_3.0.md) is the draft plan for 3.0.

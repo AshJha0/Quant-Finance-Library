@@ -251,6 +251,12 @@ import com.quantfinlib.regreporting.emir.EmirActionType;
 sed -i 's/com\.quantfinlib\.reporting\b/com.quantfinlib.regreporting/g' $(git ls-files '*.java')
 ```
 
+EMIR and CAT checks gain a provenance list in 3.0 (`EmirRefitReport.rules()`,
+`CatEvent.rules()`, `RuleProvenance`). This is additive: `validate()` returns
+the same messages as in 2.4, and nothing needs to change in calling code.
+Read `CHECKED_AGAINST` before relying on a check; in 3.0.0 it says "not
+checked" for both regimes.
+
 ## 8. Types that change package
 
 The tick-file types leave `data`, because the rest of `data` stays in the main

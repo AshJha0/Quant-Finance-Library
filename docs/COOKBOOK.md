@@ -10826,6 +10826,21 @@ builder covers the Refit core fields, the UTI shape and the allowed pairs of
 action and event type. Both are indicative and not certified; EMIR has not been
 checked field by field against Regulation 2022/1860.
 
+To see what a check rests on, list the rules (3.0):
+
+```java
+for (RuleProvenance r : EmirRefitReport.rules()) {
+    System.out.println(r.id() + " " + r.evidence() + " " + r.citation());
+}
+// EMIR-R09 UNCONFIRMED Implementing Regulation (EU) 2022/1860, Annex, Table 2 field 2.1 (number indicative)
+System.out.println(CatEvent.CHECKED_AGAINST);   // "not checked: ..."
+```
+
+Each rule has an id, the citation it was written against and an evidence
+class. In 3.0.0 no EMIR or CAT rule is a published reference, because the
+regulation, the ESMA validation rules and the CAT specification are not in
+the library's source folder; treat `validate()` as a shape check.
+
 ## 350. Busts and corrections in the paper gateway
 
 ```java
