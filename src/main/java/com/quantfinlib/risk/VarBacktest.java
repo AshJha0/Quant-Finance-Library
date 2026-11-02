@@ -1,6 +1,6 @@
 package com.quantfinlib.risk;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.SpecialFunctions;
 
 /**
  * VaR model validation: do the exceptions (losses beyond VaR) occur at the
@@ -194,6 +194,6 @@ public final class VarBacktest {
         if (statistic <= 0) {
             return 1;
         }
-        return 2 * (1 - MathUtils.normCdf(Math.sqrt(statistic)));
+        return 2 * (1 - SpecialFunctions.normCdf(Math.sqrt(statistic)));
     }
 }

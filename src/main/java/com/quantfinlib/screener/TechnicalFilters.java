@@ -2,7 +2,7 @@ package com.quantfinlib.screener;
 
 import com.quantfinlib.core.BarSeries;
 import com.quantfinlib.indicators.Indicators;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Stats;
 
 /**
  * Technical screening filters evaluated on the most recent bar. All filters
@@ -150,7 +150,7 @@ public final class TechnicalFilters {
             if (n < lookback + 2) {
                 return false;
             }
-            double avg = MathUtils.mean(series.volumesCopy(), n - 1 - lookback, n - 1);
+            double avg = Stats.mean(series.volumesCopy(), n - 1 - lookback, n - 1);
             return avg > 0 && series.volume(n - 1) > multiplier * avg;
         };
     }

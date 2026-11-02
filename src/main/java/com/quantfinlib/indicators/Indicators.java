@@ -1,7 +1,8 @@
 package com.quantfinlib.indicators;
 
 import com.quantfinlib.core.BarSeries;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Numerics;
+import com.quantfinlib.stats.Stats;
 
 import java.util.Arrays;
 
@@ -742,7 +743,7 @@ public final class Indicators {
      */
     public static double[] sma(double[] v, int period) {
         checkPeriod(period);
-        double[] out = MathUtils.nanArray(v.length);
+        double[] out = Numerics.nanArray(v.length);
         if (v.length < period) {
             return out;
         }
@@ -768,7 +769,7 @@ public final class Indicators {
     /** Exponential moving average, seeded with the SMA of the first {@code period} values. */
     public static double[] ema(double[] v, int period) {
         checkPeriod(period);
-        double[] out = MathUtils.nanArray(v.length);
+        double[] out = Numerics.nanArray(v.length);
         if (v.length < period) {
             return out;
         }
@@ -789,7 +790,7 @@ public final class Indicators {
     /** Linearly weighted moving average. */
     public static double[] wma(double[] v, int period) {
         checkPeriod(period);
-        double[] out = MathUtils.nanArray(v.length);
+        double[] out = Numerics.nanArray(v.length);
         double denom = period * (period + 1) / 2.0;
         for (int i = period - 1; i < v.length; i++) {
             double s = 0;
@@ -808,7 +809,7 @@ public final class Indicators {
     /** Relative Strength Index (Wilder smoothing). */
     public static double[] rsi(double[] v, int period) {
         checkPeriod(period);
-        double[] out = MathUtils.nanArray(v.length);
+        double[] out = Numerics.nanArray(v.length);
         if (v.length <= period) {
             return out;
         }
@@ -842,7 +843,7 @@ public final class Indicators {
     /** Rate of change, percent: (v[i] / v[i-period] - 1) * 100. */
     public static double[] roc(double[] v, int period) {
         checkPeriod(period);
-        double[] out = MathUtils.nanArray(v.length);
+        double[] out = Numerics.nanArray(v.length);
         for (int i = period; i < v.length; i++) {
             out[i] = (v[i] / v[i - period] - 1) * 100;
         }
@@ -852,7 +853,7 @@ public final class Indicators {
     /** Momentum: v[i] - v[i-period]. */
     public static double[] momentum(double[] v, int period) {
         checkPeriod(period);
-        double[] out = MathUtils.nanArray(v.length);
+        double[] out = Numerics.nanArray(v.length);
         for (int i = period; i < v.length; i++) {
             out[i] = v[i] - v[i - period];
         }
@@ -864,12 +865,12 @@ public final class Indicators {
         double[] fast = ema(close, fastPeriod);
         double[] slow = ema(close, slowPeriod);
         int n = close.length;
-        double[] line = MathUtils.nanArray(n);
+        double[] line = Numerics.nanArray(n);
         for (int i = 0; i < n; i++) {
             line[i] = fast[i] - slow[i];
         }
-        double[] signal = MathUtils.nanArray(n);
-        double[] hist = MathUtils.nanArray(n);
+        double[] signal = Numerics.nanArray(n);
+        double[] hist = Numerics.nanArray(n);
         int start = slowPeriod - 1;
         if (start < n) {
             double[] valid = Arrays.copyOfRange(line, start, n);
@@ -887,7 +888,7 @@ public final class Indicators {
                                          int kSmooth, int dSmooth) {
         double[] r = rsi(close, rsiPeriod);
         int n = close.length;
-        double[] raw = MathUtils.nanArray(n);
+        double[] raw = Numerics.nanArray(n);
         for (int i = rsiPeriod + stochPeriod - 1; i < n; i++) {
             double hi = Double.NEGATIVE_INFINITY, lo = Double.POSITIVE_INFINITY;
             for (int j = i - stochPeriod + 1; j <= i; j++) {
@@ -907,7 +908,7 @@ public final class Indicators {
     public static double[] williamsR(BarSeries s, int period) {
         checkPeriod(period);
         int n = s.size();
-        double[] out = MathUtils.nanArray(n);
+        double[] out = Numerics.nanArray(n);
         for (int i = period - 1; i < n; i++) {
             double hh = Double.NEGATIVE_INFINITY, ll = Double.POSITIVE_INFINITY;
             for (int j = i - period + 1; j <= i; j++) {
@@ -927,9 +928,9 @@ public final class Indicators {
         for (int i = 0; i < n; i++) {
             tp[i] = (s.high(i) + s.low(i) + s.close(i)) / 3.0;
         }
-        double[] out = MathUtils.nanArray(n);
+        double[] out = Numerics.nanArray(n);
         for (int i = period - 1; i < n; i++) {
-            double m = MathUtils.mean(tp, i - period + 1, i + 1);
+            double m = Stats.mean(tp, i - period + 1, i + 1);
             double dev = 0;
             for (int j = i - period + 1; j <= i; j++) {
                 dev += Math.abs(tp[j] - m);
@@ -963,7 +964,7 @@ public final class Indicators {
         checkPeriod(period);
         double[] tr = trueRange(s);
         int n = tr.length;
-        double[] out = MathUtils.nanArray(n);
+        double[] out = Numerics.nanArray(n);
         if (n < period) {
             return out;
         }
@@ -984,9 +985,9 @@ public final class Indicators {
     public static Adx adx(BarSeries s, int period) {
         checkPeriod(period);
         int n = s.size();
-        double[] adx = MathUtils.nanArray(n);
-        double[] plusDi = MathUtils.nanArray(n);
-        double[] minusDi = MathUtils.nanArray(n);
+        double[] adx = Numerics.nanArray(n);
+        double[] plusDi = Numerics.nanArray(n);
+        double[] minusDi = Numerics.nanArray(n);
         if (n <= 2 * period) {
             return new Adx(adx, plusDi, minusDi);
         }
@@ -999,7 +1000,7 @@ public final class Indicators {
             smPlus += (up > dn && up > 0) ? up : 0;
             smMinus += (dn > up && dn > 0) ? dn : 0;
         }
-        double[] dx = MathUtils.nanArray(n);
+        double[] dx = Numerics.nanArray(n);
         for (int i = period; i < n; i++) {
             if (i > period) {
                 double up = s.high(i) - s.high(i - 1);
@@ -1033,10 +1034,10 @@ public final class Indicators {
     public static Bollinger bollinger(double[] close, int period, double k) {
         double[] mid = sma(close, period);
         int n = close.length;
-        double[] up = MathUtils.nanArray(n);
-        double[] lo = MathUtils.nanArray(n);
+        double[] up = Numerics.nanArray(n);
+        double[] lo = Numerics.nanArray(n);
         for (int i = period - 1; i < n; i++) {
-            double sd = MathUtils.stdDevP(close, i - period + 1, i + 1);
+            double sd = Stats.populationStdDev(close, i - period + 1, i + 1);
             up[i] = mid[i] + k * sd;
             lo[i] = mid[i] - k * sd;
         }
@@ -1048,8 +1049,8 @@ public final class Indicators {
         double[] mid = ema(s.closesCopy(), emaPeriod);
         double[] a = atr(s, atrPeriod);
         int n = s.size();
-        double[] up = MathUtils.nanArray(n);
-        double[] lo = MathUtils.nanArray(n);
+        double[] up = Numerics.nanArray(n);
+        double[] lo = Numerics.nanArray(n);
         for (int i = 0; i < n; i++) {
             if (!Double.isNaN(mid[i]) && !Double.isNaN(a[i])) {
                 up[i] = mid[i] + multiplier * a[i];
@@ -1065,7 +1066,7 @@ public final class Indicators {
         int n = s.size();
         double[] up = highest(s.highsCopy(), period);
         double[] lo = lowest(s.lowsCopy(), period);
-        double[] mid = MathUtils.nanArray(n);
+        double[] mid = Numerics.nanArray(n);
         for (int i = 0; i < n; i++) {
             if (!Double.isNaN(up[i])) {
                 mid[i] = (up[i] + lo[i]) / 2;
@@ -1113,7 +1114,7 @@ public final class Indicators {
             double mult = range == 0 ? 0 : ((s.close(i) - s.low(i)) - (s.high(i) - s.close(i))) / range;
             mfv[i] = mult * s.volume(i);
         }
-        double[] out = MathUtils.nanArray(n);
+        double[] out = Numerics.nanArray(n);
         double sumMfv = 0, sumVol = 0;
         for (int i = 0; i < n; i++) {
             sumMfv += mfv[i];
@@ -1137,7 +1138,7 @@ public final class Indicators {
     public static SuperTrend superTrend(BarSeries s, int period, double multiplier) {
         int n = s.size();
         double[] a = atr(s, period);
-        double[] value = MathUtils.nanArray(n);
+        double[] value = Numerics.nanArray(n);
         int[] dir = new int[n];
         double fUp = Double.NaN, fLo = Double.NaN;
         int trend = 1;
@@ -1173,9 +1174,9 @@ public final class Indicators {
         int n = s.size();
         double[] tenkan = midChannel(s, tenkanPeriod);
         double[] kijun = midChannel(s, kijunPeriod);
-        double[] senkouA = MathUtils.nanArray(n);
-        double[] senkouB = MathUtils.nanArray(n);
-        double[] chikou = MathUtils.nanArray(n);
+        double[] senkouA = Numerics.nanArray(n);
+        double[] senkouB = Numerics.nanArray(n);
+        double[] chikou = Numerics.nanArray(n);
         double[] spanBBase = midChannel(s, senkouBPeriod);
         for (int i = 0; i < n; i++) {
             int fwd = i + kijunPeriod;
@@ -1196,7 +1197,7 @@ public final class Indicators {
     private static double[] midChannel(BarSeries s, int period) {
         double[] hh = highest(s.highsCopy(), period);
         double[] ll = lowest(s.lowsCopy(), period);
-        double[] out = MathUtils.nanArray(s.size());
+        double[] out = Numerics.nanArray(s.size());
         for (int i = 0; i < out.length; i++) {
             if (!Double.isNaN(hh[i])) {
                 out[i] = (hh[i] + ll[i]) / 2;
@@ -1208,7 +1209,7 @@ public final class Indicators {
     /** Parabolic SAR (standard Wilder acceleration schedule). */
     public static double[] parabolicSar(BarSeries s, double afStart, double afStep, double afMax) {
         int n = s.size();
-        double[] out = MathUtils.nanArray(n);
+        double[] out = Numerics.nanArray(n);
         if (n < 2) {
             return out;
         }
@@ -1253,7 +1254,7 @@ public final class Indicators {
 
     public static double[] highest(double[] v, int period) {
         checkPeriod(period);
-        double[] out = MathUtils.nanArray(v.length);
+        double[] out = Numerics.nanArray(v.length);
         for (int i = period - 1; i < v.length; i++) {
             double m = Double.NEGATIVE_INFINITY;
             for (int j = i - period + 1; j <= i; j++) {
@@ -1266,7 +1267,7 @@ public final class Indicators {
 
     public static double[] lowest(double[] v, int period) {
         checkPeriod(period);
-        double[] out = MathUtils.nanArray(v.length);
+        double[] out = Numerics.nanArray(v.length);
         for (int i = period - 1; i < v.length; i++) {
             double m = Double.POSITIVE_INFINITY;
             for (int j = i - period + 1; j <= i; j++) {
@@ -1280,9 +1281,9 @@ public final class Indicators {
     /** Rolling population standard deviation. */
     public static double[] rollingStd(double[] v, int period) {
         checkPeriod(period);
-        double[] out = MathUtils.nanArray(v.length);
+        double[] out = Numerics.nanArray(v.length);
         for (int i = period - 1; i < v.length; i++) {
-            out[i] = MathUtils.stdDevP(v, i - period + 1, i + 1);
+            out[i] = Stats.populationStdDev(v, i - period + 1, i + 1);
         }
         return out;
     }
@@ -1291,7 +1292,7 @@ public final class Indicators {
         if (period <= 1) {
             return v.clone();
         }
-        double[] out = MathUtils.nanArray(v.length);
+        double[] out = Numerics.nanArray(v.length);
         for (int i = 0; i < v.length; i++) {
             double s = 0;
             int cnt = 0;

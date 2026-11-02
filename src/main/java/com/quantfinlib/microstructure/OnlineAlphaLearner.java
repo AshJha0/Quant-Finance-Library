@@ -1,7 +1,7 @@
 package com.quantfinlib.microstructure;
 
 import com.quantfinlib.persist.Checkpoint;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Numerics;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -206,7 +206,7 @@ public final class OnlineAlphaLearner {
             return 0;
         }
         double pred = predict(queueImbalance, tradeImbalance, normalizedOfi, momentumZ);
-        return MathUtils.clamp(pred / (2 * absPredEwma), -1, 1);
+        return Numerics.clamp(pred / (2 * absPredEwma), -1, 1);
     }
 
     /** The learned weight for feature {@code i} (0=queueImb, 1=tradeImb, 2=OFI, 3=momZ). */

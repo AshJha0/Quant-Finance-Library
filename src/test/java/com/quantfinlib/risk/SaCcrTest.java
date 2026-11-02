@@ -1,5 +1,6 @@
 package com.quantfinlib.risk;
 
+import com.quantfinlib.stats.SpecialFunctions;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -154,9 +155,9 @@ class SaCcrTest {
     @Test
     void boughtCallDeltaIsTheNormalCdf() {
         double d1 = (Math.log(1.1) + 0.5 * 0.04) / 0.2;
-        assertEquals(com.quantfinlib.util.MathUtils.normCdf(d1),
+        assertEquals(SpecialFunctions.normCdf(d1),
                 SaCcr.optionDelta(true, true, 1.1, 1.0, 1, 0.2), 1e-15);
-        assertEquals(-com.quantfinlib.util.MathUtils.normCdf(d1),
+        assertEquals(-SpecialFunctions.normCdf(d1),
                 SaCcr.optionDelta(true, false, 1.1, 1.0, 1, 0.2), 1e-15);
     }
 }

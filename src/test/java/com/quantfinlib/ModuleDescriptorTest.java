@@ -42,6 +42,8 @@ class ModuleDescriptorTest {
         assertEquals("com.quantfinlib", d.name());
         Set<String> expected = sourcePackages();
         assertTrue(expected.remove("com.quantfinlib.examples"));
+        // examples.* subpackages ship in the examples jar too, never exported
+        expected.removeIf(p -> p.startsWith("com.quantfinlib.examples."));
         Set<String> exported = d.exports().stream()
                 .filter(e -> !e.isQualified())
                 .map(ModuleDescriptor.Exports::source)

@@ -1,5 +1,6 @@
 package com.quantfinlib.backtest.portfolio;
 
+import com.quantfinlib.stats.Numerics;
 import com.quantfinlib.core.BarSeries;
 import com.quantfinlib.data.PointInTimeUniverse;
 
@@ -104,7 +105,7 @@ public final class CrossSectionalMomentum implements PortfolioStrategy {
 
         // The point-in-time step: rank only the names that are members at
         // this bar. Dead and dropped stocks never enter the cross-section.
-        // Primitive arrays + MathUtils.pairSort: no boxed Doubles/Integers
+        // Primitive arrays + Numerics.pairSort: no boxed Doubles/Integers
         // through a comparator per rebalance.
         int n = 0;
         double[] momentum = new double[symbols.size()];
@@ -130,7 +131,7 @@ public final class CrossSectionalMomentum implements PortfolioStrategy {
         // Ascending sort: losers at the front, winners at the back.
         double[] keys = java.util.Arrays.copyOf(momentum, n);
         int[] order = java.util.Arrays.copyOf(candidate, n);
-        com.quantfinlib.util.MathUtils.pairSort(keys, order);
+        Numerics.pairSort(keys, order);
 
         Map<String, Double> weights = new HashMap<>();
         double w = config.grossPerSide() / side;

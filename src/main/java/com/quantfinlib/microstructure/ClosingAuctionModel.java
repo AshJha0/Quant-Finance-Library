@@ -1,7 +1,7 @@
 package com.quantfinlib.microstructure;
 
 import com.quantfinlib.persist.Checkpoint;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Numerics;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -114,7 +114,7 @@ public final class ClosingAuctionModel {
         }
         double signed = (buyImbalance ? 1.0 : -1.0) * imbalanceQty;
         imbalanceRatio = signed / (imbalanceQty + pairedQty);
-        indicativePressure = MathUtils.clamp(
+        indicativePressure = Numerics.clamp(
                 (indicativePrice - referencePrice) / referencePrice, -1, 1);
     }
 
@@ -155,7 +155,7 @@ public final class ClosingAuctionModel {
         // dissemination the ratio is 0 and the tilt vanishes with it.
         double opposite = parentIsBuy ? -imbalanceRatio : imbalanceRatio;
         double tilt = imbalanceSensitivity * opposite;
-        return MathUtils.clamp(auctionShareEwma * (1 + tilt), 0, maxReserveFraction);
+        return Numerics.clamp(auctionShareEwma * (1 + tilt), 0, maxReserveFraction);
     }
 
     /** The learned typical auction share of daily volume (0 until learned). */

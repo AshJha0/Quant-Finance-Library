@@ -2,7 +2,7 @@ package com.quantfinlib.hedging;
 
 import com.quantfinlib.pricing.BlackScholes;
 import com.quantfinlib.pricing.BlackScholes.OptionType;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.SpecialFunctions;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -177,7 +177,7 @@ public final class OptionsBook {
         double sqrtT = Math.sqrt(t);
         double d1 = (Math.log(s / k) + (r - q + 0.5 * vol * vol) * t) / (vol * sqrtT);
         double d2 = d1 - vol * sqrtT;
-        double pdf = MathUtils.normPdf(d1);
+        double pdf = SpecialFunctions.normPdf(d1);
         double vega = s * Math.exp(-q * t) * pdf * sqrtT;
         return new double[]{-Math.exp(-q * t) * pdf * d2 / vol, vega * d1 * d2 / vol};
     }

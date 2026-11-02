@@ -3,7 +3,7 @@ package com.quantfinlib.credit;
 import com.quantfinlib.rates.CurveInterpolation;
 import com.quantfinlib.rates.DiscountCurve;
 import com.quantfinlib.rates.YieldCurve;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.SpecialFunctions;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * exposures match independent closed forms or quadrature within four
  * standard errors.
  */
+@SuppressWarnings("removal") // exercises 2.x API deprecated for removal in 2.4.0
 class MultiCurrencyExposureSimulatorTest {
 
     private static final LocalDate D0 = LocalDate.of(2026, 11, 2);
@@ -236,7 +237,7 @@ class MultiCurrencyExposureSimulatorTest {
             double sd = Math.sqrt(var);
             double d1 = (Math.log(f0 / strike) + 0.5 * var) / sd;
             double black = notional * p(OIS, tm)
-                    * (f0 * MathUtils.normCdf(d1) - strike * MathUtils.normCdf(d1 - sd));
+                    * (f0 * SpecialFunctions.normCdf(d1) - strike * SpecialFunctions.normCdf(d1 - sd));
             assertEquals(black, prof.discountedExpectedExposure(i),
                     4 * prof.discountedExpectedExposureStdError(i), "t=" + times[i]);
         }

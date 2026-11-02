@@ -1,6 +1,6 @@
 package com.quantfinlib.microstructure;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Numerics;
 
 /**
  * Self-exciting (Hawkes) event intensity — the model behind the trader's
@@ -98,7 +98,7 @@ public final class HawkesIntensity {
             if (dt < 0) {
                 return;
             }
-            excited = excited * MathUtils.decayFactor(dt, decayHalfLifeNanos) + excitation;
+            excited = excited * Numerics.decayFactor(dt, decayHalfLifeNanos) + excitation;
         } else {
             excited = excitation;
             hasEvent = true;
@@ -118,7 +118,7 @@ public final class HawkesIntensity {
      * 0 in steady flow; decays back with the configured half-life.
      */
     public double burstScore(long nowNanos) {
-        return MathUtils.clamp(excitedAt(nowNanos) / baselineRatePerSec, 0, 1);
+        return Numerics.clamp(excitedAt(nowNanos) / baselineRatePerSec, 0, 1);
     }
 
     private double excitedAt(long nowNanos) {
@@ -126,7 +126,7 @@ public final class HawkesIntensity {
             return 0;
         }
         long dt = nowNanos - lastEventNanos;
-        return dt <= 0 ? excited : excited * MathUtils.decayFactor(dt, decayHalfLifeNanos);
+        return dt <= 0 ? excited : excited * Numerics.decayFactor(dt, decayHalfLifeNanos);
     }
 
     public long events() {

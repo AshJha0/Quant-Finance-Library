@@ -1,6 +1,6 @@
 package com.quantfinlib.rates;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.LinearAlgebra;
 
 /**
  * Svensson (Nelson-Siegel-Svensson) yield-curve fit — {@link NelsonSiegel}
@@ -121,7 +121,7 @@ public final class Svensson {
                 }
                 double[] beta;
                 try {
-                    beta = MathUtils.solveLinear(xtx, xty);
+                    beta = LinearAlgebra.solveLinear(xtx, xty);
                 } catch (IllegalArgumentException singular) {
                     continue; // degenerate node (near-collinear regressors); skip
                 }

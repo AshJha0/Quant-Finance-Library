@@ -1,6 +1,6 @@
 package com.quantfinlib.pricing;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.SpecialFunctions;
 
 /**
  * Black-Scholes-Merton option pricing and Greeks with a continuous carry
@@ -50,9 +50,9 @@ public final class BlackScholes {
         double df = Math.exp(-rate * timeYears);
         double cf = Math.exp(-carry * timeYears);
         if (type == OptionType.CALL) {
-            return spot * cf * MathUtils.normCdf(d1) - strike * df * MathUtils.normCdf(d2);
+            return spot * cf * SpecialFunctions.normCdf(d1) - strike * df * SpecialFunctions.normCdf(d2);
         }
-        return strike * df * MathUtils.normCdf(-d2) - spot * cf * MathUtils.normCdf(-d1);
+        return strike * df * SpecialFunctions.normCdf(-d2) - spot * cf * SpecialFunctions.normCdf(-d1);
     }
 
     public static double delta(OptionType type, double spot, double strike,
@@ -67,8 +67,8 @@ public final class BlackScholes {
         double d1 = d1(spot, strike, rate, carry, vol, timeYears);
         double cf = Math.exp(-carry * timeYears);
         return type == OptionType.CALL
-                ? cf * MathUtils.normCdf(d1)
-                : cf * (MathUtils.normCdf(d1) - 1);
+                ? cf * SpecialFunctions.normCdf(d1)
+                : cf * (SpecialFunctions.normCdf(d1) - 1);
     }
 
     public static double gamma(double spot, double strike, double rate, double carry,
@@ -81,7 +81,7 @@ public final class BlackScholes {
             return 0;
         }
         double d1 = d1(spot, strike, rate, carry, vol, timeYears);
-        return Math.exp(-carry * timeYears) * MathUtils.normPdf(d1)
+        return Math.exp(-carry * timeYears) * SpecialFunctions.normPdf(d1)
                 / (spot * vol * Math.sqrt(timeYears));
     }
 
@@ -95,11 +95,11 @@ public final class BlackScholes {
             // Limit as vol -> 0: zero unless the option is exactly at the forward.
             double fwd = spot * Math.exp((rate - carry) * timeYears);
             return Double.compare(fwd, strike) == 0
-                    ? spot * Math.exp(-carry * timeYears) * MathUtils.normPdf(0) * Math.sqrt(timeYears)
+                    ? spot * Math.exp(-carry * timeYears) * SpecialFunctions.normPdf(0) * Math.sqrt(timeYears)
                     : 0;
         }
         double d1 = d1(spot, strike, rate, carry, vol, timeYears);
-        return spot * Math.exp(-carry * timeYears) * MathUtils.normPdf(d1) * Math.sqrt(timeYears);
+        return spot * Math.exp(-carry * timeYears) * SpecialFunctions.normPdf(d1) * Math.sqrt(timeYears);
     }
 
     /** Per year (divide by 365 for per-calendar-day). */
@@ -121,13 +121,13 @@ public final class BlackScholes {
         double d2 = d1 - vol * sqrtT;
         double cf = Math.exp(-carry * timeYears);
         double df = Math.exp(-rate * timeYears);
-        double common = -spot * cf * MathUtils.normPdf(d1) * vol / (2 * sqrtT);
+        double common = -spot * cf * SpecialFunctions.normPdf(d1) * vol / (2 * sqrtT);
         if (type == OptionType.CALL) {
-            return common - rate * strike * df * MathUtils.normCdf(d2)
-                    + carry * spot * cf * MathUtils.normCdf(d1);
+            return common - rate * strike * df * SpecialFunctions.normCdf(d2)
+                    + carry * spot * cf * SpecialFunctions.normCdf(d1);
         }
-        return common + rate * strike * df * MathUtils.normCdf(-d2)
-                - carry * spot * cf * MathUtils.normCdf(-d1);
+        return common + rate * strike * df * SpecialFunctions.normCdf(-d2)
+                - carry * spot * cf * SpecialFunctions.normCdf(-d1);
     }
 
     /** Per 1.00 change in the domestic rate. */
@@ -144,8 +144,8 @@ public final class BlackScholes {
         double d2 = d1(spot, strike, rate, carry, vol, timeYears) - vol * Math.sqrt(timeYears);
         double df = Math.exp(-rate * timeYears);
         return type == OptionType.CALL
-                ? strike * timeYears * df * MathUtils.normCdf(d2)
-                : -strike * timeYears * df * MathUtils.normCdf(-d2);
+                ? strike * timeYears * df * SpecialFunctions.normCdf(d2)
+                : -strike * timeYears * df * SpecialFunctions.normCdf(-d2);
     }
 
     public static Greeks greeks(OptionType type, double spot, double strike,

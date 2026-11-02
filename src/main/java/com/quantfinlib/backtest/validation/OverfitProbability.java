@@ -1,6 +1,6 @@
 package com.quantfinlib.backtest.validation;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Stats;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -193,8 +193,8 @@ public final class OverfitProbability {
      */
     public static Result cscvSharpe(double[][] returns, int blocks) {
         return cscv(returns, blocks, r -> {
-            double sd = MathUtils.stdDev(r);
-            return sd > 0 ? MathUtils.mean(r) / sd : 0;
+            double sd = Stats.sampleStdDev(r);
+            return sd > 0 ? Stats.mean(r) / sd : 0;
         });
     }
 

@@ -1,6 +1,6 @@
 package com.quantfinlib.hedging;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Stats;
 
 /**
  * Statistical (pairs) hedging: regresses one price series on another to get
@@ -120,9 +120,9 @@ public final class PairsHedger {
             throw new IllegalArgumentException("need two aligned series of >= 20 points");
         }
         // OLS of A on B (price levels) for the hedge ratio.
-        double varB = MathUtils.variance(pricesB);
-        double beta = varB == 0 ? 0 : MathUtils.covariance(pricesA, pricesB) / varB;
-        double alpha = MathUtils.mean(pricesA) - beta * MathUtils.mean(pricesB);
+        double varB = Stats.sampleVariance(pricesB);
+        double beta = varB == 0 ? 0 : Stats.sampleCovariance(pricesA, pricesB) / varB;
+        double alpha = Stats.mean(pricesA) - beta * Stats.mean(pricesB);
 
         int n = pricesA.length;
         double[] spread = new double[n];
@@ -130,8 +130,8 @@ public final class PairsHedger {
             spread[i] = pricesA[i] - beta * pricesB[i] - alpha;
         }
 
-        double mean = MathUtils.mean(spread);
-        double std = MathUtils.stdDev(spread);
+        double mean = Stats.mean(spread);
+        double std = Stats.sampleStdDev(spread);
         double z = std == 0 ? 0 : (spread[n - 1] - mean) / std;
 
         // Return correlation of the pair.
@@ -142,7 +142,7 @@ public final class PairsHedger {
             retB[i - 1] = pricesB[i] / pricesB[i - 1] - 1;
         }
 
-        return new PairsAnalysis(beta, alpha, MathUtils.correlation(retA, retB),
+        return new PairsAnalysis(beta, alpha, Stats.pearsonOrZero(retA, retB),
                 halfLife(spread), z, spread);
     }
 
@@ -159,11 +159,11 @@ public final class PairsHedger {
             lag[i - 1] = spread[i - 1];
             diff[i - 1] = spread[i] - spread[i - 1];
         }
-        double varLag = MathUtils.variance(lag);
+        double varLag = Stats.sampleVariance(lag);
         if (varLag == 0) {
             return Double.POSITIVE_INFINITY;
         }
-        double lambda = MathUtils.covariance(diff, lag) / varLag;
+        double lambda = Stats.sampleCovariance(diff, lag) / varLag;
         if (lambda >= 0) {
             return Double.POSITIVE_INFINITY;
         }

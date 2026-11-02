@@ -1,7 +1,7 @@
 package com.quantfinlib.backtest.validation;
 
 import com.quantfinlib.backtest.Trade;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Stats;
 
 import java.util.List;
 import java.util.SplittableRandom;
@@ -35,7 +35,7 @@ import java.util.SplittableRandom;
  * all-in compounding book, where a trade's currency P&amp;L depends on the
  * equity at the time it was taken. Drawdowns are fractions of the running
  * peak, terminal values are total returns. Percentiles come from
- * {@code MathUtils.percentile}. Deterministic given the seed.</p>
+ * {@code Stats.quantile}. Deterministic given the seed.</p>
  */
 public final class MonteCarloTradeShuffle {
 
@@ -117,10 +117,10 @@ public final class MonteCarloTradeShuffle {
             }
         }
         return new Result(
-                MathUtils.percentile(dd, 0.50),
-                MathUtils.percentile(dd, 0.95),
-                MathUtils.percentile(dd, 0.99),
-                MathUtils.percentile(terminal, 0.50),
+                Stats.quantile(dd, 0.50),
+                Stats.quantile(dd, 0.95),
+                Stats.quantile(dd, 0.99),
+                Stats.quantile(terminal, 0.50),
                 (double) losses / shuffles,
                 actualDd,
                 (double) actualAtOrBelow / shuffles);

@@ -56,6 +56,15 @@ import java.util.TreeSet;
  *
  * <p>Seeded {@link SplittableRandom}; the same seed gives the same
  * profile. Research lane.</p>
+ *
+ * <p><b>3.0 notice.</b> This class folds into
+ * {@link MultiCurrencyExposureSimulator} in 3.0. {@link Market}, its
+ * {@code ratesOnly} factory and {@link #simulate} are deprecated for removal
+ * in 2.4.0. The trade-term records {@link Swap}, {@link FxForward} and
+ * {@link Csa} are not deprecated in 2.x because the multi-currency API takes
+ * them as parameters; in 3.0 they become nested records of
+ * {@code MultiCurrencyExposureSimulator} with the same components (an import
+ * change only). See docs/MIGRATION_3.0.md.</p>
  */
 public final class ExposureSimulator {
 
@@ -72,7 +81,14 @@ public final class ExposureSimulator {
      * @param fxSpot         spot, domestic per foreign, &gt; 0 when FX is used
      * @param fxVol          FX lognormal volatility, &ge; 0
      * @param fxRateCorrelation correlation of the FX and rate Brownians, in [-1, 1]
+     * @deprecated since 2.4.0, removed in 3.0 when this class folds into
+     *     {@link MultiCurrencyExposureSimulator}. Use
+     *     {@link MultiCurrencyExposureSimulator.Market} with a
+     *     {@link MultiCurrencyExposureSimulator.Domestic} and zero or one
+     *     {@link MultiCurrencyExposureSimulator.Foreign} (foreign rate vol 0);
+     *     docs/MIGRATION_3.0.md shows the one-pair equivalent.
      */
+    @Deprecated(since = "2.4.0", forRemoval = true)
     public record Market(YieldCurve domestic, double meanReversion, double rateVol,
                          YieldCurve foreign, double fxSpot, double fxVol,
                          double fxRateCorrelation) {
@@ -94,7 +110,13 @@ public final class ExposureSimulator {
             }
         }
 
-        /** Rates-only market (no FX). */
+        /**
+         * Rates-only market (no FX).
+         *
+         * @deprecated since 2.4.0, removed in 3.0. Use
+         *     {@code new MultiCurrencyExposureSimulator.Market(new Domestic(Curve.of(curve), a, sigma), List.of(), new double[][]{{1}})}.
+         */
+        @Deprecated(since = "2.4.0", forRemoval = true)
         public static Market ratesOnly(YieldCurve domestic, double meanReversion, double rateVol) {
             return new Market(domestic, meanReversion, rateVol, null, 0, 0, 0);
         }
@@ -194,7 +216,14 @@ public final class ExposureSimulator {
      * @param paths    number of paths, &ge; 2
      * @param seed     random seed
      * @return the exposure profile
+     * @deprecated since 2.4.0, removed in 3.0. Use
+     *     {@link MultiCurrencyExposureSimulator#simulate(MultiCurrencyExposureSimulator.Market, List, List, Csa, double[], int, long)},
+     *     wrapping each swap as {@code new MultiCurrencyExposureSimulator.Swap(swap, null)} and each
+     *     forward as {@code new MultiCurrencyExposureSimulator.FxForward(0, fwd)}. The multi-currency
+     *     engine agrees with this one to rounding, path for path, from the same seed (own test:
+     *     {@code MultiCurrencyExposureSimulatorTest}), not bit for bit.
      */
+    @Deprecated(since = "2.4.0", forRemoval = true)
     public static ExposureProfile simulate(Market market, List<Swap> swaps, List<FxForward> forwards,
                                            Csa csa, double[] times, int paths, long seed) {
         Objects.requireNonNull(market, "market");

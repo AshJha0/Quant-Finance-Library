@@ -1,7 +1,7 @@
 package com.quantfinlib.microstructure;
 
 import com.quantfinlib.persist.Checkpoint;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Numerics;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -151,7 +151,7 @@ public final class AlphaEnsemble {
                 weighted += weight * values[c];
             }
         }
-        return MathUtils.clamp(weighted, -1, 1);
+        return Numerics.clamp(weighted, -1, 1);
     }
 
     /**

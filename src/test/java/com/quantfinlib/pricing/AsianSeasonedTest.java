@@ -1,6 +1,6 @@
 package com.quantfinlib.pricing;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.SpecialFunctions;
 import org.junit.jupiter.api.Test;
 
 import java.util.SplittableRandom;
@@ -47,7 +47,7 @@ class AsianSeasonedTest {
         double fwdG = Math.exp(meanLog + 0.5 * varLog), sd = Math.sqrt(varLog);
         double d1 = (Math.log(fwdG / kStar) + 0.5 * varLog) / sd;
         int s = type.sign();
-        double geo = df * s * (fwdG * MathUtils.normCdf(s * d1) - kStar * MathUtils.normCdf(s * (d1 - sd)));
+        double geo = df * s * (fwdG * SpecialFunctions.normCdf(s * d1) - kStar * SpecialFunctions.normCdf(s * (d1 - sd)));
 
         SplittableRandom rnd = new SplittableRandom(seed);
         double[] x = new double[paths], y = new double[paths];

@@ -1,6 +1,7 @@
 package com.quantfinlib.risk;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.LinearAlgebra;
+import com.quantfinlib.stats.SpecialFunctions;
 
 /**
  * Component VaR — the answer to the risk committee's actual question. A
@@ -152,14 +153,14 @@ public final class ComponentVar {
                 }
             }
         }
-        double[] sw = MathUtils.matVec(covariance, weights);
-        double variance = MathUtils.dot(weights, sw);
+        double[] sw = LinearAlgebra.matVec(covariance, weights);
+        double variance = LinearAlgebra.dot(weights, sw);
         if (!(variance > 0)) {
             throw new IllegalArgumentException(
                     "portfolio variance must be > 0 (flat or perfectly hedged book), got " + variance);
         }
         double sigma = Math.sqrt(variance);
-        double z = MathUtils.normInv(confidence);
+        double z = SpecialFunctions.normInv(confidence);
         double[] components = new double[n];
         double[] marginals = new double[n];
         for (int i = 0; i < n; i++) {
@@ -183,9 +184,9 @@ public final class ComponentVar {
         double full = allocate(weights, covariance, confidence).portfolioVar();
         double[] without = weights.clone();
         without[i] = 0;
-        double sw = MathUtils.quadraticForm(without, covariance);
+        double sw = LinearAlgebra.quadraticForm(without, covariance);
         // A book that is flat without this position has zero remaining VaR.
-        double rest = sw > 0 ? MathUtils.normInv(confidence) * Math.sqrt(sw) : 0;
+        double rest = sw > 0 ? SpecialFunctions.normInv(confidence) * Math.sqrt(sw) : 0;
         return full - rest;
     }
 }

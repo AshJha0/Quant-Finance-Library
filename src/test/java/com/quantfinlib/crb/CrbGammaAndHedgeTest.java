@@ -3,7 +3,7 @@ package com.quantfinlib.crb;
 import com.quantfinlib.pricing.BlackScholes;
 import com.quantfinlib.pricing.BlackScholes.OptionType;
 import com.quantfinlib.risk.TailRisk;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.SpecialFunctions;
 import org.junit.jupiter.api.Test;
 
 import java.util.SplittableRandom;
@@ -44,7 +44,7 @@ class CrbGammaAndHedgeTest {
             losses[i] = -(dollarDelta * r + 50 * dollarGamma * r * r);
         }
         double mcVar = TailRisk.of(losses, 0.99).var();
-        double deltaNormal = MathUtils.normInv(0.99) * Math.abs(dollarDelta) * sigma;
+        double deltaNormal = SpecialFunctions.normInv(0.99) * Math.abs(dollarDelta) * sigma;
         assertTrue(rep.var() > deltaNormal, "short gamma raises VaR above delta-normal");
         assertEquals(mcVar, rep.var(), 0.03 * mcVar, "CF VaR within 3% of exact delta-gamma MC");
 

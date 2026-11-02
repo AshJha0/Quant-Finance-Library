@@ -1,6 +1,6 @@
 package com.quantfinlib.fx;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.SpecialFunctions;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -440,8 +440,8 @@ public final class FxVolSurface {
         double sv = vol * Math.sqrt(t);
         double d1 = Math.log(f / k) / sv + 0.5 * sv;
         double d2 = d1 - sv;
-        return call ? f * MathUtils.normCdf(d1) - k * MathUtils.normCdf(d2)
-                : k * MathUtils.normCdf(-d2) - f * MathUtils.normCdf(-d1);
+        return call ? f * SpecialFunctions.normCdf(d1) - k * SpecialFunctions.normCdf(d2)
+                : k * SpecialFunctions.normCdf(-d2) - f * SpecialFunctions.normCdf(-d1);
     }
 
     /** Linear in x, flat beyond the ends. */
@@ -512,7 +512,7 @@ public final class FxVolSurface {
         double sv = vol * sqrtT;
         if (!premiumAdjusted) {
             // Call: Δ = N(d1) → d1 = N⁻¹(Δ). Put: Δ = −N(−d1) → d1 = −N⁻¹(−Δ).
-            double d1 = isCall ? MathUtils.normInv(delta) : -MathUtils.normInv(-delta);
+            double d1 = isCall ? SpecialFunctions.normInv(delta) : -SpecialFunctions.normInv(-delta);
             return forward * Math.exp(-d1 * sv + 0.5 * sv * sv);
         }
         // Premium-adjusted: call Δpa = (K/F)·N(d2), put Δpa = −(K/F)·N(−d2).
@@ -578,11 +578,11 @@ public final class FxVolSurface {
             return bisect(k -> paCallDelta(forward, k, sv) - delta, peak, hi);
         }
         // Put delta is monotone decreasing in K over the whole bracket.
-        return bisect(k -> -(k / forward) * MathUtils.normCdf(-d2(forward, k, sv)) - delta, lo, hi);
+        return bisect(k -> -(k / forward) * SpecialFunctions.normCdf(-d2(forward, k, sv)) - delta, lo, hi);
     }
 
     private static double paCallDelta(double forward, double strike, double sv) {
-        return (strike / forward) * MathUtils.normCdf(d2(forward, strike, sv));
+        return (strike / forward) * SpecialFunctions.normCdf(d2(forward, strike, sv));
     }
 
     private static double d2(double forward, double strike, double sv) {

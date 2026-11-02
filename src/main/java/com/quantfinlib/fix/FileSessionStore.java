@@ -66,6 +66,14 @@ import java.util.zip.CRC32C;
  * A directory written by the v1 store ({@code seqnums.dat} and
  * {@code messages.dat}) is imported on first open and the old files are
  * renamed with a {@code .migrated} suffix.
+ *
+ * <p><b>3.0 notice.</b> This import of the v1 layout is deprecated in 2.4.0
+ * and removed in 3.0 (owner decision D8): a 3.0 store opened on a v1
+ * directory starts a fresh journal and leaves {@code seqnums.dat} and
+ * {@code messages.dat} untouched. To migrate, open the directory once with
+ * any 2.4 (or earlier 2.x) release before upgrading, for example with
+ * {@code com.quantfinlib.examples.FixJournalMigration} from the
+ * {@code examples} jar. No public signature changes.</p>
  */
 public final class FileSessionStore implements FixSessionStore, AutoCloseable {
 

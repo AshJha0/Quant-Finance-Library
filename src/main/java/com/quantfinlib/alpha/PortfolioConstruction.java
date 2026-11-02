@@ -1,6 +1,7 @@
 package com.quantfinlib.alpha;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.LinearAlgebra;
+import com.quantfinlib.stats.Stats;
 
 /**
  * Turns raw factor scores into tradeable weight vectors, as a
@@ -334,7 +335,7 @@ public final class PortfolioConstruction {
                     r[k++] = s.close(j) / s.close(j - 1) - 1;
                 }
             }
-            vols[i] = k < 2 ? Double.NaN : MathUtils.stdDev(java.util.Arrays.copyOf(r, k));
+            vols[i] = k < 2 ? Double.NaN : Stats.sampleStdDev(java.util.Arrays.copyOf(r, k));
         }
         return vols;
     }
@@ -532,12 +533,12 @@ public final class PortfolioConstruction {
                 }
             }
             for (double[] b : basis) {
-                double d = MathUtils.dot(q, b);
+                double d = LinearAlgebra.dot(q, b);
                 for (int i = 0; i < n; i++) {
                     q[i] -= d * b[i];
                 }
             }
-            double norm = Math.sqrt(MathUtils.dot(q, q));
+            double norm = Math.sqrt(LinearAlgebra.dot(q, q));
             if (norm <= 1e-10 * Math.max(1, Math.sqrt(norm0))) {
                 continue; // dependent on earlier constraints
             }
@@ -548,7 +549,7 @@ public final class PortfolioConstruction {
         }
         double[] w = weights.clone();
         for (double[] b : basis) {
-            double d = MathUtils.dot(w, b);
+            double d = LinearAlgebra.dot(w, b);
             for (int i = 0; i < n; i++) {
                 w[i] -= d * b[i];
             }
@@ -613,7 +614,7 @@ public final class PortfolioConstruction {
         }
         double[] solved;
         try {
-            solved = MathUtils.solveLinear(cov, a);
+            solved = LinearAlgebra.solveLinear(cov, a);
         } catch (IllegalArgumentException e) {
             // The solver reports compacted-matrix columns, which mislead when
             // NaN alphas were squeezed out — re-throw in the caller's terms.

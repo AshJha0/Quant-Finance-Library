@@ -1,7 +1,7 @@
 package com.quantfinlib.microstructure;
 
 import com.quantfinlib.persist.Checkpoint;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Numerics;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -133,7 +133,7 @@ public final class VolatilityCurve {
                 || currentVolPerSqrtSecond == Double.POSITIVE_INFINITY) {
             return 0;
         }
-        return MathUtils.clamp(currentVolPerSqrtSecond / base - 1, 0, 1);
+        return Numerics.clamp(currentVolPerSqrtSecond / base - 1, 0, 1);
     }
 
     // ------------------------------------------------------------------

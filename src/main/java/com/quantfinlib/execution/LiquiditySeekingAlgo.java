@@ -1,7 +1,7 @@
 package com.quantfinlib.execution;
 
 import com.quantfinlib.execution.BenchmarkExecutor.MarketState;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Numerics;
 
 /**
  * The opportunistic execution archetype, counterpart to
@@ -107,7 +107,7 @@ public final class LiquiditySeekingAlgo {
         if (remaining <= 0) {
             return 0;
         }
-        double f = MathUtils.clamp(scheduleFraction, 0, 1);
+        double f = Numerics.clamp(scheduleFraction, 0, 1);
 
         long due = 0;
         if (isCheap(m, forecastSpread)) {

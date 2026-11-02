@@ -16,6 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * brute-force simulation of the two default times, and positive wrong-way
  * loading raises the CVA (own tests).
  */
+@SuppressWarnings("removal") // exercises 2.x API deprecated for removal in 2.4.0
 class BilateralWrongWayCvaTest {
 
     private static YieldCurve dom() {

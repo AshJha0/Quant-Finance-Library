@@ -55,7 +55,7 @@ import com.quantfinlib.screener.TechnicalFilters;
 import com.quantfinlib.simulation.MonteCarloSimulator;
 import com.quantfinlib.simulation.SimulationResult;
 import com.quantfinlib.trading.PaperTradingGateway;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Stats;
 import com.quantfinlib.volatility.EwmaVolatility;
 import com.quantfinlib.volatility.Garch11;
 
@@ -135,7 +135,7 @@ public final class QuickStartDemo {
         double[][] dailyCov = CorrelationMatrix.covariance(returns);
         double[][] annualCov = new double[symbols.length][symbols.length];
         for (int i = 0; i < symbols.length; i++) {
-            annualMeans[i] = MathUtils.mean(returns[i]) * 252;
+            annualMeans[i] = Stats.mean(returns[i]) * 252;
             for (int j = 0; j < symbols.length; j++) {
                 annualCov[i][j] = dailyCov[i][j] * 252;
             }
@@ -200,9 +200,9 @@ public final class QuickStartDemo {
         System.out.printf("Book sweep 5k: avg %.3f, impact %.1f bps over %d levels%n",
                 sweepCost.avgPrice(), sweepCost.impactBps(), sweepCost.levelsConsumed());
         SmartOrderRouter.RoutingPlan plan = SmartOrderRouter.route(Side.BUY, 900, List.of(
-                new VenueQuote("LIT_A", 99.98, 400, 100.02, 400, 0, 0, false),
-                new VenueQuote("LIT_B", 99.97, 600, 100.00, 300, 1.0, 0, false),
-                new VenueQuote("DARK_X", 99.98, 500, 100.02, 500, 0.2, 0, true)), true);
+                new VenueQuote("LIT_A", 99.98, 400, 100.02, 400, 0, 0, false, Long.MAX_VALUE),
+                new VenueQuote("LIT_B", 99.97, 600, 100.00, 300, 1.0, 0, false, Long.MAX_VALUE),
+                new VenueQuote("DARK_X", 99.98, 500, 100.02, 500, 0.2, 0, true, Long.MAX_VALUE)), true);
         System.out.printf("SOR: %d legs, avg all-in %.4f, first venue %s%n",
                 plan.legs().size(), plan.expectedAvgAllInPrice(), plan.legs().getFirst().venue());
 
@@ -282,7 +282,7 @@ public final class QuickStartDemo {
         // ---- 20. Portfolio backtest (inverse-vol weights) ----------------
         double[] assetVols = new double[3];
         for (int i = 1; i < 4; i++) {
-            assetVols[i - 1] = MathUtils.stdDev(series[i].returns());
+            assetVols[i - 1] = Stats.sampleStdDev(series[i].returns());
         }
         double[] ivw = PositionSizing.inverseVolatilityWeights(assetVols);
         Map<String, Double> targetWeights = Map.of(
@@ -363,7 +363,7 @@ public final class QuickStartDemo {
     private static double[] dailyMeans(double[][] returns) {
         double[] m = new double[returns.length];
         for (int i = 0; i < returns.length; i++) {
-            m[i] = MathUtils.mean(returns[i]);
+            m[i] = Stats.mean(returns[i]);
         }
         return m;
     }

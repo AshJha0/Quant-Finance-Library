@@ -1,6 +1,6 @@
 package com.quantfinlib.hedging;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Stats;
 
 /**
  * Minimum-variance and beta hedging with futures or a correlated proxy:
@@ -21,11 +21,11 @@ public final class MinimumVarianceHedge {
 
     /** Optimal (variance-minimizing) hedge ratio: units of hedge per unit of asset. */
     public static double hedgeRatio(double[] assetReturns, double[] hedgeReturns) {
-        double var = MathUtils.variance(hedgeReturns);
+        double var = Stats.sampleVariance(hedgeReturns);
         if (var == 0) {
             return 0;
         }
-        return MathUtils.covariance(assetReturns, hedgeReturns) / var;
+        return Stats.sampleCovariance(assetReturns, hedgeReturns) / var;
     }
 
     /**
@@ -33,7 +33,7 @@ public final class MinimumVarianceHedge {
      * (equals the squared correlation).
      */
     public static double hedgeEffectiveness(double[] assetReturns, double[] hedgeReturns) {
-        double rho = MathUtils.correlation(assetReturns, hedgeReturns);
+        double rho = Stats.pearsonOrZero(assetReturns, hedgeReturns);
         return rho * rho;
     }
 
@@ -48,11 +48,11 @@ public final class MinimumVarianceHedge {
 
     /** Realized variance reduction of a given hedge ratio versus unhedged. */
     public static double varianceReduction(double[] assetReturns, double[] hedgeReturns, double ratio) {
-        double unhedged = MathUtils.variance(assetReturns);
+        double unhedged = Stats.sampleVariance(assetReturns);
         if (unhedged == 0) {
             return 0;
         }
-        return 1 - MathUtils.variance(hedgedReturns(assetReturns, hedgeReturns, ratio)) / unhedged;
+        return 1 - Stats.sampleVariance(hedgedReturns(assetReturns, hedgeReturns, ratio)) / unhedged;
     }
 
     /**

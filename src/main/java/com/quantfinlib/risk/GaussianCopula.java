@@ -1,6 +1,6 @@
 package com.quantfinlib.risk;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.SpecialFunctions;
 
 import java.util.random.RandomGenerator;
 
@@ -49,7 +49,7 @@ public final class GaussianCopula {
         }
         correlate(scratch, out);
         for (int i = 0; i < dim; i++) {
-            out[i] = MathUtils.normCdf(out[i]);
+            out[i] = SpecialFunctions.normCdf(out[i]);
         }
     }
 
@@ -58,7 +58,7 @@ public final class GaussianCopula {
      * the same correlated Gaussians divided by a shared √(χ²/df) — the
      * shared shock is what creates tail dependence (one bad draw drags
      * every factor's tail together). Uniforms come from the exact t-CDF
-     * ({@link MathUtils#tCdf}); a moment-matched normal approximation
+     * ({@link SpecialFunctions#tCdf}); a moment-matched normal approximation
      * here would distort exactly the tail quantiles this sampler exists
      * to model (at df = 3 it puts ~37% excess mass below the 1% level).
      */
@@ -78,7 +78,7 @@ public final class GaussianCopula {
         }
         double scale = Math.sqrt(df / Math.max(chiSq, 1e-12));
         for (int i = 0; i < dim; i++) {
-            out[i] = MathUtils.tCdf(out[i] * scale, df);
+            out[i] = SpecialFunctions.tCdf(out[i] * scale, df);
         }
     }
 

@@ -2,7 +2,7 @@ package com.quantfinlib.credit;
 
 import com.quantfinlib.rates.CurveInterpolation;
 import com.quantfinlib.rates.DiscountCurve;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.SpecialFunctions;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
@@ -168,7 +168,7 @@ class MultiCurrencySwapBasisTest {
         double fwdB = 100 * (1 + k) * p(OIS, e);
         double v = sb * sb * Math.exp(-2 * a * (s - tt)) * (1 - Math.exp(-2 * a * tt)) / (2 * a);
         double d1 = (Math.log(fwdA / fwdB) + 0.5 * v) / Math.sqrt(v), d2 = d1 - Math.sqrt(v);
-        double black = fwdA * MathUtils.normCdf(d1) - fwdB * MathUtils.normCdf(d2);
+        double black = fwdA * SpecialFunctions.normCdf(d1) - fwdB * SpecialFunctions.normCdf(d2);
         assertEquals(black, pr.discountedExpectedExposure(0), 4 * pr.discountedExpectedExposureStdError(0));
         assertTrue(black > 0.05, "test should be informative, black=" + black);
     }

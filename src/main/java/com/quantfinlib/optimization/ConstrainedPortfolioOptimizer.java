@@ -1,7 +1,8 @@
 package com.quantfinlib.optimization;
 
 import com.quantfinlib.risk.PsdMatrices;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.LinearAlgebra;
+import com.quantfinlib.stats.Numerics;
 
 /**
  * Constrained long-only optimiser: per-asset weight bounds (position caps
@@ -49,7 +50,13 @@ public final class ConstrainedPortfolioOptimizer {
         java.util.Arrays.fill(maxWeights, 1.0);
     }
 
-    /** Kept for source compatibility; the solver is deterministic and the seed is ignored. */
+    /**
+     * Kept for source compatibility; the solver is deterministic and the seed is ignored.
+     *
+     * @deprecated since 2.4.0, removed in 3.0; the seed has no effect. Use
+     *     {@link #ConstrainedPortfolioOptimizer(double[], double[][])}.
+     */
+    @Deprecated(since = "2.4.0", forRemoval = true)
     public ConstrainedPortfolioOptimizer(double[] expectedReturns, double[][] covariance, long seed) {
         this(expectedReturns, covariance);
     }
@@ -297,7 +304,7 @@ public final class ConstrainedPortfolioOptimizer {
     }
 
     private double adjustedReturn(double[] w) {
-        double r = MathUtils.dot(expectedReturns, w);
+        double r = LinearAlgebra.dot(expectedReturns, w);
         if (hasTurnover()) {
             double t = 0;
             for (int i = 0; i < w.length; i++) {
@@ -332,7 +339,7 @@ public final class ConstrainedPortfolioOptimizer {
             double t = 0.5 * (tLo + tHi);
             double sum = 0;
             for (int i = 0; i < n; i++) {
-                sum += MathUtils.clamp(v[i] - t, minWeights[i], maxWeights[i]);
+                sum += Numerics.clamp(v[i] - t, minWeights[i], maxWeights[i]);
             }
             if (sum > 1) {
                 tLo = t;
@@ -342,7 +349,7 @@ public final class ConstrainedPortfolioOptimizer {
         }
         double t = 0.5 * (tLo + tHi);
         for (int i = 0; i < n; i++) {
-            w[i] = MathUtils.clamp(v[i] - t, minWeights[i], maxWeights[i]);
+            w[i] = Numerics.clamp(v[i] - t, minWeights[i], maxWeights[i]);
         }
         return w;
     }
@@ -351,17 +358,17 @@ public final class ConstrainedPortfolioOptimizer {
     private double[] clipToBounds(double[] w) {
         double[] out = new double[w.length];
         for (int i = 0; i < w.length; i++) {
-            out[i] = MathUtils.clamp(w[i], minWeights[i], maxWeights[i]);
+            out[i] = Numerics.clamp(w[i], minWeights[i], maxWeights[i]);
         }
         return out;
     }
 
     private double volatility(double[] w) {
-        return Math.sqrt(Math.max(0, MathUtils.quadraticForm(w, covariance)));
+        return Math.sqrt(Math.max(0, LinearAlgebra.quadraticForm(w, covariance)));
     }
 
     private PortfolioOptimizer.Allocation toAllocation(double[] w, double riskFreeRate) {
-        double ret = MathUtils.dot(expectedReturns, w);
+        double ret = LinearAlgebra.dot(expectedReturns, w);
         double vol = volatility(w);
         return new PortfolioOptimizer.Allocation(w, ret, vol,
                 vol == 0 ? 0 : (ret - riskFreeRate) / vol);

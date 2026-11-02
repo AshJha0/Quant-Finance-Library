@@ -1,6 +1,6 @@
 package com.quantfinlib.risk;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.SpecialFunctions;
 import org.junit.jupiter.api.Test;
 
 import java.util.SplittableRandom;
@@ -82,8 +82,8 @@ class RiskExtensionsTest {
                 new double[]{0.03, 0.03, 0.03, 0.03}, new double[]{0.04, 0.04, 0.04, 0.04}, 0.75);
         assertEquals(-0.25, z, 1e-15);
 
-        double zq = MathUtils.normInv(0.975);
-        double esUnit = MathUtils.normPdf(zq) / 0.025;
+        double zq = SpecialFunctions.normInv(0.975);
+        double esUnit = SpecialFunctions.normPdf(zq) / 0.025;
         SplittableRandom rnd = new SplittableRandom(4);
         double sumTrue = 0;
         double sumUnder = 0;
@@ -161,7 +161,7 @@ class RiskExtensionsTest {
         double[] exposure = {1_000_000};
         VarEngine.VarResult hs = VarEngine.historicalVar(exposure, rows, 0.99);
         VarEngine.VarResult fhs = VarEngine.filteredHistoricalVar(exposure, rows, 0.94, 50, 0.99);
-        double truth = MathUtils.normInv(0.99) * 0.03 * 1_000_000;
+        double truth = SpecialFunctions.normInv(0.99) * 0.03 * 1_000_000;
         // Tolerance 20%: σ_{T+1} from an EWMA with an effective sample of ~30
         // days is itself ~13% noisy, and the standardised shocks are a scale
         // mixture with heavier tails than the normal.

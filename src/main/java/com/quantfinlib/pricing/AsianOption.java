@@ -1,6 +1,6 @@
 package com.quantfinlib.pricing;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.SpecialFunctions;
 
 /**
  * Asian (average-price) options — the corporate hedger's option: paying off
@@ -244,9 +244,9 @@ public final class AsianOption {
         for (int i = 0; i < m; i++) {
             double mui = lnS + (g - 0.5 * v2) * t[i];
             double sxi = v2 * sumMin[i] / m;
-            first += Math.exp(mui + 0.5 * v2 * t[i]) * MathUtils.normCdf(z + sxi / sx);
+            first += Math.exp(mui + 0.5 * v2 * t[i]) * SpecialFunctions.normCdf(z + sxi / sx);
         }
-        return df * (first / m - k * MathUtils.normCdf(z));
+        return df * (first / m - k * SpecialFunctions.normCdf(z));
     }
 
     /**
@@ -302,7 +302,7 @@ public final class AsianOption {
             double sv = Math.sqrt(var);
             double d1 = (0.5 * Math.log(dd) - Math.log(xStar)) / sv;
             double d2 = d1 - sv;
-            call = se * MathUtils.normCdf(d1) - xStar * dfx * MathUtils.normCdf(d2);
+            call = se * SpecialFunctions.normCdf(d1) - xStar * dfx * SpecialFunctions.normCdf(d2);
         }
         double price = type == BlackScholes.OptionType.CALL ? call : call - se + xStar * dfx;
         return Math.max(0, price);
@@ -370,7 +370,7 @@ public final class AsianOption {
         double d1 = (Math.log(f / k) + 0.5 * v2) / sd;
         double d2 = d1 - sd;
         int s = type.sign();
-        return df * s * (f * MathUtils.normCdf(s * d1) - k * MathUtils.normCdf(s * d2));
+        return df * s * (f * SpecialFunctions.normCdf(s * d1) - k * SpecialFunctions.normCdf(s * d2));
     }
 
     private static void validate(double spot, double strike, double rate, double carry,

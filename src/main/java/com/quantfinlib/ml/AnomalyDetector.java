@@ -1,6 +1,6 @@
 package com.quantfinlib.ml;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Stats;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -103,6 +103,6 @@ public final class AnomalyDetector {
             dev[i] = Math.abs(v[i] - center);
         }
         double mad = median(dev);
-        return mad > 0 ? 1.4826 * mad : MathUtils.stdDev(v);
+        return mad > 0 ? 1.4826 * mad : Stats.sampleStdDev(v);
     }
 }

@@ -1,6 +1,6 @@
 package com.quantfinlib.pricing;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.SpecialFunctions;
 import org.junit.jupiter.api.Test;
 
 import static com.quantfinlib.pricing.BlackScholes.OptionType.CALL;
@@ -106,7 +106,7 @@ class AsianOptionTest {
         double f = Math.exp(meanLog + 0.5 * varLog);
         double sd = Math.sqrt(varLog);
         double d1 = (Math.log(f / 100) + 0.5 * varLog) / sd;
-        double floor = f * MathUtils.normCdf(d1) - 100 * MathUtils.normCdf(d1 - sd);
+        double floor = f * SpecialFunctions.normCdf(d1) - 100 * SpecialFunctions.normCdf(d1 - sd);
         assertTrue(prev > floor, "n=252 " + prev + " vs continuous " + floor);
         assertTrue(prev < floor + 0.05, "n=252 should be within pennies of the limit");
     }
@@ -148,8 +148,8 @@ class AsianOptionTest {
             m2 *= spot * spot / ((double) n * n);
             double sd = Math.sqrt(Math.log(m2 / (m1 * m1)));
             double d1 = (Math.log(m1 / k) + 0.5 * sd * sd) / sd;
-            double ref = Math.exp(-r * t) * (m1 * com.quantfinlib.util.MathUtils.normCdf(d1)
-                    - k * com.quantfinlib.util.MathUtils.normCdf(d1 - sd));
+            double ref = Math.exp(-r * t) * (m1 * SpecialFunctions.normCdf(d1)
+                    - k * SpecialFunctions.normCdf(d1 - sd));
             assertEquals(ref, AsianOption.arithmeticPrice(BlackScholes.OptionType.CALL, spot, k, r, q,
                     vol, t, n), 1e-12 * ref, "n=" + n);
         }

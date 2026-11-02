@@ -1,5 +1,6 @@
 package com.quantfinlib.alpha;
 
+import com.quantfinlib.stats.Stats;
 import com.quantfinlib.core.BarSeries;
 import org.junit.jupiter.api.Test;
 
@@ -158,7 +159,7 @@ class AlphaCombinerTest {
                 for (int i = 0; i < N; i++) {
                     y[i] = w.ctx.series(i).close(t + l + 1) / w.ctx.series(i).close(t + l) - 1;
                 }
-                s += com.quantfinlib.util.MathUtils.correlation(x, y) / h;
+                s += Stats.pearsonOrZero(x, y) / h;
             }
             ics.add(s);
         }

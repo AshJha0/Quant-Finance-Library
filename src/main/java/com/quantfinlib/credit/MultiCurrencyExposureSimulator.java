@@ -15,7 +15,7 @@ import java.util.TreeSet;
  * and FX forwards on several currency pairs, each foreign currency with
  * its own stochastic short rate. It generalises {@link ExposureSimulator},
  * which stays the default: a market built with
- * {@link Market#fromLegacy(ExposureSimulator.Market)} reproduces the 2.1
+ * {@code Market.fromLegacy} (deprecated, removed in 3.0) reproduces the 2.1
  * results to rounding, path for path, from the same seed.
  *
  * <p><b>Plain idea.</b> Every currency has a Hull-White short rate fitted
@@ -223,7 +223,14 @@ public final class MultiCurrencyExposureSimulator {
          *
          * @param m legacy market
          * @return the equivalent market
+         * @deprecated since 2.4.0, removed in 3.0 together with
+         *     {@code ExposureSimulator.Market}. Build the {@link Market} directly:
+         *     {@code new Market(new Domestic(Curve.of(dom), a, sigma), List.of(new Foreign(Curve.of(fgn), a, 0, spot, fxVol)),
+         *     new double[][]{{1, 0, rho}, {0, 1, 0}, {rho, 0, 1}})}, or with {@code List.of()} and
+         *     {@code {{1}}} when there is no FX.
          */
+        @Deprecated(since = "2.4.0", forRemoval = true)
+        @SuppressWarnings("removal") // reads the deprecated 2.1 market it converts
         public static Market fromLegacy(ExposureSimulator.Market m) {
             Objects.requireNonNull(m, "market");
             Domestic d = new Domestic(Curve.of(m.domestic()), m.meanReversion(), m.rateVol());

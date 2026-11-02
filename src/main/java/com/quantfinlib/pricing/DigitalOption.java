@@ -1,7 +1,7 @@
 package com.quantfinlib.pricing;
 
 import com.quantfinlib.pricing.BlackScholes.OptionType;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.SpecialFunctions;
 
 /**
  * European digital (binary) options under Black-Scholes — the building
@@ -38,7 +38,7 @@ public final class DigitalOption {
         }
         double d2 = d2(spot, strike, rate, carry, vol, timeYears);
         double df = Math.exp(-rate * timeYears);
-        return payout * df * MathUtils.normCdf(type.sign() * d2);
+        return payout * df * SpecialFunctions.normCdf(type.sign() * d2);
     }
 
     /**
@@ -94,7 +94,7 @@ public final class DigitalOption {
             return itm ? spot : 0;
         }
         double d1 = d2(spot, strike, rate, carry, vol, timeYears) + vol * Math.sqrt(timeYears);
-        return spot * Math.exp(-carry * timeYears) * MathUtils.normCdf(type.sign() * d1);
+        return spot * Math.exp(-carry * timeYears) * SpecialFunctions.normCdf(type.sign() * d1);
     }
 
     private static double d2(double spot, double strike, double rate, double carry,

@@ -1,5 +1,6 @@
 package com.quantfinlib.alpha;
 
+import com.quantfinlib.stats.Stats;
 import com.quantfinlib.core.BarSeries;
 import org.junit.jupiter.api.Test;
 
@@ -140,7 +141,7 @@ class SignalEvaluatorTest {
         double[] fwd2 = {0.03, 0.01, 0.01, 0.04};  // top two swapped
         double rho = SignalEvaluator.spearman(scores, fwd2);
         assertTrue(rho < 1.0 && rho > 0.5, "rho=" + rho);
-        // All-tied side: zero variance in ranks → MathUtils.correlation's
+        // All-tied side: zero variance in ranks → Stats.pearsonOrZero's
         // zero-variance guard yields 0 (no information), not a fabricated sign.
         assertEquals(0.0, SignalEvaluator.spearman(new double[]{2, 2, 2, 2}, fwd), 1e-12);
     }

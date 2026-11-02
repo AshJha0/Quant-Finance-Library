@@ -45,5 +45,10 @@
  * {@link com.quantfinlib.trading.PositionLedger}, which
  * {@link com.quantfinlib.trading.DropCopyReconciler} checks against a drop
  * copy.</p>
+ *
+ * <p><b>3.0 notice.</b> This package moves to the separate artifact
+ * {@code quant-finance-library-lowlatency} (module {@code com.quantfinlib.lowlatency})
+ * in 3.0; the package name is unchanged, so only your dependency changes,
+ * not your imports. See docs/MIGRATION_3.0.md.</p>
  */
 package com.quantfinlib.trading;

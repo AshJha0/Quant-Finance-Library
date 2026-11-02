@@ -1,6 +1,7 @@
 package com.quantfinlib.risk;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.LinearAlgebra;
+import com.quantfinlib.stats.SpecialFunctions;
 import com.quantfinlib.volatility.Garch11;
 import com.quantfinlib.volatility.GjrGarch11;
 import org.junit.jupiter.api.Test;
@@ -116,10 +117,10 @@ class MarketRiskTest {
     void tCopulaUniformsAreActuallyUniformInTheTails() {
         // The t-CDF against closed forms: df = 1 is Cauchy, df = 2 is
         // algebraic, df -> infinity is the normal.
-        assertEquals(0.5 + Math.atan(0.5) / Math.PI, MathUtils.tCdf(0.5, 1), 1e-12);
-        assertEquals(0.5 * (1 + 1 / Math.sqrt(3)), MathUtils.tCdf(1, 2), 1e-12);
-        assertEquals(0.5, MathUtils.tCdf(0, 7), 1e-12);
-        assertEquals(MathUtils.normCdf(-1.5), MathUtils.tCdf(-1.5, 1_000_000), 1e-4);
+        assertEquals(0.5 + Math.atan(0.5) / Math.PI, SpecialFunctions.tCdf(0.5, 1), 1e-12);
+        assertEquals(0.5 * (1 + 1 / Math.sqrt(3)), SpecialFunctions.tCdf(1, 2), 1e-12);
+        assertEquals(0.5, SpecialFunctions.tCdf(0, 7), 1e-12);
+        assertEquals(SpecialFunctions.normCdf(-1.5), SpecialFunctions.tCdf(-1.5, 1_000_000), 1e-4);
 
         // Marginal tail mass: P(U < 0.05) must BE 5% — the moment-matched
         // normal approximation this replaced put ~3.3% there at df = 3,
@@ -168,7 +169,7 @@ class MarketRiskTest {
 
         double sigma = VarEngine.portfolioStdev(exposures, cov);
         double parametric = VarEngine.deltaNormalVar(exposures, cov, 0.99);
-        assertEquals(MathUtils.normInv(0.99) * sigma, parametric, 1e-9,
+        assertEquals(SpecialFunctions.normInv(0.99) * sigma, parametric, 1e-9,
                 "delta-normal IS z times sigma");
         assertTrue(VarEngine.deltaNormalEs(exposures, cov, 0.99) > parametric,
                 "ES sits beyond VaR, always");
@@ -513,7 +514,7 @@ class MarketRiskTest {
 
         // An indefinite "covariance" (typo'd correlation 1.3) fails loudly
         // instead of silently simulating a clamped dependence structure.
-        assertThrows(IllegalArgumentException.class, () -> MathUtils.cholesky(
+        assertThrows(IllegalArgumentException.class, () -> LinearAlgebra.cholesky(
                 new double[][]{{1e-4, 1.3e-4}, {1.3e-4, 1e-4}}));
     }
 

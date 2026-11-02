@@ -1,7 +1,7 @@
 package com.quantfinlib.pricing;
 
 import com.quantfinlib.pricing.BlackScholes.OptionType;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.SpecialFunctions;
 
 /**
  * Black-76 — the Black-Scholes sibling for options on forwards and
@@ -37,9 +37,9 @@ public final class Black76 {
                 / (vol * sqrtT);
         double d2 = d1 - vol * sqrtT;
         if (type == OptionType.CALL) {
-            return df * (forward * MathUtils.normCdf(d1) - strike * MathUtils.normCdf(d2));
+            return df * (forward * SpecialFunctions.normCdf(d1) - strike * SpecialFunctions.normCdf(d2));
         }
-        return df * (strike * MathUtils.normCdf(-d2) - forward * MathUtils.normCdf(-d1));
+        return df * (strike * SpecialFunctions.normCdf(-d2) - forward * SpecialFunctions.normCdf(-d1));
     }
 
     /** Sensitivity to the forward (not spot): df·Φ(d₁) for calls. */
@@ -54,8 +54,8 @@ public final class Black76 {
                 / (vol * Math.sqrt(timeYears));
         double df = Math.exp(-rate * timeYears);
         return type == OptionType.CALL
-                ? df * MathUtils.normCdf(d1)
-                : df * (MathUtils.normCdf(d1) - 1);
+                ? df * SpecialFunctions.normCdf(d1)
+                : df * (SpecialFunctions.normCdf(d1) - 1);
     }
 
     /** Vega per 1.00 of vol (divide by 100 for per-point). Same for calls and puts. */
@@ -67,7 +67,7 @@ public final class Black76 {
         double sqrtT = Math.sqrt(timeYears);
         double d1 = (Math.log(forward / strike) + 0.5 * vol * vol * timeYears)
                 / (vol * sqrtT);
-        return Math.exp(-rate * timeYears) * forward * MathUtils.normPdf(d1) * sqrtT;
+        return Math.exp(-rate * timeYears) * forward * SpecialFunctions.normPdf(d1) * sqrtT;
     }
 
     /**

@@ -18,5 +18,10 @@
  * String symbols, multi-portfolio mark-to-market) and the generic
  * {@link com.quantfinlib.marketdata.RingBuffer} for research and
  * monitoring.</p>
+ *
+ * <p><b>3.0 notice.</b> This package moves to the separate artifact
+ * {@code quant-finance-library-lowlatency} (module {@code com.quantfinlib.lowlatency})
+ * in 3.0; the package name is unchanged, so only your dependency changes,
+ * not your imports. See docs/MIGRATION_3.0.md.</p>
  */
 package com.quantfinlib.marketdata;

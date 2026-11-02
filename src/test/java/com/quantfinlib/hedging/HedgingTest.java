@@ -1,7 +1,7 @@
 package com.quantfinlib.hedging;
 
 import com.quantfinlib.pricing.BlackScholes.OptionType;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Stats;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -73,15 +73,15 @@ class HedgingTest {
             naked[p] = report.premium() * Math.exp(r * t) - report.payoff();
             premium = report.premium();
         }
-        double hedgedStd = MathUtils.stdDev(hedged);
-        double nakedStd = MathUtils.stdDev(naked);
+        double hedgedStd = Stats.sampleStdDev(hedged);
+        double nakedStd = Stats.sampleStdDev(naked);
 
         // Daily rebalancing removes the vast majority of the short option's risk.
         assertTrue(hedgedStd < 0.35 * nakedStd,
                 "hedged std " + hedgedStd + " vs naked " + nakedStd);
         // Replication error is small relative to the premium and centered near zero.
         assertTrue(hedgedStd < 0.25 * premium);
-        assertTrue(Math.abs(MathUtils.mean(hedged)) < 0.15 * premium);
+        assertTrue(Math.abs(Stats.mean(hedged)) < 0.15 * premium);
     }
 
     @Test
@@ -105,8 +105,8 @@ class HedgingTest {
             wideTrades += b.rebalances();
         }
         assertTrue(tightTrades > 3 * wideTrades, tightTrades + " vs " + wideTrades);
-        assertTrue(MathUtils.stdDev(tight) < MathUtils.stdDev(wide),
-                "tight " + MathUtils.stdDev(tight) + " wide " + MathUtils.stdDev(wide));
+        assertTrue(Stats.sampleStdDev(tight) < Stats.sampleStdDev(wide),
+                "tight " + Stats.sampleStdDev(tight) + " wide " + Stats.sampleStdDev(wide));
     }
 
     @Test
@@ -170,8 +170,8 @@ class HedgingTest {
         }
         double h = FxHedger.optimalHedgeRatio(unhedged, fx);
         assertEquals(1.0, h, 0.05);
-        assertTrue(MathUtils.stdDev(FxHedger.hedgedReturns(unhedged, fx, h))
-                < MathUtils.stdDev(unhedged));
+        assertTrue(Stats.sampleStdDev(FxHedger.hedgedReturns(unhedged, fx, h))
+                < Stats.sampleStdDev(unhedged));
         assertEquals(3_000_000, FxHedger.hedgeNotional(net.get("EUR"), 1.0), 1e-9);
     }
 
@@ -208,7 +208,7 @@ class HedgingTest {
                 "halfLife=" + analysis.halfLifeBars());
         assertTrue(Math.abs(analysis.lastZScore()) < 5);
         // The hedged spread is far less volatile than the raw leg.
-        assertTrue(MathUtils.stdDev(analysis.spreadCopy()) < 0.1 * MathUtils.stdDev(a));
+        assertTrue(Stats.sampleStdDev(analysis.spreadCopy()) < 0.1 * Stats.sampleStdDev(a));
     }
 
     @Test

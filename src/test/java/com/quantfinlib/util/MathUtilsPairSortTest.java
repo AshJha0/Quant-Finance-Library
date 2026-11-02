@@ -1,5 +1,6 @@
 package com.quantfinlib.util;
 
+import com.quantfinlib.stats.Numerics;
 import org.junit.jupiter.api.Test;
 
 import java.util.SplittableRandom;
@@ -31,7 +32,7 @@ class MathUtilsPairSortTest {
             java.util.Arrays.sort(expectedKeys);
             double[] originals = keys.clone();
 
-            MathUtils.pairSort(keys, values);
+            Numerics.pairSort(keys, values);
             assertArrayEquals(expectedKeys, keys, "trial " + trial);
             // The permutation must carry each original key with its index.
             for (int i = 0; i < n; i++) {
@@ -56,10 +57,10 @@ class MathUtilsPairSortTest {
             }
             double[] expected = shape.clone();
             java.util.Arrays.sort(expected);
-            MathUtils.pairSort(keys, values);
+            Numerics.pairSort(keys, values);
             assertArrayEquals(expected, keys);
         }
         assertThrows(IllegalArgumentException.class,
-                () -> MathUtils.pairSort(new double[2], new int[3]));
+                () -> Numerics.pairSort(new double[2], new int[3]));
     }
 }

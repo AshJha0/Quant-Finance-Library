@@ -1,6 +1,6 @@
 package com.quantfinlib.volatility;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Stats;
 
 /**
  * EGARCH(1,1) — Nelson's exponential GARCH, the log-variance dynamics
@@ -155,7 +155,7 @@ public final class Egarch11 {
     /** Maximum-likelihood fit with standard errors (at least 100 finite returns). */
     public static Fit estimate(double[] returns, Innovation innovation) {
         double[] r = GarchEstimation.demean(returns);
-        double lnVar = Math.log(MathUtils.variance(r));
+        double lnVar = Math.log(Stats.sampleVariance(r));
         boolean t = innovation == Innovation.STUDENT_T;
         Model model = new Model(lnVar, t);
         double[][] starts = {
@@ -252,7 +252,7 @@ public final class Egarch11 {
                 throw new IllegalArgumentException("returns must be finite");
             }
         }
-        if (!(MathUtils.variance(returns) > 0)) {
+        if (!(Stats.sampleVariance(returns) > 0)) {
             throw new IllegalArgumentException("returns carry no variance");
         }
     }
@@ -260,9 +260,9 @@ public final class Egarch11 {
     /** Conditional variance series under the fitted parameters. */
     public static double[] conditionalVariances(double[] returns, Params p) {
         requireSeries(returns);
-        double mean = MathUtils.mean(returns);
+        double mean = Stats.mean(returns);
         double[] h = new double[returns.length];
-        double lnH = Math.log(MathUtils.variance(returns));
+        double lnH = Math.log(Stats.sampleVariance(returns));
         h[0] = Math.exp(lnH);
         for (int t = 1; t < returns.length; t++) {
             double x = returns[t - 1] - mean;
@@ -277,7 +277,7 @@ public final class Egarch11 {
     /** One-step-ahead variance — exact (tomorrow's ln h is deterministic today). */
     public static double nextVariance(double[] returns, Params p) {
         double[] h = conditionalVariances(returns, p);
-        double mean = MathUtils.mean(returns);
+        double mean = Stats.mean(returns);
         double x = returns[returns.length - 1] - mean;
         double last = h[h.length - 1];
         double z = x / Math.sqrt(last);

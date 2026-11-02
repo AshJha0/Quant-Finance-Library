@@ -1,6 +1,6 @@
 package com.quantfinlib.microstructure;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Numerics;
 
 /**
  * Jump-robust streaming volatility. A squared-return estimator (the one
@@ -71,7 +71,7 @@ public final class JumpRobustVolatility {
             return;
         }
         double dtSec = dtNanos * 1e-9;
-        double a = 1 - MathUtils.decayFactor(dtNanos, halfLifeNanos);
+        double a = 1 - Numerics.decayFactor(dtNanos, halfLifeNanos);
 
         double rawObs = ret * ret / dtSec;
         rawRatePerSec = samples == 0 ? rawObs : rawRatePerSec + a * (rawObs - rawRatePerSec);
@@ -119,7 +119,7 @@ public final class JumpRobustVolatility {
         if (rawRatePerSec <= 0 || !bipowerSeeded) {
             return 0;
         }
-        return MathUtils.clamp(1 - bipowerRatePerSec / rawRatePerSec, 0, 1);
+        return Numerics.clamp(1 - bipowerRatePerSec / rawRatePerSec, 0, 1);
     }
 
     public long samples() {

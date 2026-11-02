@@ -1,6 +1,7 @@
 package com.quantfinlib.risk;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.SpecialFunctions;
+import com.quantfinlib.stats.Stats;
 
 /**
  * Core quantitative risk metrics. Return-based metrics take simple periodic
@@ -15,7 +16,7 @@ public final class RiskMetrics {
 
     /** Per-period sample volatility. */
     public static double volatility(double[] returns) {
-        return MathUtils.stdDev(returns);
+        return Stats.sampleStdDev(returns);
     }
 
     public static double annualizedVolatility(double[] returns, int periodsPerYear) {
@@ -26,19 +27,19 @@ public final class RiskMetrics {
      * Historical Value at Risk at the given confidence level (e.g. 0.95).
      * Returned as a positive loss fraction; 0 if the quantile is a gain.
      * Uses the linearly interpolated return percentile
-     * ({@link MathUtils#percentile}); {@link TailRisk#varSorted} gives the
+     * ({@link Stats#quantile}); {@link TailRisk#varSorted} gives the
      * lower empirical quantile that pairs with the ES estimator.
      */
     public static double historicalVar(double[] returns, double confidence) {
-        double q = MathUtils.percentile(returns, 1 - confidence);
+        double q = Stats.quantile(returns, 1 - confidence);
         return Math.max(0, -q);
     }
 
     /** Parametric (Gaussian) VaR at the given confidence level. */
     public static double parametricVar(double[] returns, double confidence) {
-        double mu = MathUtils.mean(returns);
-        double sigma = MathUtils.stdDev(returns);
-        double z = MathUtils.normInv(1 - confidence);
+        double mu = Stats.mean(returns);
+        double sigma = Stats.sampleStdDev(returns);
+        double z = SpecialFunctions.normInv(1 - confidence);
         return Math.max(0, -(mu + z * sigma));
     }
 
@@ -67,7 +68,7 @@ public final class RiskMetrics {
         if (vol == 0) {
             return 0;
         }
-        double annualReturn = MathUtils.mean(returns) * periodsPerYear;
+        double annualReturn = Stats.mean(returns) * periodsPerYear;
         return (annualReturn - riskFreeRate) / vol;
     }
 
@@ -78,7 +79,7 @@ public final class RiskMetrics {
         if (dd == 0) {
             return 0;
         }
-        double annualReturn = MathUtils.mean(returns) * periodsPerYear;
+        double annualReturn = Stats.mean(returns) * periodsPerYear;
         return (annualReturn - riskFreeRate) / dd;
     }
 
@@ -107,14 +108,14 @@ public final class RiskMetrics {
 
     /** Beta of an asset versus a benchmark (equal-length return series). */
     public static double beta(double[] assetReturns, double[] benchmarkReturns) {
-        double varB = MathUtils.variance(benchmarkReturns);
+        double varB = Stats.sampleVariance(benchmarkReturns);
         if (varB == 0) {
             return 0;
         }
-        return MathUtils.covariance(assetReturns, benchmarkReturns) / varB;
+        return Stats.sampleCovariance(assetReturns, benchmarkReturns) / varB;
     }
 
     public static double correlation(double[] a, double[] b) {
-        return MathUtils.correlation(a, b);
+        return Stats.pearsonOrZero(a, b);
     }
 }

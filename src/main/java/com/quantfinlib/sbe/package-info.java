@@ -14,5 +14,10 @@
  * circuit breaker) and {@link com.quantfinlib.sbe.BinaryOrderReceiver} carry
  * gateway orders. The readers still decode schema-version-1 frames (no
  * header, double prices). Symbol ids are part of the wire contract.
+ *
+ * <p><b>3.0 notice.</b> This package moves to the separate artifact
+ * {@code quant-finance-library-lowlatency} (module {@code com.quantfinlib.lowlatency})
+ * in 3.0; the package name is unchanged, so only your dependency changes,
+ * not your imports. See docs/MIGRATION_3.0.md.</p>
  */
 package com.quantfinlib.sbe;

@@ -1,5 +1,6 @@
 package com.quantfinlib.volatility;
 
+import com.quantfinlib.stats.Stats;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -16,8 +17,8 @@ class HarAndEwmaTest {
         double[] rv = new double[n];
         java.util.Arrays.fill(rv, 0, 22, 1e-4);
         for (int t = 21; t < n - 1; t++) {
-            double w = com.quantfinlib.util.MathUtils.mean(rv, t - 4, t + 1);
-            double m = com.quantfinlib.util.MathUtils.mean(rv, t - 21, t + 1);
+            double w = Stats.mean(rv, t - 4, t + 1);
+            double m = Stats.mean(rv, t - 21, t + 1);
             rv[t + 1] = Math.max(1e-8, 1e-5 + 0.4 * rv[t] + 0.3 * w + 0.2 * m
                     + 2e-5 * rnd.nextGaussian());
         }
@@ -36,8 +37,8 @@ class HarAndEwmaTest {
             java.util.Arrays.fill(row, BigDecimal.ZERO);
         }
         for (int t = 21; t < n - 1; t++) {
-            double[] x = {1, rv[t], com.quantfinlib.util.MathUtils.mean(rv, t - 4, t + 1),
-                    com.quantfinlib.util.MathUtils.mean(rv, t - 21, t + 1)};
+            double[] x = {1, rv[t], Stats.mean(rv, t - 4, t + 1),
+                    Stats.mean(rv, t - 21, t + 1)};
             for (int i = 0; i < 4; i++) {
                 for (int j = 0; j < 4; j++) {
                     a[i][j] = a[i][j].add(new BigDecimal(x[i]).multiply(new BigDecimal(x[j]), mc), mc);
@@ -110,8 +111,8 @@ class HarAndEwmaTest {
             rv[i] = 1e-4;
         }
         for (int t = 21; t < n - 1; t++) {
-            double w = Math.log(com.quantfinlib.util.MathUtils.mean(rv, t - 4, t + 1));
-            double m = Math.log(com.quantfinlib.util.MathUtils.mean(rv, t - 21, t + 1));
+            double w = Math.log(Stats.mean(rv, t - 4, t + 1));
+            double m = Math.log(Stats.mean(rv, t - 21, t + 1));
             lrv[t + 1] = -0.9 + 0.35 * lrv[t] + 0.35 * w + 0.2 * m + 0.4 * rnd.nextGaussian();
             rv[t + 1] = Math.exp(lrv[t + 1]);
         }

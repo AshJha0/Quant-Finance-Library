@@ -35,6 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * toxic venue is found, and nothing is lost or poisoned at the
  * write/restore seam.
  */
+@SuppressWarnings("removal") // exercises 2.x API deprecated for removal in 2.4.0
 class OvernightLearningLoopTest {
 
     private static final int BUCKETS = 26;             // 15-min buckets

@@ -2,7 +2,7 @@ package com.quantfinlib.alpha;
 
 import com.quantfinlib.core.BarSeries;
 import com.quantfinlib.risk.FactorRiskModel;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.LinearAlgebra;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -120,9 +120,9 @@ class RiskModelBacktestTest {
         for (int i = 0; i < NAMES; i++) {
             a[i] = 0.05 * Math.sqrt(v[i][i]) * Math.sqrt(5) * z[i];
         }
-        double[][] inv = MathUtils.inverse(v);
-        double[] via = MathUtils.matVec(inv, a);
-        double[] vi1 = MathUtils.matVec(inv, AlphaBacktester.ones(NAMES));
+        double[][] inv = LinearAlgebra.inverse(v);
+        double[] via = LinearAlgebra.matVec(inv, a);
+        double[] vi1 = LinearAlgebra.matVec(inv, AlphaBacktester.ones(NAMES));
         double nu = sum(via) / sum(vi1);
         double gross = 0;
         for (int i = 0; i < NAMES; i++) {

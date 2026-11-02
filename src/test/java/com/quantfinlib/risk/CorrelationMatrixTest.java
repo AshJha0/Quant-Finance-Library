@@ -1,13 +1,13 @@
 package com.quantfinlib.risk;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Stats;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * Pins for the matrix WRAPPER's own invariants — the inner
- * {@code MathUtils.correlation} is tested elsewhere; what can silently
+ * {@code Stats.pearsonOrZero} is tested elsewhere; what can silently
  * break here is placement: diagonal, symmetry, and index order.
  */
 class CorrelationMatrixTest {
@@ -39,7 +39,7 @@ class CorrelationMatrixTest {
         double[][] m = CorrelationMatrix.covariance(RETURNS);
         for (int i = 0; i < 3; i++) {
             for (int j = 0; j < 3; j++) {
-                assertEquals(MathUtils.covariance(RETURNS[i], RETURNS[j]), m[i][j], 0.0,
+                assertEquals(Stats.sampleCovariance(RETURNS[i], RETURNS[j]), m[i][j], 0.0,
                         "cell (" + i + "," + j + ")");
                 assertEquals(m[i][j], m[j][i], 0.0);
             }

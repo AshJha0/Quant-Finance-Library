@@ -1,6 +1,6 @@
 package com.quantfinlib.optimization;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.LinearAlgebra;
 
 /**
  * Risk parity: the portfolio where every asset contributes a set share of
@@ -80,7 +80,7 @@ public final class RiskParityOptimizer {
         }
         boolean converged = false;
         for (int iter = 0; iter < 200 && !converged; iter++) {
-            double[] sx = MathUtils.matVec(s, x);
+            double[] sx = LinearAlgebra.matVec(s, x);
             double[] grad = new double[n];
             double[][] hess = new double[n][n];
             for (int i = 0; i < n; i++) {
@@ -90,8 +90,8 @@ public final class RiskParityOptimizer {
                 }
                 hess[i][i] += budgets[i] / (x[i] * x[i]);
             }
-            double[] step = MathUtils.solveLinear(hess, grad);
-            double decrement = MathUtils.dot(grad, step);       // Newton decrement squared
+            double[] step = LinearAlgebra.solveLinear(hess, grad);
+            double decrement = LinearAlgebra.dot(grad, step);       // Newton decrement squared
             if (decrement < 1e-24) {
                 converged = true;
                 break;
@@ -126,13 +126,13 @@ public final class RiskParityOptimizer {
         for (int i = 0; i < n; i++) {
             w[i] = x[i] / sum;
         }
-        double ret = MathUtils.dot(expectedReturns, w);
-        double vol = Math.sqrt(MathUtils.quadraticForm(w, covariance));
+        double ret = LinearAlgebra.dot(expectedReturns, w);
+        double vol = Math.sqrt(LinearAlgebra.quadraticForm(w, covariance));
         return new PortfolioOptimizer.Allocation(w, ret, vol, vol == 0 ? 0 : ret / vol);
     }
 
     private static double objective(double[][] s, double[] x, double[] b) {
-        double f = 0.5 * MathUtils.quadraticForm(x, s);
+        double f = 0.5 * LinearAlgebra.quadraticForm(x, s);
         for (int i = 0; i < x.length; i++) {
             f -= b[i] * Math.log(x[i]);
         }
@@ -141,8 +141,8 @@ public final class RiskParityOptimizer {
 
     /** Each asset's fractional contribution to portfolio variance under weights {@code w}. */
     public static double[] riskContributions(double[] w, double[][] covariance) {
-        double[] marginal = MathUtils.matVec(covariance, w);
-        double portVar = MathUtils.dot(w, marginal);
+        double[] marginal = LinearAlgebra.matVec(covariance, w);
+        double portVar = LinearAlgebra.dot(w, marginal);
         double[] rc = new double[w.length];
         for (int i = 0; i < w.length; i++) {
             rc[i] = portVar == 0 ? 0 : w[i] * marginal[i] / portVar;

@@ -1,5 +1,6 @@
 package com.quantfinlib.alpha;
 
+import com.quantfinlib.stats.LinearAlgebra;
 import com.quantfinlib.backtest.FillPolicy;
 import com.quantfinlib.core.BarSeries;
 import com.quantfinlib.data.PointInTimeUniverse;
@@ -283,12 +284,12 @@ class AlphaEngineTest {
         rows[3] = beta;
         double[] n = PortfolioConstruction.neutralize(w, rows);
         for (double[] row : rows) {
-            assertEquals(0, com.quantfinlib.util.MathUtils.dot(row, n), 1e-12);
+            assertEquals(0, LinearAlgebra.dot(row, n), 1e-12);
         }
         // Sequential neutralisation leaves a sector exposure behind.
         double[] seq = PortfolioConstruction.betaNeutralize(
                 PortfolioConstruction.sectorNeutralize(w, sectors), beta);
-        assertTrue(Math.abs(com.quantfinlib.util.MathUtils.dot(sec[0], seq)) > 1e-3);
+        assertTrue(Math.abs(LinearAlgebra.dot(sec[0], seq)) > 1e-3);
     }
 
     @Test
@@ -296,7 +297,7 @@ class AlphaEngineTest {
         // kappa = 0, no equality, loose boxes: w = Sigma^-1 alpha / (2 lambda).
         double[] alpha = {0.02, -0.01, 0.005};
         double[][] cov = {{0.04, 0.01, 0.0}, {0.01, 0.09, 0.02}, {0.0, 0.02, 0.0625}};
-        double[] expected = com.quantfinlib.util.MathUtils.solveLinear(cov, alpha);
+        double[] expected = LinearAlgebra.solveLinear(cov, alpha);
         for (int i = 0; i < 3; i++) {
             expected[i] /= 2 * 2.0;
         }

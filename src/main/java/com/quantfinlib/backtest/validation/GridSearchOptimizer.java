@@ -5,7 +5,8 @@ import com.quantfinlib.backtest.BacktestResult;
 import com.quantfinlib.backtest.Backtester;
 import com.quantfinlib.backtest.PerformanceMetrics;
 import com.quantfinlib.core.BarSeries;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.SpecialFunctions;
+import com.quantfinlib.stats.Stats;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -154,7 +155,7 @@ public final class GridSearchOptimizer {
         int pairs = 0;
         for (int i = 0; i < m; i++) {
             for (int j = i + 1; j < m; j++) {
-                double c = r[i].length == r[j].length ? MathUtils.correlation(r[i], r[j]) : 0;
+                double c = r[i].length == r[j].length ? Stats.pearsonOrZero(r[i], r[j]) : 0;
                 // A flat (no-trade) stream has no correlation: count it as independent.
                 sum += Double.isFinite(c) ? c : 0;
                 pairs++;
@@ -201,17 +202,17 @@ public final class GridSearchOptimizer {
             double s = ranked.get(i).metrics().sharpeRatio() / perPeriodScale;
             trialSharpes[i] = Double.isFinite(s) ? s : 0;
         }
-        double sd = MathUtils.stdDev(winnerReturns);
-        double observed = sd > 0 ? MathUtils.mean(winnerReturns) / sd : 0;
+        double sd = Stats.sampleStdDev(winnerReturns);
+        double observed = sd > 0 ? Stats.mean(winnerReturns) / sd : 0;
         double nEff = effectiveTrials(ranked);
         double benchmark = 0;
         if (nEff > 1) {
-            double sdTrials = Math.sqrt(Math.max(0, MathUtils.variance(trialSharpes)));
+            double sdTrials = Math.sqrt(Math.max(0, Stats.sampleVariance(trialSharpes)));
             double gamma = 0.5772156649015329;
-            benchmark = sdTrials * ((1 - gamma) * MathUtils.normInv(1 - 1 / nEff)
-                    + gamma * MathUtils.normInv(1 - 1 / (nEff * Math.E)));
+            benchmark = sdTrials * ((1 - gamma) * SpecialFunctions.normInv(1 - 1 / nEff)
+                    + gamma * SpecialFunctions.normInv(1 - 1 / (nEff * Math.E)));
         }
         return SharpeValidation.probabilisticSharpe(observed, benchmark, winnerReturns.length,
-                MathUtils.skewness(winnerReturns), MathUtils.kurtosis(winnerReturns));
+                Stats.skewness(winnerReturns), Stats.kurtosis(winnerReturns));
     }
 }

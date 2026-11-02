@@ -1,6 +1,7 @@
 package com.quantfinlib.hedging;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.LinearAlgebra;
+import com.quantfinlib.stats.Stats;
 
 /**
  * Engle-Granger two-step cointegration test: regress one price series on the
@@ -82,9 +83,9 @@ public final class CointegrationTest {
             throw new IllegalArgumentException("need two aligned series of >= 30 points");
         }
         // Step 1: cointegrating regression A = a + b*B + e.
-        double varB = MathUtils.variance(pricesB);
-        double beta = varB == 0 ? 0 : MathUtils.covariance(pricesA, pricesB) / varB;
-        double alpha = MathUtils.mean(pricesA) - beta * MathUtils.mean(pricesB);
+        double varB = Stats.sampleVariance(pricesB);
+        double beta = varB == 0 ? 0 : Stats.sampleCovariance(pricesA, pricesB) / varB;
+        double alpha = Stats.mean(pricesA) - beta * Stats.mean(pricesB);
         double[] residuals = new double[pricesA.length];
         for (int i = 0; i < pricesA.length; i++) {
             residuals[i] = pricesA[i] - beta * pricesB[i] - alpha;
@@ -165,11 +166,11 @@ public final class CointegrationTest {
                 }
             }
         }
-        double[][] inv = MathUtils.inverse(xtx);
-        double[] beta = MathUtils.matVec(inv, xty);
+        double[][] inv = LinearAlgebra.inverse(xtx);
+        double[] beta = LinearAlgebra.matVec(inv, xty);
         double sse = 0;
         for (int r = 0; r < rows; r++) {
-            double e = y[r] - MathUtils.dot(x[r], beta);
+            double e = y[r] - LinearAlgebra.dot(x[r], beta);
             sse += e * e;
         }
         double s2 = sse / (rows - k);

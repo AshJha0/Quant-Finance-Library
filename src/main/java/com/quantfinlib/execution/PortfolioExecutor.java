@@ -2,7 +2,7 @@ package com.quantfinlib.execution;
 
 import com.quantfinlib.microstructure.EwmaCovariance;
 import com.quantfinlib.orderbook.Side;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Numerics;
 
 /**
  * True multi-symbol portfolio-level scheduling: a basket (rebalance,
@@ -213,7 +213,7 @@ public final class PortfolioExecutor {
             }
             if (riskModel.marginalContribution(signedRemaining, riskFactor) > 0) {
                 for (int i = 0; i < count; i++) {
-                    riskFactor[i] = 1 + MathUtils.clamp(riskFactor[i], 0, 1);
+                    riskFactor[i] = 1 + Numerics.clamp(riskFactor[i], 0, 1);
                 }
                 modeled = true;
             }
@@ -264,7 +264,7 @@ public final class PortfolioExecutor {
      * without moving the ledger.
      */
     private void scaleSide(Side side, double scale, long[] dueOut) {
-        double s = MathUtils.clamp(scale, 0, 1);
+        double s = Numerics.clamp(scale, 0, 1);
         for (int i = 0; i < count; i++) {
             if (children[i].side() == side && dueOut[i] > 0 && lastMid[i] > 0) {
                 dueOut[i] = (long) Math.floor(dueOut[i] * s);

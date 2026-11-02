@@ -10,6 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** AdaptiveSor latency cap and total dark cap; AntiGamingJitter separation bound. */
+@SuppressWarnings("removal") // exercises 2.x API deprecated for removal in 2.4.0
 class ExecutionP3FixesTest {
 
     private static final long MS = 1_000_000L;

@@ -1,6 +1,6 @@
 package com.quantfinlib.optimization;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.LinearAlgebra;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -20,7 +20,7 @@ class ExactOptimizerTest {
             {0.01, 0.02, 0.00, 0.16}};
 
     private static double[] normalisedSolve(double[][] cov, double[] rhs) {
-        double[] x = MathUtils.solveLinear(cov, rhs);
+        double[] x = LinearAlgebra.solveLinear(cov, rhs);
         double s = 0;
         for (double v : x) {
             s += v;
@@ -99,9 +99,9 @@ class ExactOptimizerTest {
         // Interior target with all weights positive: closed form
         // w = Σ⁻¹(a·1 + b·μ), with a, b from the two constraints.
         double target = 0.08;
-        double[] s1 = MathUtils.solveLinear(COV, new double[]{1, 1, 1, 1});
-        double[] sm = MathUtils.solveLinear(COV, MU);
-        double A = sum(s1), B = MathUtils.dot(MU, s1), C = MathUtils.dot(MU, sm);
+        double[] s1 = LinearAlgebra.solveLinear(COV, new double[]{1, 1, 1, 1});
+        double[] sm = LinearAlgebra.solveLinear(COV, MU);
+        double A = sum(s1), B = LinearAlgebra.dot(MU, s1), C = LinearAlgebra.dot(MU, sm);
         double det = A * C - B * B;
         double a = (C - B * target) / det;
         double b = (A * target - B) / det;
@@ -132,7 +132,7 @@ class ExactOptimizerTest {
         double[] w = new ConstrainedPortfolioOptimizer(MU, COV).withBounds(min, max)
                 .minVolatility().weightsCopy();
         assertEquals(1, sum(w), 1e-12);
-        double[] grad = MathUtils.matVec(COV, w);
+        double[] grad = LinearAlgebra.matVec(COV, w);
         // Free assets share one marginal variance ν; capped assets have
         // gradient <= ν, floored assets >= ν.
         double nu = Double.NaN;
@@ -224,8 +224,8 @@ class ExactOptimizerTest {
                 ts[i][j] = tau * COV[i][j];
             }
         }
-        double[][] prec = MathUtils.inverse(ts);
-        double[] rhs = MathUtils.matVec(prec, pi);
+        double[][] prec = LinearAlgebra.inverse(ts);
+        double[] rhs = LinearAlgebra.matVec(prec, pi);
         for (int v = 0; v < 2; v++) {
             for (int i = 0; i < 4; i++) {
                 rhs[i] += p[v][i] * q[v] / omega[v];
@@ -234,8 +234,8 @@ class ExactOptimizerTest {
                 }
             }
         }
-        double[][] m = MathUtils.inverse(prec);
-        double[] mean = MathUtils.matVec(m, rhs);
+        double[][] m = LinearAlgebra.inverse(prec);
+        double[] mean = LinearAlgebra.matVec(m, rhs);
         for (int i = 0; i < 4; i++) {
             assertEquals(mean[i], post.mean(i), 1e-12);
             for (int j = 0; j < 4; j++) {

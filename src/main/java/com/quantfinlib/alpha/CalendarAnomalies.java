@@ -1,6 +1,7 @@
 package com.quantfinlib.alpha;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.SpecialFunctions;
+import com.quantfinlib.stats.Stats;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -220,8 +221,8 @@ public final class CalendarAnomalies {
                 naive[d] = Double.NaN;
                 continue;
             }
-            double m = MathUtils.mean(byDay[d], 0, counts[d]);
-            double se = MathUtils.stdDevSample(byDay[d], 0, counts[d]) / Math.sqrt(counts[d]);
+            double m = Stats.mean(byDay[d], 0, counts[d]);
+            double se = Stats.sampleStdDev(byDay[d], 0, counts[d]) / Math.sqrt(counts[d]);
             mean[d] = m;
             naive[d] = se > 0 ? m / se : Math.signum(m) * Double.POSITIVE_INFINITY;
             column[d] = tested++;
@@ -248,7 +249,7 @@ public final class CalendarAnomalies {
         for (int d = 0; d < 7; d++) {
             if (column[d] >= 0) {
                 hacT[d] = fit.hacTStat(column[d]);
-                p[column[d]] = 2 * (1 - MathUtils.normCdf(Math.abs(hacT[d])));
+                p[column[d]] = 2 * (1 - SpecialFunctions.normCdf(Math.abs(hacT[d])));
             }
         }
         boolean[] holmCol = holm(p, FAMILY_WISE_ALPHA);
@@ -317,10 +318,10 @@ public final class CalendarAnomalies {
             throw new IllegalArgumentException("both windows need >= 2 observations (inside "
                     + nIn + ", outside " + nOut + ")");
         }
-        double mIn = MathUtils.mean(inside, 0, nIn);
-        double mOut = MathUtils.mean(outside, 0, nOut);
-        double vIn = square(MathUtils.stdDevSample(inside, 0, nIn));
-        double vOut = square(MathUtils.stdDevSample(outside, 0, nOut));
+        double mIn = Stats.mean(inside, 0, nIn);
+        double mOut = Stats.mean(outside, 0, nOut);
+        double vIn = square(Stats.sampleStdDev(inside, 0, nIn));
+        double vOut = square(Stats.sampleStdDev(outside, 0, nOut));
         double se = Math.sqrt(vIn / nIn + vOut / nOut);
         double welch = se > 0 ? (mIn - mOut) / se
                 : Math.signum(mIn - mOut) * Double.POSITIVE_INFINITY;

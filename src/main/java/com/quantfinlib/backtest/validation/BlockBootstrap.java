@@ -1,5 +1,6 @@
 package com.quantfinlib.backtest.validation;
 
+import com.quantfinlib.stats.Stats;
 import com.quantfinlib.risk.RiskMetrics;
 
 import java.util.Random;
@@ -35,7 +36,7 @@ public final class BlockBootstrap {
 
     /**
      * The bootstrap distribution of annualized Sharpe, sorted ascending
-     * — read percentiles with {@code MathUtils.percentileSorted}.
+     * — read percentiles with {@code Stats.quantileSorted}.
      *
      * @param returns         per-period strategy returns, ≥ 50 finite
      * @param meanBlockLength geometric mean block length L, ≥ 1

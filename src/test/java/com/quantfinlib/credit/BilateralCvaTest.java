@@ -13,6 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * integral of the first-to-default densities, the zero-own-hazard limit,
  * and the ordering against the unilateral legs.
  */
+@SuppressWarnings("removal") // exercises 2.x API deprecated for removal in 2.4.0
 class BilateralCvaTest {
 
     private static YieldCurve dom() {

@@ -1,6 +1,6 @@
 package com.quantfinlib.volatility;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Stats;
 
 /**
  * Systematic vs idiosyncratic volatility — the decomposition behind
@@ -79,14 +79,14 @@ public final class VolatilityDecomposition {
                 throw new IllegalArgumentException("returns must be finite");
             }
         }
-        double marketVar = MathUtils.variance(marketReturns);
+        double marketVar = Stats.sampleVariance(marketReturns);
         if (!(marketVar > 0)) {
             throw new IllegalArgumentException(
                     "the benchmark carries no variance — nothing to decompose against");
         }
-        double cov = MathUtils.covariance(assetReturns, marketReturns);
+        double cov = Stats.sampleCovariance(assetReturns, marketReturns);
         double beta = cov / marketVar;
-        double totalVar = MathUtils.variance(assetReturns);
+        double totalVar = Stats.sampleVariance(assetReturns);
         double systematic = beta * beta * marketVar;      // = cov²/Var(m)
         // Exact by the OLS identity; the max() only absorbs float dust
         // (Cauchy-Schwarz guarantees systematic <= total in exact math).

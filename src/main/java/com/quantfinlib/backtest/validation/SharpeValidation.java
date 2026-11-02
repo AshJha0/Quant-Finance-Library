@@ -1,6 +1,7 @@
 package com.quantfinlib.backtest.validation;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.SpecialFunctions;
+import com.quantfinlib.stats.Stats;
 
 /**
  * Sharpe ratio significance tests (Bailey &amp; López de Prado):
@@ -36,7 +37,7 @@ public final class SharpeValidation {
             return observedSharpe > benchmarkSharpe ? 1 : 0;
         }
         double z = (observedSharpe - benchmarkSharpe) * Math.sqrt(nObs - 1) / Math.sqrt(variance);
-        return MathUtils.normCdf(z);
+        return SpecialFunctions.normCdf(z);
     }
 
     /**
@@ -48,8 +49,8 @@ public final class SharpeValidation {
             throw new IllegalArgumentException("need at least 2 trials");
         }
         double sd = Math.sqrt(Math.max(0, varianceOfTrialSharpes));
-        return sd * ((1 - EULER_GAMMA) * MathUtils.normInv(1 - 1.0 / trials)
-                + EULER_GAMMA * MathUtils.normInv(1 - 1.0 / (trials * Math.E)));
+        return sd * ((1 - EULER_GAMMA) * SpecialFunctions.normInv(1 - 1.0 / trials)
+                + EULER_GAMMA * SpecialFunctions.normInv(1 - 1.0 / (trials * Math.E)));
     }
 
     /**
@@ -63,7 +64,7 @@ public final class SharpeValidation {
      */
     public static double deflatedSharpe(double observedSharpe, double[] trialSharpes,
                                         int nObs, double skewness, double kurtosis) {
-        double benchmark = expectedMaxSharpe(trialSharpes.length, MathUtils.variance(trialSharpes));
+        double benchmark = expectedMaxSharpe(trialSharpes.length, Stats.sampleVariance(trialSharpes));
         return probabilisticSharpe(observedSharpe, benchmark, nObs, skewness, kurtosis);
     }
 
@@ -100,7 +101,7 @@ public final class SharpeValidation {
         if (variance <= 0) {
             return 2;                  // PSR is already 1: any record suffices
         }
-        double z = MathUtils.normInv(confidence);
+        double z = SpecialFunctions.normInv(confidence);
         double edge = observedSharpe - benchmarkSharpe;
         return 1 + variance * z * z / (edge * edge);
     }

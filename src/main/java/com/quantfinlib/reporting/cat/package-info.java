@@ -12,6 +12,12 @@
  * subset is populated (listed on {@link com.quantfinlib.reporting.cat.CatEventBuilder}), and
  * the output has not been validated against the CAT JSON schema or submitted to the CAT
  * test environment. Use it as a structured starting point, not as a filing.</p>
+ *
+ * <p><b>3.0 notice.</b> Renamed to {@code com.quantfinlib.regreporting.cat} in 3.0
+ * (the {@code report} and {@code reporting} names were one letter apart with
+ * unrelated meanings), and moved with the rest of the reference tier to the
+ * separate artifact {@code quant-finance-library-lowlatency}. Types and members
+ * are unchanged; update the import. See docs/MIGRATION_3.0.md.</p>
  */
 @NullMarked
 package com.quantfinlib.reporting.cat;

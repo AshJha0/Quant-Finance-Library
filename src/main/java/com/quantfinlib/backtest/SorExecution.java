@@ -71,7 +71,8 @@ public final class SorExecution implements ExecutionModel {
         for (VenueConfig v : venues) {
             long size = (long) (series.volume(index) * v.liquidityShare());
             if (size > 0) {
-                quotes.add(new VenueQuote(v.name(), bid, size, ask, size, v.feeBps(), 0, v.dark()));
+                quotes.add(new VenueQuote(v.name(), bid, size, ask, size, v.feeBps(), 0, v.dark(),
+                        Long.MAX_VALUE)); // bar-sampled quote: never stale, as before
             }
         }
         if (quotes.isEmpty()) {

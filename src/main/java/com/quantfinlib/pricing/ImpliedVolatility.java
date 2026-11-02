@@ -1,7 +1,7 @@
 package com.quantfinlib.pricing;
 
 import com.quantfinlib.pricing.BlackScholes.OptionType;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.SpecialFunctions;
 
 /**
  * Black (lognormal) implied volatility by a safeguarded Newton iteration on
@@ -101,7 +101,7 @@ public final class ImpliedVolatility {
             double h2 = halfOffset(d2);
             return Math.sinh(x / 2) + Math.exp(x / 2) * h1 - Math.exp(-x / 2) * h2;
         }
-        double v = Math.exp(x / 2) * MathUtils.normCdf(d1) - Math.exp(-x / 2) * MathUtils.normCdf(d2);
+        double v = Math.exp(x / 2) * SpecialFunctions.normCdf(d1) - Math.exp(-x / 2) * SpecialFunctions.normCdf(d2);
         return Math.max(v, 0);
     }
 
@@ -146,7 +146,7 @@ public final class ImpliedVolatility {
         for (int i = 0; i < MAX_ITER; i++) {
             double b = otmCall(x, s);
             double d1 = x / s + s / 2;
-            double vega = Math.exp(x / 2 + MathUtils.logNormPdf(d1));
+            double vega = Math.exp(x / 2 + SpecialFunctions.logNormPdf(d1));
             if (b > beta) {
                 hi = Math.min(hi, s);
             } else if (b < beta) {

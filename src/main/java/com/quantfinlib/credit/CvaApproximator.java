@@ -1,7 +1,7 @@
 package com.quantfinlib.credit;
 
 import com.quantfinlib.rates.YieldCurve;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.SpecialFunctions;
 
 import java.util.Arrays;
 import java.util.Objects;
@@ -210,7 +210,7 @@ public final class CvaApproximator {
             } else if (pd >= 1) {
                 thresholds[i] = Double.POSITIVE_INFINITY;
             } else {
-                thresholds[i] = MathUtils.normInv(pd);
+                thresholds[i] = SpecialFunctions.normInv(pd);
             }
         }
         double scale = Math.sqrt(1 - rho * rho);
@@ -236,7 +236,7 @@ public final class CvaApproximator {
         if (threshold == Double.POSITIVE_INFINITY) {
             return 1;
         }
-        return MathUtils.normCdf((threshold + shift) / scale);
+        return SpecialFunctions.normCdf((threshold + shift) / scale);
     }
 
     /**
