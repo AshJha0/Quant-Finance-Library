@@ -41,7 +41,7 @@ public enum EmirActionType {
      * @param e the event type, or null
      * @return true if accepted
      */
-    public boolean accepts(@org.jspecify.annotations.Nullable EmirEventType e) {
+    public boolean accepts(EmirEventType e) {
         if (e == null) {
             return allowed.isEmpty() || this == CORR;
         }

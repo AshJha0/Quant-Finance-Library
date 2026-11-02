@@ -36,7 +36,7 @@ import java.util.Objects;
 public final class EmirRefitReportBuilder {
     private final Map<String, String> f = new LinkedHashMap<>();
 
-    private EmirRefitReportBuilder(EmirActionType action, @org.jspecify.annotations.Nullable EmirEventType event) {
+    private EmirRefitReportBuilder(EmirActionType action, EmirEventType event) {
         for (String k : EmirRefitReport.ALWAYS) {
             f.put(k, "");
         }
@@ -51,7 +51,7 @@ public final class EmirRefitReportBuilder {
      * @param event event type, or null where the action takes none (VALU, EROR, REVI, POSC)
      * @return the builder
      */
-    public static EmirRefitReportBuilder of(EmirActionType action, @org.jspecify.annotations.Nullable EmirEventType event) {
+    public static EmirRefitReportBuilder of(EmirActionType action, EmirEventType event) {
         return new EmirRefitReportBuilder(Objects.requireNonNull(action, "action"), event);
     }
 

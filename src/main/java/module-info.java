@@ -15,7 +15,7 @@
  * is a compile-time dependency only ({@code requires static}).</p>
  */
 module com.quantfinlib {
-    requires java.net.http;
+    requires transitive java.net.http;
     requires java.xml;
     requires jdk.httpserver;
     requires static org.jspecify;
