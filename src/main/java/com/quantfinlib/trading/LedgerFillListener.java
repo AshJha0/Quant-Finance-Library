@@ -28,8 +28,9 @@ import java.util.function.ToIntFunction;
  * {@link HftOrderGateway#onTradeBust} and {@link HftOrderGateway#onTradeCorrect}
  * reach {@link PositionLedger#onBust} and {@link PositionLedger#onCorrect};
  * one the ledger refuses (unknown ExecRefID, for example) is counted in
- * {@link #rejectedCount()}. {@link PaperTradingGateway} simulates its own
- * fills and never busts them.</p>
+ * {@link #rejectedCount()}. {@link PaperTradingGateway} can simulate busts
+ * and corrections ({@link PaperTradingGateway#bustFill}); book them with
+ * {@link #forPaperTrades}, which uses the gateway's execution ids.</p>
  *
  * <p>The ledger is single-writer: register this adapter on a gateway whose
  * reports come from one thread, or synchronise externally. A fill the
@@ -94,5 +95,41 @@ public final class LedgerFillListener implements FillListener {
         AtomicLong seq = new AtomicLong();
         return (orderId, symbol, side, price, quantity, ts) -> ledger.onFill(seq.incrementAndGet(),
                 accountId, strategyId, symbolIds.applyAsInt(symbol), side, quantity, price);
+    }
+
+    /**
+     * A {@link PaperTradingGateway.TradeListener} that books fills, busts and
+     * corrections into {@code ledger} under the gateway's own execution ids,
+     * so a simulated drop copy can be reconciled with
+     * {@link DropCopyReconciler}. Refusals are not counted here; check the
+     * ledger's return values through {@link PositionLedger} if needed.
+     *
+     * @since 2.4.0
+     */
+    public static PaperTradingGateway.TradeListener forPaperTrades(PositionLedger ledger,
+                                                                   int accountId, int strategyId,
+                                                                   ToIntFunction<String> symbolIds) {
+        Objects.requireNonNull(ledger, "ledger");
+        Objects.requireNonNull(symbolIds, "symbolIds");
+        return new PaperTradingGateway.TradeListener() {
+            @Override
+            public void onFill(long execId, long orderId, String symbol, Side side, long quantity,
+                               double price, long timestampNanos) {
+                ledger.onFill(execId, accountId, strategyId, symbolIds.applyAsInt(symbol), side,
+                        quantity, price);
+            }
+
+            @Override
+            public void onBust(long execId, long execRefId, long orderId, String symbol,
+                               Side side, long quantity, long timestampNanos) {
+                ledger.onBust(execId, execRefId);
+            }
+
+            @Override
+            public void onCorrect(long execId, long execRefId, long orderId, String symbol,
+                                  Side side, long quantity, double price, long timestampNanos) {
+                ledger.onCorrect(execId, execRefId, quantity, price);
+            }
+        };
     }
 }
