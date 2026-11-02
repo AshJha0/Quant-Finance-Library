@@ -4,11 +4,11 @@
     <!-- Own coordinates first: JitPack's artifact scan reads the first groupId/artifactId/version in the file. -->
     <groupId>com.quantfinlib</groupId>
     <artifactId>quant-finance-library</artifactId>
-    <version>4.0.0-SNAPSHOT</version>
+    <version>4.0.0</version>
     <parent>
         <groupId>com.quantfinlib</groupId>
         <artifactId>quant-finance-library-parent</artifactId>
-        <version>4.0.0-SNAPSHOT</version>
+        <version>4.0.0</version>
     </parent>
     <packaging>jar</packaging>
     <name>Quant-Finance-Library</name>
@@ -17,10 +17,10 @@
         <qfl.module>com.quantfinlib</qfl.module>
     </properties>
     <profiles>
-        <!-- API compatibility gate (japicmp) against the released 3.0.0 core
+        <!-- API compatibility gate (japicmp) against the released 3.2.0 core
              jar (api.baseline.version in the parent POM). Every package of this
              module is stable tier. 4.0 is a major release, so the comparison
-             with 3.0.0 reports MAJOR (execution api-stable); the gate
+             with 3.2.0 reports MAJOR (execution api-stable); the gate
              (api-stable-gate) excludes exactly the 4.0 break list of
              docs/MIGRATION_4.0.md and fails on any other binary-incompatible
              change.
@@ -48,7 +48,7 @@
                             </newVersion>
                         </configuration>
                         <executions>
-                            <!-- Report: the full comparison with 3.0.0. For 4.0 it
+                            <!-- Report: the full comparison with 3.2.0. For 4.0 it
                                  reports semver MAJOR (the moves and removals of
                                  docs/MIGRATION_4.0.md); it does not fail the build. -->
                             <execution>
@@ -104,6 +104,7 @@
                                             <exclude>com.quantfinlib.data.CsvBarLoader</exclude>
                                             <exclude>com.quantfinlib.data.HttpBarFetcher</exclude>
                                             <exclude>com.quantfinlib.data.UniverseCsvLoader</exclude>
+                                            <exclude>com.quantfinlib.io.*</exclude>
                                             <!-- row 5: io module -->
                                             <exclude>com.quantfinlib.report.*</exclude>
                                             <!-- row 6: research module -->

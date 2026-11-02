@@ -4,11 +4,11 @@
     <!-- Own coordinates first: JitPack's artifact scan reads the first groupId/artifactId/version in the file. -->
     <groupId>com.quantfinlib</groupId>
     <artifactId>quant-finance-library-lowlatency</artifactId>
-    <version>4.0.0-SNAPSHOT</version>
+    <version>4.0.0</version>
     <parent>
         <groupId>com.quantfinlib</groupId>
         <artifactId>quant-finance-library-parent</artifactId>
-        <version>4.0.0-SNAPSHOT</version>
+        <version>4.0.0</version>
     </parent>
     <packaging>jar</packaging>
     <name>Quant-Finance-Library low-latency lane</name>
@@ -83,7 +83,7 @@
         </plugins>
     </build>
     <profiles>
-        <!-- Reference tier: compared with the released 3.0.0 low-latency jar and reported only
+        <!-- Reference tier: compared with the released 3.2.0 low-latency jar and reported only
              (docs/STABILITY.md: formats and signatures may change in a minor).
              Report: lowlatency/target/japicmp/api-lowlatency.html. -->
         <profile>

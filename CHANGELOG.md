@@ -6,6 +6,32 @@ Entries for 1.x releases are archived in [docs/history/CHANGELOG-1.x.md](docs/hi
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-11-02
+
+Major release: the module split announced in 3.2.0. No number changes. Every move and removal below was announced, and every removed type deprecated with its replacement, in 3.2.0. [docs/MIGRATION_4.0.md](docs/MIGRATION_4.0.md) has one row per break with the import and dependency to change; japicmp against the 3.2.0 jars reports semver MAJOR, and its gate excludes exactly those rows and fails on anything else.
+
+Owner decision, 2026-11-02: the revised design in [docs/DESIGN_4.0.md](docs/DESIGN_4.0.md) is accepted. The packages that stable code depends on (`execution`, `microstructure`, `persist`, `screener`, `ml` and most of `data`) stay in the stable jar, because moving them would create module cycles; `-research` holds only `dsl`.
+
+#### Removed
+
+- `rates.SwapPricer` (deprecated since 3.1.0; use the convention-driven leg model, MIGRATION_3.1 section 1).
+- `fx.AggregatedBook` (use `marketdata.AggregatedBook` in the low-latency jar, added in 3.2.0).
+- `data.CsvBarLoader`, `data.HttpBarFetcher`, `data.UniverseCsvLoader` (use the `io` classes, added in 3.2.0).
+
+#### Moved
+
+- `io` and `report` to the new artifact `quant-finance-library-io` (module `com.quantfinlib.io`).
+- `dsl` to the new artifact `quant-finance-library-research` (module `com.quantfinlib.research`).
+- `rfq`, `marketdata.tick` and `backtest.tick` to `quant-finance-library-lowlatency`, so that each package hierarchy lives in one module.
+- `cli` and `backtest.strategies` to the low-latency `examples` classifier jar, with the demos. It is not a module and is not under any stability promise.
+
+#### Changed
+
+- The stable module `com.quantfinlib` requires only `java.base` (and JSpecify, compile time only). It no longer requires `java.net.http`; `com.quantfinlib.io` requires it, and the low-latency module requires it transitively.
+- New artifacts `quant-finance-library-io` and `quant-finance-library-research`, both incubating ([docs/STABILITY.md](docs/STABILITY.md)), both requiring the stable module transitively. Release builds attach a jar, sources, javadoc and CycloneDX SBOM for each.
+- New tests: `ModuleGraphTest` fails on a module cycle or a package in two modules; the stable descriptor test fails if `jdeps` finds `java.net.http` or `jdk.httpserver` in core; descriptor tests for the two new modules.
+- The japicmp baseline moves from 3.0.0 to 3.2.0 (`scripts/fetch-api-baseline.sh`).
+
 ## [3.2.0] - 2026-11-02
 
 Minor release, additive over 3.1.0: no public member is removed, no signature changes, and no existing result changes unless noted under Fixed. japicmp against the released 3.0.0 jars: semver MINOR for both modules, no allow-list. It is the last 3.x release before 4.0.0, which follows it directly and removes everything deprecated for removal here; [docs/MIGRATION_4.0.md](docs/MIGRATION_4.0.md) lists each move with its new dependency.
