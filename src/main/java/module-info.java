@@ -51,10 +51,10 @@ module com.quantfinlib {
     exports com.quantfinlib.rates;
     exports com.quantfinlib.regulatory;
     exports com.quantfinlib.report;
-    exports com.quantfinlib.reporting;
-    exports com.quantfinlib.reporting.cat;
-    exports com.quantfinlib.reporting.emir;
-    exports com.quantfinlib.reporting.registry;
+    exports com.quantfinlib.regreporting;
+    exports com.quantfinlib.regreporting.cat;
+    exports com.quantfinlib.regreporting.emir;
+    exports com.quantfinlib.regreporting.registry;
     exports com.quantfinlib.rfq;
     exports com.quantfinlib.risk;
     exports com.quantfinlib.sbe;
