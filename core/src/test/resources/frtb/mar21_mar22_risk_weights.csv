@@ -1,0 +1,93 @@
+# Risk weights transcribed by hand from the BCBS consolidated Basel Framework
+# (QFL-sources/basel/basel-framework-full.pdf, printed 02/11/2026). Percent as printed.
+# Columns: table id, key (tenor years, bucket number or credit quality), percent, citation.
+# Evidence class: externally anchored.
+girr,0.25,1.7,MAR21.42 Table 1 p.592
+girr,0.5,1.7,MAR21.42 Table 1 p.592
+girr,1,1.6,MAR21.42 Table 1 p.592
+girr,2,1.3,MAR21.42 Table 1 p.592
+girr,3,1.2,MAR21.42 Table 1 p.592
+girr,5,1.1,MAR21.42 Table 1 p.592
+girr,10,1.1,MAR21.42 Table 1 p.592
+girr,15,1.1,MAR21.42 Table 1 p.592
+girr,20,1.1,MAR21.42 Table 1 p.592
+girr,30,1.1,MAR21.42 Table 1 p.592
+csr,1,0.5,MAR21.53 Table 4 p.597
+csr,2,1.0,MAR21.53 Table 4 p.597
+csr,3,5.0,MAR21.53 Table 4 p.597
+csr,4,3.0,MAR21.53 Table 4 p.597
+csr,5,3.0,MAR21.53 Table 4 p.597
+csr,6,2.0,MAR21.53 Table 4 p.597
+csr,7,1.5,MAR21.53 Table 4 p.597
+csr,8,2.5,MAR21.53 Table 4 p.597 (footnote 288: 1.5% for covered bonds AA- or better is a bank option)
+csr,9,2.0,MAR21.53 Table 4 p.597
+csr,10,4.0,MAR21.53 Table 4 p.597
+csr,11,12.0,MAR21.53 Table 4 p.597
+csr,12,7.0,MAR21.53 Table 4 p.597
+csr,13,8.5,MAR21.53 Table 4 p.597
+csr,14,5.5,MAR21.53 Table 4 p.597
+csr,15,5.0,MAR21.53 Table 4 p.597
+csr,16,12.0,MAR21.53 Table 4 p.597
+csr,17,1.5,MAR21.53 Table 4 p.597
+csr,18,5.0,MAR21.53 Table 4 p.597
+eq_spot,1,55,MAR21.77 Table 10 p.607-608
+eq_spot,2,60,MAR21.77 Table 10 p.607-608
+eq_spot,3,45,MAR21.77 Table 10 p.607-608
+eq_spot,4,55,MAR21.77 Table 10 p.607-608
+eq_spot,5,30,MAR21.77 Table 10 p.607-608
+eq_spot,6,35,MAR21.77 Table 10 p.607-608
+eq_spot,7,40,MAR21.77 Table 10 p.607-608
+eq_spot,8,50,MAR21.77 Table 10 p.607-608
+eq_spot,9,70,MAR21.77 Table 10 p.607-608
+eq_spot,10,50,MAR21.77 Table 10 p.607-608
+eq_spot,11,70,MAR21.77 Table 10 p.607-608
+eq_spot,12,15,MAR21.77 Table 10 p.607-608
+eq_spot,13,25,MAR21.77 Table 10 p.607-608
+eq_repo,1,0.55,MAR21.77 Table 10 p.607-608
+eq_repo,2,0.60,MAR21.77 Table 10 p.607-608
+eq_repo,3,0.45,MAR21.77 Table 10 p.607-608
+eq_repo,4,0.55,MAR21.77 Table 10 p.607-608
+eq_repo,5,0.30,MAR21.77 Table 10 p.607-608
+eq_repo,6,0.35,MAR21.77 Table 10 p.607-608
+eq_repo,7,0.40,MAR21.77 Table 10 p.607-608
+eq_repo,8,0.50,MAR21.77 Table 10 p.607-608
+eq_repo,9,0.70,MAR21.77 Table 10 p.607-608
+eq_repo,10,0.50,MAR21.77 Table 10 p.607-608
+eq_repo,11,0.70,MAR21.77 Table 10 p.607-608
+eq_repo,12,0.15,MAR21.77 Table 10 p.607-608
+eq_repo,13,0.25,MAR21.77 Table 10 p.607-608
+cmdty,1,30,MAR21.82 Table 11 p.609-610
+cmdty,2,35,MAR21.82 Table 11 p.609-610
+cmdty,3,60,MAR21.82 Table 11 p.609-610
+cmdty,4,80,MAR21.82 Table 11 p.609-610
+cmdty,5,40,MAR21.82 Table 11 p.609-610
+cmdty,6,45,MAR21.82 Table 11 p.609-610
+cmdty,7,20,MAR21.82 Table 11 p.609-610
+cmdty,8,35,MAR21.82 Table 11 p.609-610
+cmdty,9,25,MAR21.82 Table 11 p.609-610
+cmdty,10,35,MAR21.82 Table 11 p.609-610
+cmdty,11,50,MAR21.82 Table 11 p.609-610
+cmdty_rho,1,55,MAR21.83 Table 12 p.610-611
+cmdty_rho,2,95,MAR21.83 Table 12 p.610-611
+cmdty_rho,3,40,MAR21.83 Table 12 p.610-611
+cmdty_rho,4,80,MAR21.83 Table 12 p.610-611
+cmdty_rho,5,60,MAR21.83 Table 12 p.610-611
+cmdty_rho,6,65,MAR21.83 Table 12 p.610-611
+cmdty_rho,7,55,MAR21.83 Table 12 p.610-611
+cmdty_rho,8,45,MAR21.83 Table 12 p.610-611
+cmdty_rho,9,15,MAR21.83 Table 12 p.610-611
+cmdty_rho,10,40,MAR21.83 Table 12 p.610-611
+cmdty_rho,11,15,MAR21.83 Table 12 p.610-611
+drc,AAA,0.5,MAR22.24 Table 2 p.627-628
+drc,AA,2,MAR22.24 Table 2 p.627-628
+drc,A,3,MAR22.24 Table 2 p.627-628
+drc,BBB,6,MAR22.24 Table 2 p.627-628
+drc,BB,15,MAR22.24 Table 2 p.627-628
+drc,B,30,MAR22.24 Table 2 p.627-628
+drc,CCC,50,MAR22.24 Table 2 p.627-628
+drc,UNRATED,15,MAR22.24 Table 2 p.627-628
+drc,DEFAULTED,100,MAR22.24 Table 2 p.627-628
+lgd,SENIOR,75,MAR22.12(2)
+lgd,NON_SENIOR,100,MAR22.12(1)
+lgd,EQUITY,100,MAR22.12(1)
+lgd,COVERED_BOND,25,MAR22.12(3)

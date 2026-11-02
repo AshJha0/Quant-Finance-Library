@@ -277,6 +277,37 @@
         </plugins>
     </build>
     <profiles>
+        <!-- Deep structured fuzzing of the FIX, FIRDS XML, CFI XLSX and GLEIF/MIC CSV
+             parsers (classes named *FuzzTest, seeded mutation of the committed seed
+             corpus). The default build runs the same tests at 1000 cases
+             each (system property qfl.cases); this profile runs only them, at fuzz.tries cases each, with a
+             longer per-test timeout. Nightly use:
+               ./mvnw -Pfuzz -Djacoco.skip=true -pl lowlatency -am test
+             Override the depth with -Dfuzz.tries=N. -->
+        <profile>
+            <id>fuzz</id>
+            <properties>
+                <fuzz.tries>200000</fuzz.tries>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <includes>
+                                <include>**/*FuzzTest.java</include>
+                            </includes>
+                            <failIfNoTests>false</failIfNoTests>
+                            <systemPropertyVariables>
+                                <qfl.cases>${fuzz.tries}</qfl.cases>
+                                <junit.jupiter.execution.timeout.default>60 m</junit.jupiter.execution.timeout.default>
+                            </systemPropertyVariables>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
         <!-- Everything, including the load and timing tags (nightly CI). -->
         <profile>
             <id>full</id>
