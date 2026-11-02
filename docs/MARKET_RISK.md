@@ -214,8 +214,7 @@ library.
   equity repo.
 - The risk-factor eligibility test. NMRF stress capital (`risk.FrtbNmrf`) aggregates
   scenario charges the caller computes.
-- The official ISDA SIMM calibration and ISDA's unit tests (licensed);
-  `risk.simm` ships an illustrative calibration only. See [SIMM.md](SIMM.md).
+- ISDA SIMM: not included; ISDA licenses SIMM for use.
 - CVA capital. SA-CCR (`risk.SaCcr`) haircuts follow Basel II paragraph 151, not the
   CRE22 (2017) table.
 - xVA beyond CVA, DVA (unilateral and first-to-default bilateral) and wrong-way CVA

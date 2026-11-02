@@ -4531,20 +4531,17 @@ recipes 339, 340 and 342.
 
 ---
 
-## 108. Capital and margin: FRTB SA and SIMM
+## 108. Capital: FRTB SA
 
 ```mermaid
 flowchart TB
     SENS_108["sensitivities s_k<br/>(caller computes)"]
-    WS_108["weighted WS_k = RW_k s_k<br/>(SIMM: x concentration CR_k)"]
+    WS_108["weighted WS_k = RW_k s_k"]
     KB_108["bucket K_b, S_b<br/>intra-bucket rho"]
     AGG_108["across buckets, gamma_bc"]
     SC_108["FrtbSa: LOW / MEDIUM / HIGH<br/>correlation scenarios, take the max"]
     DRC_108["FrtbDrc + FrtbRrao"]
     SBM_108["FRTB SA capital"]
-    CAL_108["SimmParameters<br/>calibration file (licensed)"]
-    PC_108["SimmCalculator: risk classes,<br/>psi within product class,<br/>product classes add"]
-    IM_108["SIMM initial margin"]
 
     SENS_108 --> WS_108 --> KB_108 --> AGG_108
     AGG_108 --> SC_108 --> SBM_108
@@ -4553,10 +4550,9 @@ flowchart TB
     AGG_108 --> PC_108 --> IM_108
 ```
 
-The two share the bucket-then-across-buckets shape. FRTB SA uses fixed
-regulatory weights and three correlation scenarios; SIMM takes its weights
-from a calibration file and has no scenarios. See LEARN sections 10o and
-10p and recipes 336 and 337.
+Weighted sensitivities aggregate within a bucket, then across buckets, under
+three correlation scenarios, and the charge is the largest of the three. See
+LEARN section 10o and recipe 336.
 
 ---
 

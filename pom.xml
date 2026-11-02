@@ -483,6 +483,8 @@
                                         <exclude>com.quantfinlib.data.TickFileReader</exclude>
                                         <exclude>com.quantfinlib.data.TickCapture</exclude>
                                         <exclude>com.quantfinlib.data.AsyncTickCapture</exclude>
+                                        <!-- risk.simm (reference package, STABILITY.md) removed in 2.3.0 pending licensing review; the risk include matches subpackages -->
+                                        <exclude>com.quantfinlib.risk.simm</exclude>
                                         </excludes>
                                     </parameter>
                                 </configuration>
