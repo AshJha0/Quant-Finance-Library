@@ -21,7 +21,6 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * auth.016.001.01 output. The structural checks always run. The XSD check needs
@@ -31,7 +30,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  */
 class Auth016XmlTest {
 
-    private static List<Rts22TransactionReport> samples() {
+    static List<Rts22TransactionReport> samples() {
         Rts22TransactionReport neg = Rts22Fixtures.build(Rts22Fixtures.equityDeal(), Side.BUY, 1, "N1");
         java.util.Map<Rts22Field, String> m = new java.util.EnumMap<>(Rts22Field.class);
         for (Rts22Field f : Rts22Field.values()) {
@@ -98,7 +97,7 @@ class Auth016XmlTest {
     @Test
     void validatesAgainstEsmaXsd() throws Exception {
         String path = System.getenv("QFL_ESMA_XSD");
-        assumeTrue(path != null && new File(path).isFile(),
+        ReferenceFiles.require(path != null && new File(path).isFile(),
                 "QFL_ESMA_XSD not set: the ESMA auth.016 XSD is SWIFT-licensed and not in the repo");
         SchemaFactory sf = SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI);
         sf.setProperty(XMLConstants.ACCESS_EXTERNAL_DTD, "");

@@ -371,7 +371,9 @@
              Narrow it with -Dpit.targets=com.quantfinlib.pricing.*; when the
              tests live in other classes than the mutated ones, also set
              -Dpit.targetTests (defaults to pit.targets). Run from the root with
-             -pl core (or -pl lowlatency).
+             -pl core (or -pl lowlatency). For lowlatency run from the root with
+             -pl core,lowlatency -Dpit.failWhenNoMutations=false and lowlatency
+             targets, so core resolves from the reactor and its run is empty.
              Report: target/pit-reports/index.html -->
         <profile>
             <id>mutation</id>
@@ -379,6 +381,11 @@
                 <pit.targets>com.quantfinlib.pricing.*,com.quantfinlib.risk.*,com.quantfinlib.rates.*,com.quantfinlib.volatility.*</pit.targets>
                 <pit.targetTests>${pit.targets}</pit.targetTests>
                 <pit.threads>4</pit.threads>
+                <!-- Overall kill-rate floor for one run (PIT fails the build below it). The
+                     nightly job sets one per target; per-package floors are checked by
+                     scripts/pit-summary.py against scripts/pit-thresholds.txt. -->
+                <pit.mutationThreshold>0</pit.mutationThreshold>
+                <pit.failWhenNoMutations>true</pit.failWhenNoMutations>
             </properties>
             <build>
                 <plugins>
@@ -401,6 +408,8 @@
                                 <excludedGroup>timing</excludedGroup>
                             </excludedGroups>
                             <threads>${pit.threads}</threads>
+                            <mutationThreshold>${pit.mutationThreshold}</mutationThreshold>
+                            <failWhenNoMutations>${pit.failWhenNoMutations}</failWhenNoMutations>
                             <timeoutFactor>2.0</timeoutFactor>
                             <timeoutConstant>4000</timeoutConstant>
                             <outputFormats>

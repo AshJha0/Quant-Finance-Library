@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.quantfinlib.regreporting.StatusAdvice.Record;
 import com.quantfinlib.regreporting.StatusAdvice.Rule;
@@ -40,7 +39,7 @@ class StatusAdviceTest {
                 .relatedTo(submitted);
     }
 
-    private static StatusAdvice workedExample() {
+    static StatusAdvice workedExample() {
         return StatusAdvice.of("FILE0001", List.of(
                 new RecordOutcome(K1, false, RecordStatus.ACCEPTED, List.of()),
                 new RecordOutcome(K2, false, RecordStatus.REJECTED,
@@ -214,7 +213,7 @@ class StatusAdviceTest {
         File a31 = env("QFL_ESMA_AUTH031_XSD");
         File h1 = env("QFL_ESMA_HEAD001_XSD");
         File h3 = env("QFL_ESMA_HEAD003_XSD");
-        assumeTrue(a31 != null && a31.isFile() && h1 != null && h1.isFile() && h3 != null && h3.isFile(),
+        ReferenceFiles.require(a31 != null && a31.isFile() && h1 != null && h1.isFile() && h3 != null && h3.isFile(),
                 "QFL_ESMA_AUTH031_XSD, QFL_ESMA_HEAD001_XSD, QFL_ESMA_HEAD003_XSD not set: XSDs are not in the repo");
         SchemaFactory sf = SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI);
         sf.setProperty(XMLConstants.ACCESS_EXTERNAL_DTD, "");
