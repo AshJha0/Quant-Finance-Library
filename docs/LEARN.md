@@ -2485,15 +2485,22 @@ Refit (EU derivatives) have their own field sets and action/event codes.
 Worked example. An RTS 22 report whose buyer LEI passes the ISO 17442
 check digits but has status LAPSED in the GLEIF golden copy passes
 `validate()` and is refused by `ReferenceDataChecker`. An EMIR report with
-action TERM and event TRAD fails `validate()`, because TERM only pairs with ETRM.
+action TERM and event TRAD fails `validate()` with EMIR-VR-2152-04, because the
+ESMA rules let TERM carry only NOVA, COMP, ETRM, CLRG, EXER, ALOC, CREV, CORP or
+INCP. The ESMA workbook's own example: a notional of 25 nines (its default
+value) passes EMIR-VR-2055-01; 26 digits fails.
 
 *In this library:* `Rts22TransactionReport.toAuth016Xml` and
 `validateEsmaRules` (about 45 data-only rules; the ESMA XSD is checked in
 tests only when `QFL_ESMA_XSD` is set, since it cannot be redistributed),
 `regreporting/registry/` (GLEIF golden copy and API, FIRDS FULINS, ISO 10383,
 `ReferenceDataChecker`), `regreporting/cat/` and `regreporting/emir/`. CAT and
-EMIR are indicative and not certified; EMIR has not been checked against
-Regulation 2022/1860 field by field. Section 17g covers the ESMA rules that
+EMIR are not certified. From 3.0 EMIR is checked against the ESMA Refit
+validation rules (ESMA74-362-2683) and CAT against the IM Technical
+Specifications v4.1.0 r14, single-record rules only; `EmirRefitReport.rules()`
+and `CatEvent.rules()` list each check with its source and evidence class
+(`RuleProvenance`). EMIR field numbers and formats are checked against the
+Annex of Regulation 2022/1860. Section 17g covers the ESMA rules that
 need reference data and the submission envelope (2.4). Swap legs are not
 implemented. Recipes 347 to 349.
 

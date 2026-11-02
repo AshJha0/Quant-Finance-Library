@@ -7,17 +7,22 @@
  * events as {@link com.quantfinlib.regreporting.TransactionReport}s and writes them as JSON
  * lines.</p>
  *
- * <p><b>Not certified.</b> Field names follow the published CAT Reporting Technical
- * Specifications for Industry Members (event types MENO, MEOR, MEOT, MEOF), but only a core
- * subset is populated (listed on {@link com.quantfinlib.regreporting.cat.CatEventBuilder}), and
- * the output has not been validated against the CAT JSON schema or submitted to the CAT
- * test environment. Use it as a structured starting point, not as a filing.</p>
+ * <p><b>Not certified.</b> Field names and single-record checks are checked against the CAT
+ * Reporting Technical Specifications for Industry Members v4.1.0 r14 (2026-02-13): Tables 3,
+ * 16, 18, 48, 52 and 165, section 7.6 and Appendix G, for the equity event types MENO, MEOR,
+ * MEOT and MEOF; {@link com.quantfinlib.regreporting.cat.CatEvent#rules()} lists each rule.
+ * Only a core subset of fields is populated (listed on
+ * {@link com.quantfinlib.regreporting.cat.CatEventBuilder}); linkage, reference data (symbol
+ * master, IMID list, FDID), Name/Value pair contents, conditional fields other than price
+ * and errorROEID, option and quote events, and the CAT JSON schema itself are not checked,
+ * and nothing has been submitted to the CAT test environment. Use it as a structured
+ * starting point, not as a filing.</p>
  *
- * <p>Renamed from {@code reporting} to {@code com.quantfinlib.regreporting.cat} in 3.0
+ * <p><b>3.0 notice.</b> Renamed to {@code com.quantfinlib.regreporting.cat} in 3.0
  * (the {@code report} and {@code reporting} names were one letter apart with
  * unrelated meanings), and moved with the rest of the reference tier to the
  * separate artifact {@code quant-finance-library-lowlatency}. Types and members
- * did not change; a 2.x user updates the import. See docs/MIGRATION_3.0.md.</p>
+ * are unchanged; update the import. See docs/MIGRATION_3.0.md.</p>
  */
 @NullMarked
 package com.quantfinlib.regreporting.cat;

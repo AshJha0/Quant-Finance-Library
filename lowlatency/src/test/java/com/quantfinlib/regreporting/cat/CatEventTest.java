@@ -17,7 +17,7 @@ class CatEventTest {
         return CatEventBuilder.newOrder().reporter("FRMA", "ROE1").orderKey("O-1", T0).eventTimestamp(T0)
                 .symbol("TEST").sidePriceQty("B", new BigDecimal("10.25"), new BigDecimal("100"))
                 .field("orderType", "LMT").field("timeInForce", "DAY=20260302").field("tradingSession", "REG")
-                .field("handlingInstructions", "NH").field("deptType", "A")
+                .field("handlingInstructions", "NH").field("deptType", "A").field("representativeInd", "N")
                 .field("firmDesignatedID", "ACCT1").field("accountHolderType", "I").build();
     }
 
@@ -43,37 +43,49 @@ class CatEventTest {
         assertTrue(!json.contains("errorROEID"), json);
     }
 
+    /** Table 18: destinationType and isoInd are 'R'; destination is 'C'. */
     @Test
-    void routeRequiresDestination() {
+    void routeTable18RequiredFields() {
         CatEvent r = CatEventBuilder.route().reporter("FRMA", "ROE2").orderKey("O-1", T0).eventTimestamp(T0)
                 .symbol("TEST").sidePriceQty("B", new BigDecimal("10.25"), new BigDecimal("100"))
                 .field("orderType", "LMT").field("timeInForce", "DAY=20260302").field("tradingSession", "REG")
-                .field("senderIMID", "FRMA").field("destinationType", "E").field("routedOrderID", "R-1")
-                .field("session", "S1").field("handlingInstructions", "NH").build();
-        assertEquals(List.of("missing destination"), r.validate());
+                .field("destinationType", "E").build();
+        assertEquals(List.of("missing isoInd"), r.validate());
     }
 
+    /** Table 48: MEOT has tradeKeyDate, not orderKeyDate or orderID. */
     @Test
-    void tradeDoesNotNeedOrderKey() {
+    void tradeTable48() {
         CatEvent t = CatEventBuilder.trade().reporter("FRMA", "ROE3").eventTimestamp(T0).symbol("TEST")
-                .field("tradeID", "T-1").field("price", "10.25").field("quantity", "100")
-                .field("marketCenterID", "D").field("sideDetailsInd", "BOTH")
-                .field("buyDetails", "O-1").field("sellDetails", "O-2").build();
+                .tradeKey("T-1", T0).field("price", "10.25").field("quantity", "100").field("capacity", "P")
+                .field("sideDetailsInd", "NA").field("buyDetails", "O-1").field("sellDetails", "O-2").build();
         assertEquals(List.of(), t.validate());
+    }
+
+    private static CatEventBuilder meof(String linkType) {
+        return CatEventBuilder.fulfillment().reporter("FRMA", "ROE4").eventTimestamp(T0).symbol("TEST")
+                .fillKey("F-1", T0).field("fulfillmentLinkType", linkType).field("price", "10.25")
+                .field("quantity", "100").field("capacity", "A").field("clientDetails", "O-1");
+    }
+
+    /** Table 52: MEOF has fillKeyDate and clientDetails, no side; Appendix G fulfillmentLinkType. */
+    @Test
+    void fulfillmentTable52() {
+        assertEquals(List.of(), meof("Y").build().validate());
+        assertEquals(List.of("fulfillmentLinkType must be one of [FOR, Y, YE]"), meof("N").build().validate());
     }
 
     @Test
     void badValuesReported() {
-        CatEvent e = CatEventBuilder.fulfillment().reporter("lower", "ROE4").orderKey("O-1", T0).eventTimestamp(T0)
-                .symbol("TEST").sidePriceQty("X", new BigDecimal("1.123456789"), BigDecimal.ZERO)
-                .field("fulfillmentID", "F1").field("fulfillmentLinkType", "Y")
-                .action("COR", "").build();
+        CatEvent e = CatEventBuilder.newOrder().reporter("TOOLONG8", "ROE4").orderKey("O-1", T0).eventTimestamp(T0)
+                .symbol("TEST").sidePriceQty("X", new BigDecimal("1.123456789"), new BigDecimal("-1"))
+                .action("RPR", "").build();
         List<String> v = e.validate();
-        assertTrue(v.contains("errorROEID required for actionType COR"), v.toString());
+        assertTrue(v.contains("errorROEID required for actionType RPR"), v.toString());
         assertTrue(v.stream().anyMatch(s -> s.startsWith("side must")), v.toString());
-        assertTrue(v.contains("CATReporterIMID must be 1-7 upper-case alphanumerics"), v.toString());
-        assertTrue(v.contains("quantity must be positive"), v.toString());
-        assertTrue(v.contains("price must be a decimal with at most 8 places"), v.toString());
+        assertTrue(v.contains("CATReporterIMID must be Alphanumeric (7)"), v.toString());
+        assertTrue(v.stream().anyMatch(s -> s.startsWith("quantity must")), v.toString());
+        assertTrue(v.contains("price must be Price: Numeric (10,8)"), v.toString());
     }
 
     @Test

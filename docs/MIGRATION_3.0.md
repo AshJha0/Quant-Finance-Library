@@ -264,6 +264,25 @@ import com.quantfinlib.regreporting.emir.EmirActionType;
 sed -i 's/com\.quantfinlib\.reporting\b/com.quantfinlib.regreporting/g' $(git ls-files '*.java')
 ```
 
+EMIR and CAT validation changed in 3.0, because it was checked against the
+published texts for the first time (ESMA74-362-2683 for EMIR Refit, CAT IM
+Technical Specifications v4.1.0 r14 for CAT). EMIR messages now start with the
+ESMA error code, and some reports that passed in 2.4 now fail:
+
+| 2.4 behaviour | 3.0 | Why |
+|---|---|---|
+| EMIR `direction` accepts MAKE/TAKE | BYER/SLLR only; use `legDirections("MAKE", "TAKE")` | EMIR-VR-1017-02, -1018-02 |
+| EMIR report without 1.2 or 2.153 passes | fails; `counterparties` sets 1.2 and `terms` sets 2.153 | columns L-S 'M' |
+| EMIR CORR with an event type passes | fails; leave event type blank | EMIR-VR-2152-05 |
+| EMIR TERM with only an expiration date passes | needs `earlyTerminationDate` equal to `eventDate` | row 70, EMIR-VR-2153-07 |
+| EMIR event type PTNG accepted | rejected | not in EMIR-VR-2152-01 |
+| EMIR natural-person client code any text | up to 72 alphanumerics, starting with 1.4 for NEWT/POSC | EMIR-VR-1009-06/07 |
+| CAT COR needs errorROEID | only RPR does; NEW must leave it blank | Table 16 seq 2, section 7.6 |
+| CAT MEOT/MEOF need orderID, orderKeyDate | use `tradeKey`/`fillKey` | Tables 48, 52 |
+| CAT quantity must be positive | not negative, no trailing decimal zeros | Table 3 |
+
+`EmirRefitReport.rules()` and `CatEvent.rules()` list each check with its source.
+
 ## 8. Types that change package
 
 The plain idea: a package lives in exactly one module. Where a 2.x package
