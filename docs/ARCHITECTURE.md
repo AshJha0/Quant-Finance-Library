@@ -169,9 +169,14 @@ stable module.
 3. **Batch and streaming indicators agree.** `Indicators` and `StreamingIndicators`
    are tested for equal outputs on the same input, so a rule backtested on bars
    behaves the same when fed ticks.
-4. **Allocation claims are tested.** Zero-allocation tests read the JVM's per-thread
-   allocation counter and require exactly zero bytes after warm-up. Latency results
-   come from the benchmarks described in [BENCHMARKS.md](BENCHMARKS.md).
+4. **Allocation claims are tested.** Every "allocation-free" claim in the javadoc has a
+   test in `AllocationClaimsTest` (core) or `LaneAllocationClaimsTest` (lowlatency),
+   tagged `allocation`. Each reads the JVM's per-thread allocation counter after
+   50,000 warm-up calls and allows at most 256 bytes over a batch of 10,000 calls (one
+   object per call would be 160,000 bytes). Older per-class tests require exactly zero
+   bytes. A claim that fails its test is fixed or reworded, as `BinanceTradeParser`'s
+   and `ShortRateModels`' were in 3.1. Latency results come from the benchmarks described in
+   [BENCHMARKS.md](BENCHMARKS.md).
 5. **No look-ahead by default.** Backtests fill at the next bar's open, EWMA
    volatility is seeded causally, fundamentals are point-in-time, and the regime
    detector exposes a filtered probability for live use.
@@ -182,6 +187,11 @@ stable module.
    after a crash, tick sessions can be replayed, walk-forward analysis carries the
    position across folds, and `persist.Checkpoint` writes learned model state
    atomically (forced to disk before the rename) so it survives a restart.
+8. **Large public classes are facades.** `Indicators`, `MultiCurrencyExposureSimulator`
+   and `FixSession` keep their 3.0 signatures, but since 3.1 the work lives in
+   package-private classes beside them (`MovingAverages`, `Oscillators`, ...;
+   `MultiCurrencyExposureEngine`; `FixSessionMessages`, `FixSessionParsing`). The plan
+   for moving packages between modules in 4.0 is in [DESIGN_4.0.md](DESIGN_4.0.md).
 
 ## Module descriptors
 

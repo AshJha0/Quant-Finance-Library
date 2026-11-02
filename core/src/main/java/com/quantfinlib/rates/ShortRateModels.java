@@ -24,7 +24,11 @@ package com.quantfinlib.rates;
  * <p>All prices are for unit face. Simulation steps (exact Gaussian for
  * Vasicek, full-truncation Euler for CIR) are provided for Monte Carlo
  * scenario generation — the rates leg of a risk-factor simulation.
- * Static, allocation-free per call, research lane. Calibration of
+ * Static, research lane. The Vasicek and CIR functions are
+ * allocation-free per call. The Hull-White functions read a
+ * {@link YieldCurve}, whose lookup boxes the tenor into a {@code Double},
+ * so they allocate a few small objects per call unless the JIT removes
+ * them; keep them off a garbage-free path. Calibration of
  * (a, σ) to market instruments is the caller's optimization exercise;
  * these classes price and simulate given parameters.</p>
  */
