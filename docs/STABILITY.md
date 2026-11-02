@@ -88,15 +88,15 @@ keeps reading the previous version, and is listed under "Changed" in the changel
 
 ## How compatibility is checked
 
-Compatibility is checked by japicmp against the released 2.4.0 jar
-(`./mvnw -Papi-compat -DskipTests verify` after `scripts/fetch-api-baseline.sh`; the
-CI job is `API compatibility`). Every package of the stable module fails the build on
-a binary-incompatible change (`core/pom.xml`, profile `api-compat`; report
-`core/target/japicmp/api-stable.html`). For 3.0 only, the intended breaks are listed
-one by one as `<exclude>` entries, each commented with its row in
-[MIGRATION_3.0.md](MIGRATION_3.0.md); any break not on that list fails the build.
-After 3.0.0 is tagged the baseline moves to 3.0.0 and the list is emptied. The
-reference module is compared and reported in
+Compatibility is checked by japicmp against the released 3.0.0 jars, one per
+module (`./mvnw -Papi-compat -DskipTests verify` after
+`scripts/fetch-api-baseline.sh`; the CI job is `API compatibility`). Every package of
+the stable module fails the build on a binary-incompatible change (`core/pom.xml`,
+profile `api-compat`; report `core/target/japicmp/api-stable.html`). There is no
+allow-list: 3.x makes no breaking changes, so a break is fixed in code. (3.0 listed
+its intended breaks against 2.4.0 one by one, each with its row in
+[MIGRATION_3.0.md](MIGRATION_3.0.md); that list was emptied in 3.1.0.) The reference
+module is compared with the 3.0.0 low-latency jar and reported in
 `lowlatency/target/japicmp/api-lowlatency.html` but does not fail the build.
 
 Stable packages are `@NullMarked` (JSpecify 1.0): unannotated parameters and return

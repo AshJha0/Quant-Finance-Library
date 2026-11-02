@@ -47,10 +47,11 @@ The `Release` workflow (`.github/workflows/release.yml`) then runs on JDK 25:
 After a release, move the API compatibility baseline to it: set
 `api.baseline.version` in the parent `pom.xml` and the version passed to
 `scripts/fetch-api-baseline.sh` in the `api-compat` job of `.github/workflows/ci.yml`
-to the version just released. The gate currently compares against 2.4.0, the last
-single-jar release; after 3.0.0 is tagged, the baseline needs one jar per module
-(the fetch script and `api.baseline.jar` take the artifact name), and the 3.0
-allow-list in `core/pom.xml` is emptied.
+to the version just released. The gate compares against 3.0.0: the fetch script
+downloads both 3.x jars (`quant-finance-library` and
+`quant-finance-library-lowlatency`), and `api.baseline.jar` and
+`api.baseline.lowlatency.jar` in the parent POM name them. There is no allow-list in
+3.x.
 
 ## JitPack
 
@@ -67,7 +68,7 @@ JitPack builds from a tag on request, so a release is usable without further set
 <dependency>
   <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
   <artifactId>quant-finance-library</artifactId>   <!-- or quant-finance-library-lowlatency -->
-  <version>v3.0.0</version>
+  <version>v3.1.0</version>
 </dependency>
 ```
 

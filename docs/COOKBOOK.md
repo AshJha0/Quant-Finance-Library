@@ -10965,7 +10965,7 @@ reads the code list SIX publishes as maintenance agency and checks each attribut
 letter against its group. The file is ISO copyright, so download your own copy. `toSubmissionXml` writes the head.003
 envelope with the head.001 header (sender LEI, authority country, file id,
 creation time to the second) around auth.016 (ESMA65-8-2356 paras 124 to 132).
-Recipe 355 covers the pending workflow and the feedback file.
+Recipe 358 covers the pending workflow and the feedback file.
 
 ## 354. Moving off MathUtils (removed in 3.0)
 
@@ -10981,20 +10981,20 @@ double beta = Numerics.decayFactor(dtNanos, halfLifeNanos);
 delegated to one of these, so the switch changes no result. docs/MIGRATION_3.0.md section 4
 has the full table.
 
-## 355. Depending on the 3.0 artifacts
+## 355. Depending on the 3.x artifacts
 
 ```xml
 <!-- stable tier: pricing, risk, research, backtesting -->
 <dependency>
   <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
   <artifactId>quant-finance-library</artifactId>
-  <version>v3.0.0</version>
+  <version>v3.1.0</version>
 </dependency>
 <!-- trading lane; brings the stable tier with it -->
 <dependency>
   <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
   <artifactId>quant-finance-library-lowlatency</artifactId>
-  <version>v3.0.0</version>
+  <version>v3.1.0</version>
 </dependency>
 ```
 

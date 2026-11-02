@@ -19,7 +19,7 @@ ships in its own jar (classifier `examples`), not in the library jar.
 
 ## Tests
 
-Tests use JUnit 5. Test classes run in parallel, methods within a class run in
+Tests use JUnit 6 (Jupiter). Test classes run in parallel, methods within a class run in
 order, and every test has a two-minute timeout.
 
 Some tests are tagged:
