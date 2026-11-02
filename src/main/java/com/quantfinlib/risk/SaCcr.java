@@ -57,7 +57,8 @@ import java.util.Objects;
  * where the same trade as an ordinary swap would add 393.5 and net
  * against the other USD swaps.</p>
  *
- * <p>Margin agreements and netting sets (paras 185-187):
+ * <p>Margin agreements and netting sets (paras 185-187, checked against
+ * the March 2014 text):
  * {@link #oneMarginAgreementManyNettingSets} for one agreement covering
  * several netting sets, {@link #subNettingSets} for one netting set
  * under several agreements (or partly unmargined). Collateral C is
@@ -300,13 +301,16 @@ public final class SaCcr {
     }
 
     /**
-     * One margin agreement covering several netting sets (paras 185-186).
+     * One margin agreement covering several netting sets (RC from
+     * BCBS 279 para 186, PFE from para 187, both checked against the
+     * March 2014 text).
      * The agreement's collateral cannot be split between the netting
      * sets, so {@code RC_MA = max(sum_NS max(V_NS, 0) - C_MA, 0)}, and
      * {@code PFE_MA = sum_NS PFE_NS} with each netting set's PFE computed
      * as if unmargined. Each multiplier uses that set's own V_NS with no
-     * collateral, since C_MA belongs to no single set; that is this
-     * library's reading of para 186.
+     * collateral, since C_MA belongs to no single set; para 187 says only
+     * that each PFE follows the unmargined methodology, so the choice of
+     * V_NS for the multiplier is this library's reading.
      *
      * <p>Example (own hand computation): netting sets with V of 100 and
      * -40 under one agreement holding C = 30 give
@@ -364,13 +368,19 @@ public final class SaCcr {
 
     /**
      * One netting set under several margin agreements, or mixing
-     * margined and unmargined trades (para 187). The PFE is computed per
-     * sub-netting set aligned with its agreement, with that part's own
-     * maturity factors and own multiplier from V_k - C_k, and the parts
-     * are summed. The replacement cost is for the netting set as a whole,
-     * {@code RC = max(V - C, sum_k (TH_k + MTA_k - NICA_k), 0)} over the
-     * margined parts. Para 187 prescribes only the PFE split; summing the
-     * margined floors for RC is this library's reading.
+     * margined and unmargined trades (BCBS 279 para 185). The netting set
+     * is divided into sub-netting sets aligned with their agreements, and
+     * para 185 states that this applies to both RC and PFE. So each part
+     * gets its own {@code RC_k} (margined: {@code max(V_k - C_k, TH_k +
+     * MTA_k - NICA_k, 0)}; unmargined: {@code max(V_k - C_k, 0)}) and its
+     * own PFE with its own maturity factors and multiplier from V_k - C_k,
+     * and both are summed over the parts. Until 2.3 the RC was taken for
+     * the netting set as a whole with summed floors; that reading did not
+     * match para 185 and was corrected.
+     *
+     * <p>Example (own hand computation): a margined part with V = -30,
+     * C = 0, TH + MTA - NICA = 5 and an unmargined part with V = 50 give
+     * RC = 5 + 50 = 55, where netting the parts first would give 20.</p>
      *
      * @param parts the sub-netting sets
      * @return a result whose add-on fields are sums over the parts and
@@ -382,25 +392,14 @@ public final class SaCcr {
             throw new IllegalArgumentException("no sub-netting sets");
         }
         double v = 0;
-        double c = 0;
-        double floor = 0;
-        boolean anyMargined = false;
+        double rc = 0;
         double[] sum = new double[6];
         for (SubNettingSet part : parts) {
             Objects.requireNonNull(part, "part");
             Result r = compute(part.trades(), part.collateralHeld(), part.margin());
             v += r.marketValue();
-            c += part.collateralHeld();
-            if (part.margin() != null) {
-                anyMargined = true;
-                Margin m = part.margin();
-                floor += m.threshold() + m.minimumTransfer() - m.nica();
-            }
+            rc += r.replacementCost();
             accumulate(sum, r);
-        }
-        double rc = Math.max(v - c, 0);
-        if (anyMargined) {
-            rc = Math.max(rc, floor);
         }
         return combine(v, rc, sum);
     }

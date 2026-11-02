@@ -90,6 +90,19 @@ class SaCcrExtensionsTest {
     }
 
     @Test
+    void subNettingSetReplacementCostIsPerPart() {
+        // BCBS 279 para 185: the sub-netting-set split applies to RC as well as PFE.
+        SaCcr.Margin csa = new SaCcr.Margin(0, 5, 0, 10);
+        SaCcr.SubNettingSet margined = new SaCcr.SubNettingSet(
+                List.of(SaCcrTrade.fx("EURUSD", 1_000, 1, -1, -30)), 0, csa);
+        SaCcr.SubNettingSet unmargined = new SaCcr.SubNettingSet(
+                List.of(SaCcrTrade.fx("GBPUSD", 1_000, 1, 1, 50)), 0, null);
+        SaCcr.Result r = SaCcr.subNettingSets(List.of(margined, unmargined));
+        // RC = max(-30, 5, 0) + max(50, 0) = 55; netting first would give max(20, 5) = 20
+        assertEquals(55, r.replacementCost(), 1e-12);
+    }
+
+    @Test
     void supervisoryHaircuts() {
         assertEquals(0.06, SaCcrHaircuts.haircut10Day(SaCcrHaircuts.CollateralKind.OTHER_DEBT,
                 SaCcrHaircuts.DebtRating.A_TO_BBB, 3), 0);
