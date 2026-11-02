@@ -24,7 +24,15 @@ import java.util.regex.Pattern;
  * (symbol master, IMID list, FDID), late-reporting and option or quote events were not.
  * Since 3.1.0 the new-quote (MENQ), new option order (MONO), option route (MOOR) and new
  * option quote (MONQ) types are also checked (rules CAT-R13 to CAT-R16), and
- * {@link CatLinkageChecker} checks linkage keys across a batch of events.</p>
+ * {@link CatLinkageChecker} checks linkage keys across a batch of events. Also since 3.1.0 the
+ * option lifecycle events (MOOA, MOOM, MOOC, MOOT, MOOF), the supplements (MENOS, MONOS,
+ * MLOS) and the multi-leg events (MLNO, MLOR, MLOC) are checked (rules CAT-R17 to CAT-R21);
+ * {@link CatSchema} checks a JSON record line against a CAT schema file.</p>
+ *
+ * <p>Multi-leg events carry their legs in {@code legDetails} (Table 101), held here as the
+ * JSON array text written by {@link CatEventBuilder#optionLeg} and
+ * {@link CatEventBuilder#equityLeg}. {@link #toJson()} writes every value as a JSON string,
+ * that included; {@link CatSchema#toJson(CatEvent)} writes the JSON types of the schema.</p>
  *
  * <p>Worked examples from the specification, pinned in tests: the section 7.6.1.1 repair
  * record (RPR with errorROEID 12345678) and the section 7.6.2.1 firm correction (COR, no
@@ -53,6 +61,12 @@ public final class CatEvent implements TransactionReport {
     private static final Set<String> CAPACITIES = Set.of("A", "P", "R");
     private static final Set<String> SIDE_DETAILS = Set.of("BUY", "SELL", "NA");
     private static final Set<String> LINK_TYPES = Set.of("FOR", "Y", "YE");
+    private static final Set<String> OPTION_LINK_TYPES = Set.of("O", "OS", "OE");
+    private static final Set<String> ORDER_SENDER_TYPES = Set.of("E", "F", "O");
+    private static final Set<String> INITIATORS = Set.of("C", "F");
+    private static final Set<String> PRICE_TYPES = Set.of("PU", "TC", "TS");
+    private static final Set<String> LEG_KEYS = Set.of("legRefID", "symbol", "optionID", "openCloseIndicator",
+            "side", "legRatioQuantity");
     private static final Set<String> BOOLEANS = Set.of("manualFlag", "electronicDupFlag", "solicitationFlag",
             "custDspIntrFlag", "affiliateFlag", "negotiatedTradeFlag", "routeRejectedFlag", "dupROIDCond",
             "multiLegInd", "cancelFlag");
@@ -68,6 +82,17 @@ public final class CatEvent implements TransactionReport {
     public static final String CHECKED_AGAINST = "checked against CAT Reporting Technical Specifications for "
             + "Industry Members v4.1.0 r14 (2026-02-13), sections 2.5, 4.1, 4.3, 4.11.1, 4.12.1, 7.6 and "
             + "Appendix G, plus Tables 39, 62, 64 and 85 (MENQ, MONO, MOOR, MONQ) since 3.1.0; not certified";
+
+    /**
+     * What the rules added with the option lifecycle, supplement and multi-leg types have been
+     * compared with ({@link #CHECKED_AGAINST} is left as it was).
+     *
+     * @since 3.1.0
+     */
+    public static final String CHECKED_AGAINST_LIFECYCLE = "checked against CAT Reporting Technical "
+            + "Specifications for Industry Members v4.1.0 r14 (2026-02-13), Tables 17, 63, 70, 79, 83, 90, 92, "
+            + "100, 101, 102, 126 and 139 and Appendix G (senderType, initiator, priceType, "
+            + "fulfillmentLinkType); not certified";
 
     private static final String SPEC = "CAT IM Technical Specifications v4.1.0 r14, ";
 
@@ -116,7 +141,32 @@ public final class CatEvent implements TransactionReport {
             new RuleProvenance("CAT-R16", "on quote events bidPrice and askPrice are Price and not negative; bidQty "
                     + "and askQty are Whole Quantity (Numeric (12,0)); quoteKeyDate is a Timestamp",
                     SPEC + "Table 39 seq 17-20, Table 85 seq 11-14, Table 3 Whole Quantity",
-                    Evidence.PUBLISHED_REFERENCE));
+                    Evidence.PUBLISHED_REFERENCE),
+            new RuleProvenance("CAT-R17", "senderType is E, F or O on MOOA; initiator is C or F on MOOM, MOOC and "
+                    + "MLOC; priceType is PU, TC or TS on MLNO and MLOR and required when orderType is LMT; on MOOT "
+                    + "and MOOF fulfillmentLinkType is O, OS or OE (option values)", SPEC + "Table 70 seq 17, "
+                    + "Table 79 seq 22, Table 83 seq 15, Table 126 seq 14, Table 100 seq 31, Table 102 seq 30; "
+                    + "Appendix G senderType (order events), initiator, priceType, fulfillmentLinkType (option "
+                    + "events)", Evidence.PUBLISHED_REFERENCE),
+            new RuleProvenance("CAT-R18", "cancelQty and leavesQty are Real Quantity; numberOfLegs is Whole "
+                    + "Quantity and at least 1", SPEC + "Table 79 seq 27, Table 83 seq 13-14, Table 126 seq "
+                    + "12-13, Table 100 seq 30, Table 102 seq 29; Table 3 Real and Whole Quantity",
+                    Evidence.PUBLISHED_REFERENCE),
+            new RuleProvenance("CAT-R19", "legDetails on MLNO and MLOR is a non-empty JSON array of legs; each "
+                    + "leg has exactly one of symbol and optionID, a side (B or S for option legs, B, SL, SS or SX "
+                    + "for equity legs), a legRatioQuantity that is Real Quantity, an OSI optionID, and no "
+                    + "openCloseIndicator on an equity leg; no more legs than numberOfLegs", SPEC + "Table 101 "
+                    + "seq 32.n.2-32.n.6, Table 103; Appendix G side; 'no more legs than numberOfLegs' is the "
+                    + "library's reading (legs that do not fit go on MLOS, Table 101 note)",
+                    Evidence.LIBRARY_READING),
+            new RuleProvenance("CAT-R20", "price is not negative on MOOA, MOOM, MOOT and MOOF; on MOOA, MOOM, MLNO "
+                    + "and MLOR it is required when orderType is LMT and blank when MKT; a multi-leg net price may "
+                    + "be negative (a credit)", SPEC + "Table 70 seq 21, Table 79 seq 24, Table 90 seq 15, Table 92 "
+                    + "seq 13, Table 100 seq 16, Table 102 seq 18", Evidence.PUBLISHED_REFERENCE),
+            new RuleProvenance("CAT-R21", "multi-leg events (MLNO, MLOR, MLOC, MLOS) carry no symbol and no "
+                    + "optionID at the top level; underlying, when given, is at most 22 characters", SPEC
+                    + "Tables 100, 102, 126, 139 (no symbol or optionID field; seq 8 underlying is Symbol 'O'); "
+                    + "Table 3 Symbol", Evidence.PUBLISHED_REFERENCE));
 
     private final Map<String, String> fields;
 
@@ -170,7 +220,7 @@ public final class CatEvent implements TransactionReport {
         }
         CatEventType t = type();
         for (String k : COMMON_REQUIRED) {
-            if (t.isOption() && "symbol".equals(k)) {
+            if ((t.isOption() || t.isMultiLeg()) && "symbol".equals(k)) {
                 continue;
             }
             if (blank(k)) {
@@ -204,7 +254,8 @@ public final class CatEvent implements TransactionReport {
         }
         oneOf("capacity", CAPACITIES, out);
         oneOf("sideDetailsInd", SIDE_DETAILS, out);
-        oneOf("fulfillmentLinkType", LINK_TYPES, out);
+        oneOf("fulfillmentLinkType", t == CatEventType.MOOT || t == CatEventType.MOOF ? OPTION_LINK_TYPES
+                : LINK_TYPES, out);
         String imid = v("CATReporterIMID");
         if (!imid.isEmpty() && !IMID.matcher(imid).matches()) {
             out.add("CATReporterIMID must be Alphanumeric (7)");
@@ -214,9 +265,10 @@ public final class CatEvent implements TransactionReport {
             out.add("quantity must be Real Quantity: Numeric (12,6), not negative, no trailing zeros");
         }
         checkPrice(t, out);
-        if (t == CatEventType.MEOT) {
+        if (t == CatEventType.MEOT || t == CatEventType.MOOT) {
             checkSideDetails(out);
         }
+        checkLifecycle(t, out);
         for (String k : TIMESTAMPS) {
             String ts = v(k);
             if (!ts.isEmpty() && !TIMESTAMP.matcher(ts).matches()) {
@@ -250,6 +302,130 @@ public final class CatEvent implements TransactionReport {
                 out.add("price must be blank when orderType is MKT");
             }
         }
+    }
+
+    /** CAT-R17 to CAT-R21; only the types added with the 3.1.0 lifecycle work reach a check. */
+    private void checkLifecycle(CatEventType t, List<String> out) {
+        String px = v("price");
+        String ot = v("orderType");
+        switch (t) {
+            case MOOA -> oneOf("senderType", ORDER_SENDER_TYPES, out);
+            case MOOM, MOOC, MLOC -> oneOf("initiator", INITIATORS, out);
+            default -> {
+                // no choice field of R17 on the other types
+            }
+        }
+        boolean nonNegative = t == CatEventType.MOOA || t == CatEventType.MOOM || t == CatEventType.MOOT
+                || t == CatEventType.MOOF;
+        if (nonNegative && px.startsWith("-")) {
+            out.add("price must be greater than or equal to zero");
+        }
+        if (t == CatEventType.MOOA || t == CatEventType.MOOM || t == CatEventType.MLNO
+                || t == CatEventType.MLOR) {
+            if ("LMT".equals(ot) && px.isEmpty()) {
+                out.add("price required when orderType is LMT");
+            }
+            if ("MKT".equals(ot) && !px.isEmpty()) {
+                out.add("price must be blank when orderType is MKT");
+            }
+        }
+        for (String k : List.of("cancelQty", "leavesQty")) {
+            String q = v(k);
+            if (!q.isEmpty() && !REAL_QTY.matcher(q).matches()) {
+                out.add(k + " must be Real Quantity: Numeric (12,6), not negative, no trailing zeros");
+            }
+        }
+        if (!t.isMultiLeg()) {
+            return;
+        }
+        if (!blank("symbol") || !blank("optionID")) {
+            out.add("multi-leg events carry no top-level symbol or optionID");
+        }
+        if (v("underlying").length() > 22) {
+            out.add("underlying must be Symbol: Text (22)");
+        }
+        if (t == CatEventType.MLNO || t == CatEventType.MLOR) {
+            oneOf("priceType", PRICE_TYPES, out);
+            if ("LMT".equals(ot) && blank("priceType")) {
+                out.add("priceType required when orderType is LMT");
+            }
+            long n = -1;
+            String legs = v("numberOfLegs");
+            if (!legs.isEmpty()) {
+                if (WHOLE_QTY.matcher(legs).matches() && Long.parseLong(legs) >= 1) {
+                    n = Long.parseLong(legs);
+                } else {
+                    out.add("numberOfLegs must be Whole Quantity, at least 1");
+                }
+            }
+            checkLegs(n, out);
+        }
+    }
+
+    private void checkLegs(long numberOfLegs, List<String> out) {
+        String text = v("legDetails");
+        if (text.isBlank()) {
+            return;
+        }
+        Object parsed;
+        try {
+            parsed = CatJson.parse(text);
+        } catch (CatJson.ParseException e) {
+            out.add("legDetails must be a JSON array of leg objects: " + e.getMessage());
+            return;
+        }
+        if (!(parsed instanceof List<?> legs) || legs.isEmpty()) {
+            out.add("legDetails must be a non-empty JSON array of leg objects");
+            return;
+        }
+        if (numberOfLegs > 0 && legs.size() > numberOfLegs) {
+            out.add("legDetails has " + legs.size() + " legs, more than numberOfLegs " + numberOfLegs);
+        }
+        for (int n = 0; n < legs.size(); n++) {
+            String at = "leg " + (n + 1) + ": ";
+            if (!(legs.get(n) instanceof Map<?, ?> leg)) {
+                out.add(at + "must be a JSON object");
+                continue;
+            }
+            for (Object k : leg.keySet()) {
+                if (!LEG_KEYS.contains(k)) {
+                    out.add(at + "unknown field " + k);
+                }
+            }
+            checkLeg(leg, at, out);
+        }
+    }
+
+    private static void checkLeg(Map<?, ?> leg, String at, List<String> out) {
+        String sym = legText(leg, "symbol");
+        String osi = legText(leg, "optionID");
+        if (sym.isEmpty() == osi.isEmpty()) {
+            out.add(at + "exactly one of symbol and optionID");
+        }
+        if (!osi.isEmpty() && !OSI.matcher(osi).matches()) {
+            out.add(at + "optionID must be a 21-character OSI symbol");
+        }
+        if (!sym.isEmpty() && !legText(leg, "openCloseIndicator").isEmpty()) {
+            out.add(at + "openCloseIndicator must be blank on an equity leg");
+        }
+        String side = legText(leg, "side");
+        Set<String> sides = osi.isEmpty() ? SIDES : OPTION_SIDES;
+        if (side.isEmpty()) {
+            out.add(at + "missing side");
+        } else if (!sides.contains(side)) {
+            out.add(at + "side must be one of " + new TreeSet<>(sides));
+        }
+        String ratio = legText(leg, "legRatioQuantity");
+        if (ratio.isEmpty()) {
+            out.add(at + "missing legRatioQuantity");
+        } else if (!REAL_QTY.matcher(ratio).matches()) {
+            out.add(at + "legRatioQuantity must be Real Quantity");
+        }
+    }
+
+    private static String legText(Map<?, ?> leg, String k) {
+        Object o = leg.get(k);
+        return o == null || CatJson.NULL.equals(o) ? "" : o.toString();
     }
 
     private void checkQuote(List<String> out) {

@@ -45,6 +45,10 @@ public final class GleifApiLeiRegistry implements LeiRegistry {
     private static final Pattern ENTITY_STATUS = Pattern.compile(
             "\"status\"\\s*:\\s*\"(ACTIVE|INACTIVE)\"");
 
+    /** {@code entity.category}, one of the LEI-CDF 3.1 {@code EntityCategoryTypeEnum} values. */
+    private static final Pattern CATEGORY = Pattern.compile("\"category\"\\s*:\\s*\"(GENERAL|BRANCH|FUND|"
+            + "SOLE_PROPRIETOR|RESIDENT_GOVERNMENT_ENTITY|INTERNATIONAL_ORGANIZATION)\"");
+
     private final HttpClient client;
     private final URI base;
     private final Duration requestTimeout;
@@ -115,7 +119,8 @@ public final class GleifApiLeiRegistry implements LeiRegistry {
         Matcher s = STATUS.matcher(json);
         String name = n.find() ? n.group(1).replace("\\\"", "\"").replace("\\\\", "\\") : "";
         LeiStatus st = s.find() ? LeiStatus.parse(s.group(1)) : LeiStatus.UNKNOWN;
-        return new LeiRecord(lei, name, st);
+        Matcher c = CATEGORY.matcher(json);
+        return new LeiRecord(lei, name, st, c.find() ? c.group(1) : "");
     }
 
     /**

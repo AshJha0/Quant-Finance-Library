@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The routines moved out of {@code util.MathUtils} in 2.4.0 return the same
@@ -11,6 +12,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * published 2.3.0 jar's {@code MathUtils} on the same inputs (independent
  * computation: a separate program run against the released artifact), so the
  * move cannot have changed a result without this test failing.
+ *
+ * <p>Pure arithmetic (sums, products, square roots, divisions) is pinned to the
+ * exact bits: IEEE-754 makes it the same on every platform. Results that go
+ * through {@code Math.exp}, {@code log}, {@code pow} or {@code erf}-style series
+ * are pinned to within {@value #TRANSCENDENTAL_ULPS} ulps, because
+ * {@link Math} only promises 1 ulp for those and the JIT intrinsics differ by
+ * CPU (macOS arm64 gave {@code regularizedIncompleteBeta} one ulp above the
+ * x86-64 value). A changed algorithm moves far more than that.
  */
 class MovedFromMathUtilsTest {
 
@@ -24,18 +33,28 @@ class MovedFromMathUtilsTest {
                 () -> "got " + actual + ", 2.3.0 gave " + Double.longBitsToDouble(expectedBits));
     }
 
+    /** Platform allowance for results computed through {@link Math} transcendentals. */
+    static final int TRANSCENDENTAL_ULPS = 4;
+
+    private static void near(long expectedBits, double actual) {
+        double expected = Double.longBitsToDouble(expectedBits);
+        double ulps = Math.abs(actual - expected) / Math.ulp(expected);
+        assertTrue(ulps <= TRANSCENDENTAL_ULPS,
+                () -> "got " + actual + ", 2.3.0 gave " + expected + " (" + ulps + " ulps)");
+    }
+
     @Test
     void sameBitsAsTwoThreeZero() {
-        pin(0x3fa6d148ca287905L, SpecialFunctions.normCdf(-1.7));
-        pin(0x3fe3c5ee2cc40b79L, SpecialFunctions.normCdf(0.3));
-        pin(0x3c00a7afbb1ee67dL, SpecialFunctions.normCdf(-9));
-        pin(0xc0029c5c4630ff0fL, SpecialFunctions.normInv(0.01));
-        pin(0x3fe0c7e39582c5faL, SpecialFunctions.normInv(0.7));
-        pin(0x3fd791bcec2c8cfdL, SpecialFunctions.normPdf(0.4));
-        pin(0xc015acfe390c97d7L, SpecialFunctions.logNormPdf(3));
-        pin(0x4003a140a3a623cfL, SpecialFunctions.logGamma(4.5));
-        pin(0x3fb6c5040e33d645L, SpecialFunctions.regularizedIncompleteBeta(2.5, 1.5, 0.3));
-        pin(0x3fa6fa11a8f6cc06L, SpecialFunctions.tCdf(-2.1, 5));
+        near(0x3fa6d148ca287905L, SpecialFunctions.normCdf(-1.7));
+        near(0x3fe3c5ee2cc40b79L, SpecialFunctions.normCdf(0.3));
+        near(0x3c00a7afbb1ee67dL, SpecialFunctions.normCdf(-9));
+        near(0xc0029c5c4630ff0fL, SpecialFunctions.normInv(0.01));
+        near(0x3fe0c7e39582c5faL, SpecialFunctions.normInv(0.7));
+        near(0x3fd791bcec2c8cfdL, SpecialFunctions.normPdf(0.4));
+        near(0xc015acfe390c97d7L, SpecialFunctions.logNormPdf(3));
+        near(0x4003a140a3a623cfL, SpecialFunctions.logGamma(4.5));
+        near(0x3fb6c5040e33d645L, SpecialFunctions.regularizedIncompleteBeta(2.5, 1.5, 0.3));
+        near(0x3fa6fa11a8f6cc06L, SpecialFunctions.tCdf(-2.1, 5));
         pin(0xbfc2cdae5bfce57fL, Stats.skewness(X));
         pin(0x3ffe7c639738beecL, Stats.kurtosis(X));
         pin(0x3fef1b745840e896L, Stats.pearsonOrZero(X, Y));
@@ -47,7 +66,7 @@ class MovedFromMathUtilsTest {
         pin(0x3fae7307e4ef156eL, LinearAlgebra.solveLinear(M, W)[2]);
         pin(0xbfbbae64447c4206L, LinearAlgebra.inverse(M)[0][1]);
         pin(0x3fe0ea929ba144cbL, LinearAlgebra.inverse(M)[2][2]);
-        pin(0x3fe9fdf8bcce533dL, Numerics.decayFactor(3_000_000_000L, 10_000_000_000L));
+        near(0x3fe9fdf8bcce533dL, Numerics.decayFactor(3_000_000_000L, 10_000_000_000L));
         pin(0x3ff0000000000000L, Numerics.clamp(1.7, -1, 1));
     }
 

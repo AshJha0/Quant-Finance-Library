@@ -9,9 +9,7 @@ import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.time.DateTimeException;
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -261,7 +259,7 @@ public final class FixSession implements AutoCloseable {
             DateTimeFormatter.ofPattern("yyyyMMdd-HH:mm:ss.SSS", Locale.ROOT).withZone(ZoneOffset.UTC);
     private static final long ESTABLISH_TIMEOUT_SECONDS = 10;
     private static final long NOT_ESTABLISHED_TIMER_NANOS = 50_000_000L;
-    private static final long BAD_TIME = Long.MIN_VALUE;
+    private static final long BAD_TIME = FixSessionParsing.BAD_TIME;
     private static final Set<String> ADMIN_TYPES = Set.of(
             FixMessage.HEARTBEAT, FixMessage.TEST_REQUEST, FixMessage.RESEND_REQUEST,
             FixMessage.REJECT, FixMessage.SEQUENCE_RESET, FixMessage.LOGOUT, FixMessage.LOGON);
@@ -503,24 +501,8 @@ public final class FixSession implements AutoCloseable {
             }
             rollIfNewPeriod(now);
         }
-        FixMessage.Builder logon = FixMessage.builder(FixMessage.LOGON)
-                .field(FixMessage.ENCRYPT_METHOD, "0")
-                .field(FixMessage.HEART_BT_INT, config.heartbeatSeconds());
-        if (version.isFixt()) {
-            logon.field(FixVersion.DEFAULT_APPL_VER_ID, version.applVerId());
-        }
-        if (config.resetOnLogon()) {
-            logon.field(FixMessage.RESET_SEQ_NUM_FLAG, "Y");
-        }
-        if (config.username() != null) {
-            logon.field(FixMessage.USERNAME, config.username());
-        }
-        if (config.password() != null) {
-            logon.field(FixMessage.PASSWORD, config.password());
-        }
-        if (useNextExpected) {
-            logon.field(FixMessage.NEXT_EXPECTED_MSG_SEQ_NUM, expectedIncomingSeq);
-        }
+        FixMessage.Builder logon = FixSessionMessages.logon(config, version, useNextExpected,
+                expectedIncomingSeq);
         synchronized (writeLock) {
             ourLogonSeq = outgoingSeq;
             send(logon);
@@ -558,20 +540,8 @@ public final class FixSession implements AutoCloseable {
     public String sendNewOrderSingle(String clOrdId, String symbol, Side side, long quantity,
                                      double limitPrice, char timeInForce) {
         requireEstablished();
-        FixMessage.Builder b = FixMessage.builder(FixMessage.NEW_ORDER_SINGLE)
-                .field(FixMessage.CL_ORD_ID, clOrdId)
-                .field(FixMessage.SYMBOL, symbol)
-                .field(FixMessage.SIDE, side == Side.BUY ? '1' : '2')
-                .field(FixMessage.TRANSACT_TIME, utcNow())
-                .field(FixMessage.ORDER_QTY, quantity);
-        if (Double.isNaN(limitPrice)) {
-            b.field(FixMessage.ORD_TYPE, NewOrderSingle.ORD_TYPE_MARKET);
-        } else {
-            b.field(FixMessage.ORD_TYPE, NewOrderSingle.ORD_TYPE_LIMIT)
-                    .field(FixMessage.PRICE, limitPrice);
-        }
-        b.field(FixMessage.TIME_IN_FORCE, timeInForce);
-        send(b);
+        send(FixSessionMessages.newOrderSingle(clOrdId, symbol, side, quantity, limitPrice,
+                timeInForce, utcNow()));
         return clOrdId;
     }
 
@@ -589,13 +559,8 @@ public final class FixSession implements AutoCloseable {
     public String sendOrderCancelRequest(String clOrdId, String origClOrdId, String symbol,
                                          Side side, long quantity) {
         requireEstablished();
-        send(FixMessage.builder(FixMessage.ORDER_CANCEL_REQUEST)
-                .field(FixMessage.ORIG_CL_ORD_ID, origClOrdId)
-                .field(FixMessage.CL_ORD_ID, clOrdId)
-                .field(FixMessage.SYMBOL, symbol)
-                .field(FixMessage.SIDE, side == Side.BUY ? '1' : '2')
-                .field(FixMessage.TRANSACT_TIME, utcNow())
-                .field(FixMessage.ORDER_QTY, quantity));
+        send(FixSessionMessages.cancelRequest(clOrdId, origClOrdId, symbol, side, quantity,
+                utcNow()));
         return clOrdId;
     }
 
@@ -604,21 +569,8 @@ public final class FixSession implements AutoCloseable {
                                          Side side, long quantity, double limitPrice,
                                          char timeInForce) {
         requireEstablished();
-        FixMessage.Builder b = FixMessage.builder(FixMessage.ORDER_CANCEL_REPLACE_REQUEST)
-                .field(FixMessage.ORIG_CL_ORD_ID, origClOrdId)
-                .field(FixMessage.CL_ORD_ID, clOrdId)
-                .field(FixMessage.SYMBOL, symbol)
-                .field(FixMessage.SIDE, side == Side.BUY ? '1' : '2')
-                .field(FixMessage.TRANSACT_TIME, utcNow())
-                .field(FixMessage.ORDER_QTY, quantity);
-        if (Double.isNaN(limitPrice)) {
-            b.field(FixMessage.ORD_TYPE, NewOrderSingle.ORD_TYPE_MARKET);
-        } else {
-            b.field(FixMessage.ORD_TYPE, NewOrderSingle.ORD_TYPE_LIMIT)
-                    .field(FixMessage.PRICE, limitPrice);
-        }
-        b.field(FixMessage.TIME_IN_FORCE, timeInForce);
-        send(b);
+        send(FixSessionMessages.cancelReplace(clOrdId, origClOrdId, symbol, side, quantity,
+                limitPrice, timeInForce, utcNow()));
         return clOrdId;
     }
 
@@ -643,21 +595,7 @@ public final class FixSession implements AutoCloseable {
      */
     public void sendReject(long refSeqNum, String refMsgType, int reason, int refTagId,
                            String text) {
-        FixMessage.Builder b = FixMessage.builder(FixMessage.REJECT)
-                .field(FixMessage.REF_SEQ_NUM, refSeqNum);
-        if (refTagId > 0) {
-            b.field(FixMessage.REF_TAG_ID, refTagId);
-        }
-        if (refMsgType != null && !refMsgType.isEmpty()) {
-            b.field(FixMessage.REF_MSG_TYPE, refMsgType);
-        }
-        if (reason >= 0) {
-            b.field(FixMessage.SESSION_REJECT_REASON, reason);
-        }
-        if (text != null && !text.isEmpty()) {
-            b.field(FixMessage.TEXT, text.replace(FixMessage.SOH, ' '));
-        }
-        send(b);
+        send(FixSessionMessages.reject(refSeqNum, refMsgType, reason, refTagId, text));
     }
 
     /** Initiates the Logout handshake and closes the session. */
@@ -1456,75 +1394,19 @@ public final class FixSession implements AutoCloseable {
     }
 
     // ------------------------------------------------------------------
-    // Parsing helpers
+    // Parsing helpers (implementation in FixSessionParsing)
     // ------------------------------------------------------------------
 
-    /** Non-negative integer, or -1 when absent or malformed. */
     private static long parsePositive(String s) {
-        if (s == null || s.isEmpty() || s.length() > 18) {
-            return -1;
-        }
-        long v = 0;
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            if (c < '0' || c > '9') {
-                return -1;
-            }
-            v = v * 10 + (c - '0');
-        }
-        return v;
+        return FixSessionParsing.parsePositive(s);
     }
 
     /**
      * UTCTimestamp {@code YYYYMMDD-HH:MM:SS[.sss...]} (FIX 4.4 Vol 1) to epoch
      * milliseconds; fractions beyond milliseconds are truncated. Returns
-     * {@link #BAD_TIME} when malformed.
+     * {@code Long.MIN_VALUE} when malformed.
      */
     static long parseUtcMillis(String s) {
-        if (s == null || s.length() < 17 || s.charAt(8) != '-' || s.charAt(11) != ':'
-                || s.charAt(14) != ':') {
-            return BAD_TIME;
-        }
-        try {
-            int year = digits(s, 0, 4);
-            int month = digits(s, 4, 6);
-            int day = digits(s, 6, 8);
-            int hour = digits(s, 9, 11);
-            int minute = digits(s, 12, 14);
-            int second = digits(s, 15, 17);
-            int millis = 0;
-            if (s.length() > 17) {
-                if (s.charAt(17) != '.' || s.length() == 18 || s.length() > 27) {
-                    return BAD_TIME;
-                }
-                int fracEnd = Math.min(s.length(), 21);
-                digits(s, 18, s.length());   // validates every fraction digit
-                millis = digits(s, 18, fracEnd);
-                for (int i = fracEnd - 18; i < 3; i++) {
-                    millis *= 10;
-                }
-            }
-            if (second == 60) {
-                second = 59;   // leap second: FIX allows 60
-            }
-            return LocalDateTime.of(year, month, day, hour, minute, second)
-                    .toEpochSecond(ZoneOffset.UTC) * 1000L + millis;
-        } catch (NumberFormatException | DateTimeException e) {
-            return BAD_TIME;
-        }
-    }
-
-    private static int digits(String s, int from, int to) {
-        int v = 0;
-        for (int i = from; i < to; i++) {
-            char c = s.charAt(i);
-            if (c < '0' || c > '9') {
-                throw new NumberFormatException(s);
-            }
-            if (to - from <= 9) {
-                v = v * 10 + (c - '0');
-            }
-        }
-        return v;
+        return FixSessionParsing.parseUtcMillis(s);
     }
 }

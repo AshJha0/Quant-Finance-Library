@@ -22,9 +22,16 @@
  * Table 39), new option order (MONO, Table 62), option order route (MOOR, Table 64) and new
  * option quote (MONQ, Table 85). {@link com.quantfinlib.regreporting.cat.CatLinkageChecker}
  * checks Order, Trade, Fulfillment and Quote Keys across a batch (section 2.6.1, Table 5).
- * Still not covered in 3.1.0: the other option lifecycle events (modify, cancel, fill and
- * the rest), multi-leg events, supplement events, linkage across files or days (the checker
- * is batch-local), reference data, and the CAT JSON schema.</p>
+ * Also since 3.1.0: the option lifecycle events MOOA, MOOM, MOOC, MOOT and MOOF
+ * (Tables 70, 79, 83, 90, 92), the supplements MENOS, MONOS and MLOS (Tables 17, 63, 139),
+ * the multi-leg events MLNO, MLOR and MLOC with their legDetails (Tables 100 to 103, 126),
+ * linkage across several files ({@code CatLinkageChecker.checkFiles}), and a
+ * dependency-free check of JSON record lines against a CAT schema file in the section
+ * 6.1.5.2 layout ({@link com.quantfinlib.regreporting.cat.CatSchema}; the bundled schema is
+ * the library's transcription, not the official file). Still not covered: the other option
+ * and multi-leg events of Tables 60 and 61 (internal routes, child orders, quote lifecycle,
+ * allocations, effective events, modification and cancel requests), Name/Value Pair and
+ * side-detail contents, CAIS, and reference data.</p>
  *
  * <p><b>3.0 notice.</b> Renamed to {@code com.quantfinlib.regreporting.cat} in 3.0
  * (the {@code report} and {@code reporting} names were one letter apart with

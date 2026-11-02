@@ -159,6 +159,7 @@ rules.
   major that removes it. The changelog gives the earliest removal date.
 - 3.x has no breaking changes. New behaviour arrives as new classes, methods or
   options; the old path stays and is deprecated.
-- The next major (4.0) ships no earlier than three months after 3.2.0.
+- The next major (4.0) ships no earlier than three months after 3.2.0. Its
+  planned module split is in [DESIGN_4.0.md](DESIGN_4.0.md).
 - Tags are never moved. A release that fails after tagging is fixed by a new patch
   release.

@@ -19,19 +19,28 @@ connectivity stack; see [docs/STABILITY.md](docs/STABILITY.md).
   convention-driven swap leg model (payment lag, lookback, observation shift,
   lockout, stubs) checked against QuantLib, an analytic bootstrap Jacobian, exact
   bond accrual between coupon dates, the Basel VaR traffic light, stateful EMIR
-  Refit rules, CAT option and quote events with a linkage check, and nightly
-  reference, fuzz and mutation checks. `SwapPricer` is deprecated, not removed.
+  Refit rules (28, including GLEIF branch tests, the venue MIC and dates held
+  for a UTI), CAT option lifecycle, multi-leg and supplement events with linkage
+  across files and a schema check, allocation-regression tests for every
+  "allocation-free" claim, and nightly reference, fuzz and mutation checks. The
+  bundled CAT schema is the library's own transcription of the PDF
+  specification, not the official CAT schema file. `SwapPricer` is deprecated, not removed.
   [docs/MIGRATION_3.1.md](docs/MIGRATION_3.1.md) and [CHANGELOG.md](CHANGELOG.md)
   list every change.
-- At 3.1.0 the full suite (`./mvnw verify -Pfull`) runs 2,087 tests (core 1,436,
-  lowlatency 651). 8 are skipped: 7 need optional external files or the network
+- At 3.1.0 the full suite (`./mvnw verify -Pfull`) runs 2,164 tests (core 1,464,
+  lowlatency 700). 8 are skipped: 7 need optional external files or the network
   (ISDA grids, ESMA XSDs, the SIX CFI list, GLEIF), and one regenerates a golden
   file on request. CONTRIBUTING.md lists the environment variables that turn them
   on; the nightly workflow fetches the ISDA grids and ESMA XSDs and fails if those
   tests skip.
 - Release cadence from 3.1.0: at most one minor release a month, no breaking
   changes in 3.x, and a deprecation lives at least one minor release and three
-  months before a major removes it ([docs/STABILITY.md](docs/STABILITY.md)).
+  months before a major removes it ([docs/STABILITY.md](docs/STABILITY.md)). The
+  planned 4.0 module split is in [docs/DESIGN_4.0.md](docs/DESIGN_4.0.md).
+- Build integrity: each release attaches a CycloneDX SBOM per jar, and CI checks
+  that two clean builds give identical jar hashes. CI tests on Java 25 on
+  Ubuntu, Windows and macOS; Java 25 is the only supported JDK. See
+  [docs/PUBLISHING.md](docs/PUBLISHING.md).
 - Version 3.0.0 changes no number; it reduces the public API. The library splits
   into two artifacts (stable tier and low-latency lane), `reporting` becomes
   `regreporting`, and everything 2.4.0 deprecated for removal is gone.
@@ -329,6 +338,7 @@ Benchmark method, environment and results are in [docs/BENCHMARKS.md](docs/BENCH
 | [GETTING_STARTED.md](docs/GETTING_STARTED.md) | Build, first backtest, paper trading, benchmarks, troubleshooting |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Package map, data flow, design rules |
 | [STABILITY.md](docs/STABILITY.md) | Stable APIs, reference implementations, versioning policy |
+| [DESIGN_4.0.md](docs/DESIGN_4.0.md) | The planned 4.0 module split, its reasons and schedule |
 | [MIGRATION_3.1.md](docs/MIGRATION_3.1.md) | The 3.1 deprecations (`SwapPricer`, non-integral `BondPricer` use) and their replacements |
 | [MIGRATION_3.0.md](docs/MIGRATION_3.0.md) | What 3.0 removes or moves, and the 2.4 replacement for each |
 | [MIGRATION_2.4.md](docs/MIGRATION_2.4.md) | 2.4 deprecations, new opt-in behaviour, unconfirmed readings |
@@ -336,7 +346,7 @@ Benchmark method, environment and results are in [docs/BENCHMARKS.md](docs/BENCH
 | [MIGRATION_2.2.md](docs/MIGRATION_2.2.md) | The two 2.2 default changes and how to keep 2.1 behaviour |
 | [MIGRATION_2.1.md](docs/MIGRATION_2.1.md) | What 2.1 adds and how to adopt it |
 | [MIGRATION_2.0.md](docs/MIGRATION_2.0.md) | Breaking changes from 1.x |
-| [LEARN.md](docs/LEARN.md) | Tutorial from first principles, with exercises |
+| [LEARN.md](docs/LEARN.md) | Tutorial from first principles, with exercises (index; chapters in `docs/learn/`) |
 | [COOKBOOK.md](docs/COOKBOOK.md) | Runnable recipes |
 | [DIAGRAMS.md](docs/DIAGRAMS.md) | Mermaid diagrams of the main flows |
 | [MARKET_RISK.md](docs/MARKET_RISK.md) | The market-risk workflow mapped to classes |

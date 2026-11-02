@@ -39,6 +39,9 @@
     </scm>
     <properties>
         <maven.compiler.release>25</maven.compiler.release>
+        <!-- Lowest JDK the build accepts (Java 25 only). -->
+        <qfl.minJdk>25</qfl.minJdk>
+        <cyclonedx.version>2.9.1</cyclonedx.version>
         <project.build.outputTimestamp>2026-11-02T16:39:15Z</project.build.outputTimestamp>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <junit.version>6.1.3</junit.version>
@@ -122,7 +125,7 @@
                         <configuration>
                             <rules>
                                 <requireJavaVersion>
-                                    <version>[25,)</version>
+                                    <version>[${qfl.minJdk},)</version>
                                 </requireJavaVersion>
                                 <requireMavenVersion>
                                     <version>[3.9,)</version>
@@ -278,6 +281,35 @@
         </plugins>
     </build>
     <profiles>
+        <!-- CycloneDX SBOM (target/bom.json and bom.xml per module), attached to
+             GitHub releases by release.yml:  ./mvnw -Psbom -DskipTests package -->
+        <profile>
+            <id>sbom</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.cyclonedx</groupId>
+                        <artifactId>cyclonedx-maven-plugin</artifactId>
+                        <version>${cyclonedx.version}</version>
+                        <executions>
+                            <execution>
+                                <id>make-sbom</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>makeBom</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <projectType>library</projectType>
+                            <outputFormat>all</outputFormat>
+                            <outputName>bom</outputName>
+                            <includeTestScope>false</includeTestScope>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
         <!-- Deep structured fuzzing of the FIX, FIRDS XML, CFI XLSX and GLEIF/MIC CSV
              parsers (classes named *FuzzTest, seeded mutation of the committed seed
              corpus). The default build runs the same tests at 1000 cases

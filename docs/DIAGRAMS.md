@@ -698,7 +698,7 @@ constraints and optimal execution. The classes, stage by stage:
 | Did reality match the objective? | `TransactionCostAnalyzer` |
 
 When live P&L disappoints, walk the stages backwards; a post-mortem usually
-lands on one of them. The prose version is LEARN.md section 8c.
+lands on one of them. The prose version is [LEARN.md section 8c](learn/01-markets-execution-alpha.md#8c-the-full-trading-pipeline).
 
 ---
 
@@ -4300,9 +4300,9 @@ flowchart TD
 
 The dotted edge is the cost of two-curve risk: every bucket is two full
 bootstraps (up and down bump). `BootstrapJacobian` (3.1) avoids it: one
-build, then one linear solve (LEARN 10d.2). An OIS quote moves both curves, because the
+build, then one linear solve ([LEARN 10d.2](learn/02-risk-derivatives-rates-credit.md#10d2-the-analytic-bootstrap-jacobian)). An OIS quote moves both curves, because the
 projection curve is solved against the discount curve; a 3M quote moves
-only the projection curve. See LEARN section 10d and COOKBOOK recipes 301
+only the projection curve. See [LEARN section 10d](learn/02-risk-derivatives-rates-credit.md#10d-two-curves-ois-discounting-and-term-projection) and COOKBOOK recipes 301
 and 302.
 
 ---
@@ -4345,7 +4345,7 @@ The CSA enters inside the simulation, because collateral depends on the
 path; the credit curves enter only afterwards. Wrong-way risk reweights
 each path's default buckets by a driver taken from the same path (the factor
 level at each bucket date, or its move over the margin period under a CSA), so
-it needs no second simulation. See LEARN section 10f and recipes 305 and 306.
+it needs no second simulation. See [LEARN section 10f](learn/02-risk-derivatives-rates-credit.md#10f-counterparty-exposure-cva-dva-and-wrong-way-risk) and recipes 305 and 306.
 
 ---
 
@@ -4374,7 +4374,7 @@ stateDiagram-v2
 The period check happens when the session is created, on Logon and on
 each timer tick, so a process restarted the next morning finds the saved
 period stale and rolls instead of resuming yesterday's numbers. A Logon
-outside the window is refused. See LEARN section 17b and recipes 325 and
+outside the window is refused. See [LEARN section 17b](learn/04-technology.md#17b-fix-session-schedules-and-tag-789) and recipes 325 and
 326.
 
 ---
@@ -4407,7 +4407,7 @@ The loop between collecting orders and publishing the indicative price is
 the price discovery: participants see the imbalance and add liquidity on
 the short side. In the LEARN example, buys of 100 at 10 and 200 at 9
 against sells of 150 at 8 and 100 at 9 uncross at 9 for 250 shares. See
-LEARN section 2b and recipe 330.
+[LEARN section 2b](learn/01-markets-execution-alpha.md#2b-call-auctions-one-price-for-everyone) and recipe 330.
 
 ---
 
@@ -4490,7 +4490,7 @@ flowchart LR
 
 The contract is close fills, no costs and all-in long only, the one
 setting in which the three fill models coincide. A difference in fills
-under it points at an engine, not at the strategy. See LEARN section 11b
+under it points at an engine, not at the strategy. See [LEARN section 11b](learn/03-backtesting-and-desk-playbooks.md#11b-one-strategy-three-engines)
 and recipe 324.
 
 ---
@@ -4559,7 +4559,7 @@ three. Across buckets the plain sum S_b is used first and the clamped
 alternative only when the expression under the root is negative (MAR21.4(5));
 until 2.3 the library clamped first. Curvature applies the scenario to the
 squared correlation (MAR21.101).
-See LEARN section 10o and recipe 336.
+See [LEARN section 10o](learn/02-risk-derivatives-rates-credit.md#10o-the-frtb-standardised-approach) and recipe 336.
 
 ---
 
@@ -4594,16 +4594,17 @@ flowchart LR
     FILL_110["execution"]
     RTS_110["Rts22ReportBuilder<br/>validate, validateEsmaRules,<br/>validateWithReferenceData (2.4)"]
     SUB_110["toSubmissionXml (2.4)<br/>head.003 envelope, head.001 header,<br/>auth.016 payload"]
-    CAT_110["regreporting.cat<br/>CatEventBuilder (MENO/MEOR/MEOT/MEOF;<br/>MENQ/MONO/MOOR/MONQ from 3.1)"]
-    LINK_110["CatLinkageChecker (3.1)<br/>Order/Trade/Fulfillment/Quote Keys<br/>across a batch"]
+    CAT_110["regreporting.cat<br/>CatEventBuilder (MENO/MEOR/MEOT/MEOF;<br/>MENQ/MONO/MOOR/MONQ, option lifecycle,<br/>supplements, multi-leg from 3.1)"]
+    CSCH_110["CatSchema (3.1)<br/>JSON line vs schema file"]
+    LINK_110["CatLinkageChecker (3.1)<br/>Order/Trade/Fulfillment/Quote Keys<br/>across a batch or several files"]
     EMIR_110["regreporting.emir<br/>EmirRefitReportBuilder"]
-    STATE_110["EmirStatefulValidator (3.1, opt-in)<br/>UTI history, receipt time,<br/>GLEIF status, ISO 4217"]
+    STATE_110["EmirStatefulValidator (3.1, opt-in)<br/>UTI history, receipt time,<br/>GLEIF status and branch, venue MIC,<br/>trade key, UTI dates, ISO 4217"]
     CHK_110["regreporting.registry<br/>ReferenceDataChecker"]
     REG_110["GLEIF golden copy or API,<br/>FIRDS FULINS, ISO 10383 MIC"]
     SINK_110["TransactionReportSink<br/>(e.g. CatJsonLinesSink)"]
 
     FILL_110 --> RTS_110 --> CHK_110
-    FILL_110 --> CAT_110 --> LINK_110 --> CHK_110
+    FILL_110 --> CAT_110 --> CSCH_110 --> LINK_110 --> CHK_110
     FILL_110 --> EMIR_110 --> STATE_110 --> CHK_110
     REG_110 --> CHK_110 -->|clean| SINK_110
     REG_110 -.->|ReferenceData| RTS_110
@@ -4616,11 +4617,44 @@ report also runs the ESMA rules that need reference data and writes the
 submission file; the shipped loaders read status only, so the dated rules need
 richer reference data. Since 3.1 a batch of CAT events can be checked for
 linkage keys, and EMIR reports can be checked against the repository's state
-(history per UTI, receipt time, GLEIF status, ISO 4217) by the opt-in
+(history per UTI, receipt time, GLEIF status and entity category, the venue
+MIC, a caller trade key for UTI changes, the dates reported for the UTI,
+ISO 4217) by the opt-in
 `EmirStatefulValidator`. See LEARN sections 17e, 17g and 17i and recipes 347 to
-349, 353, 364 and 365.
+349, 353, 364, 365 and 400 to 403.
 
-## 22. CI, nightly and release gates
+## 111. CAT event chains and the schema gate (3.1)
+
+```mermaid
+flowchart LR
+    subgraph FILE_A["file A (FRMA)"]
+        MONO_111["MONO<br/>opens Order Key K1"]
+    end
+    subgraph FILE_B["file B (FRMA)"]
+        MONOS_111["MONOS<br/>supplement, key K1"]
+        MOOR_111["MOOR<br/>route, key K1"]
+        MOOM_111["MOOM<br/>prior K1, opens K2"]
+        MOOC_111["MOOC<br/>cancel, key K2"]
+    end
+    LINE_111["JSON line"] --> SCH_111["CatSchema<br/>CAT-S01..S09"]
+    MONO_111 -->|LK04| MONOS_111
+    MONO_111 -->|LK02| MOOR_111
+    MONO_111 -->|LK05 via prior key| MOOM_111
+    MOOM_111 -->|LK05| MOOC_111
+```
+
+The schema gate runs first and record by record: one JSON object per line,
+known type and field names, required fields, JSON types, Table 3 data types and
+choice values. Linkage runs after it, over keys rather than file order. Each
+arrow is the rule that fails when the parent is missing: a supplement without
+its order is CAT-LK04, a route CAT-LK02, a modify or cancel CAT-LK05. A MOOM
+with priorOrderKeyDate and priorOrderID moves the order to a new key, so the
+later cancel links to K2. `CatLinkageChecker.checkFiles` reads files A and B
+as one key space; `check` on file B alone reports all four children.
+Multi-leg orders (MLNO, MLOR, MLOC, MLOS) chain the same way on a key without
+a symbol. Recipes 420 to 424.
+
+## 112. CI, nightly and release gates
 
 Three workflows, each answering a different question: is this change safe to
 merge (CI), does the library still match its outside references (nightly), and
@@ -4629,7 +4663,7 @@ can this tag be published (release).
 ```mermaid
 flowchart TD
     subgraph PR22["every push and PR (ci.yml)"]
-        T22["tests, JDK 25<br/>+ committed stand-ins:<br/>IsdaGoldenSubsetTest, EsmaXsdGoldenTest"]
+        T22["tests, JDK 25 (3 OS)<br/>+ committed stand-ins:<br/>IsdaGoldenSubsetTest, EsmaXsdGoldenTest"]
         API22["api-compat (japicmp)<br/>vs the 3.0.0 jars, no allow-list"]
     end
     subgraph NIGHT22["nightly.yml"]
@@ -4655,6 +4689,38 @@ The release checklist (tag the PR head first, then merge with `--merge`;
 tags are never moved) is in [PUBLISHING.md](PUBLISHING.md).
 
 ---
+
+## 113. The 4.0 module plan: what moves where
+
+Design only; 3.x ships none of these moves. Solid arrows are `requires`; the
+dashed arrows show where 3.x packages go. Details and dates are in
+[DESIGN_4.0.md](DESIGN_4.0.md).
+
+```mermaid
+flowchart LR
+    subgraph S23["quant-finance-library (stable, no java.net.http)"]
+        ST23["core, stats, pricing, rates, credit,<br/>risk, crb, volatility, hedging, fx,<br/>indicators, optimization, alpha, backtest"]
+    end
+    subgraph IO23["-io (incubating)"]
+        IOP23["data (incl. HttpBarFetcher),<br/>persist, report"]
+    end
+    subgraph RS23["-research (incubating)"]
+        RSP23["screener, dsl, ml"]
+    end
+    subgraph LL23["-lowlatency (reference)"]
+        LLP23["3.x lane packages<br/>+ execution, microstructure sims,<br/>rfq, marketdata.tick, AggregatedBook"]
+    end
+    EX23["examples classifier<br/>cli, backtest.strategies"]
+    IO23 --> S23
+    RS23 --> S23
+    LL23 --> S23
+    EX23 --> LL23
+    C30["3.x core exports"] -.-> ST23
+    C30 -.-> IOP23
+    C30 -.-> RSP23
+    C30 -.-> LLP23
+    C30 -.-> EX23
+```
 
 ## Where to go next
 

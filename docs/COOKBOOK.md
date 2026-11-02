@@ -3565,7 +3565,7 @@ calendar anomalies weakened after publication; re-test out of sample
 ## 100. Run the full pipeline end to end
 
 A systematic desk's work is a chain of five stages: alpha discovery,
-signal, validation, sizing and execution (LEARN.md section 8c). Each
+signal, validation, sizing and execution ([LEARN.md section 8c](learn/01-markets-execution-alpha.md#8c-the-full-trading-pipeline)). Each
 hand-off is a place where money is made or quietly lost. This recipe runs
 the whole chain in one compact pass.
 
@@ -3615,7 +3615,7 @@ has on financial data; PBO asks whether picking the best of K was itself
 noise-mining; beta-neutralization and inverse-vol budgeting stop the book
 being a leveraged market bet in disguise; and the executor turns targets into
 children the market can absorb. Skip a stage and the backtest improves: that
-is the tell, not a reward. LEARN.md 8c walks the same line with the math
+is the tell, not a reward. [LEARN.md 8c](learn/01-markets-execution-alpha.md#8c-the-full-trading-pipeline) walks the same line with the math
 attached; recipes 3, 4, 10 and 20 expand the individual stages.
 
 ## 101. Bootstrap a credit curve and price a CDS
@@ -11215,7 +11215,7 @@ List<String> problems = validator.validate(report, receivedByTr);
 // ... send it; once the trade repository has accepted it:
 history.accept(report);
 
-for (RuleProvenance r : EmirStatefulValidator.rules()) {    // 15 rules, each with its sheet row
+for (RuleProvenance r : EmirStatefulValidator.rules()) {    // 28 rules, each with its sheet row
     System.out.println(r.id() + " " + r.citation());
 }
 ```
@@ -11226,8 +11226,8 @@ you leave out skips its rules rather than failing them. Record a report in
 the history only after the repository accepted it, or a rejected NEWT makes
 the corrected one fail EMIR-VR-2151-03. The library does not ship the ISO
 4217 list (SIX changes it several times a year), so load your copy. The
-GLEIF branch tests, EMIR-VR-1003-01, 2001-03/04 and the "reported for that
-UTI" date rules are not checked; the package javadoc lists them. LEARN 17i.
+branch tests, the venue rule, the UTI rule and the "reported for that UTI"
+date rules came later in 3.1; see recipes 400 to 403. [LEARN 17i](learn/04-technology.md#17i-emir-rules-that-need-state-and-cat-linkage-keys-31).
 
 ## 365. CAT option orders, routes and the linkage check (3.1)
 
@@ -11257,9 +11257,9 @@ Option events carry `optionID` in place of `symbol` and take side B or S only
 (CAT-R13). The linkage check works on keys (section 2.6.1, Table 5): a MOOR
 without a MONO of the same Order Key is CAT-LK02, two NEW events with one key
 are CAT-LK01 for each of them, and a missing key field is CAT-LK03. The file
-IMID fills in a blank CATReporterIMID. The check is batch-local, while CAT
-links across files, so pass a whole day for a firm. Quotes use `newQuote()` or
-`newOptionQuote()` with `quoteKey(quoteId, time)`. LEARN 17i.
+IMID fills in a blank CATReporterIMID. `check` is batch-local, while CAT
+links across files; recipe 423 checks several files together. Quotes use
+`newQuote()` or `newOptionQuote()` with `quoteKey(quoteId, time)`. [LEARN 17i](learn/04-technology.md#17i-emir-rules-that-need-state-and-cat-linkage-keys-31).
 
 ## 366. Property and fuzz tests: running deeper, reproducing a failure (3.1)
 
@@ -11279,4 +11279,283 @@ test with the same `qfl.cases` and it fails at the same case. A fuzz test
 fails when a parser throws anything other than its documented exception
 (`FixParseException`, `WireProtocolException` or `IOException`), so a new
 parser should declare that exception and get a fuzz test with a small seed
-corpus. LEARN section 19.
+corpus. [LEARN section 19](learn/04-technology.md#19-how-this-codebase-tests-itself).
+
+## 400. EMIR: reject a branch LEI (3.1)
+
+```java
+LeiRegistry gleif = GleifGoldenCopyLeiRegistry.load(Path.of("gleif-goldencopy.csv"));
+EmirStatefulValidator validator = EmirStatefulValidator.create().withLeiRegistry(gleif);
+
+LeiRecord rec = gleif.lookup(report.fields().get("otherCounterpartyId")).orElseThrow();
+System.out.println(rec.entityCategory() + " branch=" + rec.isBranch());   // GENERAL branch=Optional[false]
+
+for (String e : validator.validate(report)) {
+    if (e.startsWith("EMIR-VR-1009-04")) {          // 1.9 pertains to a branch
+        System.out.println(e);
+    }
+}
+```
+
+ESMA74-362-2683 asks that the LEI in fields 1.2, 1.3, 1.4 and 1.9 "pertain to a
+legal entity and not a branch" (rows 6, 7, 8 and 13). Since 3.1 the golden-copy
+loader reads `Entity.EntityCategory` and the API loader reads `entity.category`
+into `LeiRecord.entityCategory()`. Only `BRANCH` fails; a registry that does not
+know the category (an older extract, or a `LeiRecord` built with three
+arguments) skips the test instead of failing it. [LEARN 17i](learn/04-technology.md#17i-emir-rules-that-need-state-and-cat-linkage-keys-31).
+
+## 401. EMIR: field 1.3 and the venue (3.1)
+
+```java
+MicRegistry mics = Iso10383MicRegistry.load(Path.of("ISO10383_MIC.csv"));
+EmirStatefulValidator validator = EmirStatefulValidator.create().withMicRegistry(mics);
+
+EmirRefitReport onExchange = EmirRefitReportBuilder.of(EmirActionType.NEWT, EmirEventType.TRAD)
+    // ... counterparties, uti, terms as usual ...
+    .field("venueOfExecution", "XPAR")    // field 2.41
+    .entityResponsible("")                // 1.3 blank: XPAR is an EEA regulated market
+    .build();
+List<String> problems = validator.validate(onExchange);   // no EMIR-VR-1003-01
+```
+
+Field 1.3 (entity responsible for reporting) is filled unless the trade was
+done on a regulated market, and left blank when it was (row 7, condition 1).
+The library reads "regulated market" as ISO 10383 market category `RMKT` in an
+EEA country, active on the date of 2.42. A non-EEA `RMKT` would need the
+Commission's equivalence decisions, which ISO 10383 does not carry, so the rule
+is skipped for it, as it is for a MIC or category the registry does not know.
+`counterparties(...)` fills 1.3 with the reporting counterparty, so clear it for
+an on-exchange trade.
+
+## 402. EMIR: a UTI that changes under the same trade (3.1)
+
+```java
+java.util.function.Function<EmirRefitReport, String> tradeId =
+    r -> r.fields().getOrDefault("internalTradeId", "");
+InMemoryUtiHistory history = new InMemoryUtiHistory(tradeId);
+EmirStatefulValidator validator = EmirStatefulValidator.create()
+    .withHistory(history)
+    .withTradeKey(tradeId);
+
+history.accept(newt);                                     // built with .field("internalTradeId", "T-1")
+List<String> problems = validator.validate(modiWithNewUti);   // EMIR-VR-2001-03
+```
+
+The history is keyed by (field 1.4, UTI), so on its own a new UTI looks like a
+new trade, and the MODI then fails EMIR-VR-2151-02 rather than 2001-03. Rule
+2001-03 ("not allowed to change the content of this field once it is
+reported", row 26) needs another identity for the trade: your own trade id.
+Give the same function to the history and to the validator. A blank key skips
+the rule. A custom `UtiHistory` implements `firstUtiForTradeKey`; the default
+returns empty, which also skips it.
+
+## 403. EMIR: dates "reported for that UTI" (3.1)
+
+```java
+InMemoryUtiHistory history = new InMemoryUtiHistory();
+EmirStatefulValidator validator = EmirStatefulValidator.create().withHistory(history);
+history.accept(newt);       // 2.42 2026-03-02T10:00Z, 2.44 2031-03-04
+history.accept(term);       // 2.45 2026-03-02
+
+List<String> problems = validator.validate(corr);
+// a CORR without 2.45 after the TERM:            EMIR-VR-2045-07
+// a VALU dated after the 2.45 above:             EMIR-VR-2153-08
+// a REVI after the TERM that carries a 2.45:     EMIR-VR-2045-08
+```
+
+Several rules compare the current report with a value "reported for the given
+UTI": 2044-04, 2045-02/03/06/07/08 and 2153-06/08 (rows 69, 70 and 186), plus
+2042-03 (a MODI may not move 2.42) and 1008-02 (1.8 unchanged). When the
+current report leaves a date blank, the validator takes it from the latest
+accepted report that carried it; a REVI clears an earlier 2.45, because a
+revived trade is no longer terminated. Where the report carries the date
+itself, the single-report form in `EmirRefitReport.validate()` applies and the
+stateful form stays quiet, so a problem is reported once. Column AC of row 186
+numbers its last two conditions "6 7." and "7 8."; the codes are taken from
+column AD. [LEARN 17i](learn/04-technology.md#17i-emir-rules-that-need-state-and-cat-linkage-keys-31).
+
+## 420. CAT option lifecycle: accept, modify with a new key, cancel (3.1)
+
+```java
+Instant t0 = Instant.parse("2026-03-02T14:30:00Z");
+Instant t1 = Instant.parse("2026-03-02T14:31:00Z");
+String osi = "AAPL  260320C00150000";
+CatEvent mooa = CatEventBuilder.optionAccepted()              // Table 70
+    .reporter("FRMB", "A1").orderKey("B-1", t0).eventTimestamp(t0).optionId(osi)
+    .sidePriceQty("S", new BigDecimal("2.10"), new BigDecimal("5"))
+    .field("receiverIMID", "123:FRMB").field("senderIMID", "456:FRMA").field("senderType", "F")
+    .field("routedOrderID", "R-9").field("deptType", "A").field("orderType", "LMT")
+    .field("timeInForce", "DAY=20260302").field("tradingSession", "REG")
+    .build();
+CatEvent moom = CatEventBuilder.optionModified()              // Table 79, new Order Key B-2
+    .reporter("FRMB", "A2").orderKey("B-2", t1).eventTimestamp(t1).optionId(osi)
+    .field("priorOrderKeyDate", mooa.fields().get("orderKeyDate")).field("priorOrderID", "B-1")
+    .sidePriceQty("S", new BigDecimal("2.05"), new BigDecimal("5"))
+    .field("leavesQty", "5").field("initiator", "C").field("orderType", "LMT")
+    .field("timeInForce", "DAY=20260302").field("tradingSession", "REG").field("representativeInd", "N")
+    .build();
+CatEvent mooc = CatEventBuilder.optionCancelled()             // Table 83
+    .reporter("FRMB", "A3").orderKey("B-2", t1).eventTimestamp(t1).optionId(osi)
+    .field("cancelQty", "5").field("leavesQty", "0").field("initiator", "C")
+    .build();
+
+List<String> each = mooa.validate();                          // [] ; same for moom, mooc
+List<CatLinkageChecker.Issue> chain =
+    CatLinkageChecker.check(List.of(mooa, moom, mooc), "FRMB"); // [] : B-1 -> B-2 -> cancel
+```
+
+A MOOA opens an Order Key the same way a MONO does. A MOOM that carries
+`priorOrderKeyDate` and `priorOrderID` (Table 79 seq 9-10) links back through
+the prior key and opens its own, so the cancel above links to B-2, not B-1.
+Without the prior fields a MOOM acts on its own key. A modify or cancel with
+no order behind it is CAT-LK05. Single-record rules: senderType E, F or O,
+initiator C or F (CAT-R17), cancelQty and leavesQty as Real Quantity
+(CAT-R18), price not negative and LMT/MKT presence (CAT-R20). [LEARN 17j](learn/04-technology.md#17j-an-option-orders-life-after-the-new-order-event-31).
+
+## 421. CAT option trade and option fulfillment (3.1)
+
+```java
+Instant t = Instant.parse("2026-03-02T14:30:00Z");
+String osi = "AAPL  260320C00150000";
+CatEvent moot = CatEventBuilder.optionTrade()                 // Table 90
+    .reporter("FRMA", "T1").tradeKey("TR-1", t).eventTimestamp(t).optionId(osi)
+    .field("quantity", "5").field("price", "2.15").field("capacity", "A")
+    .field("tapeTradeID", "X1").field("marketCenterID", "C").field("clearingFirm", "123")
+    .field("sideDetailsInd", "BUY").field("buyDetails", "[{\"orderID\":\"O-1\",\"side\":\"B\"}]")
+    .build();
+CatEvent moof = CatEventBuilder.optionFulfillment()           // Table 92
+    .reporter("FRMA", "F1").fillKey("FL-1", t).eventTimestamp(t).optionId(osi)
+    .field("quantity", "5").field("price", "2.15").field("fulfillmentLinkType", "O")
+    .field("clientDetails", "[{\"orderID\":\"O-7\",\"side\":\"B\"}]")
+    .build();
+List<String> e1 = moot.validate();                            // []
+List<String> e2 = moof.validate();                            // []
+```
+
+Option fulfillments take the option values of fulfillmentLinkType, O, OS or
+OE (Appendix G); the equity values FOR, Y and YE are refused on a MOOF
+(CAT-R17). The trade's sideDetailsInd works as on MEOT (CAT-R10, CAT-R11).
+Both open a Trade or Fulfillment Key keyed on optionID, and two of them with
+one key are CAT-LK01.
+
+## 422. Multi-leg option orders: legs, route and cancel (3.1)
+
+```java
+Instant t = Instant.parse("2026-03-02T14:30:00Z");
+CatEvent mlno = CatEventBuilder.multiLegNewOrder()            // Table 100
+    .reporter("FRMA", "M1").orderKey("ML-1", t).eventTimestamp(t)
+    .field("deptType", "A").field("price", "-0.35").field("quantity", "10")
+    .field("orderType", "LMT").field("priceType", "PU")
+    .field("timeInForce", "DAY=20260302").field("tradingSession", "REG")
+    .field("firmDesignatedID", "ACCT1").field("accountHolderType", "I").field("representativeInd", "N")
+    .optionLeg("AAPL  260320C00150000", "B", BigDecimal.ONE, "Open")   // Table 101
+    .optionLeg("AAPL  260320P00140000", "S", BigDecimal.ONE, "Open")
+    .build();
+String legs = mlno.fields().get("legDetails");   // [{"optionID":"AAPL  260320C00150000",...}, ...]
+String n = mlno.fields().get("numberOfLegs");    // "2", set because it was left blank
+List<String> errors = mlno.validate();           // []
+```
+
+A multi-leg event has no symbol and no optionID at the top level (CAT-R21);
+each leg names exactly one of them, with side B or S on an option leg and B,
+SL, SS or SX on an equity leg (`equityLeg`), a Real Quantity ratio, and no
+openCloseIndicator on an equity leg (CAT-R19). The net price may be negative
+(a credit, Table 100 seq 16), and priceType is required with LMT. The Order
+Key of a multi-leg order has no symbol: orderKeyDate, CATReporterIMID,
+orderID. MLOR, MLOC and MLOS link to the MLNO with that key (CAT-LK02,
+CAT-LK05, CAT-LK04).
+
+## 423. Supplements and linkage across files (3.1)
+
+```java
+Instant t0 = Instant.parse("2026-03-02T14:30:00Z");
+String osi = "AAPL  260320C00150000";
+CatEvent mono = CatEventBuilder.newOptionOrder()
+    .reporter("FRMA", "R1").orderKey("O-1", t0).eventTimestamp(t0).optionId(osi)
+    .sidePriceQty("B", new BigDecimal("2.15"), new BigDecimal("10"))
+    .field("orderType", "LMT").field("timeInForce", "DAY=20260302").field("tradingSession", "REG")
+    .field("deptType", "A").field("firmDesignatedID", "PENDING").field("accountHolderType", "I")
+    .field("representativeInd", "N")
+    .build();
+CatEvent monos = CatEventBuilder.optionOrderSupplement()     // Table 63: the FDID, once known
+    .reporter("FRMA", "S1").orderKey("O-1", t0).eventTimestamp(t0.plusSeconds(3600))
+    .optionId(osi).field("firmDesignatedID", "ACCT1")
+    .build();
+
+List<CatLinkageChecker.FileIssue> issues = CatLinkageChecker.checkFiles(List.of(
+    new CatLinkageChecker.Batch("FRMA_20260302_orders.json", "FRMA", List.of(mono)),
+    new CatLinkageChecker.Batch("FRMA_20260302_late.json", "FRMA", List.of(monos))));
+// [] ; checked alone, the second file gives CAT-LK04 for S1
+```
+
+`checkFiles` puts the events of every file into one key space, which is what
+CAT does: keys are unique per CATReporterIMID, not per file (section 2.6.1,
+Table 5). A key used in two files is CAT-LK01 in both, and each issue names
+the file of its event. Pass the earlier days' files too when orders rest
+overnight. The single-batch `check` gives the same results as before for the
+equity, MONO, MOOR and quote types; the new rules only fire on the new
+types.
+
+## 424. Checking JSON lines against the CAT schema (3.1)
+
+```java
+CatSchema schema = CatSchema.bundledSubset();    // library transcription of 19 event tables
+// CatSchema schema = CatSchema.load(Path.of("IM_Schema_4.1.0.json"));  // the official file
+Instant t = Instant.parse("2026-03-02T14:30:00Z");
+CatEvent meno = CatEventBuilder.newOrder()
+    .reporter("FRMA", "R1").orderKey("O-1", t).eventTimestamp(t).symbol("XYZ")
+    .sidePriceQty("B", new BigDecimal("10.01"), new BigDecimal("500"))
+    .field("orderType", "LMT").field("timeInForce", "DAY=20260302").field("tradingSession", "REG")
+    .field("deptType", "A").field("representativeInd", "N").field("firmDesignatedID", "ACCT1")
+    .field("accountHolderType", "I")
+    .build();
+String line = schema.toJson(meno);   // {"actionType":"NEW",...,"price":10.01,"timeInForce":{"DAY":20260302},...}
+List<CatSchema.Issue> ok = schema.validateLine(line);                                  // []
+List<CatSchema.Issue> bad = schema.validateLine(line.replace("\"price\":10.01", "\"price\":\"10.01\""));
+// [Issue[line=1, field=price, ruleId=CAT-S06, message=price must be JSON NUMBER, not STRING]]
+```
+
+The checks are those CAT runs before linkage: one line of at most 8190 bytes
+(CAT-S01), one JSON object (S02), a known event type (S03), known field names
+(S04), required fields present (S05, not Booleans, not on DEL), the JSON type
+(S06), the Table 3 data type (S07, for example Real Quantity has no trailing
+zeros, so `500.0` fails), the choice values (S08) and no empty values (S09).
+`CatEvent.toJson()` writes every value as a string and is kept as it was; use
+`CatSchema.toJson` for a file you will submit. The bundled schema is not the
+official file, which CAT publishes on its website; `load` reads that file in
+the section 6.1.5.2 layout. Name/Value Pair and multi-dimensional array
+contents are checked only for their JSON type. [LEARN 17k](learn/04-technology.md#17k-multi-leg-orders-and-supplements-31).
+
+## 450. Checking an "allocation-free" claim yourself (3.1)
+
+```bash
+# every javadoc allocation claim, core and lowlatency (tag "allocation")
+./mvnw -Djacoco.skip=true -Dgroups=allocation -pl core,lowlatency test
+```
+
+Each test warms the call up 50,000 times, then counts the bytes one batch of
+10,000 calls allocates on the test thread with
+`com.sun.management.ThreadMXBean.getCurrentThreadAllocatedBytes`. A batch may
+allocate at most 256 bytes, and the best of five batches counts. One object per
+call would put at least 160,000 bytes into every batch, so the tolerance only
+absorbs one-off events such as a deoptimisation. To test your own hot path, copy
+`AllocationProbe` from `core/src/test/java/com/quantfinlib/alloc` and call
+`AllocationProbe.assertAllocationFree("my claim", i -> handler.onTick(prices[i & 1023]))`.
+Build the inputs outside the lambda, or the test measures your test fixture.
+[LEARN 13b](learn/04-technology.md#13b-proving-an-allocation-free-claim-31).
+
+## 451. Sizing `HftOrderBook` for large sweeps (3.1)
+
+```java
+// 100,000 resting orders over a 20,000-tick ladder
+HftOrderBook book = new HftOrderBook(0, 19_999, 100_000);
+long bytes = 32L * 20_000 + 69L * 100_000;   // about 7.5 MB, plus the id map
+```
+
+Since 3.1 the book keeps a trade buffer of `maxOrders` fills, allocated in the
+constructor. A market order that sweeps every resting order therefore buffers
+all its fills without growing an array, where 3.0 copied five arrays once a sweep
+passed 256 fills. The cost is 36 bytes per order of capacity, so size
+`maxOrders` to the book you expect, not to the largest number you can type. The
+API and the trades delivered are unchanged.
+

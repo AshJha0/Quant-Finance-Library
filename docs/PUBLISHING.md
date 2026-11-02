@@ -53,6 +53,34 @@ downloads both 3.x jars (`quant-finance-library` and
 `api.baseline.lowlatency.jar` in the parent POM name them. There is no allow-list in
 3.x.
 
+## Build integrity: SBOM, reproducible jars, supported JDKs
+
+**SBOM.** Each GitHub release carries a CycloneDX software bill of materials per
+module (`quant-finance-library-<version>-sbom.cdx.json` and the `-lowlatency-`
+one). It lists the runtime dependency closure only; test-scope libraries are left
+out, so for 3.x it records the zero-runtime-dependency claim in a machine-readable
+form. The release job makes it with the `sbom` profile
+(`org.cyclonedx:cyclonedx-maven-plugin`); to make it locally:
+
+```bash
+./mvnw -Psbom -DskipTests package   # writes core/target/bom.json, bom.xml (and lowlatency/)
+```
+
+**Reproducible jars.** `project.build.outputTimestamp` in the parent `pom.xml` fixes
+the timestamp and order of every jar entry, so the same commit built twice gives
+byte-identical jars. The CI job `reproducible build` checks this on every PR:
+
+```bash
+bash scripts/check-reproducible.sh   # two clean builds, SHA-256 of every jar, diff
+```
+
+Anyone can check a release the same way: check out the tag, run the script (or one
+`./mvnw -DskipTests package` on JDK 25) and compare its hashes with the jars on the
+release page. Bump `project.build.outputTimestamp` when you cut a release; it does
+not have to be exact, it only has to be fixed.
+
+**Supported JDK.** Java 25 only. The build's enforcer rule refuses an older JDK, and CI runs the full `verify` on JDK 25 on Ubuntu, Windows and macOS.
+
 ## JitPack
 
 JitPack builds from a tag on request, so a release is usable without further setup:

@@ -24,7 +24,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        # Java 25 is the only supported JDK; macOS checks the third free runner OS.
+        os: [ubuntu-latest, windows-latest, macos-latest]
         java: ['25']
     defaults:
       run:
@@ -44,6 +45,9 @@ jobs:
       - name: Compile COOKBOOK recipes against the build
         if: matrix.os == 'ubuntu-latest'
         run: python3 scripts/check-cookbook.py
+      - name: Check LEARN snippets, class names and links against the build
+        if: matrix.os == 'ubuntu-latest'
+        run: python3 scripts/check-learn.py
       - name: Coverage summary
         if: always() && hashFiles('target/site/jacoco/jacoco.csv') != ''
         run: |
@@ -51,7 +55,7 @@ jobs:
             {printf "Line coverage (%s): %.1f%% (%d/%d lines)\n", ENVIRON["RUNNER_OS"], 100*covered/(covered+missed), covered, covered+missed}' \
             target/site/jacoco/jacoco.csv | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Upload coverage report
-        if: always() && matrix.os == 'ubuntu-latest'
+        if: always() && matrix.os == 'ubuntu-latest' && matrix.java == '25'
         uses: actions/upload-artifact@v7
         with:
           name: coverage-report
@@ -59,6 +63,21 @@ jobs:
             core/target/site/jacoco
             lowlatency/target/site/jacoco
           if-no-files-found: ignore
+
+  reproducible:
+    # Two clean builds must give byte-identical jars (project.build.outputTimestamp).
+    name: reproducible build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Build twice and compare jar hashes
+        run: bash scripts/check-reproducible.sh
 
   api-compat:
     # Binary compatibility against the released 3.0.0 core jar (japicmp). Fails on

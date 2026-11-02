@@ -127,6 +127,6 @@ class CatOptionQuoteLinkageTest {
         CatEvent cor = CatEventBuilder.newOrder().reporter("FRMA", "R8").orderKey("O-1", T0).eventTimestamp(T0)
                 .symbol("TEST").action("COR", "").build();
         assertEquals(List.of(), CatLinkageChecker.check(List.of(meno("O-1", "R1"), cor), "FRMA"));
-        assertEquals(3, CatLinkageChecker.rules().size());
+        assertEquals(5, CatLinkageChecker.rules().size());
     }
 }

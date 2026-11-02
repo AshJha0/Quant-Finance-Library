@@ -8,7 +8,7 @@ Entries for 1.x releases are archived in [docs/history/CHANGELOG-1.x.md](docs/hi
 
 ## [3.1.0] - 2026-11-02
 
-Minor release, additive over 3.0.0: no public member is removed, no signature changes, and no existing result changes unless noted under Fixed. It is the first release under the cadence in [docs/STABILITY.md](docs/STABILITY.md) (at most one minor a month, no breaking changes in 3.x). japicmp against the released 3.0.0 jars: semver MINOR for both modules, no binary-incompatible change, no allow-list. Migration notes: [docs/MIGRATION_3.1.md](docs/MIGRATION_3.1.md).
+Minor release, additive over 3.0.0: no public member is removed, no signature changes, and no existing result changes unless noted under Fixed. It is the first release under the cadence in [docs/STABILITY.md](docs/STABILITY.md) (at most one minor a month, no breaking changes in 3.x). japicmp against the released 3.0.0 jars: semver MINOR for both modules, no binary-incompatible change, no allow-list. Migration notes: [docs/MIGRATION_3.1.md](docs/MIGRATION_3.1.md). The release was built in two parts; part 2 adds the remaining EMIR and CAT rules, the schema check, allocation-regression tests, the LEARN split, DESIGN_4.0, the SBOM and the reproducible-build check.
 
 #### Added
 
@@ -24,11 +24,23 @@ Minor release, additive over 3.0.0: no public member is removed, no signature ch
 - `-Pfuzz` Maven profile: runs only `*FuzzTest`, at `fuzz.tries` cases (default 200,000).
 - `docs/INPUT_LIMITS.md`: the size and entry limits of every file loader. `docs/MIGRATION_3.1.md`.
 
+- EMIR (part 2): `EmirStatefulValidator.rules()` now has 28 entries (15 before). New: the GLEIF branch tests 1002-04, 1003-05, 1004-04 and 1009-04 (only `BRANCH` fails; an unknown category skips), 1003-01 with `withMicRegistry(MicRegistry)` (applied when the venue of 2.41 is an EEA regulated market active on the date of 2.42; the library's reading), 2001-03 with `withTradeKey(Function)` (a caller trade key; the library's own device), and the history-aware date rules 1008-02, 2042-03, 2044-04, 2045-02/03/06/07/08, 2153-06 and 2153-08 (a blank date is taken from the latest accepted report that carried it). `LeiRecord` gets an `entityCategory` component (the 3-argument constructor is kept and gives `""`), `isBranch()` and `BRANCH`; the GLEIF golden-copy and API loaders read the category. `UtiHistory.firstUtiForTradeKey` (default: empty) and `InMemoryUtiHistory(Function)`. Rule texts from ESMA74-362-2683 sheet Validations_Cpty_derivative (published reference); the test cases are own constructions. Recipes 400 to 403, LEARN 17i.
+- CAT (part 2): event types MOOA, MOOM, MOOC, MOOT, MOOF (option lifecycle), MENOS, MONOS, MLOS (supplements) and MLNO, MLOR, MLOC (multi-leg), with `isMultiLeg()` and `isSupplement()`; eleven new `CatEventBuilder` starters plus `optionLeg(...)` and `equityLeg(...)`; rules CAT-R17 to CAT-R21 and `CatEvent.CHECKED_AGAINST_LIFECYCLE`. `CatLinkageChecker` rules CAT-LK04 (a supplement needs its parent) and LK05 (a modify or cancel needs its order), and `checkFiles(List<Batch>)` with `Batch` and `FileIssue`, which reads several files as one key space. `CatSchema` (`load`, `parse`, `bundledSubset`, `validateLine`, `validateLines`, `toJson`) applies rules CAT-S01 to CAT-S09 with a package-private JSON reader and no new dependency. Source: CAT IM Technical Specifications v4.1.0 r14, each rule citing table and seq. Recipes 420 to 424, LEARN 17j to 17l.
+- The bundled resource `cat-im-schema-subset-4.1.0r14.json` is **the library's own transcription** of 19 event tables and 10 Appendix G choice lists from the PDF specification. It is not the official CAT JSON schema file, and the library has not been tested against that file; a `_provenance` field in the resource says so. `CatSchema.load(Path)` reads the official file if you have it.
+- Allocation-regression tests: `AllocationClaimsTest` (core, 28 tests) and `LaneAllocationClaimsTest` (lowlatency, 23 tests), tagged `allocation`, cover every "allocation-free" javadoc claim with `ThreadMXBean` byte counts (best of 5 batches of 10,000 calls, 256 B tolerance per batch). Recipe 450, LEARN 13b.
+
 #### Changed
 
-- `CatEvent.rules()` lists 16 rules instead of 12 and the text of `CatEvent.CHECKED_AGAINST` names the new tables. CAT-R13 to R16 apply only to the four new event types; `validate()` on MENO, MEOR, MEOT and MEOF gives the same result as in 3.0.
+- Part 1 took `CatEvent.rules()` from 12 to 16 rules (part 2 to 21, below), and the text of `CatEvent.CHECKED_AGAINST` names the new tables. CAT-R13 to R16 apply only to the four new event types; `validate()` on MENO, MEOR, MEOT and MEOF gives the same result as in 3.0.
 - The `FrtbSa` class example K = 0.98182 is now labelled an independent recomputation: MAR21 prints no worked capital calculation. The value is unchanged.
 - japicmp compares each module with its own released 3.0.0 jar (`scripts/fetch-api-baseline.sh` fetches both); the 3.0 allow-list is gone, so any break in core fails the build.
+
+- Part 2: `CatEvent.rules()` lists 21 rules (3.0: 12), `CatLinkageChecker.rules()` 5 instead of 3, and `CatEventType.isOption()` is also true for MONOS and MOOA to MOOF. `check()` and `validate()` give the same results as before for the earlier event types.
+- `EmirStatefulValidator.rules()` lists 28 entries instead of 15. `LeiRecord` equality and `toString` now include the entity category.
+- `HftOrderBook` sizes its trade buffer to `maxOrders` in the constructor, so a sweep never grows it (one call buffers at most `maxOrders` fills). The API and the trades delivered are unchanged; the cost is 36 bytes of memory per order of capacity, allocated up front. Recipe 451.
+- `Indicators`, `MultiCurrencyExposureSimulator` and `FixSession` are now facades over package-private classes; public signatures are identical (japicmp against 3.0.0: MINOR, no allow-list).
+- FIRDS: the parser decodes through a reporting `CharsetDecoder`, so malformed bytes surface only as an `IOException` and nothing is printed to stderr. An encoding name Java does not know gives an `IOException` ("unsupported encoding").
+- Javadoc claims softened after the allocation tests found them false: `feed.BinanceTradeParser` allocates substrings per message (its test now asserts that it allocates), and in `rates.ShortRateModels` the Hull-White functions box tenors through `YieldCurve` (408 B per call under JaCoCo), so the allocation-free claim now covers Vasicek and CIR only. No result changes.
 
 #### Deprecated
 
@@ -43,6 +55,13 @@ Minor release, additive over 3.0.0: no public member is removed, no signature ch
 
 - `CfiCodeRegistry.fromSixXlsx` caps the workbook at 10,000 zip entries and 256 MiB inflated in total, as well as the existing 64 MiB per part, so a zip bomb fails with `IOException` instead of exhausting memory (`CfiXlsxLimitsTest`; the real SIX file has 319 entries and 1.5 MB). Every loader's limits are in `docs/INPUT_LIMITS.md`.
 
+#### Docs
+
+- LEARN split into 17 chapter files under `docs/learn/`; `docs/LEARN.md` is now the index and keeps every old heading anchor, so existing `LEARN.md#...` links still land. New sections 13b (proving an allocation-free claim), 17j to 17l (CAT), 19b (SBOM and reproducible jars), 20b (the 4.0 design) and an EMIR subsection of 17i.
+- `docs/DESIGN_4.0.md`: the target stable tier, the 4.0 module map, dropping `java.net.http` from core and one module per package hierarchy, on the STABILITY.md schedule. No `@Deprecated(forRemoval)` was added for these moves: a jar move keeps the package names, so 3.1 has no replacement location to point at.
+- COOKBOOK recipes 400-403, 420-424, 450-451; DIAGRAMS 110 and 111 updated, 112 (CI gates) and 113 (4.0 module plan) renumbered from duplicate numbers 22 and 23.
+
+
 #### CI
 
 - Nightly `reference-files` job: downloads the ISDA CDS test grids and ESMA XSDs from their public URLs, checks the SHA-256 pins in `scripts/reference-files.sha256`, sets `QFL_REQUIRE_REFERENCE_FILES=true` so a missing file fails, and fails if any reference test skipped. PRs run committed stand-ins (`IsdaGoldenSubsetTest`, 48 invented contracts; `EsmaXsdGoldenTest`). No ISDA or ESMA file is committed.
@@ -50,6 +69,10 @@ Minor release, additive over 3.0.0: no public member is removed, no signature ch
 - Nightly `fuzz` job: `-Pfuzz` on the low-latency parser fuzz tests, then `PricingInvariantPropertiesTest` at 20,000 cases.
 - `release.yml`: `tag-guard` (refuses a forced push, an existing release or a re-used tag name), then the reusable `ci.yml` and a javadoc build, before the release job attaches the jars and dispatches `docs.yml`. Release checklist in `docs/PUBLISHING.md`.
 - The API check job fetches and compares against the 3.0.0 jars.
+- CycloneDX SBOM: `-Psbom` (cyclonedx-maven-plugin 2.9.1, runtime scope) and `release.yml` attaches `*-<version>-sbom.cdx.json` for each jar to the GitHub release.
+- Reproducible build: `project.build.outputTimestamp` is fixed and `scripts/check-reproducible.sh` (two clean builds, SHA-256 of every jar compared) runs as the CI job `reproducible build`. Self-consistency on one machine; a cross-OS rebuild has not been compared.
+- CI matrix: macOS JDK 25 alongside Ubuntu and Windows JDK 25. Java 25 stays the only supported JDK.
+- `scripts/check-learn.py` in CI next to the COOKBOOK check: compiles LEARN Java blocks (there are none at present), checks backticked class and method names against the class files, and checks every link into LEARN.
 
 ## [3.0.0] - 2026-11-02
 

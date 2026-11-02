@@ -126,9 +126,9 @@ stable module.
 | `trading` (LL) | Order entry and pre-trade risk | `StrategyRunner` (3.0; was in `backtest`), `HftRiskGate`, `HftOrderGateway`, `OrderStateMachine`, `OrderRingBuffer`, `OrderListener`, `HftQuoter`, `AutoHedger`, `OrderThrottle`, `LastLookGate`, `LoopbackVenue`, `PaperTradingGateway`, `TradingDashboard`, `ShardedTradingEngine`, `GlobalRiskAggregator`, `PositionLedger`, `FillListener`, `LedgerFillListener`, `DropCopyReconciler`, `LimitsConfig`, `LimitsManager`; `PaperTradingGateway.TradeListener` (busts and corrections, 2.4) |
 | `entitlements` (LL) | Who may trade what, where and when | `EntitlementService`, `Grant`, `Permission`, `Decision`, `EntitlementPreTradeCheck` |
 | `regreporting` (LL; `reporting` up to 2.4) | Regulatory transaction reports | `TransactionReport`, `TransactionReportSink`, `Rts22ReportBuilder`, `Rts22TransactionReport`, `ReportingIdentifiers` (`Rts22TransactionReport.toAuth016Xml`, `validateEsmaRules` from 2.3; `validateWithReferenceData`, `toSubmissionXml` from 2.4) |
-| `regreporting.registry` (LL) | Reference data for reports (2.3) | `LeiRegistry`, `GleifGoldenCopyLeiRegistry`, `GleifApiLeiRegistry`, `InstrumentRegistry`, `FirdsInstrumentRegistry`, `MicRegistry`, `Iso10383MicRegistry`, `ReferenceDataChecker`; `ReferenceData`, `LeiValidity`, `CodeRegistry` (2.4) |
-| `regreporting.cat` (LL) | US CAT order events, indicative (2.3); option and quote events, linkage check (3.1) | `CatEventBuilder`, `CatEvent`, `CatEventType` (MENQ, MONO, MOOR, MONQ from 3.1), `CatJsonLinesSink`, `CatLinkageChecker` (3.1) |
-| `regreporting.emir` (LL) | EMIR Refit derivative reports, indicative (2.3); opt-in stateful rules (3.1) | `EmirRefitReportBuilder`, `EmirRefitReport`, `EmirActionType`, `EmirEventType`; `EmirStatefulValidator`, `UtiHistory`, `InMemoryUtiHistory`, `CurrencyRegistry` (3.1) |
+| `regreporting.registry` (LL) | Reference data for reports (2.3) | `LeiRegistry`, `GleifGoldenCopyLeiRegistry`, `GleifApiLeiRegistry`, `InstrumentRegistry`, `FirdsInstrumentRegistry`, `MicRegistry`, `Iso10383MicRegistry`, `ReferenceDataChecker`; `ReferenceData`, `LeiValidity`, `CodeRegistry` (2.4); `LeiRecord.entityCategory` (GLEIF category, for the EMIR branch rules) and a FIRDS parse that reports bad bytes only through `IOException` (3.1) |
+| `regreporting.cat` (LL) | US CAT order events, indicative (2.3); option and quote events, option lifecycle, supplement and multi-leg events, linkage within a batch and across files, JSON schema check (3.1) | `CatEventBuilder`, `CatEvent`, `CatEventType` (MENQ, MONO, MOOR, MONQ, MENOS, MONOS, MOOA, MOOM, MOOC, MOOT, MOOF, MLNO, MLOR, MLOC, MLOS from 3.1), `CatJsonLinesSink`, `CatLinkageChecker` (3.1; `checkFiles`, `Batch`, `FileIssue`), `CatSchema` (3.1) |
+| `regreporting.emir` (LL) | EMIR Refit derivative reports, indicative (2.3); opt-in stateful rules (3.1): history, receipt time, GLEIF status and category, venue MIC (1003-01), caller trade key (2001-03), "reported for that UTI" dates | `EmirRefitReportBuilder`, `EmirRefitReport`, `EmirActionType`, `EmirEventType`; `EmirStatefulValidator`, `UtiHistory`, `InMemoryUtiHistory`, `CurrencyRegistry` (3.1) |
 | `indicators` | Technical indicators | `Indicators` (batch), `StreamingIndicators` (one update per tick) |
 | `pricing` | Option pricing and volatility surfaces | `BlackScholes`, `Black76`, `Bachelier`, `ImpliedVolatility`, `BinomialTree`, `Heston`, `SabrModel`, `VolSurface`, `BarrierOption`, `DigitalOption`, `TouchOption`, `AsianOption`, `QuantoOption`, `ExchangeOption`, `VarianceSwap`, `VannaVolga`, `HestonCos`, `HestonCalibrator`, `SviSlice`, `SsviSurface`, `SviSurface`, `TotalVarianceSurface`, `DupireLocalVol`, `LocalVolMonteCarlo`, `LocalVolPde`, `DividendTree`, `Autocallable`, `StructuredNotes`, `IncrementalGreeks`, `HigherOrderGreeks` |
 | `rates` | Fixed income | `YieldCurve` (single curve), `DiscountCurve`, `MultiCurveBootstrap`, `MultiCurveRisk`, curve instruments (`Deposit`, `Fra`, `RateFuture`, `OisSwap`, `InterestRateSwap`), `BondPricer` (with the 3.1 `...Exact` non-integral-period functions and `convexityAnalytic`), `BootstrapJacobian` (analytic per-quote DV01, 3.1), the 3.1 leg model (`LegConvention`, `FixedLeg`, `FloatLeg` = `OvernightLeg` / `TermRateLeg`, `OvernightConvention`, `FixingHistory`, `VanillaSwap`), `DayCount`, `BusinessCalendar`, `HolidayCalendars`, `SwapPricer` (deprecated since 3.1, see `MIGRATION_3.1.md`), `RatesOptions`, `NelsonSiegel`, `Svensson`, `ShortRateModels`, `KeyRateDurations` |
@@ -155,7 +155,9 @@ stable module.
 ## Design rules
 
 1. **No runtime dependencies.** Main sources use only the JDK. JUnit and JMH are
-   test-scope.
+   test-scope. Where a format needs parsing, the library carries a small reader of
+   its own: the CAT schema check (3.1) uses a package-private strict JSON reader in
+   `regreporting.cat` rather than a JSON or JSON-Schema library.
 2. **Single writer per hot structure.** Each market-data bus has one producer and one
    consumer thread, and each order gateway has one submitting thread and one venue
    thread. The ring buffers and the risk gate's per-symbol state publish with
@@ -167,9 +169,14 @@ stable module.
 3. **Batch and streaming indicators agree.** `Indicators` and `StreamingIndicators`
    are tested for equal outputs on the same input, so a rule backtested on bars
    behaves the same when fed ticks.
-4. **Allocation claims are tested.** Zero-allocation tests read the JVM's per-thread
-   allocation counter and require exactly zero bytes after warm-up. Latency results
-   come from the benchmarks described in [BENCHMARKS.md](BENCHMARKS.md).
+4. **Allocation claims are tested.** Every "allocation-free" claim in the javadoc has a
+   test in `AllocationClaimsTest` (core) or `LaneAllocationClaimsTest` (lowlatency),
+   tagged `allocation`. Each reads the JVM's per-thread allocation counter after
+   50,000 warm-up calls and allows at most 256 bytes over a batch of 10,000 calls (one
+   object per call would be 160,000 bytes). Older per-class tests require exactly zero
+   bytes. A claim that fails its test is fixed or reworded, as `BinanceTradeParser`'s
+   and `ShortRateModels`' were in 3.1. Latency results come from the benchmarks described in
+   [BENCHMARKS.md](BENCHMARKS.md).
 5. **No look-ahead by default.** Backtests fill at the next bar's open, EWMA
    volatility is seeded causally, fundamentals are point-in-time, and the regime
    detector exposes a filtered probability for live use.
@@ -180,6 +187,11 @@ stable module.
    after a crash, tick sessions can be replayed, walk-forward analysis carries the
    position across folds, and `persist.Checkpoint` writes learned model state
    atomically (forced to disk before the rename) so it survives a restart.
+8. **Large public classes are facades.** `Indicators`, `MultiCurrencyExposureSimulator`
+   and `FixSession` keep their 3.0 signatures, but since 3.1 the work lives in
+   package-private classes beside them (`MovingAverages`, `Oscillators`, ...;
+   `MultiCurrencyExposureEngine`; `FixSessionMessages`, `FixSessionParsing`). The plan
+   for moving packages between modules in 4.0 is in [DESIGN_4.0.md](DESIGN_4.0.md).
 
 ## Module descriptors
 
@@ -264,8 +276,11 @@ unchanged.
 
 ## CI and release gates
 
-Every push and pull request runs `ci.yml` (tests on JDK 25 and the japicmp API
-check). Tests that need files we do not commit skip locally; PR CI runs the
+Every push and pull request runs `ci.yml`: tests on JDK 25 (Ubuntu, Windows,
+macOS), the
+japicmp API check, and a reproducible-build job (two clean builds, same jar
+hashes; `scripts/check-reproducible.sh`). Release builds add a CycloneDX SBOM
+(`-Psbom`). Tests that need files we do not commit skip locally; PR CI runs the
 committed stand-ins `IsdaGoldenSubsetTest` (48 invented CDS contracts) and
 `EsmaXsdGoldenTest` (SHA-256 of the validated documents).
 
@@ -285,7 +300,7 @@ no allow-list: 3.x makes no breaking changes ([STABILITY.md](STABILITY.md)).
 existing release, or a tag name already released from another commit), then
 `ci` (the reusable `ci.yml`) and `docs` (javadoc build), then `release`, which
 attaches the jars and dispatches `docs.yml` on `main`. The checklist is in
-[PUBLISHING.md](PUBLISHING.md); diagram 22 in [DIAGRAMS.md](DIAGRAMS.md).
+[PUBLISHING.md](PUBLISHING.md); diagram 112 in [DIAGRAMS.md](DIAGRAMS.md).
 
 Loaders bound what they read (zip entries, inflated bytes, line lengths); the
 per-loader limits are in [INPUT_LIMITS.md](INPUT_LIMITS.md).

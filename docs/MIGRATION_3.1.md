@@ -45,7 +45,7 @@ annual tenors off a `YieldCurve`, the new one the actual accrual fractions
 and business-day schedule. In the special case of no lag and no lookback,
 `VanillaSwap` equals `OisSwap` (and, with a `TermRateLeg`,
 `InterestRateSwap`) to 1e-14 (`VanillaSwapTest`). Lookback, observation
-shift, lockout and payment lag are explained in LEARN 10d.1.
+shift, lockout and payment lag are explained in [LEARN 10d.1](learn/02-risk-derivatives-rates-credit.md#10d1-lookback-observation-shift-lockout-and-payment-lag).
 
 ## 2. `BondPricer` with non-integral maturities
 
@@ -58,3 +58,21 @@ functions otherwise (`priceFromYieldExact`, `accruedInterestExact`,
 `macaulayDurationExact`, `modifiedDurationExact`, `convexityExact`,
 `yieldToMaturityExact`). On whole periods they equal the old functions to
 1e-12. COOKBOOK recipe 361.
+
+## 3. Small behaviour notes from 3.1 part 2
+
+Nothing here needs a code change, but a test that pins exact values may notice.
+
+- `LeiRecord` has a new `entityCategory` component. The 3-argument constructor
+  still works and gives `""`. Equality and `toString` now include the category,
+  so two records that differ only in category are no longer equal.
+- `CatEvent.rules()` has 21 entries, `CatLinkageChecker.rules()` 5 and
+  `EmirStatefulValidator.rules()` 28. A test that asserts the size of a rule
+  catalogue needs its number updated; results for the earlier event types and
+  rules are unchanged.
+- `CatEventType.isOption()` is true for the new option types MONOS and MOOA to
+  MOOF.
+- The FIRDS parser reports malformed bytes and an unknown encoding name as an
+  `IOException` and no longer prints to stderr.
+- `HftOrderBook` allocates its trade buffer up front (36 bytes per order of
+  capacity), so a very large `maxOrders` costs that memory at construction.

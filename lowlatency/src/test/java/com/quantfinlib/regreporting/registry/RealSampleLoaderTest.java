@@ -56,6 +56,10 @@ class RealSampleLoaderTest {
         assertEquals(Optional.of(LocalDate.of(2017, 12, 29)), retired.initialRegistrationDate());
         assertEquals(LeiStatus.PENDING_ARCHIVAL, r.status("2549001UDLAZCFT3MU07"));
         assertEquals("Riverdale Holding AB", r.lookup("159558AMFM99CRKAS859").orElseThrow().legalName());
+        // Entity.EntityCategory (column read since 3.1.0), values as in the real file
+        assertEquals("GENERAL", r.lookup("159558AMFM99CRKAS859").orElseThrow().entityCategory());
+        assertEquals("SOLE_PROPRIETOR", r.lookup("2549001UDLAZCFT3MU07").orElseThrow().entityCategory());
+        assertEquals(Optional.of(false), r.lookup("2549001UDLAZCFT3MU07").orElseThrow().isBranch());
     }
 
     @Test
@@ -70,6 +74,7 @@ class RealSampleLoaderTest {
         assertTrue(v.entityActive());
         assertEquals(Optional.of(LocalDate.of(2018, 3, 16)), v.initialRegistrationDate());
         assertEquals(Optional.of(LocalDate.of(2026, 4, 23)), v.lastUpdateDate());
+        assertEquals("GENERAL", GleifApiLeiRegistry.parse("506700GE1G29325QX363", json).entityCategory());
     }
 
     @Test
