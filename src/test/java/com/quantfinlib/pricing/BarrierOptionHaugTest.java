@@ -16,6 +16,15 @@ import org.junit.jupiter.api.Test;
  * so the tolerance is 1e-4. One cell (up-and-in put, X = 90, vol 30%) is
  * checked by Monte Carlo instead of the table. A Brownian-bridge Monte Carlo
  * also checks two reverse knock-outs independently of the formulas.
+ *
+ * <p>Provenance: values reproduced by independent computation, table number
+ * unverified. The book was not to hand when this was checked (2026-11-02), so
+ * the "4-13" label is as originally cited. All 53 tabulated cells were
+ * recomputed from the Reiner-Rubinstein (1991) formulas (Haug section 4.17.1)
+ * in a separate double-precision script that shares no code with this
+ * library; every cell agrees with the printed four-decimal figure to within
+ * 6.3e-5, so the differences are last-digit rounding. That script gives
+ * 2.0658 for the skipped up-and-in put cell (X = 90, vol 30%).
  */
 class BarrierOptionHaugTest {
 

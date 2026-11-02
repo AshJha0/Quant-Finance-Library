@@ -19,12 +19,17 @@ class HestonCosTest {
 
     @Test
     void reproducesFangOosterleePublishedValue() {
-        // The paper quotes 5.785155450. This pricer and the independent Simpson
-        // pricer agree with each other to 2e-9 and both sit 1.6e-8 below the
-        // printed figure, so the published value is pinned to 2e-8 and the two
-        // implementations to each other at 2e-9.
+        // The paper quotes 5.785155450. The 1.6e-8 gap to this pricer is in the
+        // reference, not here. An independent computation (Lewis 2001 single
+        // integral with the Albrecher et al. 2007 characteristic function,
+        // 40-digit mpmath adaptive quadrature, no shared code) gives
+        // 5.7851554343761890; the paper's figure is 1.56e-8 above that, so its
+        // last two printed digits are not significant (the paper's own COS
+        // reference run is double precision). The published value is therefore
+        // pinned at 2e-8 and the high-precision value at 1e-10.
         double cos = HestonCos.price(CALL, 100, 100, 0, 0, 1, FO);
         assertEquals(5.785155450, cos, 2e-8);
+        assertEquals(5.7851554343761890, cos, 1e-10);
         assertEquals(Heston.call(100, 100, 0, 0, 1, FO), cos, 2e-9);
         // Converged: more terms and a wider interval change nothing at this tolerance.
         assertEquals(cos, HestonCos.price(CALL, 100, 100, 0, 0, 1, FO, 2048, 40), 1e-10);
