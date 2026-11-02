@@ -10,8 +10,9 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Option, quote and linkage checks added in 3.1.0, each written from the CAT IM Technical
- * Specifications v4.1.0 r14 table cited on the test. Cases are own constructions.
+ * Specifications v4.2.0 r4 table cited on the test. Cases are own constructions.
  */
+@SuppressWarnings("removal") // covers the v4.1.0 r14 quote types kept until 5.0.0
 class CatOptionQuoteLinkageTest {
     private static final Instant T0 = Instant.parse("2026-03-02T14:30:00Z");
     /** OSI: root "AAPL  ", 2026-03-20, call, strike 150.000. */
@@ -40,7 +41,7 @@ class CatOptionQuoteLinkageTest {
                 .field("accountHolderType", "I").build();
     }
 
-    /** Table 62: optionID replaces symbol; side B or S (Appendix G). */
+    /** Table 61: optionID replaces symbol; side B or S (Appendix G). */
     @Test
     void newOptionOrderTable62() {
         CatEvent e = mono("O-1", "R1");
@@ -56,7 +57,7 @@ class CatOptionQuoteLinkageTest {
         assertTrue(errs.contains("price must be blank when orderType is MKT"), errs.toString());
         assertTrue(errs.contains("missing deptType"), errs.toString());
         assertTrue(errs.stream().noneMatch(s -> s.equals("missing symbol")), errs.toString());
-        // FLEX Percent prefix (Table 62 seq 8)
+        // FLEX Percent prefix (Table 61 seq 8)
         assertEquals(List.of(), CatEventBuilder.newOptionOrder().reporter("FRMA", "R3").orderKey("O-3", T0)
                 .eventTimestamp(T0).optionId("%" + OSI).sidePriceQty("S", BigDecimal.ONE, BigDecimal.ONE)
                 .field("orderType", "LMT").field("timeInForce", "DAY=20260302").field("tradingSession", "REG")
@@ -64,7 +65,7 @@ class CatOptionQuoteLinkageTest {
                 .field("representativeInd", "N").build().validate());
     }
 
-    /** Table 64: destinationType 'R'. */
+    /** Table 63: destinationType 'R'. */
     @Test
     void optionRouteTable64() {
         assertEquals(List.of(), moor("O-1", "R2").validate());
@@ -75,7 +76,7 @@ class CatOptionQuoteLinkageTest {
         assertEquals(List.of("missing destinationType"), noDest.validate());
     }
 
-    /** Table 39 (MENQ) and Table 85 (MONQ). */
+    /** Table 38 (MENQ) and v4.1.0 r14 Table 85 (MONQ). */
     @Test
     void quotesTables39And85() {
         CatEvent q = CatEventBuilder.newQuote().reporter("FRMA", "Q1").quoteKey("QT-1", T0).eventTimestamp(T0)
@@ -115,7 +116,7 @@ class CatOptionQuoteLinkageTest {
 
     @Test
     void linkageImidFallbackAndMissingFields() {
-        // the IMID on the event may be blank: the file's IMID is used (Table 16 seq 5 'O')
+        // the IMID on the event may be blank: the file's IMID is used (Table 15 seq 5 'O')
         CatEvent blankImid = CatEventBuilder.newOrder().reporter("", "R7").orderKey("O-1", T0).eventTimestamp(T0)
                 .symbol("TEST").build();
         assertEquals(1, CatLinkageChecker.check(List.of(meno("O-1", "R1"), blankImid), "FRMA").stream()
@@ -127,6 +128,6 @@ class CatOptionQuoteLinkageTest {
         CatEvent cor = CatEventBuilder.newOrder().reporter("FRMA", "R8").orderKey("O-1", T0).eventTimestamp(T0)
                 .symbol("TEST").action("COR", "").build();
         assertEquals(List.of(), CatLinkageChecker.check(List.of(meno("O-1", "R1"), cor), "FRMA"));
-        assertEquals(5, CatLinkageChecker.rules().size());
+        assertEquals(9, CatLinkageChecker.rules().size());
     }
 }

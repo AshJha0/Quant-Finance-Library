@@ -43,7 +43,7 @@ class CatEventTest {
         assertTrue(!json.contains("errorROEID"), json);
     }
 
-    /** Table 18: destinationType and isoInd are 'R'; destination is 'C'. */
+    /** Table 17: destinationType and isoInd are 'R'; destination is 'C'. */
     @Test
     void routeTable18RequiredFields() {
         CatEvent r = CatEventBuilder.route().reporter("FRMA", "ROE2").orderKey("O-1", T0).eventTimestamp(T0)
@@ -53,7 +53,7 @@ class CatEventTest {
         assertEquals(List.of("missing isoInd"), r.validate());
     }
 
-    /** Table 48: MEOT has tradeKeyDate, not orderKeyDate or orderID. */
+    /** Table 47: MEOT has tradeKeyDate, not orderKeyDate or orderID. */
     @Test
     void tradeTable48() {
         CatEvent t = CatEventBuilder.trade().reporter("FRMA", "ROE3").eventTimestamp(T0).symbol("TEST")
@@ -68,7 +68,7 @@ class CatEventTest {
                 .field("quantity", "100").field("capacity", "A").field("clientDetails", "O-1");
     }
 
-    /** Table 52: MEOF has fillKeyDate and clientDetails, no side; Appendix G fulfillmentLinkType. */
+    /** Table 51: MEOF has fillKeyDate and clientDetails, no side; Appendix G fulfillmentLinkType. */
     @Test
     void fulfillmentTable52() {
         assertEquals(List.of(), meof("Y").build().validate());

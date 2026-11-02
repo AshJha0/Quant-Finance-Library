@@ -17,12 +17,12 @@ import java.util.Objects;
  * {@code errorROEID}, {@code firmROEID}, {@code type}, {@code CATReporterIMID},
  * {@code symbol}, {@code eventTimestamp}, {@code manualFlag} (default {@code false}).
  * Per type, the names in {@link CatEventType#requiredFields()} (the 'R' fields of
- * Tables 16, 18, 48 and 52 of the v4.1.0 r14 specification). Anything else in the specification (FDID customer
+ * Tables 15, 17, 47 and 51 of the v4.2.0 r4 specification). Anything else in the specification (FDID customer
  * records, representative orders, aggregated orders, options legs, quote events, CAIS)
  * is not populated; use {@link #field(String, String)} to add it by name.</p>
  *
  * <p>Timestamps are written in US Eastern time as {@code yyyyMMdd HHmmss.SSSSSSSSS}, the
- * STRING form of Table 3 (Timestamp) in the v4.1.0 r14 specification; the event must carry its time in
+ * STRING form of Table 3 (Timestamp) in the v4.2.0 r4 specification; the event must carry its time in
  * {@link Instant} and the zone is applied here. Worked example: an order accepted at
  * 2026-03-02T14:30:00.123456789Z (09:30 Eastern, EST) gives
  * {@code eventTimestamp = "20260302 093000.123456789"} (own test).</p>
@@ -54,7 +54,7 @@ public final class CatEventBuilder {
      * Starts an event of any type, with the common fields and the type's required fields
      * ({@link CatEventType#requiredFields()}) present and blank, actionType NEW and manualFlag
      * false. The named starters such as {@link #newOrder()} add a few optional fields as well;
-     * this one adds none. Use it for the Table 60 and 61 types that have no named starter.
+     * this one adds none. Use it for the Table 59 and 60 types that have no named starter.
      *
      * @param type the event type
      * @return the builder
@@ -86,7 +86,7 @@ public final class CatEventBuilder {
     }
 
     /**
-     * Starts a new-quote (MENQ) event (section 4.10.1, Table 39).
+     * Starts a new-quote (MENQ) event (section 4.10.1, Table 38).
      *
      * @return the builder
      * @since 3.1.0
@@ -96,7 +96,7 @@ public final class CatEventBuilder {
     }
 
     /**
-     * Starts a new option order (MONO) event (section 5.1.1, Table 62). Set the OSI symbol
+     * Starts a new option order (MONO) event (section 5.1.1, Table 61). Set the OSI symbol
      * with {@link #optionId(String)}; {@code symbol} stays blank.
      *
      * @return the builder
@@ -107,7 +107,7 @@ public final class CatEventBuilder {
     }
 
     /**
-     * Starts an option order route (MOOR) event (section 5.1.3, Table 64).
+     * Starts an option order route (MOOR) event (section 5.1.3, Table 63).
      *
      * @return the builder
      * @since 3.1.0
@@ -117,17 +117,21 @@ public final class CatEventBuilder {
     }
 
     /**
-     * Starts a new option quote (MONQ) event (section 5.1.10.1, Table 85).
+     * Starts a new option quote (MONQ) event (v4.1.0 r14 section 5.1.10.1, Table 85; not in v4.2.0).
      *
      * @return the builder
      * @since 3.1.0
+     * @deprecated MONQ is not in CAT IM Technical Specifications v4.2.0 ({@link CatEventType#MONQ});
+     *     to be removed in 5.0.0
      */
+    @Deprecated(since = "4.0.0", forRemoval = true)
+    @SuppressWarnings("removal")
     public static CatEventBuilder newOptionQuote() {
         return new CatEventBuilder(CatEventType.MONQ);
     }
 
     /**
-     * Starts a new order supplement (MENOS) event (section 4.2, Table 17).
+     * Starts a new order supplement (MENOS) event (section 4.2, Table 16).
      *
      * @return the builder
      * @since 3.1.0
@@ -137,7 +141,7 @@ public final class CatEventBuilder {
     }
 
     /**
-     * Starts an option order supplement (MONOS) event (section 5.1.2, Table 63).
+     * Starts an option order supplement (MONOS) event (section 5.1.2, Table 62).
      *
      * @return the builder
      * @since 3.1.0
@@ -147,7 +151,7 @@ public final class CatEventBuilder {
     }
 
     /**
-     * Starts an option order accepted (MOOA) event (section 5.1.4, Table 70).
+     * Starts an option order accepted (MOOA) event (section 5.1.4, Table 69).
      *
      * @return the builder
      * @since 3.1.0
@@ -157,7 +161,7 @@ public final class CatEventBuilder {
     }
 
     /**
-     * Starts an option order modified (MOOM) event (section 5.1.7, Table 79). For a new Order Key, set priorOrderKeyDate and priorOrderID (seq 9-10) with {@link #field(String, String)}.
+     * Starts an option order modified (MOOM) event (section 5.1.7, Table 78). For a new Order Key, set priorOrderKeyDate and priorOrderID (seq 9-10) with {@link #field(String, String)}.
      *
      * @return the builder
      * @since 3.1.0
@@ -167,7 +171,7 @@ public final class CatEventBuilder {
     }
 
     /**
-     * Starts an option order cancelled (MOOC) event (section 5.1.9, Table 83).
+     * Starts an option order cancelled (MOOC) event (section 5.1.9, Table 82).
      *
      * @return the builder
      * @since 3.1.0
@@ -177,7 +181,7 @@ public final class CatEventBuilder {
     }
 
     /**
-     * Starts an option trade (MOOT) event (section 5.1.11, Table 90).
+     * Starts an option trade (MOOT) event (section 5.1.10, Table 84).
      *
      * @return the builder
      * @since 3.1.0
@@ -187,7 +191,7 @@ public final class CatEventBuilder {
     }
 
     /**
-     * Starts an option order fulfillment (MOOF) event (section 5.1.12.1, Table 92).
+     * Starts an option order fulfillment (MOOF) event (section 5.1.11.1, Table 86).
      *
      * @return the builder
      * @since 3.1.0
@@ -197,7 +201,7 @@ public final class CatEventBuilder {
     }
 
     /**
-     * Starts a multi-leg new order (MLNO) event (section 5.2.1, Table 100). Add legs with {@link #optionLeg} and {@link #equityLeg}.
+     * Starts a multi-leg new order (MLNO) event (section 5.2.1, Table 94). Add legs with {@link #optionLeg} and {@link #equityLeg}.
      *
      * @return the builder
      * @since 3.1.0
@@ -207,7 +211,7 @@ public final class CatEventBuilder {
     }
 
     /**
-     * Starts a multi-leg order route (MLOR) event (section 5.2.2, Table 102). Legs are restated (Table 103).
+     * Starts a multi-leg order route (MLOR) event (section 5.2.2, Table 96). Legs are restated (Table 97).
      *
      * @return the builder
      * @since 3.1.0
@@ -217,7 +221,7 @@ public final class CatEventBuilder {
     }
 
     /**
-     * Starts a multi-leg order cancelled (MLOC) event (section 5.2.7, Table 126).
+     * Starts a multi-leg order cancelled (MLOC) event (section 5.2.7, Table 120).
      *
      * @return the builder
      * @since 3.1.0
@@ -227,7 +231,7 @@ public final class CatEventBuilder {
     }
 
     /**
-     * Starts a multi-leg order supplement (MLOS) event (section 5.2.9, Table 139).
+     * Starts a multi-leg order supplement (MLOS) event (section 5.2.8, Table 122).
      *
      * @return the builder
      * @since 3.1.0
@@ -237,7 +241,7 @@ public final class CatEventBuilder {
     }
 
     /**
-     * Adds an option leg to legDetails (Table 101 seq 32.n.1 to 32.n.6). The builder writes
+     * Adds an option leg to legDetails (Table 95 seq 32.n.1 to 32.n.6). The builder writes
      * legDetails as a JSON array and, if numberOfLegs is still blank, sets it to the number of
      * legs added.
      *
@@ -259,7 +263,7 @@ public final class CatEventBuilder {
     }
 
     /**
-     * Adds an equity leg to legDetails (Table 101 seq 32.n.2, 32.n.5, 32.n.6); see
+     * Adds an equity leg to legDetails (Table 95 seq 32.n.2, 32.n.5, 32.n.6); see
      * {@link #optionLeg}.
      *
      * @param symbol the stock symbol (32.n.2)
@@ -288,7 +292,7 @@ public final class CatEventBuilder {
     }
 
     /**
-     * Sets the option's OSI symbol (field optionID, seq 8 of Tables 62, 64 and 85).
+     * Sets the option's OSI symbol (field optionID, seq 8 of Tables 61 and 63; v4.1.0 r14 Table 85).
      *
      * @param osi the 21-character OSI symbol
      * @return this
@@ -299,7 +303,7 @@ public final class CatEventBuilder {
     }
 
     /**
-     * Sets the quote ID and its key date (MENQ and MONQ, Table 39 seq 6-7, Table 85 seq 6-7).
+     * Sets the quote ID and its key date (MENQ and MONQ, Table 38 seq 6-7, v4.1.0 r14 Table 85 seq 6-7).
      *
      * @param quoteId firm-assigned quote ID
      * @param quoteKeyTime when the ID was assigned
@@ -363,7 +367,7 @@ public final class CatEventBuilder {
     }
 
     /**
-     * Sets the trade ID and its key date (MEOT, Table 48 seq 6 and 7).
+     * Sets the trade ID and its key date (MEOT, Table 47 seq 6 and 7).
      *
      * @param tradeId firm-assigned trade ID
      * @param tradeKeyTime when the ID was assigned
@@ -374,7 +378,7 @@ public final class CatEventBuilder {
     }
 
     /**
-     * Sets the fulfillment ID and its key date (MEOF, Table 52 seq 6 and 7).
+     * Sets the fulfillment ID and its key date (MEOF, Table 51 seq 6 and 7).
      *
      * @param fulfillmentId firm-assigned fulfillment ID
      * @param fillKeyTime when the ID was assigned

@@ -1,10 +1,10 @@
 {
- "_provenance": "Library transcription, NOT the official CAT Industry Member Schema file. Field names, data types, Include Key and CSV positions of CAT Reporting Technical Specifications for Industry Members v4.1.0 r14 (2026-02-13) Tables 16, 17, 18, 39, 48, 52, 62, 63, 64, 70, 79, 83, 85, 90, 92, 100, 102, 126, 139, 65, 66, 67, 68, 69, 71, 72, 73, 74, 75, 76, 77, 78, 80, 81, 82, 84, 86, 87, 88, 89, 94, 96, 97, 98, 99, 104, 106, 107, 109, 111, 113, 114, 116, 117, 119, 121, 122, 124, 127, 128, 130, 132, 134, 136, 137, 141; choice values from Appendix G; layout per section 6.1.5.2. Retired and reserved positions left out. Generated with pdftotext -raw and the transcription scripts in scripts/cat-transcription of the library repository (gen2.py). Since 3.2.0: destination and senderIMID read as 'Industry Member ID / Exchange ID' where the table prints both (a JSON array of alternatives), found by comparison with the official 4.2.0 file.",
- "schemaVersion": "4.1.0",
+ "_provenance": "Library transcription, NOT the official CAT Industry Member Schema file. Field names, data types, Include Key and CSV positions of CAT Reporting Technical Specifications for Industry Members v4.2.0 r4 (2026-10-21) Tables 15, 16, 17, 38, 47, 51, 61, 62, 63, 69, 78, 82, 84, 86, 94, 96, 120, 122, 64, 65, 66, 67, 68, 70, 71, 72, 73, 74, 75, 76, 77, 79, 80, 81, 83, 88, 90, 91, 92, 93, 98, 100, 101, 103, 105, 107, 108, 110, 111, 113, 115, 116, 118, 121, 124; choice values from Appendix G; layout per section 6.1.4.2. Retired and reserved positions left out. Generated with pdftotext -raw and the transcription scripts in scripts/cat-transcription of the library repository (gen2.py). Since 3.2.0: destination and senderIMID read as 'Industry Member ID / Exchange ID' where the table prints both (a JSON array of alternatives), found by comparison with the official 4.2.0 file. Since 4.0.0 (v4.2.0 r4): the option and multi-leg quote events of v4.1.0 r14 are not in v4.2.0 and are left out; the MENQ RFQ fields v4.2.0 retires are left out as retired.",
+ "schemaVersion": "4.2.0",
  "eventDefinitions": [
   {
    "eventName": "MENO",
-   "source": "Table 16",
+   "source": "Table 15",
    "fields": [
     {
      "name": "actionType",
@@ -354,7 +354,7 @@
   },
   {
    "eventName": "MENOS",
-   "source": "Table 17",
+   "source": "Table 16",
    "fields": [
     {
      "name": "actionType",
@@ -450,7 +450,7 @@
   },
   {
    "eventName": "MEOR",
-   "source": "Table 18",
+   "source": "Table 17",
    "fields": [
     {
      "name": "actionType",
@@ -730,7 +730,7 @@
   },
   {
    "eventName": "MENQ",
-   "source": "Table 39",
+   "source": "Table 38",
    "fields": [
     {
      "name": "actionType",
@@ -908,47 +908,12 @@
      "JSONDataType": "ARRAY",
      "required": "Conditional",
      "position": "31"
-    },
-    {
-     "name": "RFQID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Conditional",
-     "position": "32"
-    },
-    {
-     "name": "RFQFlag",
-     "dataType": "Boolean",
-     "JSONDataType": "BOOLEAN",
-     "required": "Conditional",
-     "position": "33"
-    },
-    {
-     "name": "bidRelativePrice",
-     "dataType": "Name/Value Pairs",
-     "JSONDataType": "OBJECT",
-     "required": "Conditional",
-     "position": "34"
-    },
-    {
-     "name": "askRelativePrice",
-     "dataType": "Name/Value Pairs",
-     "JSONDataType": "OBJECT",
-     "required": "Conditional",
-     "position": "35"
-    },
-    {
-     "name": "validUntilDuration",
-     "dataType": "Real Quantity",
-     "JSONDataType": "NUMBER",
-     "required": "Optional",
-     "position": "36"
     }
    ]
   },
   {
    "eventName": "MEOT",
-   "source": "Table 48",
+   "source": "Table 47",
    "fields": [
     {
      "name": "actionType",
@@ -1200,7 +1165,7 @@
   },
   {
    "eventName": "MEOF",
-   "source": "Table 52",
+   "source": "Table 51",
    "fields": [
     {
      "name": "actionType",
@@ -1358,7 +1323,7 @@
   },
   {
    "eventName": "MONO",
-   "source": "Table 62",
+   "source": "Table 61",
    "fields": [
     {
      "name": "actionType",
@@ -1600,7 +1565,7 @@
   },
   {
    "eventName": "MONOS",
-   "source": "Table 63",
+   "source": "Table 62",
    "fields": [
     {
      "name": "actionType",
@@ -1696,7 +1661,7 @@
   },
   {
    "eventName": "MOOR",
-   "source": "Table 64",
+   "source": "Table 63",
    "fields": [
     {
      "name": "actionType",
@@ -1945,7 +1910,7 @@
   },
   {
    "eventName": "MOOA",
-   "source": "Table 70",
+   "source": "Table 69",
    "fields": [
     {
      "name": "actionType",
@@ -2190,7 +2155,7 @@
   },
   {
    "eventName": "MOOM",
-   "source": "Table 79",
+   "source": "Table 78",
    "fields": [
     {
      "name": "actionType",
@@ -2469,7 +2434,7 @@
   },
   {
    "eventName": "MOOC",
-   "source": "Table 83",
+   "source": "Table 82",
    "fields": [
     {
      "name": "actionType",
@@ -2598,167 +2563,8 @@
    ]
   },
   {
-   "eventName": "MONQ",
-   "source": "Table 85",
-   "fields": [
-    {
-     "name": "actionType",
-     "dataType": "Choice",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "1"
-    },
-    {
-     "name": "errorROEID",
-     "dataType": "Unsigned",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "2"
-    },
-    {
-     "name": "firmROEID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "3"
-    },
-    {
-     "name": "type",
-     "dataType": "Message Type",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "4"
-    },
-    {
-     "name": "CATReporterIMID",
-     "dataType": "CAT Reporter IMID",
-     "JSONDataType": "STRING",
-     "required": "Optional",
-     "position": "5"
-    },
-    {
-     "name": "quoteKeyDate",
-     "dataType": "Timestamp",
-     "JSONDataType": [
-      "STRING",
-      "NUMBER"
-     ],
-     "required": "Required",
-     "position": "6"
-    },
-    {
-     "name": "quoteID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "7"
-    },
-    {
-     "name": "optionID",
-     "dataType": "Text (22)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "8"
-    },
-    {
-     "name": "eventTimestamp",
-     "dataType": "Timestamp",
-     "JSONDataType": [
-      "STRING",
-      "NUMBER"
-     ],
-     "required": "Required",
-     "position": "9"
-    },
-    {
-     "name": "onlyOneQuoteFlag",
-     "dataType": "Boolean",
-     "JSONDataType": "BOOLEAN",
-     "required": "Required",
-     "position": "10"
-    },
-    {
-     "name": "bidPrice",
-     "dataType": "Price",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "11"
-    },
-    {
-     "name": "bidQty",
-     "dataType": "Whole Quantity",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "12"
-    },
-    {
-     "name": "askPrice",
-     "dataType": "Price",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "13"
-    },
-    {
-     "name": "askQty",
-     "dataType": "Whole Quantity",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "14"
-    },
-    {
-     "name": "firmDesignatedID",
-     "dataType": "Text (40)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "15"
-    },
-    {
-     "name": "accountHolderType",
-     "dataType": "Choice",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "16"
-    },
-    {
-     "name": "RFQID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "17"
-    },
-    {
-     "name": "RFQFlag",
-     "dataType": "Boolean",
-     "JSONDataType": "BOOLEAN",
-     "required": "Required",
-     "position": "18"
-    },
-    {
-     "name": "bidRelativePrice",
-     "dataType": "Name/Value Pairs",
-     "JSONDataType": "OBJECT",
-     "required": "Conditional",
-     "position": "19"
-    },
-    {
-     "name": "askRelativePrice",
-     "dataType": "Name/Value Pairs",
-     "JSONDataType": "OBJECT",
-     "required": "Conditional",
-     "position": "20"
-    },
-    {
-     "name": "validUntilDuration",
-     "dataType": "Real Quantity",
-     "JSONDataType": "NUMBER",
-     "required": "Optional",
-     "position": "21"
-    }
-   ]
-  },
-  {
    "eventName": "MOOT",
-   "source": "Table 90",
+   "source": "Table 84",
    "fields": [
     {
      "name": "actionType",
@@ -2937,7 +2743,7 @@
   },
   {
    "eventName": "MOOF",
-   "source": "Table 92",
+   "source": "Table 86",
    "fields": [
     {
      "name": "actionType",
@@ -3081,7 +2887,7 @@
   },
   {
    "eventName": "MLNO",
-   "source": "Table 100",
+   "source": "Table 94",
    "fields": [
     {
      "name": "actionType",
@@ -3323,7 +3129,7 @@
   },
   {
    "eventName": "MLOR",
-   "source": "Table 102",
+   "source": "Table 96",
    "fields": [
     {
      "name": "actionType",
@@ -3558,7 +3364,7 @@
   },
   {
    "eventName": "MLOC",
-   "source": "Table 126",
+   "source": "Table 120",
    "fields": [
     {
      "name": "actionType",
@@ -3681,7 +3487,7 @@
   },
   {
    "eventName": "MLOS",
-   "source": "Table 139",
+   "source": "Table 122",
    "fields": [
     {
      "name": "actionType",
@@ -3829,7 +3635,7 @@
   },
   {
    "eventName": "MOMR",
-   "source": "Table 65",
+   "source": "Table 64",
    "fields": [
     {
      "name": "actionType",
@@ -4078,7 +3884,7 @@
   },
   {
    "eventName": "MOCR",
-   "source": "Table 66",
+   "source": "Table 65",
    "fields": [
     {
      "name": "actionType",
@@ -4236,7 +4042,7 @@
   },
   {
    "eventName": "MOORS",
-   "source": "Table 67",
+   "source": "Table 66",
    "fields": [
     {
      "name": "actionType",
@@ -4370,7 +4176,7 @@
   },
   {
    "eventName": "MOMRS",
-   "source": "Table 68",
+   "source": "Table 67",
    "fields": [
     {
      "name": "actionType",
@@ -4511,7 +4317,7 @@
   },
   {
    "eventName": "MOCRS",
-   "source": "Table 69",
+   "source": "Table 68",
    "fields": [
     {
      "name": "actionType",
@@ -4652,7 +4458,7 @@
   },
   {
    "eventName": "MOIR",
-   "source": "Table 71",
+   "source": "Table 70",
    "fields": [
     {
      "name": "actionType",
@@ -4866,7 +4672,7 @@
   },
   {
    "eventName": "MOIM",
-   "source": "Table 72",
+   "source": "Table 71",
    "fields": [
     {
      "name": "actionType",
@@ -5104,7 +4910,7 @@
   },
   {
    "eventName": "MOIC",
-   "source": "Table 73",
+   "source": "Table 72",
    "fields": [
     {
      "name": "actionType",
@@ -5241,7 +5047,7 @@
   },
   {
    "eventName": "MOIMR",
-   "source": "Table 74",
+   "source": "Table 73",
    "fields": [
     {
      "name": "actionType",
@@ -5424,7 +5230,7 @@
   },
   {
    "eventName": "MOICR",
-   "source": "Table 75",
+   "source": "Table 74",
    "fields": [
     {
      "name": "actionType",
@@ -5537,7 +5343,7 @@
   },
   {
    "eventName": "MOCO",
-   "source": "Table 76",
+   "source": "Table 75",
    "fields": [
     {
      "name": "actionType",
@@ -5730,7 +5536,7 @@
   },
   {
    "eventName": "MOCOM",
-   "source": "Table 77",
+   "source": "Table 76",
    "fields": [
     {
      "name": "actionType",
@@ -5923,7 +5729,7 @@
   },
   {
    "eventName": "MOCOC",
-   "source": "Table 78",
+   "source": "Table 77",
    "fields": [
     {
      "name": "actionType",
@@ -6043,7 +5849,7 @@
   },
   {
    "eventName": "MOOMS",
-   "source": "Table 80",
+   "source": "Table 79",
    "fields": [
     {
      "name": "actionType",
@@ -6132,7 +5938,7 @@
   },
   {
    "eventName": "MOOMR",
-   "source": "Table 81",
+   "source": "Table 80",
    "fields": [
     {
      "name": "actionType",
@@ -6325,7 +6131,7 @@
   },
   {
    "eventName": "MOOJ",
-   "source": "Table 82",
+   "source": "Table 81",
    "fields": [
     {
      "name": "actionType",
@@ -6490,7 +6296,7 @@
   },
   {
    "eventName": "MOOCR",
-   "source": "Table 84",
+   "source": "Table 83",
    "fields": [
     {
      "name": "actionType",
@@ -6595,619 +6401,8 @@
    ]
   },
   {
-   "eventName": "MORQ",
-   "source": "Table 86",
-   "fields": [
-    {
-     "name": "actionType",
-     "dataType": "Choice",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "1"
-    },
-    {
-     "name": "errorROEID",
-     "dataType": "Unsigned",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "2"
-    },
-    {
-     "name": "firmROEID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "3"
-    },
-    {
-     "name": "type",
-     "dataType": "Message Type",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "4"
-    },
-    {
-     "name": "CATReporterIMID",
-     "dataType": "CAT Reporter IMID",
-     "JSONDataType": "STRING",
-     "required": "Optional",
-     "position": "5"
-    },
-    {
-     "name": "quoteKeyDate",
-     "dataType": "Timestamp",
-     "JSONDataType": [
-      "STRING",
-      "NUMBER"
-     ],
-     "required": "Required",
-     "position": "6"
-    },
-    {
-     "name": "quoteID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "7"
-    },
-    {
-     "name": "optionID",
-     "dataType": "Text (22)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "8"
-    },
-    {
-     "name": "eventTimestamp",
-     "dataType": "Timestamp",
-     "JSONDataType": [
-      "STRING",
-      "NUMBER"
-     ],
-     "required": "Required",
-     "position": "9"
-    },
-    {
-     "name": "senderIMID",
-     "dataType": "Industry Member ID",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "10"
-    },
-    {
-     "name": "destination",
-     "dataType": "Industry Member ID",
-     "JSONDataType": "STRING",
-     "required": "Conditional",
-     "position": "11"
-    },
-    {
-     "name": "routedQuoteID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "12"
-    },
-    {
-     "name": "dupROIDCond",
-     "dataType": "Boolean",
-     "JSONDataType": "BOOLEAN",
-     "required": "Required",
-     "position": "13"
-    },
-    {
-     "name": "bidPrice",
-     "dataType": "Price",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "14"
-    },
-    {
-     "name": "bidQty",
-     "dataType": "Whole Quantity",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "15"
-    },
-    {
-     "name": "askPrice",
-     "dataType": "Price",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "16"
-    },
-    {
-     "name": "askQty",
-     "dataType": "Whole Quantity",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "17"
-    },
-    {
-     "name": "quoteRejectedFlag",
-     "dataType": "Boolean",
-     "JSONDataType": "BOOLEAN",
-     "required": "Required",
-     "position": "18"
-    },
-    {
-     "name": "destinationType",
-     "dataType": "Choice",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "19"
-    },
-    {
-     "name": "RFQID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "20"
-    },
-    {
-     "name": "bidRelativePrice",
-     "dataType": "Name/Value Pairs",
-     "JSONDataType": "OBJECT",
-     "required": "Conditional",
-     "position": "21"
-    },
-    {
-     "name": "askRelativePrice",
-     "dataType": "Name/Value Pairs",
-     "JSONDataType": "OBJECT",
-     "required": "Conditional",
-     "position": "22"
-    },
-    {
-     "name": "validUntilDuration",
-     "dataType": "Real Quantity",
-     "JSONDataType": "NUMBER",
-     "required": "Optional",
-     "position": "23"
-    }
-   ]
-  },
-  {
-   "eventName": "MOQR",
-   "source": "Table 87",
-   "fields": [
-    {
-     "name": "actionType",
-     "dataType": "Choice",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "1"
-    },
-    {
-     "name": "errorROEID",
-     "dataType": "Unsigned",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "2"
-    },
-    {
-     "name": "firmROEID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "3"
-    },
-    {
-     "name": "type",
-     "dataType": "Message Type",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "4"
-    },
-    {
-     "name": "CATReporterIMID",
-     "dataType": "CAT Reporter IMID",
-     "JSONDataType": "STRING",
-     "required": "Optional",
-     "position": "5"
-    },
-    {
-     "name": "quoteKeyDate",
-     "dataType": "Timestamp",
-     "JSONDataType": [
-      "STRING",
-      "NUMBER"
-     ],
-     "required": "Required",
-     "position": "6"
-    },
-    {
-     "name": "quoteID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "7"
-    },
-    {
-     "name": "optionID",
-     "dataType": "Text (22)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "8"
-    },
-    {
-     "name": "receivedQuoteID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "9"
-    },
-    {
-     "name": "dupROIDCond",
-     "dataType": "Boolean",
-     "JSONDataType": "BOOLEAN",
-     "required": "Required",
-     "position": "10"
-    },
-    {
-     "name": "eventTimestamp",
-     "dataType": "Timestamp",
-     "JSONDataType": [
-      "STRING",
-      "NUMBER"
-     ],
-     "required": "Required",
-     "position": "11"
-    },
-    {
-     "name": "receiverIMID",
-     "dataType": "Industry Member ID",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "12"
-    },
-    {
-     "name": "senderIMID",
-     "dataType": "Industry Member ID",
-     "JSONDataType": "STRING",
-     "required": "Conditional",
-     "position": "13"
-    },
-    {
-     "name": "onlyOneQuoteFlag",
-     "dataType": "Boolean",
-     "JSONDataType": "BOOLEAN",
-     "required": "Required",
-     "position": "14"
-    },
-    {
-     "name": "bidPrice",
-     "dataType": "Price",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "15"
-    },
-    {
-     "name": "bidQty",
-     "dataType": "Whole Quantity",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "16"
-    },
-    {
-     "name": "askPrice",
-     "dataType": "Price",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "17"
-    },
-    {
-     "name": "askQty",
-     "dataType": "Whole Quantity",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "18"
-    },
-    {
-     "name": "RFQID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "19"
-    },
-    {
-     "name": "RFQFlag",
-     "dataType": "Boolean",
-     "JSONDataType": "BOOLEAN",
-     "required": "Required",
-     "position": "20"
-    },
-    {
-     "name": "bidRelativePrice",
-     "dataType": "Name/Value Pairs",
-     "JSONDataType": "OBJECT",
-     "required": "Conditional",
-     "position": "21"
-    },
-    {
-     "name": "askRelativePrice",
-     "dataType": "Name/Value Pairs",
-     "JSONDataType": "OBJECT",
-     "required": "Conditional",
-     "position": "22"
-    },
-    {
-     "name": "senderType",
-     "dataType": "Choice",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "23"
-    },
-    {
-     "name": "validUntilDuration",
-     "dataType": "Real Quantity",
-     "JSONDataType": "NUMBER",
-     "required": "Optional",
-     "position": "24"
-    }
-   ]
-  },
-  {
-   "eventName": "MOQC",
-   "source": "Table 88",
-   "fields": [
-    {
-     "name": "actionType",
-     "dataType": "Choice",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "1"
-    },
-    {
-     "name": "errorROEID",
-     "dataType": "Unsigned",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "2"
-    },
-    {
-     "name": "firmROEID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "3"
-    },
-    {
-     "name": "type",
-     "dataType": "Message Type",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "4"
-    },
-    {
-     "name": "CATReporterIMID",
-     "dataType": "CAT Reporter IMID",
-     "JSONDataType": "STRING",
-     "required": "Optional",
-     "position": "5"
-    },
-    {
-     "name": "quoteKeyDate",
-     "dataType": "Timestamp",
-     "JSONDataType": [
-      "STRING",
-      "NUMBER"
-     ],
-     "required": "Required",
-     "position": "6"
-    },
-    {
-     "name": "quoteID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "7"
-    },
-    {
-     "name": "optionID",
-     "dataType": "Symbol",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "8"
-    },
-    {
-     "name": "originatingIMID",
-     "dataType": "CAT Reporter IMID",
-     "JSONDataType": "STRING",
-     "required": "Conditional",
-     "position": "9"
-    },
-    {
-     "name": "eventTimestamp",
-     "dataType": "Timestamp",
-     "JSONDataType": [
-      "STRING",
-      "NUMBER"
-     ],
-     "required": "Required",
-     "position": "10"
-    },
-    {
-     "name": "RFQID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "11"
-    }
-   ]
-  },
-  {
-   "eventName": "MOQM",
-   "source": "Table 89",
-   "fields": [
-    {
-     "name": "actionType",
-     "dataType": "Choice",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "1"
-    },
-    {
-     "name": "errorROEID",
-     "dataType": "Unsigned",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "2"
-    },
-    {
-     "name": "firmROEID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "3"
-    },
-    {
-     "name": "type",
-     "dataType": "Message Type",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "4"
-    },
-    {
-     "name": "CATReporterIMID",
-     "dataType": "CAT Reporter IMID",
-     "JSONDataType": "STRING",
-     "required": "Optional",
-     "position": "5"
-    },
-    {
-     "name": "quoteKeyDate",
-     "dataType": "Timestamp",
-     "JSONDataType": [
-      "STRING",
-      "NUMBER"
-     ],
-     "required": "Required",
-     "position": "6"
-    },
-    {
-     "name": "quoteID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "7"
-    },
-    {
-     "name": "optionID",
-     "dataType": "Text (22)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "8"
-    },
-    {
-     "name": "priorQuoteKeyDate",
-     "dataType": "Timestamp",
-     "JSONDataType": [
-      "STRING",
-      "NUMBER"
-     ],
-     "required": "Conditional",
-     "position": "9"
-    },
-    {
-     "name": "priorQuoteID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Conditional",
-     "position": "10"
-    },
-    {
-     "name": "receiverIMID",
-     "dataType": "Industry Member ID",
-     "JSONDataType": "STRING",
-     "required": "Conditional",
-     "position": "11"
-    },
-    {
-     "name": "senderIMID",
-     "dataType": "Industry Member ID",
-     "JSONDataType": "STRING",
-     "required": "Conditional",
-     "position": "12"
-    },
-    {
-     "name": "routedQuoteID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "13"
-    },
-    {
-     "name": "eventTimestamp",
-     "dataType": "Timestamp",
-     "JSONDataType": [
-      "STRING",
-      "NUMBER"
-     ],
-     "required": "Required",
-     "position": "14"
-    },
-    {
-     "name": "bidPrice",
-     "dataType": "Price",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "15"
-    },
-    {
-     "name": "bidQty",
-     "dataType": "Whole Quantity",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "16"
-    },
-    {
-     "name": "askPrice",
-     "dataType": "Price",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "17"
-    },
-    {
-     "name": "askQty",
-     "dataType": "Whole Quantity",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "18"
-    },
-    {
-     "name": "RFQID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "19"
-    },
-    {
-     "name": "bidRelativePrice",
-     "dataType": "Name/Value Pairs",
-     "JSONDataType": "OBJECT",
-     "required": "Conditional",
-     "position": "20"
-    },
-    {
-     "name": "askRelativePrice",
-     "dataType": "Name/Value Pairs",
-     "JSONDataType": "OBJECT",
-     "required": "Conditional",
-     "position": "21"
-    },
-    {
-     "name": "validUntilDuration",
-     "dataType": "Real Quantity",
-     "JSONDataType": "NUMBER",
-     "required": "Optional",
-     "position": "22"
-    }
-   ]
-  },
-  {
    "eventName": "MOOFS",
-   "source": "Table 94",
+   "source": "Table 88",
    "fields": [
     {
      "name": "actionType",
@@ -7289,7 +6484,7 @@
   },
   {
    "eventName": "MOFA",
-   "source": "Table 96",
+   "source": "Table 90",
    "fields": [
     {
      "name": "actionType",
@@ -7440,7 +6635,7 @@
   },
   {
    "eventName": "MOPA",
-   "source": "Table 97",
+   "source": "Table 91",
    "fields": [
     {
      "name": "actionType",
@@ -7626,7 +6821,7 @@
   },
   {
    "eventName": "MOAA",
-   "source": "Table 98",
+   "source": "Table 92",
    "fields": [
     {
      "name": "actionType",
@@ -7829,7 +7024,7 @@
   },
   {
    "eventName": "MOOE",
-   "source": "Table 99",
+   "source": "Table 93",
    "fields": [
     {
      "name": "actionType",
@@ -7998,7 +7193,7 @@
   },
   {
    "eventName": "MLMR",
-   "source": "Table 104",
+   "source": "Table 98",
    "fields": [
     {
      "name": "actionType",
@@ -8240,7 +7435,7 @@
   },
   {
    "eventName": "MLCR",
-   "source": "Table 106",
+   "source": "Table 100",
    "fields": [
     {
      "name": "actionType",
@@ -8398,7 +7593,7 @@
   },
   {
    "eventName": "MLOA",
-   "source": "Table 107",
+   "source": "Table 101",
    "fields": [
     {
      "name": "actionType",
@@ -8643,7 +7838,7 @@
   },
   {
    "eventName": "MLIR",
-   "source": "Table 109",
+   "source": "Table 103",
    "fields": [
     {
      "name": "actionType",
@@ -8843,7 +8038,7 @@
   },
   {
    "eventName": "MLIM",
-   "source": "Table 111",
+   "source": "Table 105",
    "fields": [
     {
      "name": "actionType",
@@ -9081,7 +8276,7 @@
   },
   {
    "eventName": "MLIC",
-   "source": "Table 113",
+   "source": "Table 107",
    "fields": [
     {
      "name": "actionType",
@@ -9225,7 +8420,7 @@
   },
   {
    "eventName": "MLIMR",
-   "source": "Table 114",
+   "source": "Table 108",
    "fields": [
     {
      "name": "actionType",
@@ -9415,7 +8610,7 @@
   },
   {
    "eventName": "MLICR",
-   "source": "Table 116",
+   "source": "Table 110",
    "fields": [
     {
      "name": "actionType",
@@ -9535,7 +8730,7 @@
   },
   {
    "eventName": "MLCO",
-   "source": "Table 117",
+   "source": "Table 111",
    "fields": [
     {
      "name": "actionType",
@@ -9714,7 +8909,7 @@
   },
   {
    "eventName": "MLCOM",
-   "source": "Table 119",
+   "source": "Table 113",
    "fields": [
     {
      "name": "actionType",
@@ -9907,7 +9102,7 @@
   },
   {
    "eventName": "MLCOC",
-   "source": "Table 121",
+   "source": "Table 115",
    "fields": [
     {
      "name": "actionType",
@@ -10027,7 +9222,7 @@
   },
   {
    "eventName": "MLOM",
-   "source": "Table 122",
+   "source": "Table 116",
    "fields": [
     {
      "name": "actionType",
@@ -10299,7 +9494,7 @@
   },
   {
    "eventName": "MLOMR",
-   "source": "Table 124",
+   "source": "Table 118",
    "fields": [
     {
      "name": "actionType",
@@ -10492,7 +9687,7 @@
   },
   {
    "eventName": "MLOCR",
-   "source": "Table 127",
+   "source": "Table 121",
    "fields": [
     {
      "name": "actionType",
@@ -10597,933 +9792,8 @@
    ]
   },
   {
-   "eventName": "MLNQ",
-   "source": "Table 128",
-   "fields": [
-    {
-     "name": "actionType",
-     "dataType": "Choice",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "1"
-    },
-    {
-     "name": "errorROEID",
-     "dataType": "Unsigned",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "2"
-    },
-    {
-     "name": "firmROEID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "3"
-    },
-    {
-     "name": "type",
-     "dataType": "Message Type",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "4"
-    },
-    {
-     "name": "CATReporterIMID",
-     "dataType": "CAT Reporter IMID",
-     "JSONDataType": "STRING",
-     "required": "Optional",
-     "position": "5"
-    },
-    {
-     "name": "quoteKeyDate",
-     "dataType": "Timestamp",
-     "JSONDataType": [
-      "STRING",
-      "NUMBER"
-     ],
-     "required": "Required",
-     "position": "6"
-    },
-    {
-     "name": "quoteID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "7"
-    },
-    {
-     "name": "underlying",
-     "dataType": "Symbol",
-     "JSONDataType": "STRING",
-     "required": "Optional",
-     "position": "8"
-    },
-    {
-     "name": "eventTimestamp",
-     "dataType": "Timestamp",
-     "JSONDataType": [
-      "STRING",
-      "NUMBER"
-     ],
-     "required": "Required",
-     "position": "9"
-    },
-    {
-     "name": "onlyOneQuoteFlag",
-     "dataType": "Boolean",
-     "JSONDataType": "BOOLEAN",
-     "required": "Required",
-     "position": "10"
-    },
-    {
-     "name": "bidPrice",
-     "dataType": "Price",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "11"
-    },
-    {
-     "name": "bidQty",
-     "dataType": "Whole Quantity",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "12"
-    },
-    {
-     "name": "askPrice",
-     "dataType": "Price",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "13"
-    },
-    {
-     "name": "askQty",
-     "dataType": "Whole Quantity",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "14"
-    },
-    {
-     "name": "firmDesignatedID",
-     "dataType": "Text (40)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "15"
-    },
-    {
-     "name": "accountHolderType",
-     "dataType": "Choice",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "16"
-    },
-    {
-     "name": "numberOfLegs",
-     "dataType": "Whole Quantity",
-     "JSONDataType": "NUMBER",
-     "required": "Required",
-     "position": "17"
-    },
-    {
-     "name": "RFQID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "18"
-    },
-    {
-     "name": "RFQFlag",
-     "dataType": "Boolean",
-     "JSONDataType": "BOOLEAN",
-     "required": "Required",
-     "position": "19"
-    },
-    {
-     "name": "quotePriceType",
-     "dataType": "Choice",
-     "JSONDataType": "STRING",
-     "required": "Conditional",
-     "position": "20"
-    },
-    {
-     "name": "validUntilDuration",
-     "dataType": "Real Quantity",
-     "JSONDataType": "NUMBER",
-     "required": "Optional",
-     "position": "21"
-    },
-    {
-     "name": "legDetails",
-     "dataType": "Leg Details",
-     "JSONDataType": "ARRAY",
-     "required": "Required",
-     "position": "22"
-    }
-   ]
-  },
-  {
-   "eventName": "MLRQ",
-   "source": "Table 130",
-   "fields": [
-    {
-     "name": "actionType",
-     "dataType": "Choice",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "1"
-    },
-    {
-     "name": "errorROEID",
-     "dataType": "Unsigned",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "2"
-    },
-    {
-     "name": "firmROEID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "3"
-    },
-    {
-     "name": "type",
-     "dataType": "Message Type",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "4"
-    },
-    {
-     "name": "CATReporterIMID",
-     "dataType": "CAT Reporter IMID",
-     "JSONDataType": "STRING",
-     "required": "Optional",
-     "position": "5"
-    },
-    {
-     "name": "quoteKeyDate",
-     "dataType": "Timestamp",
-     "JSONDataType": [
-      "STRING",
-      "NUMBER"
-     ],
-     "required": "Required",
-     "position": "6"
-    },
-    {
-     "name": "quoteID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "7"
-    },
-    {
-     "name": "underlying",
-     "dataType": "Symbol",
-     "JSONDataType": "STRING",
-     "required": "Optional",
-     "position": "8"
-    },
-    {
-     "name": "eventTimestamp",
-     "dataType": "Timestamp",
-     "JSONDataType": [
-      "STRING",
-      "NUMBER"
-     ],
-     "required": "Required",
-     "position": "9"
-    },
-    {
-     "name": "senderIMID",
-     "dataType": "Industry Member ID",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "10"
-    },
-    {
-     "name": "destination",
-     "dataType": "Industry Member ID",
-     "JSONDataType": "STRING",
-     "required": "Conditional",
-     "position": "11"
-    },
-    {
-     "name": "routedQuoteID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "12"
-    },
-    {
-     "name": "dupROIDCond",
-     "dataType": "Boolean",
-     "JSONDataType": "BOOLEAN",
-     "required": "Required",
-     "position": "13"
-    },
-    {
-     "name": "bidPrice",
-     "dataType": "Price",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "14"
-    },
-    {
-     "name": "bidQty",
-     "dataType": "Whole Quantity",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "15"
-    },
-    {
-     "name": "askPrice",
-     "dataType": "Price",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "16"
-    },
-    {
-     "name": "askQty",
-     "dataType": "Whole Quantity",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "17"
-    },
-    {
-     "name": "quoteRejectedFlag",
-     "dataType": "Boolean",
-     "JSONDataType": "BOOLEAN",
-     "required": "Required",
-     "position": "18"
-    },
-    {
-     "name": "destinationType",
-     "dataType": "Choice",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "19"
-    },
-    {
-     "name": "numberOfLegs",
-     "dataType": "Whole Quantity",
-     "JSONDataType": "NUMBER",
-     "required": "Required",
-     "position": "20"
-    },
-    {
-     "name": "RFQID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "21"
-    },
-    {
-     "name": "quotePriceType",
-     "dataType": "Choice",
-     "JSONDataType": "STRING",
-     "required": "Conditional",
-     "position": "22"
-    },
-    {
-     "name": "validUntilDuration",
-     "dataType": "Real Quantity",
-     "JSONDataType": "NUMBER",
-     "required": "Optional",
-     "position": "23"
-    },
-    {
-     "name": "legDetails",
-     "dataType": "Leg Details",
-     "JSONDataType": "ARRAY",
-     "required": "Required",
-     "position": "24"
-    }
-   ]
-  },
-  {
-   "eventName": "MLQS",
-   "source": "Table 132",
-   "fields": [
-    {
-     "name": "actionType",
-     "dataType": "Choice",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "1"
-    },
-    {
-     "name": "errorROEID",
-     "dataType": "Unsigned",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "2"
-    },
-    {
-     "name": "firmROEID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "3"
-    },
-    {
-     "name": "type",
-     "dataType": "Message Type",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "4"
-    },
-    {
-     "name": "CATReporterIMID",
-     "dataType": "CAT Reporter IMID",
-     "JSONDataType": "STRING",
-     "required": "Optional",
-     "position": "5"
-    },
-    {
-     "name": "quoteKeyDate",
-     "dataType": "Timestamp",
-     "JSONDataType": [
-      "STRING",
-      "NUMBER"
-     ],
-     "required": "Required",
-     "position": "6"
-    },
-    {
-     "name": "quoteID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "7"
-    },
-    {
-     "name": "underlying",
-     "dataType": "Symbol",
-     "JSONDataType": "STRING",
-     "required": "Optional",
-     "position": "8"
-    },
-    {
-     "name": "eventTimestamp",
-     "dataType": "Timestamp",
-     "JSONDataType": [
-      "STRING",
-      "NUMBER"
-     ],
-     "required": "Required",
-     "position": "9"
-    },
-    {
-     "name": "firmDesignatedID",
-     "dataType": "Text (40)",
-     "JSONDataType": "STRING",
-     "required": "Conditional",
-     "position": "10"
-    },
-    {
-     "name": "senderIMID",
-     "dataType": "Industry Member ID",
-     "JSONDataType": "STRING",
-     "required": "Conditional",
-     "position": "11"
-    },
-    {
-     "name": "destination",
-     "dataType": [
-      "Industry Member ID",
-      "Exchange ID"
-     ],
-     "JSONDataType": "STRING",
-     "required": "Conditional",
-     "position": "12"
-    },
-    {
-     "name": "destinationType",
-     "dataType": "Choice",
-     "JSONDataType": "STRING",
-     "required": "Conditional",
-     "position": "13"
-    },
-    {
-     "name": "routedQuoteID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Conditional",
-     "position": "14"
-    },
-    {
-     "name": "quoteRejectedFlag",
-     "dataType": "Boolean",
-     "JSONDataType": "BOOLEAN",
-     "required": "Required",
-     "position": "15"
-    },
-    {
-     "name": "RFQID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "16"
-    },
-    {
-     "name": "legDetails",
-     "dataType": "Leg Details",
-     "JSONDataType": "ARRAY",
-     "required": "Conditional",
-     "position": "17"
-    }
-   ]
-  },
-  {
-   "eventName": "MLQR",
-   "source": "Table 134",
-   "fields": [
-    {
-     "name": "actionType",
-     "dataType": "Choice",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "1"
-    },
-    {
-     "name": "errorROEID",
-     "dataType": "Unsigned",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "2"
-    },
-    {
-     "name": "firmROEID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "3"
-    },
-    {
-     "name": "type",
-     "dataType": "Message Type",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "4"
-    },
-    {
-     "name": "CATReporterIMID",
-     "dataType": "CAT Reporter IMID",
-     "JSONDataType": "STRING",
-     "required": "Optional",
-     "position": "5"
-    },
-    {
-     "name": "quoteKeyDate",
-     "dataType": "Timestamp",
-     "JSONDataType": [
-      "STRING",
-      "NUMBER"
-     ],
-     "required": "Required",
-     "position": "6"
-    },
-    {
-     "name": "quoteID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "7"
-    },
-    {
-     "name": "underlying",
-     "dataType": "Symbol",
-     "JSONDataType": "STRING",
-     "required": "Optional",
-     "position": "8"
-    },
-    {
-     "name": "receivedQuoteID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "9"
-    },
-    {
-     "name": "dupROIDCond",
-     "dataType": "Boolean",
-     "JSONDataType": "BOOLEAN",
-     "required": "Required",
-     "position": "10"
-    },
-    {
-     "name": "eventTimestamp",
-     "dataType": "Timestamp",
-     "JSONDataType": [
-      "STRING",
-      "NUMBER"
-     ],
-     "required": "Required",
-     "position": "11"
-    },
-    {
-     "name": "receiverIMID",
-     "dataType": "Industry Member ID",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "12"
-    },
-    {
-     "name": "senderIMID",
-     "dataType": "Industry Member ID",
-     "JSONDataType": "STRING",
-     "required": "Conditional",
-     "position": "13"
-    },
-    {
-     "name": "onlyOneQuoteFlag",
-     "dataType": "Boolean",
-     "JSONDataType": "BOOLEAN",
-     "required": "Required",
-     "position": "14"
-    },
-    {
-     "name": "bidPrice",
-     "dataType": "Price",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "15"
-    },
-    {
-     "name": "bidQty",
-     "dataType": "Whole Quantity",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "16"
-    },
-    {
-     "name": "askPrice",
-     "dataType": "Price",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "17"
-    },
-    {
-     "name": "askQty",
-     "dataType": "Whole Quantity",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "18"
-    },
-    {
-     "name": "numberOfLegs",
-     "dataType": "Whole Quantity",
-     "JSONDataType": "NUMBER",
-     "required": "Required",
-     "position": "19"
-    },
-    {
-     "name": "RFQID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "20"
-    },
-    {
-     "name": "RFQFlag",
-     "dataType": "Boolean",
-     "JSONDataType": "BOOLEAN",
-     "required": "Required",
-     "position": "21"
-    },
-    {
-     "name": "quotePriceType",
-     "dataType": "Choice",
-     "JSONDataType": "STRING",
-     "required": "Conditional",
-     "position": "22"
-    },
-    {
-     "name": "senderType",
-     "dataType": "Choice",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "23"
-    },
-    {
-     "name": "validUntilDuration",
-     "dataType": "Numeric (4,6)",
-     "JSONDataType": "NUMBER",
-     "required": "Optional",
-     "position": "24"
-    },
-    {
-     "name": "legDetails",
-     "dataType": "Leg Details",
-     "JSONDataType": "ARRAY",
-     "required": "Required",
-     "position": "25"
-    }
-   ]
-  },
-  {
-   "eventName": "MLQC",
-   "source": "Table 136",
-   "fields": [
-    {
-     "name": "actionType",
-     "dataType": "Choice",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "1"
-    },
-    {
-     "name": "errorROEID",
-     "dataType": "Unsigned",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "2"
-    },
-    {
-     "name": "firmROEID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "3"
-    },
-    {
-     "name": "type",
-     "dataType": "Message Type",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "4"
-    },
-    {
-     "name": "CATReporterIMID",
-     "dataType": "CAT Reporter IMID",
-     "JSONDataType": "STRING",
-     "required": "Optional",
-     "position": "5"
-    },
-    {
-     "name": "quoteKeyDate",
-     "dataType": "Timestamp",
-     "JSONDataType": [
-      "STRING",
-      "NUMBER"
-     ],
-     "required": "Required",
-     "position": "6"
-    },
-    {
-     "name": "quoteID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "7"
-    },
-    {
-     "name": "underlying",
-     "dataType": "Symbol",
-     "JSONDataType": "STRING",
-     "required": "Optional",
-     "position": "8"
-    },
-    {
-     "name": "eventTimestamp",
-     "dataType": "Timestamp",
-     "JSONDataType": [
-      "STRING",
-      "NUMBER"
-     ],
-     "required": "Required",
-     "position": "9"
-    },
-    {
-     "name": "RFQID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "11"
-    }
-   ]
-  },
-  {
-   "eventName": "MLQM",
-   "source": "Table 137",
-   "fields": [
-    {
-     "name": "actionType",
-     "dataType": "Choice",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "1"
-    },
-    {
-     "name": "errorROEID",
-     "dataType": "Unsigned",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "2"
-    },
-    {
-     "name": "firmROEID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "3"
-    },
-    {
-     "name": "type",
-     "dataType": "Message Type",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "4"
-    },
-    {
-     "name": "CATReporterIMID",
-     "dataType": "CAT Reporter IMID",
-     "JSONDataType": "STRING",
-     "required": "Optional",
-     "position": "5"
-    },
-    {
-     "name": "quoteKeyDate",
-     "dataType": "Timestamp",
-     "JSONDataType": [
-      "STRING",
-      "NUMBER"
-     ],
-     "required": "Required",
-     "position": "6"
-    },
-    {
-     "name": "quoteID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "7"
-    },
-    {
-     "name": "underlying",
-     "dataType": "Symbol",
-     "JSONDataType": "STRING",
-     "required": "Optional",
-     "position": "8"
-    },
-    {
-     "name": "priorQuoteKeyDate",
-     "dataType": "Timestamp",
-     "JSONDataType": [
-      "STRING",
-      "NUMBER"
-     ],
-     "required": "Conditional",
-     "position": "9"
-    },
-    {
-     "name": "priorQuoteID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Conditional",
-     "position": "10"
-    },
-    {
-     "name": "receiverIMID",
-     "dataType": "Industry Member ID",
-     "JSONDataType": "STRING",
-     "required": "Conditional",
-     "position": "11"
-    },
-    {
-     "name": "senderIMID",
-     "dataType": "Industry Member ID",
-     "JSONDataType": "STRING",
-     "required": "Conditional",
-     "position": "12"
-    },
-    {
-     "name": "routedQuoteID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "13"
-    },
-    {
-     "name": "eventTimestamp",
-     "dataType": "Timestamp",
-     "JSONDataType": [
-      "STRING",
-      "NUMBER"
-     ],
-     "required": "Required",
-     "position": "14"
-    },
-    {
-     "name": "bidPrice",
-     "dataType": "Price",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "15"
-    },
-    {
-     "name": "bidQty",
-     "dataType": "Whole Quantity",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "16"
-    },
-    {
-     "name": "askPrice",
-     "dataType": "Price",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "17"
-    },
-    {
-     "name": "askQty",
-     "dataType": "Whole Quantity",
-     "JSONDataType": "NUMBER",
-     "required": "Conditional",
-     "position": "18"
-    },
-    {
-     "name": "numberOfLegs",
-     "dataType": "Whole Quantity",
-     "JSONDataType": "NUMBER",
-     "required": "Required",
-     "position": "19"
-    },
-    {
-     "name": "RFQID",
-     "dataType": "Text (64)",
-     "JSONDataType": "STRING",
-     "required": "Required",
-     "position": "20"
-    },
-    {
-     "name": "quotePriceType",
-     "dataType": "Choice",
-     "JSONDataType": "STRING",
-     "required": "Conditional",
-     "position": "21"
-    },
-    {
-     "name": "validUntilDuration",
-     "dataType": "Real Quantity",
-     "JSONDataType": "NUMBER",
-     "required": "Optional",
-     "position": "22"
-    },
-    {
-     "name": "legDetails",
-     "dataType": "Leg Details",
-     "JSONDataType": "ARRAY",
-     "required": "Required",
-     "position": "23"
-    }
-   ]
-  },
-  {
    "eventName": "MLOE",
-   "source": "Table 141",
+   "source": "Table 124",
    "fields": [
     {
      "name": "actionType",
@@ -11811,19 +10081,6 @@
     "OE"
    ],
    "source": "Appendix G, fulfillmentLinkType (option events)"
-  },
-  {
-   "name": "senderType",
-   "eventNames": [
-    "MOQR",
-    "MLQR"
-   ],
-   "values": [
-    "F",
-    "N",
-    "S"
-   ],
-   "source": "Appendix G, senderType (quote events)"
   }
  ]
 }

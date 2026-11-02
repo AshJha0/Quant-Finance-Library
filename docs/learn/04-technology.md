@@ -595,7 +595,7 @@ client code prefix as 1009-08, column AD's number for it (recipes 470 and 471). 
 markets considered equivalent under EMIR Article 2a (no list is bundled; without one the rule
 still skips such a venue, recipe 490). For CAT the option lifecycle, multi-leg and supplement events, linkage across
 files and the schema gate came later in 3.1 (17j to 17l), and the other events of Tables 60
-and 61 in 3.2 (17m); still not checked are their linkage and reference data. `check` is
+and 61 in 3.2 (17m), with their linkage in 4.0; still not checked is their reference data. `check` is
 batch-local, so pass a whole day's events for a firm, or use `checkFiles`. Recipes 364 and 365.
 
 #### Branches, venues, a changed UTI, and dates the repository remembers (3.1)
@@ -849,8 +849,8 @@ Formally:
 
 The library's readings are two:
 
-- The new types are not linkage-checked yet. `CatLinkageChecker` skips them, so its
-  results for the 3.1 types are unchanged.
+- In 3.2 the new types were not linkage-checked: `CatLinkageChecker` skipped them.
+  Since 4.0 they are (see "Linkage for the 47 types" below).
 - Each type has a family (`CatEventFamily`), taken from the columns of Tables 60 and 61.
   It is there to group the work, and it does not change any check.
 
@@ -867,13 +867,60 @@ Worked examples (own tests, `CatTable6061Test`):
    accepted with a reason in `cat-official-schema-deltas.txt`.
 
 *In this library:* `CatEventBuilder.start(type)` starts any type. `CatEventType.family()`
-groups them. The bundled schema now covers all 66 types. Recipes 480 to 483.
+groups them. The bundled schema covered all 66 types in 3.2; since 4.0 it covers the 55
+that v4.2.0 still defines (17n). Recipes 480 to 483.
+
+Table numbers in this section are those of v4.1.0 r14, the specification 3.2 transcribed.
+v4.2.0 r4 numbers each table from 13 to 84 one lower and each from 90 to 127 six lower
+(Table 76, MOCO, is Table 75), because it drops a table before the equity events and the
+option and multi-leg quote tables.
+
+#### Linkage for the 47 types (4.0)
+
+The plain idea: every one of these events either starts a key (a child order, an internal
+route accepted by a desk, a received quote, an allocation) or points at one that must
+already exist (a cancel, a modification request, an amendment). CAT checks the pointer;
+so does the library now.
+
+Formally, each type uses the keys of the linkage list under its own table (v4.2.0 r4;
+section 2.6.1, Table 5 for the key fields):
+
+- **Start a key.** MOIR, MOCO, MLIR, MLCO and MLOA assign an Order Key; MOPA an
+  Allocation Key; the v4.1.0 r14 quote types MOQR, MLNQ and MLQR a Quote Key. Two of them
+  with one key are both reported (CAT-LK01, as for the 3.1 types).
+- **Parent Order Key (CAT-LK06).** An internal route or child order that carries
+  parentOrderKeyDate and parentOrderID must name an order in scope (Tables 70, 75, 103
+  and 111).
+- **Prior key.** MOIM, MOCOM, MOOJ, MOOE, MLIM, MLCOM, MLOM and MLOE link through the
+  Prior Order Key when they carry one, and then hold a new Order Key; MOFA through the
+  Prior Fulfillment Key, MOAA through the Prior Allocation Key, MOQM and MLQM through the
+  Prior Quote Key. Without a prior key they link through their own key.
+- **Everything else needs its key in scope:** order events CAT-LK07, quote events CAT-LK08,
+  fulfillment and allocation amendments CAT-LK09, supplements CAT-LK04.
+
+The library's reading: for these types any originating event with the same key kind
+links. Order Keys are unique per reporter (Table 5), so the key alone names the order;
+the library does not also check that a child-order cancel points at a child order. It is
+marked `LIBRARY_READING` on CAT-LK07. Routes (MOOR, MLOR) may now route internal-route,
+child, accepted, adjusted and effective orders, and MLOC may cancel an MLOA. A batch of
+the 3.1 types alone gives the same issues as in 3.x.
+
+Worked examples (own tests, `CatTable6061LinkageTest`):
+
+1. A MONO P1, a MOCO C1 with parent P1, a MOCOC for C1 and a MOOR for C1 give no issue.
+   Drop the MONO and the MOCO gives CAT-LK06.
+2. A MOCOM with prior key C1 and new orderID C2 links to MOCO C1; a MOCOC for C2 then
+   links to the MOCOM.
+3. A MOFA with the fulfillmentID of a MOOF links; alone it gives CAT-LK09.
+4. Two MOIR events with orderID D1 both give CAT-LK01.
+
+*In this library:* `CatLinkageChecker.rules()` (nine rules). Recipes 491 to 494.
 
 
 ### 17n. Maintaining the CAT transcription (3.2)
 
 The library's CAT checks rest on a transcription: the field tables of a PDF
-specification turned into a JSON file (`cat-im-schema-subset-4.1.0r14.json`) and a
+specification turned into a JSON file (`cat-im-schema-subset-4.2.0r4.json` since 4.0; the 4.1.0r14 file in 3.2) and a
 row of rules per event type. A transcription can be wrong in two ways. The script can
 misread the PDF, or CAT can publish a new version. Two tools tell those apart: the
 script that regenerates the file, and the nightly comparison with the official schema.
@@ -922,8 +969,33 @@ tables): the comparison listed 33 differences.
 - 16 were version changes. 4.2.0 drops the eleven option and multi-leg quote events
   (MONQ, MORQ, MOQR, MOQC, MOQM, MLNQ, MLRQ, MLQS, MLQR, MLQC, MLQM) and retires five
   MENQ fields (RFQID, RFQFlag, bidRelativePrice, askRelativePrice, validUntilDuration).
-  These are the 16 lines of the deltas file. The library keeps those types at v4.1.0 r14
-  until a 4.2 specification is transcribed.
+  These were the 16 lines of the deltas file in 3.2. The library kept those types at
+  v4.1.0 r14 until a 4.2 specification was transcribed, which 4.0 does (below).
+
+#### Moving the transcription to v4.2.0 r4 (4.0)
+
+Worked example (4.0.0, own transcription): `gen2.py` now takes the version, and with
+`4.2.0r4` reads the CLEAN file of 10/21/2026 from catnmsplan.com (public, no login; the
+PDF is kept out of the repo like the 4.1 one). With `4.1.0r14` it still re-derives the 3.2
+file byte for byte, which is the check that the script change did not alter the old
+reading.
+
+- The 55 events v4.2.0 still defines have the same fields, data types, Include Keys and
+  positions as in v4.1.0 r14, and the same price and choice rules. Only the table numbers
+  move. MENQ loses the five RFQ fields v4.2.0 retires.
+- One script fix: in Table 92 (MOAA) the price sentence runs over a page break, and the
+  running header broke "greater than or equal to zero". The script now removes the
+  header first; without it MOAA would have lost its non-negative price rule.
+- The eleven quote types are deprecated for removal (`CatEventType.MONQ` and the ten
+  others, and `CatEventBuilder.newOptionQuote`), not removed: the release policy needs one
+  minor of deprecation before a removal, so they go in 5.0. Their record and linkage rules
+  stay, cited to v4.1.0 r14, for files still reported under it. The bundled schema
+  (`cat-im-schema-subset-4.2.0r4.json`) leaves them out, so `CatSchema` reports them as
+  CAT-S03.
+- Against the official 4.2.0 schema (sha256 21c6e732...cad9) the comparison finds no
+  difference, and the deltas file is empty.
+- The v4.2.0 Quote Key no longer lists RFQID. RFQID is retired on MENQ, so the key the
+  library builds is unchanged for MENQ records that leave it blank.
 
 *In this library:* `scripts/cat-transcription/`, `scripts/reference-files.sha256`,
 `CatOfficialSchemaTest`, `cat-official-schema-deltas.txt`. Diagram:
