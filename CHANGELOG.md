@@ -6,7 +6,7 @@ Entries for 1.x releases are archived in [docs/history/CHANGELOG-1.x.md](docs/hi
 
 ## [Unreleased]
 
-## [2.1.0] - 2026-11-01
+## [2.1.0] - 2026-11-02
 
 Minor release. Everything is additive: code written for 2.0 compiles and behaves the same, apart from the notes in [docs/MIGRATION_2.1.md](docs/MIGRATION_2.1.md). An API-compatibility check against 2.0.0 now runs in CI.
 
