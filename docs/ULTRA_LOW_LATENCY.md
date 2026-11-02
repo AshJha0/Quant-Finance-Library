@@ -256,8 +256,8 @@ symbol-routing facade. A symbol can be registered on several shards;
 
 - Kernel-bypass networking, thread affinity and NIC hardware timestamps (need native
   code).
-- The hot-path order encoder (`FixOrderEncoder`) writes FIX 4.4 only, message views
-  are not dictionary-driven, and there is no per-message ApplVerID.
+- The hot-path views read only the repeating groups they need (NoMDEntries, a count of
+  NoPartyIDs); they do not expose party or leg contents in place.
 - Order audit trails for regulators. Entitlement checks (`entitlements`) and RTS 22
   reports (`reporting`) exist; drop-copy reconciliation
   (`trading.DropCopyReconciler`) compares fills the caller supplies, and nothing
