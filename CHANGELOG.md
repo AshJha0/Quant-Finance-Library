@@ -32,6 +32,10 @@ Owner decision, 2026-11-02: the revised design in [docs/DESIGN_4.0.md](docs/DESI
 - New tests: `ModuleGraphTest` fails on a module cycle or a package in two modules; the stable descriptor test fails if `jdeps` finds `java.net.http` or `jdk.httpserver` in core; descriptor tests for the two new modules.
 - The japicmp baseline moves from 3.0.0 to 3.2.0 (`scripts/fetch-api-baseline.sh`).
 
+#### Fixed
+
+- `trading.HftOrderGateway`: on a venue cancel or reject (and an order rejected after a kill) the reservation is now released before the CANCELED or REJECTED state is published, as fills already did. Before, a thread that saw the terminal status could still read the old open quantity in the risk gate for a moment (exposure overstated, the conservative side); `OrderLifecycleTest.restingOrdersCountAgainstThePositionLimit` failed once on Windows CI from this. A repeated cancel or reject still releases nothing.
+
 ## [3.2.0] - 2026-11-02
 
 Minor release, additive over 3.1.0: no public member is removed, no signature changes, and no existing result changes unless noted under Fixed. japicmp against the released 3.0.0 jars: semver MINOR for both modules, no allow-list. It is the last 3.x release before 4.0.0, which follows it directly and removes everything deprecated for removal here; [docs/MIGRATION_4.0.md](docs/MIGRATION_4.0.md) lists each move with its new dependency.
