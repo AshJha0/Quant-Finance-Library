@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <!-- Own coordinates first: JitPack's artifact scan reads the first groupId/artifactId/version in the file. -->
+    <groupId>com.quantfinlib</groupId>
+    <artifactId>quant-finance-library-lowlatency</artifactId>
+    <version>3.0.0</version>
+    <parent>
+        <groupId>com.quantfinlib</groupId>
+        <artifactId>quant-finance-library-parent</artifactId>
+        <version>3.0.0</version>
+    </parent>
+    <packaging>jar</packaging>
+    <name>Quant-Finance-Library low-latency lane</name>
+    <description>Reference tier of Quant-Finance-Library: order books, FIX and SBE codecs, feed handlers, market-data bus, trading gateways, entitlements and regulatory transaction reporting. Requires quant-finance-library transitively.</description>
+    <properties>
+        <qfl.module>com.quantfinlib.lowlatency</qfl.module>
+    </properties>
+    <dependencies>
+        <dependency>
+            <groupId>com.quantfinlib</groupId>
+            <artifactId>quant-finance-library</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+    </dependencies>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.5.1</version>
+                <executions>
+                    <!-- The library jar carries no demos or hand-rolled benchmarks. -->
+                    <execution>
+                        <id>default-jar</id>
+                        <configuration>
+                            <excludes>
+                                <exclude>com/quantfinlib/examples/**</exclude>
+                            </excludes>
+                        </configuration>
+                    </execution>
+                    <!-- Demos and benchmarks ship separately, classifier "examples",
+                         built from the same compiled classes. -->
+                    <execution>
+                        <id>examples-jar</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                        <configuration>
+                            <classifier>examples</classifier>
+                            <includes>
+                                <include>com/quantfinlib/examples/**</include>
+                            </includes>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+    <profiles>
+        <!-- Reference tier: compared with the 2.4.0 jar and reported only
+             (docs/STABILITY.md: formats and signatures may change in a minor).
+             Report: lowlatency/target/japicmp/api-lowlatency.html. -->
+        <profile>
+            <id>api-compat</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>com.github.siom79.japicmp</groupId>
+                        <artifactId>japicmp-maven-plugin</artifactId>
+                        <version>${japicmp.version}</version>
+                        <configuration>
+                            <oldVersion>
+                                <file>
+                                    <path>${api.baseline.jar}</path>
+                                </file>
+                            </oldVersion>
+                            <newVersion>
+                                <file>
+                                    <path>${project.build.directory}/${project.build.finalName}.jar</path>
+                                </file>
+                            </newVersion>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>api-lowlatency</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>cmp</goal>
+                                </goals>
+                                <configuration>
+                                    <parameter>
+                                        <onlyModified>true</onlyModified>
+                                        <accessModifier>protected</accessModifier>
+                                        <ignoreMissingClasses>true</ignoreMissingClasses>
+                                        <breakBuildOnBinaryIncompatibleModifications>false</breakBuildOnBinaryIncompatibleModifications>
+                                        <breakBuildOnSourceIncompatibleModifications>false</breakBuildOnSourceIncompatibleModifications>
+                                        <includes>
+                                            <include>com.quantfinlib.entitlements</include>
+                                            <include>com.quantfinlib.feed</include>
+                                            <include>com.quantfinlib.fix</include>
+                                            <include>com.quantfinlib.marketdata</include>
+                                            <include>com.quantfinlib.orderbook</include>
+                                            <include>com.quantfinlib.sbe</include>
+                                            <include>com.quantfinlib.trading</include>
+                                            <include>com.quantfinlib.util</include>
+                                        </includes>
+                                    </parameter>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+</project>

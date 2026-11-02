@@ -52,13 +52,16 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: coverage-report
-          path: target/site/jacoco
+          path: |
+            core/target/site/jacoco
+            lowlatency/target/site/jacoco
           if-no-files-found: ignore
 
   api-compat:
-    # Binary compatibility against the released 2.0.0 jar (japicmp). Fails on
-    # an incompatible change in a stable package (docs/STABILITY.md); changes
-    # in the reference packages are reported in api-all.html only.
+    # Binary compatibility against the released 2.4.0 jar (japicmp). Fails on
+    # an incompatible change in the stable module (docs/STABILITY.md) that is
+    # not on the 3.0 allow-list in core/pom.xml; the low-latency module is
+    # reported in api-lowlatency.html only.
     name: API compatibility
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -69,21 +72,23 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
-      - name: Fetch the 2.0.0 baseline jar
-        run: bash scripts/fetch-api-baseline.sh 2.2.0
-      - name: Compare against 2.0.0
+      - name: Fetch the 2.4.0 baseline jar
+        run: bash scripts/fetch-api-baseline.sh 2.4.0
+      - name: Compare against 2.4.0
         run: ./mvnw -B --no-transfer-progress -Papi-compat -DskipTests -Dmaven.javadoc.skip verify
       - name: Summary
-        if: always() && hashFiles('target/japicmp/api-stable.md') != ''
+        if: always() && hashFiles('core/target/japicmp/api-stable.md') != ''
         run: |
           {
-            echo '## API changes in stable packages since 2.0.0'
-            cat target/japicmp/api-stable.md
+            echo '## API changes in the stable module since 2.4.0'
+            cat core/target/japicmp/api-stable.md
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload reports
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: api-compat-report
-          path: target/japicmp
+          path: |
+            core/target/japicmp
+            lowlatency/target/japicmp
           if-no-files-found: ignore

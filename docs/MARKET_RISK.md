@@ -21,7 +21,7 @@ numbers for losses.
 |---|---|
 | Equity, FX and commodity bars | `data.CsvBarLoader`, `data.HttpBarFetcher`, `core.BarSeries` |
 | Live streams | `feed.WebSocketFeed`, `marketdata.HftMarketDataBus`, `fix.FixMarketDataView` (35=W/X) |
-| Tick history | `data.TickFileWriter`/`TickFileReader` (QFLT), `data.TickCapture` |
+| Tick history | `marketdata.tick.TickFileWriter`/`TickFileReader` (QFLT), `marketdata.TickCapture` (low-latency artifact) |
 | Yield curves | `rates.YieldCurve` (zero rates; `bootstrapAnnualParSwaps` from annual par swaps, single curve); `rates.MultiCurveBootstrap` (OIS discount and projection curves) with `rates.MultiCurveRisk` for bucketed, key-rate and parallel DV01 |
 | Implied volatility | `pricing.VolSurface`, `fx.FxVolSurface` (delta-quoted) |
 | FX forwards and swap points | `fx.SwapPointsCurve`, `pricing.ForwardCurve` |
@@ -209,8 +209,11 @@ library.
 ## Not implemented
 
 - Certification of the FRTB standardised approach (`risk.FrtbSa`, `FrtbDrc`,
-  `FrtbRrao`, following BCBS d457 with MAR paragraph citations), and the default
-  risk charge for securitisations. Since 2.3 the supervisory correlations for CSR
+  `FrtbRrao`, `FrtbDrcSecuritisation`, following BCBS d457 with MAR paragraph
+  citations). The securitisation DRC (2.4, MAR22.27 to 22.45) converts a
+  banking-book weight to a DRC weight by 8%, which the Basel text does not print
+  (library reading, unconfirmed), and takes SEC-IRBA weights and the
+  decomposition of index positions from the caller. Since 2.3 the supervisory correlations for CSR
   buckets, GIRR inflation and cross-currency basis, equity repo, CTP and
   securitisation non-CTP are built in.
 - The risk-factor eligibility test. NMRF stress capital (`risk.FrtbNmrf`) aggregates
@@ -218,8 +221,8 @@ library.
 - ISDA SIMM: not included; ISDA licenses SIMM for use.
 - CVA capital. SA-CCR (`risk.SaCcr`) haircuts follow the Basel II table (BCBS 128
   para 151, currency add-on para 152) by default, or CRE22.49 with
-  `SaCcrHaircuts.Table.CRE22`; the CRE22.50 table and securitisation collateral are
-  not implemented.
+  `SaCcrHaircuts.Table.CRE22`, and since 2.4 the CRE22.49 securitisation rows and the
+  CRE22.50 no-ratings table; fund haircuts are left to the caller.
 - xVA beyond CVA, DVA (unilateral and first-to-default bilateral) and wrong-way CVA,
   unilateral or bilateral, in `credit.CvaApproximator`.
   `credit.MultiCurrencyExposureSimulator` has multi-curve swaps, foreign-currency

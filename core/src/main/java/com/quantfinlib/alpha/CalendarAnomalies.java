@@ -1,0 +1,351 @@
+package com.quantfinlib.alpha;
+
+import com.quantfinlib.stats.SpecialFunctions;
+import com.quantfinlib.stats.Stats;
+
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+
+/**
+ * Calendar anomaly profiles: day-of-week and turn-of-month seasonality
+ * with their t-statistics. Most published calendar anomalies (the weekend
+ * effect, the January effect) decayed after publication, and what separates
+ * a tradable seasonal from a data-mined one is a t-stat that survives out
+ * of sample. Treat |t| &lt; 2 as decoration and re-test out of sample before
+ * believing anything (see {@code AlphaValidation}).
+ *
+ * <p>Significance. Daily returns cluster in volatility, so iid standard
+ * errors understate uncertainty. Both profiles report Newey-West (1987)
+ * HAC t-stats from a dummy regression on the full return series (lag from
+ * the Andrews 1991 AR(1) plug-in on the returns), with the iid t kept as
+ * {@code naiveTStat}. Testing five to seven days at once, the best of them
+ * clears |t| &gt; 2 by chance far more often than 5% of the time, so the
+ * day-of-week profile also flags which days survive a Holm (1979,
+ * Scand. J. Statistics 6(2)) step-down correction at the 5% family-wise
+ * level, using normal two-sided p-values from the HAC t.</p>
+ *
+ * <p>Turn-of-month windows use calendar days of month (last
+ * {@code daysBeforeMonthEnd} calendar days + first
+ * {@code daysAfterMonthStart}), not trading days; with daily equity data the
+ * difference is a day around holidays. Timestamps are interpreted in UTC.
+ * Static, deterministic, research lane.</p>
+ */
+public final class CalendarAnomalies {
+
+    /** Family-wise error rate used for the Holm flags. */
+    public static final double FAMILY_WISE_ALPHA = 0.05;
+
+    /**
+     * Per-day-of-week profile, indexed Monday = 0 … Sunday = 6. Days with
+     * fewer than two observations report NaN t-stats and are not tested.
+     */
+    public static final class DayOfWeekProfile {
+        private final double[] meanReturn;
+        private final double[] tStat;
+        private final int[] count;
+        private final double[] naiveTStat;
+        private final boolean[] holmSignificant;
+        private final int hacLag;
+
+        /**
+         * Creates the value; array and collection arguments are copied.
+         *
+         * @param tStat Newey-West t-stat of each day's mean
+         * @param naiveTStat iid t-stat (mean over sample-sd/√n)
+         * @param holmSignificant day survives Holm's correction across the tested days
+         */
+        public DayOfWeekProfile(double[] meanReturn, double[] tStat, int[] count, double[] naiveTStat,
+                boolean[] holmSignificant, int hacLag) {
+            this.meanReturn = meanReturn == null ? null : meanReturn.clone();
+            this.tStat = tStat == null ? null : tStat.clone();
+            this.count = count == null ? null : count.clone();
+            this.naiveTStat = naiveTStat == null ? null : naiveTStat.clone();
+            this.holmSignificant = holmSignificant == null ? null : holmSignificant.clone();
+            this.hacLag = hacLag;
+        }
+
+        /** Element {@code i} of {@code meanReturn}. */
+        public double meanReturn(int i) {
+            return meanReturn[i];
+        }
+
+        /** Length of {@code meanReturn}. */
+        public int meanReturnLength() {
+            return meanReturn.length;
+        }
+
+        /** A fresh copy of {@code meanReturn}. */
+        public double[] meanReturnCopy() {
+            return meanReturn == null ? null : meanReturn.clone();
+        }
+
+        /** Element {@code i} of {@code tStat} (Newey-West t-stat of each day's mean). */
+        public double tStat(int i) {
+            return tStat[i];
+        }
+
+        /** Length of {@code tStat}. */
+        public int tStatLength() {
+            return tStat.length;
+        }
+
+        /** A fresh copy of {@code tStat}. */
+        public double[] tStatCopy() {
+            return tStat == null ? null : tStat.clone();
+        }
+
+        /** Element {@code i} of {@code count}. */
+        public int count(int i) {
+            return count[i];
+        }
+
+        /** Length of {@code count}. */
+        public int countLength() {
+            return count.length;
+        }
+
+        /** A fresh copy of {@code count}. */
+        public int[] countCopy() {
+            return count == null ? null : count.clone();
+        }
+
+        /** Element {@code i} of {@code naiveTStat} (iid t-stat (mean over sample-sd/√n)). */
+        public double naiveTStat(int i) {
+            return naiveTStat[i];
+        }
+
+        /** Length of {@code naiveTStat}. */
+        public int naiveTStatLength() {
+            return naiveTStat.length;
+        }
+
+        /** A fresh copy of {@code naiveTStat}. */
+        public double[] naiveTStatCopy() {
+            return naiveTStat == null ? null : naiveTStat.clone();
+        }
+
+        /** Element {@code i} of {@code holmSignificant} (day survives Holm's correction across the tested days). */
+        public boolean holmSignificant(int i) {
+            return holmSignificant[i];
+        }
+
+        /** Length of {@code holmSignificant}. */
+        public int holmSignificantLength() {
+            return holmSignificant.length;
+        }
+
+        /** A fresh copy of {@code holmSignificant}. */
+        public boolean[] holmSignificantCopy() {
+            return holmSignificant == null ? null : holmSignificant.clone();
+        }
+
+        /** {@code hacLag}. */
+        public int hacLag() {
+            return hacLag;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof DayOfWeekProfile o)) {
+                return false;
+            }
+            return java.util.Arrays.equals(meanReturn, o.meanReturn)
+                    && java.util.Arrays.equals(tStat, o.tStat)
+                    && java.util.Arrays.equals(count, o.count)
+                    && java.util.Arrays.equals(naiveTStat, o.naiveTStat)
+                    && java.util.Arrays.equals(holmSignificant, o.holmSignificant)
+                    && hacLag == o.hacLag;
+        }
+
+        @Override
+        public int hashCode() {
+            int h = 0;
+            h = 31 * h + java.util.Arrays.hashCode(meanReturn);
+            h = 31 * h + java.util.Arrays.hashCode(tStat);
+            h = 31 * h + java.util.Arrays.hashCode(count);
+            h = 31 * h + java.util.Arrays.hashCode(naiveTStat);
+            h = 31 * h + java.util.Arrays.hashCode(holmSignificant);
+            h = 31 * h + Integer.hashCode(hacLag);
+            return h;
+        }
+
+        @Override
+        public String toString() {
+            return "DayOfWeekProfile[" + "meanReturn=" + java.util.Arrays.toString(meanReturn) + ", " + "tStat=" + java.util.Arrays.toString(tStat) + ", " + "count=" + java.util.Arrays.toString(count) + ", " + "naiveTStat=" + java.util.Arrays.toString(naiveTStat) + ", " + "holmSignificant=" + java.util.Arrays.toString(holmSignificant) + ", " + "hacLag=" + hacLag + "]";
+        }
+    }
+
+    /**
+     * The turn-of-month split.
+     *
+     * @param tStat      Newey-West t-stat of the inside-minus-outside difference
+     * @param welchTStat iid Welch t-stat of the same difference
+     */
+    public record TurnOfMonth(double insideMean, double outsideMean, double tStat,
+                              int insideCount, int outsideCount, double welchTStat, int hacLag) {
+    }
+
+    private CalendarAnomalies() {
+    }
+
+    /**
+     * Mean return by day of the week.
+     *
+     * @param returns per-period returns aligned with {@code epochMillis}
+     */
+    public static DayOfWeekProfile dayOfWeek(double[] returns, long[] epochMillis) {
+        requireAligned(returns, epochMillis);
+        int n = returns.length;
+        int[] dayOf = new int[n];
+        double[][] byDay = new double[7][n];
+        int[] counts = new int[7];
+        for (int i = 0; i < n; i++) {
+            int d = toDate(epochMillis[i]).getDayOfWeek().getValue() - 1;
+            dayOf[i] = d;
+            byDay[d][counts[d]++] = returns[i];
+        }
+        double[] mean = new double[7];
+        double[] naive = new double[7];
+        double[] hacT = new double[7];
+        java.util.Arrays.fill(hacT, Double.NaN);
+        int[] column = new int[7];
+        int tested = 0;
+        for (int d = 0; d < 7; d++) {
+            column[d] = -1;
+            if (counts[d] < 2) {
+                mean[d] = counts[d] == 1 ? byDay[d][0] : Double.NaN;
+                naive[d] = Double.NaN;
+                continue;
+            }
+            double m = Stats.mean(byDay[d], 0, counts[d]);
+            double se = Stats.sampleStdDev(byDay[d], 0, counts[d]) / Math.sqrt(counts[d]);
+            mean[d] = m;
+            naive[d] = se > 0 ? m / se : Math.signum(m) * Double.POSITIVE_INFINITY;
+            column[d] = tested++;
+        }
+        // Dummy regression (no intercept) over observations on tested days.
+        int rows = 0;
+        for (int i = 0; i < n; i++) {
+            if (column[dayOf[i]] >= 0) {
+                rows++;
+            }
+        }
+        double[][] x = new double[rows][tested];
+        double[] y = new double[rows];
+        int r = 0;
+        for (int i = 0; i < n; i++) {
+            if (column[dayOf[i]] >= 0) {
+                x[r][column[dayOf[i]]] = 1;
+                y[r++] = returns[i];
+            }
+        }
+        int lag = NeweyWest.automaticLag(y);
+        Ols.Fit fit = Ols.fit(x, y, lag);
+        double[] p = new double[tested];
+        for (int d = 0; d < 7; d++) {
+            if (column[d] >= 0) {
+                hacT[d] = fit.hacTStat(column[d]);
+                p[column[d]] = 2 * (1 - SpecialFunctions.normCdf(Math.abs(hacT[d])));
+            }
+        }
+        boolean[] holmCol = holm(p, FAMILY_WISE_ALPHA);
+        boolean[] significant = new boolean[7];
+        for (int d = 0; d < 7; d++) {
+            significant[d] = column[d] >= 0 && holmCol[column[d]];
+        }
+        return new DayOfWeekProfile(mean, hacT, counts, naive, significant, lag);
+    }
+
+    /**
+     * Holm step-down: sort p ascending, reject while
+     * {@code p_(k) <= alpha/(m − k)} (k zero-based), stop at the first failure.
+     */
+    static boolean[] holm(double[] p, double alpha) {
+        int m = p.length;
+        Integer[] order = new Integer[m];
+        for (int i = 0; i < m; i++) {
+            order[i] = i;
+        }
+        java.util.Arrays.sort(order, (a, b) -> Double.compare(p[a], p[b]));
+        boolean[] reject = new boolean[m];
+        for (int k = 0; k < m; k++) {
+            if (p[order[k]] <= alpha / (m - k)) {
+                reject[order[k]] = true;
+            } else {
+                break;
+            }
+        }
+        return reject;
+    }
+
+    /**
+     * Turn-of-month effect: returns inside against outside the month-end window.
+     *
+     * @param daysBeforeMonthEnd  calendar days at month end in the
+     *                            window, ≥ 0
+     * @param daysAfterMonthStart calendar days at month start in the
+     *                            window, ≥ 0 (at least one of the two &gt; 0)
+     */
+    public static TurnOfMonth turnOfMonth(double[] returns, long[] epochMillis,
+                                          int daysBeforeMonthEnd, int daysAfterMonthStart) {
+        requireAligned(returns, epochMillis);
+        if (daysBeforeMonthEnd < 0 || daysAfterMonthStart < 0
+                || daysBeforeMonthEnd + daysAfterMonthStart == 0) {
+            throw new IllegalArgumentException("the window must cover at least one day");
+        }
+        double[] inside = new double[returns.length];
+        double[] outside = new double[returns.length];
+        double[][] x = new double[returns.length][2];
+        int nIn = 0;
+        int nOut = 0;
+        for (int i = 0; i < returns.length; i++) {
+            LocalDate d = toDate(epochMillis[i]);
+            boolean in = d.getDayOfMonth() <= daysAfterMonthStart
+                    || d.getDayOfMonth() > d.lengthOfMonth() - daysBeforeMonthEnd;
+            x[i][0] = 1;
+            x[i][1] = in ? 1 : 0;
+            if (in) {
+                inside[nIn++] = returns[i];
+            } else {
+                outside[nOut++] = returns[i];
+            }
+        }
+        if (nIn < 2 || nOut < 2) {
+            throw new IllegalArgumentException("both windows need >= 2 observations (inside "
+                    + nIn + ", outside " + nOut + ")");
+        }
+        double mIn = Stats.mean(inside, 0, nIn);
+        double mOut = Stats.mean(outside, 0, nOut);
+        double vIn = square(Stats.sampleStdDev(inside, 0, nIn));
+        double vOut = square(Stats.sampleStdDev(outside, 0, nOut));
+        double se = Math.sqrt(vIn / nIn + vOut / nOut);
+        double welch = se > 0 ? (mIn - mOut) / se
+                : Math.signum(mIn - mOut) * Double.POSITIVE_INFINITY;
+        int lag = NeweyWest.automaticLag(returns);
+        double hacT = Ols.fit(x, returns, lag).hacTStat(1);
+        return new TurnOfMonth(mIn, mOut, hacT, nIn, nOut, welch, lag);
+    }
+
+    private static LocalDate toDate(long epochMillis) {
+        return Instant.ofEpochMilli(epochMillis).atZone(ZoneOffset.UTC).toLocalDate();
+    }
+
+    private static double square(double x) {
+        return x * x;
+    }
+
+    private static void requireAligned(double[] returns, long[] epochMillis) {
+        if (returns.length != epochMillis.length || returns.length < 30) {
+            throw new IllegalArgumentException("need >= 30 aligned observations");
+        }
+        for (double r : returns) {
+            if (!Double.isFinite(r)) {
+                throw new IllegalArgumentException("returns must be finite");
+            }
+        }
+    }
+}

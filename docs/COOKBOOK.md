@@ -38,7 +38,7 @@ options.
 Or without writing code at all:
 
 ```bash
-java -jar target/quant-finance-library-*.jar backtest --csv bars.csv --symbol EURUSD \
+java -jar core/target/quant-finance-library-*.jar backtest --csv bars.csv --symbol EURUSD \
      --strategy sma --fast 20 --slow 50 --out report.html
 ```
 
@@ -124,15 +124,16 @@ double smileVol = new VannaVolga(pillar.strikesCopy(), pillar.volsCopy(), 0.045,
 
 ```bash
 ./mvnw -q -DskipTests compile
-java -cp target/classes com.quantfinlib.examples.LiveTradingDemo
+java -cp core/target/classes:lowlatency/target/classes com.quantfinlib.examples.LiveTradingDemo
 # then open http://localhost:8080 for live positions, P&L, fills, latency
 ```
 
 Real Binance trades feed a streaming EMA crossover, which trades on a paper
 venue shown on a dashboard bound to the loopback interface. Swap the
 strategy body in `LiveTradingDemo` for your own logic. The demos ship in the
-separate `examples` jar, not in the library jar, so run them from
-`target/classes` or that jar.
+separate `examples` jar of the low-latency artifact, not in either library
+jar, so run them from `core/target/classes:lowlatency/target/classes` (`;` on
+Windows) or that jar.
 
 ## 7. The fast-lane hot path (quote a market)
 
@@ -1491,21 +1492,21 @@ The `cli.Main` entry point runs backtests, walk-forward validation and market re
 
 ```bash
 # Backtest: strategies sma|ema|rsi|macd|bollinger, HTML tear sheet optional.
-java -jar target/quant-finance-library-*.jar backtest \
+java -jar core/target/quant-finance-library-*.jar backtest \
      --csv bars.csv --symbol EURUSD \
      --strategy bollinger --period 20 --k 2.0 \
      --capital 250000 --out bt.html
 
 # RSI variant has its own knobs:
-java -jar target/quant-finance-library-*.jar backtest --csv bars.csv --symbol EURUSD \
+java -jar core/target/quant-finance-library-*.jar backtest --csv bars.csv --symbol EURUSD \
      --strategy rsi --period 14 --oversold 30 --overbought 70
 
 # Walk-forward: re-optimize an SMA grid per train window, score unseen bars only.
-java -jar target/quant-finance-library-*.jar walkforward --csv bars.csv --symbol EURUSD \
+java -jar core/target/quant-finance-library-*.jar walkforward --csv bars.csv --symbol EURUSD \
      --train 252 --test 63 --fast 5,10,20 --slow 40,60 --out wf.html
 
 # Market snapshot report: technicals, price chart, drawdown.
-java -jar target/quant-finance-library-*.jar report --csv bars.csv --symbol EURUSD \
+java -jar core/target/quant-finance-library-*.jar report --csv bars.csv --symbol EURUSD \
      --out market.html
 ```
 
@@ -2614,9 +2615,9 @@ sor.register("EXCH_B", 1);
 sor.register("DARK_X", 2);
 
 var venues = List.of(
-        new VenueQuote("EXCH_A", 99.99, 9_000, 100.01, 10_000, 0.3, 120_000, false),
-        new VenueQuote("EXCH_B", 99.99, 7_000, 100.01, 8_000, 0.3, 80_000, false),
-        new VenueQuote("DARK_X", 99.99, 0, 100.01, 0, 0.1, 200_000, true));
+        new VenueQuote("EXCH_A", 99.99, 9_000, 100.01, 10_000, 0.3, 120_000, false, quoteTimeNanos),
+        new VenueQuote("EXCH_B", 99.99, 7_000, 100.01, 8_000, 0.3, 80_000, false, quoteTimeNanos),
+        new VenueQuote("DARK_X", 99.99, 0, 100.01, 0, 0.1, 200_000, true, quoteTimeNanos));
 
 var plan = sor.route(Side.BUY, 12_000, venues);
 for (var leg : plan.lit()) {
@@ -5007,9 +5008,9 @@ sor.register("EXCH_B", 1);
 sor.register("DARK_X", 2);
 
 var venues = List.of(
-        new VenueQuote("EXCH_A", 99.99, 9_000, 100.01, 10_000, 0.3, 120_000, false),
-        new VenueQuote("EXCH_B", 99.99, 7_000, 100.01, 8_000, 0.3, 80_000, false),
-        new VenueQuote("DARK_X", 99.99, 0, 100.01, 0, 0.1, 200_000, true));
+        new VenueQuote("EXCH_A", 99.99, 9_000, 100.01, 10_000, 0.3, 120_000, false, quoteTimeNanos),
+        new VenueQuote("EXCH_B", 99.99, 7_000, 100.01, 8_000, 0.3, 80_000, false, quoteTimeNanos),
+        new VenueQuote("DARK_X", 99.99, 0, 100.01, 0, 0.1, 200_000, true, quoteTimeNanos));
 
 AdaptiveSor.RoutingDecision plan = sor.route(Side.BUY, 12_000, venues);
 for (var leg : plan.lit()) {
@@ -5762,7 +5763,7 @@ System.out.printf("implied cross mid %.4f, edge %.2f bps, tradeable %b%n",
 
 // Streaming: keep the synthetic cross live off leg ticks (consumer thread):
 // CrossRateEngine engine = new CrossRateEngine(bus);
-// engine.addCross("EURUSD", "USDJPY", "EURJPY", CrossRateEngine.Op.MULTIPLY, listener);
+// engine.addCross("EURUSD", "USDJPY", "EURJPY", CrossOp.MULTIPLY, listener);
 ```
 
 The implied cross is `EURUSD * USDJPY` for legs sharing the middle
@@ -7150,8 +7151,8 @@ double[] returns = /* strategy per-period returns, >= 50 finite */;
 double[] samples = BlockBootstrap.sharpeSamples(
         returns, 20, 5_000, 252, 42L);   // mean block 20, 5000 paths, seed 42
 // samples is sorted ascending: read percentiles straight off it.
-double lo = MathUtils.percentileSorted(samples, 0.05);
-double hi = MathUtils.percentileSorted(samples, 0.95);
+double lo = Stats.quantileSorted(samples, 0.05);
+double hi = Stats.quantileSorted(samples, 0.95);
 System.out.printf("Sharpe 90%% CI: [%.2f, %.2f]%n", lo, hi);
 ```
 
@@ -8317,7 +8318,7 @@ boolean cleared =
         wf.efficiency() > 0.5                                   // travels out of sample
      && dsr > 0.95                                              // survives its own search
      && pbo.pbo() < 0.5                                         // process is not noise-mining
-     && MathUtils.percentileSorted(sh, 0.05) > 0;               // CI excludes zero
+     && Stats.quantileSorted(sh, 0.05) > 0;               // CI excludes zero
 System.out.println(cleared ? "CLEARED for paper trading" : "REJECTED: back to research");
 
 // Post-mortem: walk the arrows; gross intact but net gone => costs;
@@ -8789,7 +8790,7 @@ quietly pausing.
 # Size the heap for startup/setup allocation only, then forbid collection.
 java -XX:+UnlockExperimentalVMOptions -XX:+UseEpsilonGC -Xms8g -Xmx8g \
      -XX:+AlwaysPreTouch \
-     -cp target/classes com.quantfinlib.examples.HftOrderBenchmark
+     -cp core/target/classes:lowlatency/target/classes com.quantfinlib.examples.HftOrderBenchmark
 ```
 
 ```java
@@ -8858,10 +8859,10 @@ bars, and its `run(String[])` entry returns an exit code instead of calling
 `System.exit`: so a nightly job can assert on it.
 
 ```bash
-java -jar target/quant-finance-library-*.jar backtest --csv bars.csv --symbol EURUSD \
+java -jar core/target/quant-finance-library-*.jar backtest --csv bars.csv --symbol EURUSD \
      --strategy bollinger --period 20 --k 2.0 --capital 250000 --out bt.html
 
-java -jar target/quant-finance-library-*.jar walkforward --csv bars.csv --symbol EURUSD \
+java -jar core/target/quant-finance-library-*.jar walkforward --csv bars.csv --symbol EURUSD \
      --train 252 --test 63 --fast 5,10,20 --slow 40,60 --out wf.html
 ```
 
@@ -9263,7 +9264,7 @@ double[] venueSharpes = perVenueRealizedSharpe;         // one per venue
 double deflated = SharpeValidation.deflatedSharpe(
         bestVenueSharpe, venueSharpes, nObs, skew, kurtosis);
 double expectedBest = SharpeValidation.expectedMaxSharpe(
-        venueSharpes.length, MathUtils.variance(venueSharpes));
+        venueSharpes.length, Stats.sampleVariance(venueSharpes));
 
 // The best venue only "wins" if it beats what luck alone would produce.
 boolean genuinelyBetter = bestVenueSharpe > expectedBest && deflated > 0;
@@ -9300,7 +9301,8 @@ while (block.find()) {
     Files.writeString(dir.resolve("Block" + n++ + ".java"), src);
 }
 javax.tools.JavaCompiler javac = javax.tools.ToolProvider.getSystemJavaCompiler();
-List<String> args = new ArrayList<>(List.of("-cp", "target/classes", "-d", dir.toString()));
+String cp = "core/target/classes" + File.pathSeparator + "lowlatency/target/classes";
+List<String> args = new ArrayList<>(List.of("-cp", cp, "-d", dir.toString()));
 try (var files = Files.list(dir)) {
     files.filter(p -> p.toString().endsWith(".java")).forEach(p -> args.add(p.toString()));
 }
@@ -9755,7 +9757,7 @@ path.
 // Offline: size the collar to the realized move distribution, the position
 // cap to a VaR-consistent level.
 double[] intradayReturns = /* from captured sessions */;
-double collarPct = 5 * MathUtils.stdDev(intradayReturns);  // 5-sigma fat-finger band
+double collarPct = 5 * Stats.sampleStdDev(intradayReturns);  // 5-sigma fat-finger band
 double var99 = VarEngine.deltaNormalVar(exposures, cov, 0.99);
 long positionCap = (long) (riskAppetite / var99 * currentPosition);
 
@@ -9835,7 +9837,7 @@ BacktestResult bt = Backtester.run(new SmaCrossStrategy(20, 50), bars,
 //    the position's market value (P&L per unit return); the covariance is
 //    the variance of daily returns.
 double price = bars.lastClose();
-double dailyVol = MathUtils.stdDev(bars.returns());
+double dailyVol = Stats.sampleStdDev(bars.returns());
 double[][] cov = {{dailyVol * dailyVol}};
 double varBudget = 20_000;                                       // currency
 double varPerShare = VarEngine.deltaNormalVar(new double[]{price}, cov, 0.99);
@@ -9969,10 +9971,13 @@ YieldCurve curve = YieldCurve.ofZeroRates(new double[]{1, 2, 5, 10},
     new double[]{0.030, 0.031, 0.032, 0.033});
 double[] dates = new double[20];                 // quarterly, strictly positive
 for (int i = 0; i < dates.length; i++) dates[i] = 0.25 * (i + 1);
-ExposureProfile profile = ExposureSimulator.simulate(
-    ExposureSimulator.Market.ratesOnly(curve, 0.05, 0.01),
-    List.of(new ExposureSimulator.Swap(100, 0.032, true, 0, 5, 1)), List.of(),
-    new ExposureSimulator.Csa(0, 0, 10 / 250.0), dates, 10_000, 42L);
+// rates only: a domestic Hull-White rate, no FX pairs
+MultiCurrencyExposureSimulator.Market market = new MultiCurrencyExposureSimulator.Market(
+    new MultiCurrencyExposureSimulator.Domestic(MultiCurrencyExposureSimulator.Curve.of(curve), 0.05, 0.01), List.of(), new double[][]{{1}});
+MultiCurrencyExposureSimulator.SwapTerms payer = new MultiCurrencyExposureSimulator.SwapTerms(100, 0.032, true, 0, 5, 1);
+ExposureProfile profile = MultiCurrencyExposureSimulator.simulate(market,
+    List.of(new MultiCurrencyExposureSimulator.Swap(payer, null)), List.of(),
+    new MultiCurrencyExposureSimulator.Csa(0, 0, 10 / 250.0), dates, 10_000, 42L);
 CreditCurve cpty = CreditCurve.bootstrap(new int[]{1, 3, 5},
     new double[]{0.010, 0.012, 0.015}, 0.4, curve);
 double cva = CvaApproximator.cva(profile, cpty, 0.6);
@@ -9989,11 +9994,9 @@ probability in each bucket times loss given default.
 ## 306. Wrong-way CVA and unilateral DVA
 
 ```java
-// dates, cpty and curve as in recipe 305; no CSA this time
-ExposureProfile bare = ExposureSimulator.simulate(
-    ExposureSimulator.Market.ratesOnly(curve, 0.05, 0.01),
-    List.of(new ExposureSimulator.Swap(100, 0.032, true, 0, 5, 1)), List.of(),
-    null, dates, 10_000, 42L);
+// dates, cpty, curve, market and payer as in recipe 305; no CSA this time
+ExposureProfile bare = MultiCurrencyExposureSimulator.simulate(market,
+    List.of(new MultiCurrencyExposureSimulator.Swap(payer, null)), List.of(), null, dates, 10_000, 42L);
 CreditCurve own = CreditCurve.bootstrap(new int[]{1, 3, 5},
     new double[]{0.006, 0.007, 0.008}, 0.4, curve);
 double independent = CvaApproximator.cva(bare, cpty, 0.6);
@@ -10514,9 +10517,9 @@ MultiCurrencyExposureSimulator.Market market = new MultiCurrencyExposureSimulato
 double[] dates = new double[20];
 for (int i = 0; i < dates.length; i++) dates[i] = 0.25 * (i + 1);
 ExposureProfile p = MultiCurrencyExposureSimulator.simulate(market,
-    List.of(new MultiCurrencyExposureSimulator.Swap(new ExposureSimulator.Swap(100, 0.039, true, 0, 5, 1),
+    List.of(new MultiCurrencyExposureSimulator.Swap(new MultiCurrencyExposureSimulator.SwapTerms(100, 0.039, true, 0, 5, 1),
         MultiCurrencyExposureSimulator.Curve.of(usdProj))),
-    List.of(new MultiCurrencyExposureSimulator.FxForward(0, new ExposureSimulator.FxForward(50, 1.10, 2))),
+    List.of(new MultiCurrencyExposureSimulator.FxForward(0, new MultiCurrencyExposureSimulator.FxForwardTerms(50, 1.10, 2))),
     null, dates, 10_000, 42L);
 CvaApproximator.Bilateral b = CvaApproximator.bilateral(p, cpty, 0.6, own, 0.6);
 double adjustment = b.total();
@@ -10525,8 +10528,10 @@ double adjustment = b.total();
 The swap discounts on the domestic curve and projects on its own curve, which
 is a fixed basis between the two. Each foreign currency has its own Hull-White
 rate and an FX spot with the quanto drift that keeps forwards arbitrage-free.
-`Market.fromLegacy` turns a 2.1 `ExposureSimulator.Market` into this form and
-reproduces its results. `bilateral` charges CVA only on the paths where the
+A market with no pairs (or one pair whose foreign rate vol is 0) is the
+single-currency case that the 2.x `ExposureSimulator` covered; 3.0 folded that
+class in here and reproduces its results to rounding (docs/MIGRATION_3.0.md
+section 6). `bilateral` charges CVA only on the paths where the
 counterparty defaults first and DVA only where we default first, with the two
 defaults independent and the hazard flat within each bucket.
 
@@ -10727,14 +10732,14 @@ and rebuilds the affected book from the surviving fills, so average cost and
 realised P&L come out as if the busted trade had never happened. The
 reconciler compares effective fills on both sides and matches the two
 adjustment lists by execution id. The gateway does not reopen a filled order
-after a bust, and `PaperTradingGateway` does not produce busts.
+after a bust. For busts in paper trading see recipe 350.
 
 ## 345. Foreign-currency swaps, a stochastic basis, and wrong-way bilateral CVA
 
 ```java
 List<MultiCurrencyExposureSimulator.ForeignSwap> eurSwaps = List.of(
     new MultiCurrencyExposureSimulator.ForeignSwap(0,
-        new ExposureSimulator.Swap(100, 0.026, true, 0, 5, 1),
+        new MultiCurrencyExposureSimulator.SwapTerms(100, 0.026, true, 0, 5, 1),
         MultiCurrencyExposureSimulator.Curve.of(eur)));
 MultiCurrencyExposureSimulator.BasisFactor basis =
     new MultiCurrencyExposureSimulator.BasisFactor(0.1, 0.002, new double[]{0.3, 0, 0});
@@ -10778,7 +10783,7 @@ String xml = Rts22TransactionReport.toAuth016Xml(List.of(rep));
 `toAuth016Xml` writes auth.016.001.01 without the head.001 envelope.
 `validateEsmaRules` runs about 45 of ESMA's content rules that need only the
 report itself (code lists, conditional fields, identifier shapes). Rules that
-need reference data are left to `ReferenceDataChecker`. The tests validate the
+need reference data are in `validateWithReferenceData` (recipe 353). The tests validate the
 XML against ESMA's XSD when the environment variable `QFL_ESMA_XSD` points to it;
 the XSD is not redistributable and is not in the repository.
 
@@ -10798,6 +10803,10 @@ copy (or `GleifApiLeiRegistry` for single lookups over HTTPS), an ESMA FIRDS
 FULINS file and the ISO 10383 MIC list. The checker refuses a report whose LEI
 is unknown or lapsed, whose ISIN is not in FIRDS, or whose MIC is unknown or
 inactive, and forwards the rest. The field keys depend on the report type.
+Since 3.0 the loaders also read registration dates and entity status (GLEIF),
+admission dates and the commodity flag (FIRDS), and country, SI category and
+creation and expiry dates (ISO 10383) when the file has those columns, which is
+what the dated ESMA rules of recipe 353 need.
 
 ## 349. CAT and EMIR Refit reports
 
@@ -10820,6 +10829,210 @@ List<String> emirProblems = emir.validate();
 
 The CAT builder covers new order, route, trade and fulfilment events (MENO, MEOR,
 MEOT, MEOF) and writes them as JSON lines with Eastern-time timestamps. The EMIR
-builder covers the Refit core fields, the UTI shape and the allowed pairs of
-action and event type. Both are indicative and not certified; EMIR has not been
-checked field by field against Regulation 2022/1860.
+builder covers the Refit core fields. From 3.0 EMIR is checked against the ESMA
+Refit validation rules (ESMA74-362-2683) and CAT against the IM Technical
+Specifications v4.1.0 r14, with EMIR field numbers and formats checked against
+Regulation 2022/1860; neither is certified.
+
+To see what a check rests on, list the rules (3.0):
+
+```java
+for (RuleProvenance r : EmirRefitReport.rules()) {
+    System.out.println(r.id() + " " + r.evidence() + " " + r.citation());
+}
+// EMIR-R17 PUBLISHED_REFERENCE ESMA74-362-2683, sheet Validations_Cpty_derivative, row 81, ...
+System.out.println(CatEvent.CHECKED_AGAINST);   // "checked against CAT ... v4.1.0 r14 ..."
+```
+
+Each rule has an id, the sheet row or specification section it was checked
+against, and an evidence class. EMIR messages start with the ESMA error code,
+so `EMIR-VR-2152-05: eventType TRAD not accepted with actionType CORR` can be
+looked up in the workbook directly. Rules that need earlier reports for the
+same UTI or reference data are not run; the package javadoc lists them.
+
+## 350. Busts and corrections in the paper gateway
+
+```java
+PaperTradingGateway paper = new PaperTradingGateway(1_000_000);
+paper.setReopenOnBust(true);                       // default false, the 2.3 behaviour
+paper.addTradeListener(LedgerFillListener.forPaperTrades(ledger, 1, 7, symbolIds::get));
+long[] execs = paper.executionIds(orderId);        // fills of one order, in order
+long bustId = paper.bustFill(execs[0]);            // -1 if unknown or already busted
+long corrId = paper.correctFill(execs[1], 80, 10.02);
+```
+
+A bust removes a simulated execution and a correction replaces its quantity and
+price. The gateway replays cash and positions from the surviving fills, so the
+account is the one you would have had without the busted trade. With
+`setReopenOnBust(true)` the order's filled quantity drops too and a filled order
+can work again; with the default it stays as it was, as `HftOrderGateway` does.
+A refused adjustment returns -1 and counts in `rejectedTradeAdjustmentCount`.
+`forPaperTrades` books the same events in a `PositionLedger` under the gateway's
+execution ids, so `DropCopyReconciler` can compare the two.
+
+## 351. Default risk charge for securitisations
+
+```java
+double rwLong = FrtbDrcSecuritisation.drcRiskWeight(0.90);   // 90% banking book -> 7.2%
+double rwShort = FrtbDrcSecuritisation.drcRiskWeight(0.50);  // 50% -> 4%
+FrtbDrcSecuritisation.NonCtpBucket rmbsEu = new FrtbDrcSecuritisation.NonCtpBucket(
+    FrtbDrcSecuritisation.AssetClass.RMBS, FrtbDrcSecuritisation.Region.EUROPE);
+double drc = FrtbDrcSecuritisation.nonCtpTotal(List.of(
+    new FrtbDrcSecuritisation.Position<>(rmbsEu, new FrtbDrcSecuritisation.NetJtd(100, rwLong)),
+    new FrtbDrcSecuritisation.Position<>(rmbsEu, new FrtbDrcSecuritisation.NetJtd(-50, rwShort))));
+// 7.2 - (2/3) x 2.0 = 5.87
+double ctp = FrtbDrcSecuritisation.ctpAggregate(List.of(100.0, -100.0));   // 50 (MAR22.45)
+```
+
+The jump-to-default amount of a tranche is its market value (MAR22.27). Longs
+and shorts net only within the same tranche (`netTranche`, MAR22.29). In a
+non-CTP bucket shorts offset longs by the hedge benefit ratio and the bucket is
+floored at zero; buckets add up (MAR22.33, 22.35). CTP buckets can be negative,
+and a net-short bucket counts at half (MAR22.45, published example). Risk weights
+come from SEC-SA (`kA`, `secSaRiskWeight`) or the one-year SEC-ERBA table
+(`erbaRiskWeight`); a SEC-IRBA weight you pass in yourself. The 8% factor in
+`drcRiskWeight` is the library's reading: MAR22 does not print it, but
+RBC20.1(3) (8.0% of RWA), MAR20.1 (x12.5) and CRE41.4 footnote 211 ("risk
+weight times 8%") all point the same way.
+
+## 352. Securitisation collateral and the no-ratings haircut table
+
+```java
+double h = SaCcrHaircuts.haircut10Day(SaCcrHaircuts.Table.CRE22,
+    SaCcrHaircuts.CollateralKind.SECURITISATION, SaCcrHaircuts.DebtRating.A_TO_BBB, 4);   // 0.12
+double h2 = SaCcrHaircuts.haircut10DayNoExternalRatings(
+    SaCcrHaircuts.NoRatingsDebtClass.SENIOR_SECURITISATION_SA_RW_BELOW_100, 4);         // 0.12
+```
+
+CRE22.49 gives securitisations their own rows (A+ to BBB-, 3 to 5 years: 12%).
+The 2006 table has no such row, so the same call with `Table.BASEL_II_2006`
+throws. `Table.CRE22_NO_EXTERNAL_RATINGS` is CRE22.50, for jurisdictions that do
+not use external ratings: debt is classed by issuer risk weight or seniority
+instead, through `haircut10DayNoExternalRatings` (published reference). Fund
+units: recipe 357.
+
+## 353. ESMA reference-data rules and the submission file
+
+```java
+ReferenceData refs = ReferenceData.of(leis, isins, mics);
+List<String> problems = rep.validateWithReferenceData(refs, LocalDate.of(2026, 11, 3));
+String file = Rts22TransactionReport.toSubmissionXml(List.of(rep),
+    submittingLei, "FR", "FILE0001", Instant.parse("2026-11-02T10:15:30Z"));
+```
+
+`validateWithReferenceData` runs the ESMA content rules that need registries,
+for example that a counterparty LEI was not retired on the trading date (CON-160
+accepts a lapsed LEI) and that the ISIN was admitted on the venue. With the 3.0
+loaders the dated rules run too. CON-430 runs when you pass an ISO 10962 table:
+`refs.withCfiCodes(CfiCodeRegistry.fromSixXlsx(Path.of("cfi-20210507-current.xlsx")))`
+reads the code list SIX publishes as maintenance agency and checks each attribute
+letter against its group. The file is ISO copyright, so download your own copy. `toSubmissionXml` writes the head.003
+envelope with the head.001 header (sender LEI, authority country, file id,
+creation time to the second) around auth.016 (ESMA65-8-2356 paras 124 to 132).
+Recipe 355 covers the pending workflow and the feedback file.
+
+## 354. Moving off MathUtils (removed in 3.0)
+
+```java
+double z = SpecialFunctions.normInv(0.99);
+double[][] l = LinearAlgebra.cholesky(cov);
+double vol = Stats.sampleStdDev(returns);
+double rho = Stats.pearsonOrZero(x, y);      // MathUtils.correlation: 0 at zero dispersion
+double beta = Numerics.decayFactor(dtNanos, halfLifeNanos);
+```
+
+`util.MathUtils` was deprecated in 2.4.0 and removed in 3.0. In 2.4 every method
+delegated to one of these, so the switch changes no result. docs/MIGRATION_3.0.md section 4
+has the full table.
+
+## 355. Depending on the 3.0 artifacts
+
+```xml
+<!-- stable tier: pricing, risk, research, backtesting -->
+<dependency>
+  <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
+  <artifactId>quant-finance-library</artifactId>
+  <version>v3.0.0</version>
+</dependency>
+<!-- trading lane; brings the stable tier with it -->
+<dependency>
+  <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
+  <artifactId>quant-finance-library-lowlatency</artifactId>
+  <version>v3.0.0</version>
+</dependency>
+```
+
+```
+module my.desk {
+    requires com.quantfinlib.lowlatency;   // reads com.quantfinlib transitively
+}
+```
+
+Pick the stable artifact if you never touch `trading`, `marketdata`, `orderbook`,
+`fix`, `sbe`, `feed`, `entitlements`, `regreporting` or `util`. The order side is
+`core.Side` in both, so an execution study and a gateway share one enum.
+docs/MIGRATION_3.0.md lists every type that moved.
+
+## 356. A synthetic cross with `CrossOp`
+
+```java
+// EUR/JPY from EUR/USD and USD/JPY: legs share the middle currency
+double ask = SyntheticCross.syntheticAsk(CrossOp.MULTIPLY, 1.0848, 1.0850, 151.20, 151.23);
+double bid = SyntheticCross.syntheticBid(CrossOp.MULTIPLY, 1.0848, 1.0850, 151.20, 151.23);
+// ask = 1.0850 * 151.23 = 164.08455, bid = 1.0848 * 151.20 = 164.02176
+```
+
+`CrossOp` was `CrossRateEngine.Op` until 2.4. It became a stable top-level type in
+3.0 because the streaming engine moved to `marketdata` in the low-latency artifact
+while `SyntheticCross`, which takes the same enum, stayed in `fx`. The engine call
+is unchanged apart from the type name:
+`engine.addCross("EURUSD", "USDJPY", "EURJPY", CrossOp.MULTIPLY, listener)`.
+
+## 357. Securitisation edge cases and fund haircuts (3.0)
+
+```java
+double ka = FrtbDrcSecuritisation.kAPartlyUnknownW(0.10, 97, 3);   // 0.127 (CRE41.9)
+double rw = FrtbDrcSecuritisation.juniorUnratedFloor(
+    FrtbDrcSecuritisation.secSaRiskWeight(ka, 0.0, 0.15, false, false, false),
+    0.60);                                                              // CRE41.15
+double[] tranches = FrtbDrcSecuritisation.decomposeIndex(100,
+    new double[]{0, 0.03, 0.07}, new double[]{0.03, 0.07, 1});         // 3, 4, 93 (MAR22.28)
+double[] left = FrtbDrcSecuritisation.offsetByReplication(0.10, 0.15, 50,
+    new double[]{0.10, 0.12}, new double[]{0.12, 0.15},
+    new double[]{-20, -30});                                            // 0, 0 (MAR22.39(3))
+double hFund = SaCcrHaircuts.fundHaircut10DayMandate(0.04, 0.20);      // 0.20
+double hLta = SaCcrHaircuts.fundHaircut10DayLookThrough(
+    new double[]{0.6, 0.4}, new double[]{0.20, 0.04});                 // 0.136
+```
+
+If more than 5% of the pool has unknown delinquency status,
+`kAPartlyUnknownW` throws: the tranche takes 1250% (CRE41.10). The
+thickness split in `decomposeIndex` is the library's reading of
+"proportionately"; names decomposed this way must leave the
+non-securitisation DRC (MAR22.28). Fund haircuts follow the "UCITS/mutual
+funds" row of CRE22.49 and CRE22.50; whether the fund is eligible at all
+(daily price, mandate limited to eligible instruments, CRE22.34(6)) you
+check yourself.
+
+## 358. Pending reports, field 2 history and the auth.031 feedback
+
+```java
+Rts22StatusTracker nca = new Rts22StatusTracker();
+RecordOutcome o = nca.submit(rep, LocalDate.of(2026, 11, 3), refs);   // ACPT, PDNG or RJCT
+List<RecordOutcome> changed = nca.revalidate(LocalDate.of(2026, 11, 5), refsOfThatDay);
+StatusAdvice advice = StatusAdvice.of("FILE0001", List.of(o), false);
+BusinessHeader sent = new BusinessHeader(submittingLei, "FR", "FILE0001", "auth.016.001.01", sentAt);
+String feedback = advice.toFeedbackXml(
+    new BusinessHeader("FR", submittingLei, "FDBK0001", StatusAdvice.MESSAGE_DEFINITION, now).relatedTo(sent));
+StatusAdvice.Parsed back = StatusAdvice.parse(feedback);  // back.header().related() is the file you sent
+```
+
+The tracker does what the authority does across files. A transaction reference
+(field 2) can be reused only after the report that used it is cancelled
+(CON-023); a cancellation needs a live report (CON-024, CON-025); the key is
+field 4 plus field 2. A report whose only fault is an ISIN missing from FIRDS
+is PDNG, not rejected, and `revalidate` returns it as ACPT once the instrument
+appears, or RJCT once more than 7 calendar days have passed (ESMA65-8-2356
+paras 20, 28, 53 and 70 to 72). Any other error rejects at once. Use it to
+predict the authority's answer, and `StatusAdvice.parse` to read the real one:
+its `Rltd` header names the file the feedback is about (para 101).

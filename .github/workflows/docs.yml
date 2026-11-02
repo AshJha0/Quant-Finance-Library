@@ -3,7 +3,8 @@ name: Docs
 on:
   push:
     branches: [main]
-    tags: ['v*']
+    # No tag trigger: the github-pages environment deploys from main only, and
+    # the release merge to main already publishes the same site.
   workflow_dispatch:
 
 permissions:
@@ -48,11 +49,16 @@ jobs:
         run: |
           mkdir -p _site/api
           cp docs/index.html _site/
-          if [ -d target/site/apidocs ]; then
-            cp -r target/site/apidocs/* _site/api/
-          else
-            cp -r target/reports/apidocs/* _site/api/
-          fi
+          # one javadoc tree per artifact: api/ (stable) and api/lowlatency/
+          for m in core lowlatency; do
+            dest=_site/api; [ "$m" = lowlatency ] && dest=_site/api/lowlatency
+            mkdir -p "$dest"
+            if [ -d "$m/target/site/apidocs" ]; then
+              cp -r "$m/target/site/apidocs/"* "$dest/"
+            else
+              cp -r "$m/target/reports/apidocs/"* "$dest/"
+            fi
+          done
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5
         with:

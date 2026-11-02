@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Compile every Java snippet in docs/COOKBOOK.md against target/classes.
+"""Compile every Java snippet in docs/COOKBOOK.md against the compiled
+classes of both modules (core/target/classes and lowlatency/target/classes).
 
 Each recipe's ```java blocks are wrapped into one class (declarations become
 static members, statements go into a run() method) with wildcard imports of
@@ -20,7 +21,8 @@ import sys
 import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CLASSES = os.path.join(ROOT, "target", "classes")
+CLASS_DIRS = [os.path.join(ROOT, "core", "target", "classes"),
+              os.path.join(ROOT, "lowlatency", "target", "classes")]
 COOKBOOK = os.path.join(ROOT, "docs", "COOKBOOK.md")
 JDK_PACKAGES = ["java.util", "java.util.function", "java.util.stream", "java.nio.file",
                 "java.time", "java.io", "java.util.concurrent", "java.nio",
@@ -32,9 +34,10 @@ DECL = re.compile(r"^(?!new |try|for|if|while|return)(?=[A-Za-z])((public |final
 
 def library_imports():
     pkgs = set()
-    for d, _, files in os.walk(CLASSES):
-        if d != CLASSES and any(f.endswith(".class") for f in files):
-            pkgs.add(os.path.relpath(d, CLASSES).replace(os.sep, "."))
+    for root in CLASS_DIRS:
+        for d, _, files in os.walk(root):
+            if d != root and any(f.endswith(".class") for f in files):
+                pkgs.add(os.path.relpath(d, root).replace(os.sep, "."))
     nested = ["com.quantfinlib.pricing.BlackScholes.OptionType",
               "com.quantfinlib.execution.BenchmarkExecutor.Benchmark"]
     return "".join(f"import {n};\n" for n in nested) + "".join(
@@ -70,7 +73,7 @@ def split_recipe(blocks):
 
 
 def main():
-    if not os.path.isdir(CLASSES):
+    if not all(os.path.isdir(c) for c in CLASS_DIRS):
         sys.exit("target/classes not found: run ./mvnw -DskipTests compile first")
     text = open(COOKBOOK, encoding="utf-8").read()
     parts = re.split(r"^## (\d+)\. ", text, flags=re.M)
@@ -96,7 +99,7 @@ def main():
     javac = os.path.join(os.environ["JAVA_HOME"], "bin", "javac") if "JAVA_HOME" in os.environ else "javac"
     files = [os.path.join(src, f) for f in sorted(os.listdir(src))]
     log =subprocess.run([javac, "-Xmaxerrs", "100000", "-proc:none", "-encoding", "UTF-8",
-                          "-cp", CLASSES, "-d", cls] + files,
+                          "-cp", os.pathsep.join(CLASS_DIRS), "-d", cls] + files,
                          capture_output=True, text=True).stderr.replace("\r", "")
     shutil.rmtree(work, ignore_errors=True)
     real, bad = [], set()

@@ -39,6 +39,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
-            target/quant-finance-library-*.jar \
+            core/target/quant-finance-library-*.jar             lowlatency/target/quant-finance-library-lowlatency-*.jar \
             --title "quantfinlib $GITHUB_REF_NAME" \
             --generate-notes

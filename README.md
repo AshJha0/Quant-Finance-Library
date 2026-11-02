@@ -15,8 +15,21 @@ connectivity stack; see [docs/STABILITY.md](docs/STABILITY.md).
 
 ## Status
 
-- Version 2.3.0. Requires Java 25 (LTS). The full suite (`./mvnw verify -Pfull`) runs
-  1,825 tests.
+- Version 3.0.0.
+  Requires Java 25 (LTS). 3.0 changes no number; it reduces the public API. The
+  library splits into two artifacts (stable tier and low-latency lane), `reporting`
+  becomes `regreporting`, and everything 2.4.0 deprecated for removal is gone.
+  [docs/MIGRATION_3.0.md](docs/MIGRATION_3.0.md) lists every change.
+- At 3.0.0 the full suite (`./mvnw verify -Pfull`) runs 2,007 tests (core 1,382,
+  lowlatency 625); 7 are skipped without optional external files or network
+  (ISDA grids, ESMA XSDs, the SIX CFI list, GLEIF). CONTRIBUTING.md lists the
+  environment variables that turn them on.
+- Version 2.4 is additive over 2.3 and changes no result by default. It deprecated
+  for removal everything 3.0 takes out and added busts and corrections in
+  `PaperTradingGateway`, the FRTB default risk charge for securitisations, the
+  CRE22.49 securitisation rows and the CRE22.50 table in SA-CCR haircuts, ESMA
+  reference-data rules and the head.001/head.003 submission envelope for RTS 22
+  ([docs/MIGRATION_2.4.md](docs/MIGRATION_2.4.md)).
 - Version 2.3 removes the `risk.simm` package (ISDA licenses SIMM) and fixes several
   results: FRTB SBM and curvature aggregation, SA-CCR sub-netting-set replacement
   cost, drop-copy reconciliation after busts, and the FIX 4.2 ExecType seen through
@@ -49,6 +62,14 @@ connectivity stack; see [docs/STABILITY.md](docs/STABILITY.md).
 
 ### JitPack
 
+Since 3.0 the library is two artifacts. Research, pricing and risk users need only
+the first; users of the trading lane depend on the second, which pulls in the first.
+
+| Artifact | JPMS module | What it holds |
+|---|---|---|
+| `quant-finance-library` | `com.quantfinlib` | the stable tier: pricing, rates, credit, risk, research, backtesting, execution analytics |
+| `quant-finance-library-lowlatency` | `com.quantfinlib.lowlatency` | the reference trading lane: `trading`, `marketdata`, `orderbook`, `fix`, `sbe`, `feed`, `entitlements`, `regreporting`, `util` |
+
 ```xml
 <repositories>
   <repository>
@@ -57,24 +78,36 @@ connectivity stack; see [docs/STABILITY.md](docs/STABILITY.md).
   </repository>
 </repositories>
 
+<!-- stable tier only -->
 <dependency>
-  <groupId>com.github.AshJha0</groupId>
-  <artifactId>Quant-Finance-Library</artifactId>
-  <version>v2.3.0</version>
+  <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
+  <artifactId>quant-finance-library</artifactId>
+  <version>v3.0.0</version>
+</dependency>
+
+<!-- or the trading lane, which brings the stable tier with it -->
+<dependency>
+  <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
+  <artifactId>quant-finance-library-lowlatency</artifactId>
+  <version>v3.0.0</version>
 </dependency>
 ```
 
-Gradle: `implementation("com.github.AshJha0:Quant-Finance-Library:v2.3.0")` with
-`maven("https://jitpack.io")` in `repositories`.
+Gradle: `implementation("com.github.AshJha0.Quant-Finance-Library:quant-finance-library:v3.0.0")`
+(or `quant-finance-library-lowlatency`) with `maven("https://jitpack.io")` in
+`repositories`. JitPack names the group `com.github.<user>.<repo>` for a multi-module
+build; 2.x was a single module and used `com.github.AshJha0:Quant-Finance-Library`.
 
 The jars attached to each GitHub release can also be put on a classpath directly.
 Publishing to Maven Central is not set up yet; see [docs/PUBLISHING.md](docs/PUBLISHING.md).
+Upgrading from 2.x: [docs/MIGRATION_3.0.md](docs/MIGRATION_3.0.md).
 
 ### Module path
 
-The jar is the named module `com.quantfinlib`. Add `requires com.quantfinlib;` to
-your `module-info.java`, or use the jar on the class path as before. Faults in
-external input throw types that implement `core.QuantFinException`
+Add `requires com.quantfinlib;` to your `module-info.java`, or
+`requires com.quantfinlib.lowlatency;` for the trading lane (it reads
+`com.quantfinlib` transitively), or use the jars on the class path as before. Faults
+in external input throw types that implement `core.QuantFinException`
 (`WireProtocolException`, `MalformedDataException`, `ConfigurationException`); each
 extends the JDK exception the same code threw in 2.0. Descriptive statistics have one
 home, `stats.Stats`. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
@@ -137,7 +170,7 @@ public class QuickStart {
 The same backtest runs without writing Java through the bundled command line:
 
 ```bash
-java -jar target/quant-finance-library-2.3.0.jar backtest \
+java -jar core/target/quant-finance-library-3.0.0.jar backtest \
     --csv bars.csv --symbol SPY --strategy sma --fast 10 --slow 30 --out report.html
 ```
 
@@ -190,12 +223,12 @@ with a summary; the javadoc is published at
   supervisory parameters, default risk charge, residual risk add-on) and NMRF
   stress capital, and a market, sector and style factor
   risk model with risk decomposition. See [docs/MARKET_RISK.md](docs/MARKET_RISK.md).
-- `entitlements`, `reporting`: deny-overrides entitlements with time-bounded grants,
+- `entitlements`, `regreporting` (low-latency artifact): deny-overrides entitlements with time-bounded grants,
   an audit log and a pre-trade check; a MiFIR RTS 22 transaction report builder with
   LEI, ISIN and MIC check-digit validation, ESMA auth.016 XML and data-only ESMA
   rules; GLEIF, FIRDS and ISO 10383 registries with a checking sink
-  (`reporting.registry`); indicative CAT (`reporting.cat`) and EMIR Refit
-  (`reporting.emir`) reports.
+  (`regreporting.registry`); indicative CAT (`regreporting.cat`) and EMIR Refit
+  (`regreporting.emir`) reports.
 - `crb`: a central risk book that nets equity and FX products onto one factor space,
   with internalisation, cost-aware hedging and routing. See
   [docs/CENTRAL_RISK_BOOK.md](docs/CENTRAL_RISK_BOOK.md).
@@ -215,17 +248,20 @@ with a summary; the javadoc is published at
 - `backtest`: bar, portfolio, tick-level and execution-algorithm backtesters, cost
   models, walk-forward analysis, purged k-fold, deflated Sharpe ratio, bootstrap
   tools, corporate events (spin-offs, rights, reverse splits, mergers and more) in the
-  portfolio backtester, and `StrategyRunner`, which runs one strategy on the bar, tick
-  and paper-trading engines in whole shares.
+  portfolio backtester. (`StrategyRunner`, which runs one strategy on the bar, tick
+  and paper-trading engines in whole shares, is `trading.StrategyRunner` in the
+  low-latency artifact since 3.0.)
 - `indicators`, `screener`, `dsl`, `ml`, `simulation`, `report`, `cli`: technical
   indicators (batch and streaming), a stock screener, a rule-based strategy builder,
   regime and volatility forecasting models, Monte Carlo simulation, HTML/PDF/XLSX/CSV
   reports and the command line.
 
-**Execution and the trading lane (reference implementations)**
+**Execution research (stable artifact)**
 - `microstructure`, `execution`: impact and queue models, Almgren-Chriss, TCA,
   benchmark algorithms (VWAP, TWAP, POV, implementation shortfall), smart order
   routing.
+
+**The trading lane (reference implementations, low-latency artifact)**
 - `marketdata`, `orderbook`, `trading`: single-producer ring buffers, a market-data
   bus, a price-ladder matching engine, opening and closing call auctions, a pre-trade
   risk gate with a kill switch and versioned, audited limits, a position and P&L
@@ -233,12 +269,13 @@ with a summary; the javadoc is published at
   trade busts and corrections (ExecType H and G) from gateway to ledger, an
   order gateway with cancel/replace and an order state machine, quoting and auto
   hedging, a paper-trading venue. See [docs/ULTRA_LOW_LATENCY.md](docs/ULTRA_LOW_LATENCY.md).
-- `fix`, `sbe`, `feed`, `data`: a FIX session (4.4 by default, 4.2 and 5.0 SP2 over
+- `fix`, `sbe`, `feed`, `marketdata`: a FIX session (4.4 by default, 4.2 and 5.0 SP2 over
   FIXT.1.1 as options, repeating groups from a dictionary; the allocation-free order
   encoder and views in all three versions) with a CRC-checked journal, session schedules and
   NextExpectedMsgSeqNum, SBE-style
   binary codecs (schema 2), ITCH 5.0 decoding and MoldUDP64 framing, a WebSocket feed,
-  tick capture and replay files.
+  and tick capture from the bus (the QFLT replay files themselves are in the stable
+  artifact, `marketdata.tick`).
 
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) has the full package map.
 
@@ -248,21 +285,26 @@ These are common requirements that the library does not cover, or covers only in
 part. Code that needs them should use a specialised library or add them.
 
 - ISDA SIMM: not included; ISDA licenses SIMM for use.
-- FRTB SA certification, and the default risk charge for securitisations.
-- The CRE22.50 haircut table (jurisdictions without external ratings) and
-  securitisation collateral in SA-CCR.
+- FRTB SA certification. The securitisation default risk charge
+  (`FrtbDrcSecuritisation`) leaves SEC-IRBA weights, the decomposition of
+  index and nth-to-default positions (MAR22.28, 22.30, 22.39) and an unknown
+  delinquency ratio W (CRE41.9) to the caller, and its 8% conversion from a
+  banking-book weight to a DRC weight is the library's reading, not printed in
+  the Basel text.
+- Haircuts for UCITS and mutual funds in SA-CCR (CRE22.50 fund rule).
 - A stochastic basis for foreign-currency swaps (only domestic swaps see the basis
   factor), and more than one basis factor.
-- Busts and corrections in `PaperTradingGateway`; `HftOrderGateway` does not reopen
-  an order after a bust.
+- `HftOrderGateway` does not reopen an order after a bust (`PaperTradingGateway`
+  can, with `setReopenOnBust(true)`).
 - Certification of the CAT and EMIR reports (EMIR not checked field by field against
-  Regulation 2022/1860); MiFIR rules that need reference data, the head.001
-  envelope, swap legs, and the post-2024 MiFIR review.
+  Regulation 2022/1860); the MiFIR rules CON-330, CON-331 and CON-430, the
+  seven-day pending workflow, field 2 history, auth.031 feedback, swap legs, and
+  the post-2024 MiFIR review. The shipped GLEIF, FIRDS and ISO 10383 loaders read
+  status only, so date, country and flag rules run only with richer reference data
+  supplied by the caller.
 - Corporate-action elections and cost basis inside the portfolio backtester
   (`CorporateEventPositions` handles them for single holdings).
 - Live broker or exchange connectivity, certification, and kernel-bypass networking.
-- A smaller public API surface is planned for 3.0: 2.4.0 will deprecate what goes,
-  and 2.x keeps every 2.0 public type.
 
 ## Performance
 
@@ -275,6 +317,8 @@ Benchmark method, environment and results are in [docs/BENCHMARKS.md](docs/BENCH
 | [GETTING_STARTED.md](docs/GETTING_STARTED.md) | Build, first backtest, paper trading, benchmarks, troubleshooting |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Package map, data flow, design rules |
 | [STABILITY.md](docs/STABILITY.md) | Stable APIs, reference implementations, versioning policy |
+| [MIGRATION_3.0.md](docs/MIGRATION_3.0.md) | What 3.0 removes or moves, and the 2.4 replacement for each |
+| [MIGRATION_2.4.md](docs/MIGRATION_2.4.md) | 2.4 deprecations, new opt-in behaviour, unconfirmed readings |
 | [MIGRATION_2.3.md](docs/MIGRATION_2.3.md) | The removed SIMM package and the 2.3 result changes |
 | [MIGRATION_2.2.md](docs/MIGRATION_2.2.md) | The two 2.2 default changes and how to keep 2.1 behaviour |
 | [MIGRATION_2.1.md](docs/MIGRATION_2.1.md) | What 2.1 adds and how to adopt it |

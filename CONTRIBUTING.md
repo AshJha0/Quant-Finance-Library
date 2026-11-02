@@ -30,6 +30,19 @@ Some tests are tagged:
 | `timing` | asserts on wall-clock time or waits with `Thread.sleep`   | skipped     |
 | `socket` | opens real loopback sockets                               | runs        |
 
+Seven tests need files that cannot be redistributed, or the network. They skip
+unless the matching environment variable is set:
+
+| Variable | Points at | Unlocks |
+|----------|-----------|---------|
+| `QFL_ISDA_GRID_DIR` | directory of ISDA CDS Standard Model test grids (converted) | `IsdaGridVerificationTest` against the official grids |
+| `QFL_ESMA_XSD` | ESMA auth.016.001.01 XSD | schema validation in `Auth016XmlTest` and `Auth016EnvelopeTest` |
+| `QFL_ESMA_HEAD001_XSD` | ISO 20022 head.001 (business application header) XSD | envelope validation in `Auth016EnvelopeTest` and `StatusAdviceTest` |
+| `QFL_ESMA_HEAD003_XSD` | ISO 20022 head.003 (business file header) XSD | envelope validation in `Auth016EnvelopeTest` and `StatusAdviceTest` |
+| `QFL_ESMA_AUTH031_XSD` | ESMA auth.031.001.01 XSD | feedback-file validation in `StatusAdviceTest` |
+| `QFL_SIX_CFI_XLSX` | SIX ISO 10962 CFI code list (xlsx) | full-list check in `CfiCodeRegistryTest` |
+| `QFL_NETWORK_TESTS=1` | (flag) | live GLEIF API call in `RegistryTest` |
+
 The nightly workflow runs everything. If you add a test that depends on how fast
 the machine is, tag it. Prefer polling with a deadline over a fixed sleep.
 

@@ -104,7 +104,7 @@
     <h1>quantfinlib</h1>
     <p class="lead">A Java library for quantitative finance research and risk, using only the
       JDK at runtime, with a reference low-latency trading lane.</p>
-    <p class="meta">Version 2.3.0 &middot; Java 25 &middot; MIT licence &middot;
+    <p class="meta">Version 3.0.0 &middot; Java 25 &middot; MIT licence &middot;
       <a href="https://github.com/AshJha0/Quant-Finance-Library">Source on GitHub</a></p>
   </header>
 
@@ -119,7 +119,7 @@
       <tr><td>Portfolio and research</td><td><code>optimization</code>, <code>alpha</code>, <code>backtest</code></td><td>Active-set QP optimiser, risk parity, Black-Litterman, factor IC with Newey-West errors, alpha combination and attribution, capacity curves, next-open backtests, corporate events, walk-forward, deflated Sharpe</td></tr>
       <tr><td>Execution</td><td><code>microstructure</code>, <code>execution</code></td><td>Almgren-Chriss, impact and queue models, VWAP/TWAP/POV/IS algorithms, smart order routing</td></tr>
       <tr><td>Trading lane (reference)</td><td><code>marketdata</code>, <code>trading</code>, <code>orderbook</code>, <code>fix</code>, <code>sbe</code>, <code>feed</code></td><td>Ring buffers, risk gate with kill switch, order state machine with cancel/replace, matching engine, call auctions, position ledger fed from gateway fills with busts and corrections, versioned limits, FIX 4.2/4.4/5.0 SP2 sessions and hot-path encoder with journal, schedules and repeating groups, SBE schema 2, ITCH 5.0</td></tr>
-      <tr><td>Controls and reporting (reference)</td><td><code>entitlements</code>, <code>reporting</code></td><td>Deny-overrides entitlements with an audit log and a pre-trade check, MiFIR RTS 22 transaction reports with auth.016 output and ESMA rules, GLEIF, FIRDS and ISO 10383 lookups, CAT and EMIR Refit reports (not certified)</td></tr>
+      <tr><td>Controls and reporting (reference)</td><td><code>entitlements</code>, <code>regreporting</code></td><td>Deny-overrides entitlements with an audit log and a pre-trade check, MiFIR RTS 22 transaction reports with auth.016 output and ESMA rules, GLEIF, FIRDS and ISO 10383 lookups, CAT and EMIR Refit reports (not certified)</td></tr>
     </tbody>
   </table>
   </div>
@@ -131,10 +131,18 @@
   &lt;url&gt;https://jitpack.io&lt;/url&gt;
 &lt;/repository&gt;
 
+&lt;!-- stable tier only --&gt;
 &lt;dependency&gt;
-  &lt;groupId&gt;com.github.AshJha0&lt;/groupId&gt;
-  &lt;artifactId&gt;Quant-Finance-Library&lt;/artifactId&gt;
-  &lt;version&gt;v2.3.0&lt;/version&gt;
+  &lt;groupId&gt;com.github.AshJha0.Quant-Finance-Library&lt;/groupId&gt;
+  &lt;artifactId&gt;quant-finance-library&lt;/artifactId&gt;
+  &lt;version&gt;v3.0.0&lt;/version&gt;
+&lt;/dependency&gt;
+
+&lt;!-- or the trading lane, which brings the stable tier with it --&gt;
+&lt;dependency&gt;
+  &lt;groupId&gt;com.github.AshJha0.Quant-Finance-Library&lt;/groupId&gt;
+  &lt;artifactId&gt;quant-finance-library-lowlatency&lt;/artifactId&gt;
+  &lt;version&gt;v3.0.0&lt;/version&gt;
 &lt;/dependency&gt;</code></pre>
   <p>Or build from source with a JDK 25:</p>
 <pre><code>git clone https://github.com/AshJha0/Quant-Finance-Library.git
@@ -154,6 +162,8 @@ cd Quant-Finance-Library
     <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/ULTRA_LOW_LATENCY.md">Trading lane</a><span>Order lifecycle, risk gate, protocols, tuning</span></li>
     <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/BENCHMARKS.md">Benchmarks</a><span>Method and results</span></li>
     <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/STABILITY.md">Stability</a><span>Stable APIs and versioning policy</span></li>
+    <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/MIGRATION_3.0.md">Migrating to 3.0</a><span>What 3.0 removes or moves, and the 2.4 replacement</span></li>
+    <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/MIGRATION_2.4.md">Migrating to 2.4</a><span>Deprecations and new opt-in behaviour in 2.4</span></li>
     <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/MIGRATION_2.3.md">Migrating to 2.3</a><span>Removed SIMM package and the result changes in 2.3</span></li>
     <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/MIGRATION_2.2.md">Migrating to 2.2</a><span>Two default changes and how to keep 2.1 behaviour</span></li>
     <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/MIGRATION_2.1.md">Migrating to 2.1</a><span>New APIs and behaviour notes</span></li>
@@ -164,10 +174,10 @@ cd Quant-Finance-Library
   <h2>Not implemented</h2>
   <ul>
     <li>ISDA SIMM: not included; ISDA licenses SIMM for use</li>
-    <li>FRTB SA certification and the securitisation default risk charge</li>
-    <li>SA-CCR CRE22.50 haircut table and securitisation collateral</li>
-    <li>Stochastic basis for foreign-currency swaps; busts in the paper-trading gateway</li>
-    <li>Certification of the CAT and EMIR reports; MiFIR reference-data rules and the head.001 envelope</li>
+    <li>FRTB SA certification; SEC-IRBA weights in the securitisation default risk charge</li>
+    <li>SA-CCR haircuts for funds (CRE22.50 fund rule)</li>
+    <li>Stochastic basis for foreign-currency swaps</li>
+    <li>Certification of the CAT and EMIR reports; MiFIR rules CON-330, CON-331 and CON-430 and the pending workflow</li>
     <li>Live venue connectivity and certification</li>
   </ul>
 

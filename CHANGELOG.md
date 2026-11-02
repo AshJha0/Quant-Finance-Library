@@ -6,6 +6,144 @@ Entries for 1.x releases are archived in [docs/history/CHANGELOG-1.x.md](docs/hi
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-11-02
+
+Major release: the public API gets smaller and the jar says what docs/STABILITY.md says. No number changes, apart from the rounding-level note on the exposure simulator below. Every change has a row in [docs/MIGRATION_3.0.md](docs/MIGRATION_3.0.md); the japicmp gate lists each intended break by name (owner decisions D1 to D9, 2026-11-02).
+
+#### Added
+
+- `fx.CrossOp`, the stable home of the former `CrossRateEngine.Op`.
+- `LowLatencyModuleDescriptorTest`; `ExposureSimulatorFoldTest`; `CliSampleStrategiesTest`.
+- `risk.FrtbDrcSecuritisation.kAPartlyUnknownW` and `secSaPermittedWithUnknownW`: K_A when the delinquency status is unknown for up to 5% of the pool (CRE41.9); above 5% the method throws, since CRE41.10 requires 1250% (published reference).
+- `risk.FrtbDrcSecuritisation.juniorUnratedFloor`: an unrated junior tranche under rated seniors takes no less than the next more senior rated weight (CRE41.15, published reference).
+- `risk.FrtbDrcSecuritisation.decomposeIndex`, `offsetByReplication` and `checkSingleNameDecomposition`: decomposition offsets of MAR22.28, MAR22.30(1)-(3) and MAR22.39(2)-(3) (published reference; the thickness split for "decomposed proportionately" is the library's reading).
+- `risk.SaCcrHaircuts.fundHaircut10DayMandate` and `fundHaircut10DayLookThrough`: UCITS and mutual fund haircuts from the CRE22.49 and CRE22.50 tables (published reference; value weights in the look-through average are the library's reading).
+- `regreporting.RuleProvenance` (record: rule id, rule text, citation, evidence class
+  `PUBLISHED_REFERENCE`, `LIBRARY_READING` or `UNCONFIRMED`).
+- `EmirRefitReport.rules()` (EMIR-R01 to R22) and `CatEvent.rules()` (CAT-R01 to
+  R12) list every check `validate()` makes, with its source row or section;
+  `CHECKED_AGAINST` on each class names the document and version.
+- EMIR Refit: validation rewritten against the ESMA EMIR Refit validation rules
+  (ESMA74-362-2683, sheet Validations_Cpty_derivative). New checks: mandatory
+  1.2, 1.8 and 2.153; event type per action (EMIR-VR-2152-02 to -05); direction
+  1.17 or legs 1.18/1.19; 2.45 required with TERM and blank elsewhere; client
+  codes; UTI special characters outside NEWT/POSC; CCPV against 2.31; special
+  currency codes; 25-digit amounts; timestamp and date formats; the date bounds
+  and orderings of 1.1, 2.42-2.45 and 2.153. Messages start with the ESMA error
+  code. Builder: `submittingEntity`, `eventDate`, `legDirections`; `terms` fills
+  the event date from the execution date when blank.
+- CAT: validation rewritten against CAT IM Technical Specifications v4.1.0 r14
+  (2026-02-13). Required fields per Tables 16, 18, 48, 52; DEL records per
+  section 7.6.3; errorROEID per Table 16 and section 7.6; Price, Real Quantity,
+  IMID, Timestamp and Boolean per Table 3; capacity, sideDetailsInd and
+  fulfillmentLinkType per Appendix G; one-sided trade details. Builder:
+  `tradeKey`, `fillKey`.
+- `regreporting.Rts22StatusTracker`: the state a competent authority keeps across files. Field 2 history per executing entity gives CON-023 (reference reused before cancellation), CON-024 (nothing to cancel) and CON-025 (already cancelled), keyed on field 4 plus field 2 (ESMA65-8-2356 para 70). A report whose only errors are CON-411 or CON-471 is pending; `revalidate` repeats the reference-data rules daily and accepts it, rejects it on any other error, or rejects it once more than 7 calendar days have passed since reception (paras 20, 28, 53; CON-411 error text). Cancelling a pending report aborts it (para 72). Published reference; that a pending report blocks reuse of its reference under CON-023 is the library's reading.
+- `StatusAdvice`: reads and writes the auth.031.001.01 feedback file (paras 100 to 106): file status, file-level rules, per-status statistics and `RcrdSts` entries keyed by field 4 plus field 2. `StatusAdvice.of` derives ACPT, PART or RJCT from a list of `RecordOutcome`s (para 105). `BusinessHeader` carries the head.001 header with its `Rltd` element (para 101); `toFeedbackXml` writes the head.003 envelope. Both validate against the ESMA auth.031 1.1.0 and head.001/head.003 XSDs in a test when `QFL_ESMA_AUTH031_XSD`, `QFL_ESMA_HEAD001_XSD` and `QFL_ESMA_HEAD003_XSD` are set.
+- `RecordStatus` (ACPT, PDNG, RCVD, RJCT) and `RecordOutcome`.
+- `PriceNotation`: field 33 and 51 values prefixed `PCTG:`, `YLD:` or `BSPS:` are written as `Pctg`, `Yld` or `BsisPts` (RTS 22 Annex I Table 2 field 33; auth.016 `SecuritiesTransactionPrice2Choice`).
+- Content rules: CON-330 (data only, debt CFI in field 43) and CON-331 (debt CFI in FIRDS): no percentage price when field 30 is in units; CON-410 and CON-470: ISO 6166 check digit of fields 41 and 47; CON-430: field 43 must be an allowed ISO 10962 CFI, run when the caller supplies the table through `ReferenceData.withCfiCodes`. `registry.CfiCodeRegistry.fromSixXlsx` loads the code list workbook published by SIX, the ISO 10962 maintenance agency (checked against `cfi-20210507-current.xlsx`, ISO 10962:2021, 78 groups), and checks each of the four attribute letters against the letters listed for that group. The workbook is marked "Copyright© ISO 2021" with no redistribution licence, so it is not shipped; point the loader at your own download. ESMA65-8-2594 Annex 1 v1.7, published reference.
+- Loaders: `GleifGoldenCopyLeiRegistry` reads `Registration.InitialRegistrationDate`, `Registration.LastUpdateDate` and `Entity.EntityStatus`; `GleifApiLeiRegistry.validityOn` reads the same three from the API; `FirdsInstrumentRegistry` reads `CmmdtyDerivInd` and per-venue `AdmssnApprvlDtByIssr`, `ReqForAdmssnDt`, `FrstTradDt`, `TermntnDt`; `Iso10383MicRegistry` reads country, market category (`SINT` for an SI), creation and expiry dates. With these files every reference-data rule of 2.4 now runs. Column and element names are checked against a real golden-copy header and API record, the LEI-CDF 3.1 XSD, the FIRDS FULINS schema (ESMA65-8-9654 1.2.1) and the real ISO 10383 CSV and its Release 2.0 factsheet (published reference); tests parse small real extracts of the GLEIF and ISO 10383 files. The FIRDS window ends on the termination date inclusive (ESMA65-11-1193 section 2.3.4.2.12, published reference); starting it at the earliest of the three start dates, and treating the ISO 10383 expiry date (the deactivation date) as the first invalid day, are the library's readings. Date-times with an offset are converted to their UTC date.
+
+#### Changed
+
+- Two artifacts and two JPMS modules. `quant-finance-library` (module `com.quantfinlib`, source tree `core/`) holds the stable tier; `quant-finance-library-lowlatency` (module `com.quantfinlib.lowlatency`, tree `lowlatency/`) holds the reference tier and `requires transitive com.quantfinlib`. It exports `trading`, `marketdata`, `orderbook`, `fix`, `sbe`, `feed`, `entitlements`, `regreporting` (with `cat`, `emir`, `registry`) and `util`. The root POM is now the parent `quant-finance-library-parent`; `jitpack.yml` publishes both modules (JitPack group `com.github.AshJha0.Quant-Finance-Library`). The `examples` jar is a classifier of the low-latency artifact.
+- The stable module no longer requires `jdk.httpserver` or `java.xml`; both moved to the low-latency module (`trading.TradingDashboard`, the FIRDS parser). `ModuleDescriptorTest` runs `jdeps` on the stable classes to check it.
+- Package `reporting` renamed `regreporting` (D7), subpackages included; types and members unchanged.
+- Types that changed package because their 2.x package and their dependencies ended up in different modules (MIGRATION_3.0 section 8): `orderbook.Side` to `core.Side`; `data.TickFileWriter` and `TickFileReader` to `marketdata.tick` (main artifact, since the stable tick backtester reads the format); `data.TickCapture` and `AsyncTickCapture` to `marketdata`; `backtest.StrategyRunner` to `trading.StrategyRunner`; `fx.CrossRateEngine` to `marketdata.CrossRateEngine`, with its nested `Op` now the stable top-level `fx.CrossOp`.
+- `util.ValueArrays` and `util.Immutable` moved to the non-exported package `com.quantfinlib.internal` (exported only to the low-latency module); `Immutable` is no longer `@Documented`.
+- `ExposureSimulator` folded into `MultiCurrencyExposureSimulator` (D4). Its trade terms are now `MultiCurrencyExposureSimulator.SwapTerms`, `FxForwardTerms` and `Csa`, with the same components and validation. A zero-pair market (or one pair with foreign rate vol 0) reproduces the 2.4 single-currency results path for path from the same seed to a relative 1e-12; `ExposureSimulatorFoldTest` pins EE, ENE, PFE and wrong-way CVA against values printed by the 2.4.0 code (largest observed relative difference 6.7e-14). Own test against the previous release's output.
+- `fix.FileSessionStore` no longer imports the v1 layout (`seqnums.dat`, `messages.dat`) on open (D8): it starts a fresh journal and leaves the v1 files untouched. Migrate with a 2.4 release first.
+- japicmp now compares each module with the released 2.4.0 jar. The stable module fails the build on any binary-incompatible change except those listed by name in `core/pom.xml`, each commented with its MIGRATION_3.0 section; the low-latency module is reported only.
+- `FrtbDrcSecuritisation.drcRiskWeight`: the 8% conversion is still not printed in MAR22, but its evidence class moves from unconfirmed to library reading, with the reasons in the javadoc (RBC20.1(3), MAR20.1, CRE41.4 footnote 211, MAR22.34(3)). Results unchanged.
+- `MicRecord`, `InstrumentRecord` and `ReferenceData` gain components; the 2.4 constructors remain, but record patterns and `equals` see the new components.
+- `validateEsmaRules` reports CON-330, CON-410 and CON-470, and the shipped loaders now feed the dated rules (CON-360, CON-411, CON-640 and the LEI date checks) when the files carry the columns. A report that passed in 2.4 can fail in 3.0 with the same files.
+
+#### Removed
+
+- The import of the v1 FIX journal layout when `fix.FileSessionStore` opens a directory (see Changed).
+
+#### Deprecated in 2.4, now gone
+
+- `util.MathUtils` (D9; use `stats.Stats`, `SpecialFunctions`, `LinearAlgebra`, `Numerics`).
+- The ignored-seed constructors `PortfolioOptimizer(double[], double[][], long)` and `ConstrainedPortfolioOptimizer(double[], double[][], long)`.
+- The 8-argument `execution.VenueQuote` constructor (it made a quote that could never go stale).
+- `ExposureSimulator` with `Market`, `Market.ratesOnly` and `simulate`; `MultiCurrencyExposureSimulator.Market.fromLegacy`.
+- `backtest.strategies.EmaCrossStrategy`, `RsiStrategy`, `MacdStrategy`, `BollingerBandsStrategy` (D3); copies stay in `examples.strategies`, and `cli` keeps package-private copies so `--strategy ema|rsi|macd|bollinger` still works. `SmaCrossStrategy` stays.
+- `examples.FixJournalMigration` (it needs the 2.x v1 import; run the 2.4 one).
+
+#### Fixed
+
+- EMIR: field numbers confirmed against Regulation 2022/1860 and the workbook. Corrections: `direction`
+  (1.17) takes BYER or SLLR only (MAKE/TAKE belong to 1.18/1.19); notional is up
+  to 25 digits, not 18; CORR takes no event type and TERM requires one; PTNG is
+  not an ESMA event type and is now rejected; TERM no longer accepts an
+  expiration date in place of 2.45; `entityResponsibleForReporting` is
+  conditional, not mandatory.
+- CAT: COR no longer needs errorROEID (only RPR does); CATReporterIMID is
+  optional and may be lower case; MEOT and MEOF no longer need orderID or
+  orderKeyDate (they key on tradeKeyDate and fillKeyDate); MEOF no longer needs
+  side; quantity zero is accepted (Real Quantity is "not negative");
+  `CatEvent.COMMON_FIELDS` lost orderKeyDate and orderID.
+
+#### Not done
+
+- EMIR field numbers and formats were checked against the Annex of Implementing
+  Regulation (EU) 2022/1860 (Tables 1 and 2) as well as the workbook; both agree
+  on notional 2.55 (25 digits, 5 decimals). EMIR rules that need earlier
+  reports, receipt time or GLEIF status are not checked (listed in the
+  `regreporting.emir` package javadoc). LEI and ISIN check digits are the library's
+  necessary condition (ISO 17442 and ISO 6166 are not on disk).
+- CAT linkage, reference data and option or quote events are not checked;
+  requiring both trade sides when sideDetailsInd is NA is a library reading.
+
+## [2.4.0] - 2026-11-02
+
+Minor release. No 2.3 public signature in a stable package is removed or changed (japicmp against 2.3.0), and no result changes unless you opt in. 2.4.0 deprecates for removal every member that 3.0 takes out, so compiling with `-Xlint:removal` lists the lines to change; [docs/MIGRATION_2.4.md](docs/MIGRATION_2.4.md) covers this release and [docs/MIGRATION_3.0.md](docs/MIGRATION_3.0.md) is the plan for 3.0.
+
+### Added
+
+- `stats.SpecialFunctions` (`normCdf`, `normInv`, `normPdf`, `logNormPdf`, `logGamma`, `regularizedIncompleteBeta`, `tCdf`), `stats.LinearAlgebra` (`dot`, `matVec`, `quadraticForm`, `cholesky`, `solveLinear`, `inverse`) and `stats.Numerics` (`clamp`, `nanArray`, `decayFactor`, `pairSort`), moved from `util.MathUtils` with results pinned bit for bit against the 2.3.0 jar (`MovedFromMathUtilsTest`); `Stats.pearsonOrZero`, `Stats.skewness`, `Stats.kurtosis`.
+- Busts and corrections in `PaperTradingGateway`: `bustFill` and `correctFill` by execution id (a correction can itself be busted or corrected), `executionIds`, `TradeListener` and `addTradeListener`, `rejectedTradeAdjustmentCount`, and `setReopenOnBust` (default off, the 2.3 behaviour). Cash and positions are replayed from the surviving fills, so the account equals one that never saw the busted trade. `LedgerFillListener.forPaperTrades` books fills, busts and corrections into a `PositionLedger` under the gateway's execution ids.
+- `risk.FrtbDrcSecuritisation`: the FRTB default risk charge for securitisations outside the correlation trading portfolio (MAR22.27 to 22.35) and inside it (MAR22.36 to 22.45), with SEC-SA (CRE41) and the one-year SEC-ERBA columns (CRE42) as risk-weight sources (published reference). SEC-IRBA weights are caller input. Converting a banking-book weight to a DRC weight by multiplying by 8% (`drcRiskWeight`) is the library's reading; the Basel text does not print that factor (unconfirmed; it is the reading under which 1250% gives a charge equal to the market value, the cap of MAR22.34(3)).
+- `risk.SaCcrHaircuts`: the CRE22.49 securitisation rows (`CollateralKind.SECURITISATION`, rejected under the 2006 table, which has no such row), `Table.CRE22_NO_EXTERNAL_RATINGS` (CRE22.50), `NoRatingsDebtClass`, `haircut10DayNoExternalRatings` and `CollateralKind.OTHER_EXPOSURE` (published reference).
+- `Rts22TransactionReport.validateWithReferenceData(ReferenceData, LocalDate)`: 36 ESMA content rules (CON-xxx) that need reference data, such as LEI status and registration dates, ISIN admission windows and MIC validity on the trading date. `Rts22TransactionReport.toSubmissionXml`: the head.003.001.01 envelope with the head.001.001.01 business application header around auth.016.001.01 (ESMA65-8-2356, paragraphs 124 to 132). Tests validate it against the ESMA XSDs when `QFL_ESMA_XSD`, `QFL_ESMA_HEAD001_XSD` and `QFL_ESMA_HEAD003_XSD` are set; the XSDs are not redistributed.
+- `reporting.registry`: `ReferenceData`, `LeiValidity`, `CodeRegistry` (dated validity windows), and default methods on `LeiRegistry`, `InstrumentRegistry` and `MicRegistry` that return the dated view.
+- `examples.strategies` (copies of the four deprecated sample strategies) and `examples.FixJournalMigration`, which rewrites a v1 FIX session store in the current layout.
+
+### Changed
+
+- The library no longer calls `util.MathUtils`; internal callers use the `stats` classes. Results are unchanged.
+- 3.0 notices in the package-info of the packages that move to the low-latency artifact, of `reporting` (renamed `regreporting` in 3.0) and of `util`.
+
+### Deprecated (for removal in 3.0)
+
+- `util.MathUtils`, whole class; every method delegates to its replacement (table in docs/MIGRATION_3.0.md section 4).
+- `PortfolioOptimizer(double[], double[][], long)` and `ConstrainedPortfolioOptimizer(double[], double[][], long)`: the seed was ignored.
+- The 8-argument `VenueQuote` constructor, which set `lastUpdateNanos` to `Long.MAX_VALUE` so the quote never went stale.
+- `credit.ExposureSimulator.Market`, `Market.ratesOnly` and `ExposureSimulator.simulate`, and `MultiCurrencyExposureSimulator.Market.fromLegacy`: use `MultiCurrencyExposureSimulator`. `ExposureSimulator.Swap`, `FxForward` and `Csa` are not deprecated yet.
+- `backtest.strategies.EmaCrossStrategy`, `RsiStrategy`, `MacdStrategy` and `BollingerBandsStrategy` (copies in `examples.strategies`); `SmaCrossStrategy` stays.
+- `fix.FileSessionStore` reading the v1 layout: notice in the class javadoc; 3.0 will not read it.
+
+### Fixed
+
+- Nothing that changes a 2.3 result.
+
+### Not done, and known gaps
+
+- The shipped GLEIF, FIRDS and ISO 10383 loaders do not parse registration dates, country, systematic-internaliser or commodity flags, so with them `validateWithReferenceData` runs only the status checks. The date and flag rules run when the caller supplies a `ReferenceData` built from richer data.
+- Not implemented: CON-330 and CON-331, CON-430 (needs the ISO 10962 table), the seven-day pending workflow, field 2 uniqueness and cancellation history, auth.031 feedback files, and the related-message element (`Rltd`) of the business application header.
+- Left to the caller in the securitisation and haircut code: SEC-IRBA weights, an unknown delinquency ratio W (CRE41.9), CRE41.15, replication by decomposition (MAR22.28, 22.30, 22.39) and fund haircuts (CRE22.50).
+
+### Tests and quality
+
+- New tests for paper busts and corrections, the securitisation DRC and haircut tables, the reference-data rules and the submission envelope, and the moved numerics. 1,893 tests in the full suite (1,825 in 2.3.0).
+- Mutation score: `SwapPricer` 44% to 100%, `HolidayCalendars` 79% to 97% (Easter checked against Oudin's algorithm for 1583 to 4099), `ExposureSimulator` and `MultiCurrencyExposureSimulator` inner classes at 85% or more.
+
+### Docs
+
+- docs/MIGRATION_2.4.md and the draft docs/MIGRATION_3.0.md; README, LEARN (10t, 17d, 17e updated; new 10u, 17g; `MathUtils` references moved to `stats`), COOKBOOK (recipes 344, 347, 348 updated; new 350 to 354; `MathUtils` calls replaced), DIAGRAMS (109 and 110 updated), ARCHITECTURE, STABILITY, MARKET_RISK, ULTRA_LOW_LATENCY, GETTING_STARTED and the site index.
+
 ## [2.3.0] - 2026-11-02
 
 Minor release. No 2.2 public signature in a stable package is removed or changed (japicmp against 2.2.0). The reference package `risk.simm` is removed, and several results change because they disagreed with the cited text; [docs/MIGRATION_2.3.md](docs/MIGRATION_2.3.md) lists each change and how to keep the old behaviour where that is possible.
