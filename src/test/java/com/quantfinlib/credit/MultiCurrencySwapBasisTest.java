@@ -56,9 +56,9 @@ class MultiCurrencySwapBasisTest {
     void reducesToTheOldEngineExactly() {
         var mk = eurMarket(0.01, 0.012, 0.12);
         var sw = List.of(new MultiCurrencyExposureSimulator.Swap(
-                new ExposureSimulator.Swap(100, 0.03, true, 0, 5, 2), c(IBOR)));
+                new MultiCurrencyExposureSimulator.SwapTerms(100, 0.03, true, 0, 5, 2), c(IBOR)));
         var fw = List.of(new MultiCurrencyExposureSimulator.FxForward(0,
-                new ExposureSimulator.FxForward(50, 1.12, 3)));
+                new MultiCurrencyExposureSimulator.FxForwardTerms(50, 1.12, 3)));
         ExposureProfile old = MultiCurrencyExposureSimulator.simulate(mk, sw, fw, null, TIMES, 500, 7L, 0);
         ExposureProfile neu = MultiCurrencyExposureSimulator.simulate(mk, sw, List.of(), fw, null, null,
                 TIMES, 500, 7L, 0);
@@ -87,8 +87,8 @@ class MultiCurrencySwapBasisTest {
     @Test
     void foreignSwapDiscountedValueIsAMartingale() {
         var mk = eurMarket(0.01, 0.012, 0.12);
-        var t = new ExposureSimulator.Swap(100, 0.02, true, 3, 5, 1);
-        var r = new ExposureSimulator.Swap(100, 0.02, false, 3, 5, 1);
+        var t = new MultiCurrencyExposureSimulator.SwapTerms(100, 0.02, true, 3, 5, 1);
+        var r = new MultiCurrencyExposureSimulator.SwapTerms(100, 0.02, false, 3, 5, 1);
         int n = 40_000;
         ExposureProfile pay = MultiCurrencyExposureSimulator.simulate(mk, List.of(),
                 List.of(new MultiCurrencyExposureSimulator.ForeignSwap(0, t, c(EURIBOR))), List.of(), null, null,
@@ -112,7 +112,7 @@ class MultiCurrencySwapBasisTest {
         // With sigma_f = sigma_S = 0, D_d(0,t) S(t) = S0 P_f(0,t) on every path, so
         // DEE(t) = max(V0, 0) exactly while the domestic rate stays random.
         var mk = eurMarket(0.01, 0, 0);
-        var t = new ExposureSimulator.Swap(100, 0.01, true, 3, 5, 1);
+        var t = new MultiCurrencyExposureSimulator.SwapTerms(100, 0.01, true, 3, 5, 1);
         ExposureProfile pr = MultiCurrencyExposureSimulator.simulate(mk, List.of(),
                 List.of(new MultiCurrencyExposureSimulator.ForeignSwap(0, t, c(EURIBOR))), List.of(), null, null,
                 new double[]{1, 2.5}, 200, 3L, 0);
@@ -135,8 +135,8 @@ class MultiCurrencySwapBasisTest {
         var bf = new MultiCurrencyExposureSimulator.BasisFactor(0.3, 0.05, new double[]{0.6});
         double[] times = {1, 2.5, 3.5};
         int n = 40_000;
-        var pay = new ExposureSimulator.Swap(100, 0.03, true, 3, 4, 1);
-        var rec = new ExposureSimulator.Swap(100, 0.03, false, 3, 4, 1);
+        var pay = new MultiCurrencyExposureSimulator.SwapTerms(100, 0.03, true, 3, 4, 1);
+        var rec = new MultiCurrencyExposureSimulator.SwapTerms(100, 0.03, false, 3, 4, 1);
         ExposureProfile a = MultiCurrencyExposureSimulator.simulate(mk,
                 List.of(new MultiCurrencyExposureSimulator.Swap(pay, c(IBOR))), List.of(), List.of(), bf, null,
                 times, n, 21L, 0);
@@ -158,7 +158,7 @@ class MultiCurrencySwapBasisTest {
         double a = 0.4, sb = 0.03, s = 3, e = 4, k = 0.034, tt = 2;
         var mk = ratesOnly(0);
         var bf = new MultiCurrencyExposureSimulator.BasisFactor(a, sb, new double[]{0});
-        var sw = new ExposureSimulator.Swap(100, k, true, s, e, 1);
+        var sw = new MultiCurrencyExposureSimulator.SwapTerms(100, k, true, s, e, 1);
         int n = 40_000;
         ExposureProfile pr = MultiCurrencyExposureSimulator.simulate(mk,
                 List.of(new MultiCurrencyExposureSimulator.Swap(sw, c(IBOR))), List.of(), List.of(), bf, null,
@@ -176,7 +176,7 @@ class MultiCurrencySwapBasisTest {
     @Test
     void rejectsBadBasisAndPairs() {
         var mk = eurMarket(0.01, 0.012, 0.12);
-        var sw = new ExposureSimulator.Swap(100, 0.03, true, 0, 5, 1);
+        var sw = new MultiCurrencyExposureSimulator.SwapTerms(100, 0.03, true, 0, 5, 1);
         assertThrows(IllegalArgumentException.class, () -> MultiCurrencyExposureSimulator.simulate(mk, List.of(),
                 List.of(new MultiCurrencyExposureSimulator.ForeignSwap(1, sw, null)), List.of(), null, null,
                 TIMES, 10, 1L, 0));

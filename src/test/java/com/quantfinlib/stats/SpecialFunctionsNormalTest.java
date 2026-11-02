@@ -1,6 +1,5 @@
-package com.quantfinlib.util;
+package com.quantfinlib.stats;
 
-import com.quantfinlib.stats.SpecialFunctions;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -19,7 +18,7 @@ import org.junit.jupiter.api.Test;
  */
 // Reference values keep the digits of their source; each rounds to the nearest double.
 @SuppressWarnings("FloatingPointLiteralPrecision")
-class MathUtilsNormalTest {
+class SpecialFunctionsNormalTest {
 
     private static final double[][] CDF = {
             {-37.5, 4.6053530095819552e-308},

@@ -1,6 +1,5 @@
-package com.quantfinlib.util;
+package com.quantfinlib.stats;
 
-import com.quantfinlib.stats.Numerics;
 import org.junit.jupiter.api.Test;
 
 import java.util.SplittableRandom;
@@ -15,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * key order, adversarial inputs (sorted, reversed, constant), and small
  * arrays through the insertion-sort path.
  */
-class MathUtilsPairSortTest {
+class NumericsPairSortTest {
 
     @Test
     void agreesWithJdkSortOnRandomData() {

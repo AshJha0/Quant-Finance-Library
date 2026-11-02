@@ -10,7 +10,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** AdaptiveSor latency cap and total dark cap; AntiGamingJitter separation bound. */
-@SuppressWarnings("removal") // exercises 2.x API deprecated for removal in 2.4.0
 class ExecutionP3FixesTest {
 
     private static final long MS = 1_000_000L;
@@ -19,8 +18,8 @@ class ExecutionP3FixesTest {
     void latencyPenaltyCapLetsOtherTermsDecide() {
         // FAST: ask 100.05 (5 bps worse), 0 ms. SLOW: ask 100.00, 100 ms at 1 bp/ms = 100 bps.
         List<VenueQuote> venues = List.of(
-                new VenueQuote("FAST", 0, 0, 100.05, 1_000, 0, 0, false),
-                new VenueQuote("SLOW", 0, 0, 100.00, 1_000, 0, 100 * MS, false));
+                new VenueQuote("FAST", 0, 0, 100.05, 1_000, 0, 0, false, Long.MAX_VALUE),
+                new VenueQuote("SLOW", 0, 0, 100.00, 1_000, 0, 100 * MS, false, Long.MAX_VALUE));
         AdaptiveSor uncapped = new AdaptiveSor(new VenueScorecard(2));
         assertEquals("FAST", uncapped.route(Side.BUY, 500, venues).lit().getFirst().venue());
         // Capped at 2 bps: SLOW costs 100.00 + 0.02 < 100.05.
@@ -37,8 +36,8 @@ class ExecutionP3FixesTest {
     void sellsRankByHighestExpectedProceedsInPriceUnits() {
         // Fee 10 bps on HIGH (bid 100.05): proceeds 100.05 * (1 - 0.001) = 99.94995 < 100.00.
         List<VenueQuote> venues = List.of(
-                new VenueQuote("HIGH", 100.05, 1_000, 0, 0, 10, 0, false),
-                new VenueQuote("LOW", 100.00, 1_000, 0, 0, 0, 0, false));
+                new VenueQuote("HIGH", 100.05, 1_000, 0, 0, 10, 0, false, Long.MAX_VALUE),
+                new VenueQuote("LOW", 100.00, 1_000, 0, 0, 0, 0, false, Long.MAX_VALUE));
         AdaptiveSor sor = new AdaptiveSor(new VenueScorecard(2));
         assertEquals("LOW", sor.route(Side.SELL, 500, venues).lit().getFirst().venue());
     }
@@ -47,9 +46,9 @@ class ExecutionP3FixesTest {
     void darkProbesShareOneBudget() {
         // Two unknown pools, default probe 5,000 each; budget 50 % of 6,000 = 3,000 in total.
         List<VenueQuote> venues = List.of(
-                new VenueQuote("D1", 99.99, 0, 100.01, 0, 0, 0, true),
-                new VenueQuote("D2", 99.99, 0, 100.01, 0, 0, 0, true),
-                new VenueQuote("D3", 99.99, 0, 100.01, 0, 0, 0, true));
+                new VenueQuote("D1", 99.99, 0, 100.01, 0, 0, 0, true, Long.MAX_VALUE),
+                new VenueQuote("D2", 99.99, 0, 100.01, 0, 0, 0, true, Long.MAX_VALUE),
+                new VenueQuote("D3", 99.99, 0, 100.01, 0, 0, 0, true, Long.MAX_VALUE));
         var d = new AdaptiveSor(new VenueScorecard(1)).route(Side.BUY, 6_000, venues);
         assertEquals(1, d.probes().size(), "the first pool takes the whole budget");
         assertEquals(3_000, d.probes().getFirst().quantity());

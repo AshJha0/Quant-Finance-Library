@@ -10,6 +10,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -125,7 +127,10 @@ class FileSessionStoreTest {
     }
 
     @Test
-    void versionOneDirectoryIsMigrated(@TempDir Path dir) throws Exception {
+    void versionOneDirectoryIsNotReadIn30(@TempDir Path dir) throws Exception {
+        // Decision D8 (docs/MIGRATION_3.0.md section 10): 3.0 no longer
+        // imports the v1 layout. The store starts fresh and leaves the v1
+        // files exactly as they were.
         try (DataOutputStream seq = new DataOutputStream(Files.newOutputStream(dir.resolve("seqnums.dat")))) {
             seq.writeLong(7);
             seq.writeLong(4);
@@ -137,18 +142,17 @@ class FileSessionStoreTest {
             byte[] body = "11=legacy\u0001".getBytes(StandardCharsets.ISO_8859_1);
             m.writeInt(body.length);
             m.write(body);
-            m.writeLong(6);   // torn second record
         }
+        byte[] seqBefore = Files.readAllBytes(dir.resolve("seqnums.dat"));
+        byte[] msgBefore = Files.readAllBytes(dir.resolve("messages.dat"));
         try (FileSessionStore store = new FileSessionStore(dir)) {
-            assertEquals(7, store.nextOutgoingSeq());
-            assertEquals(4, store.expectedIncomingSeq());
-            assertEquals("11=legacy\u0001", store.retrieve(5).body());
+            assertEquals(1, store.nextOutgoingSeq());
+            assertEquals(1, store.expectedIncomingSeq());
         }
-        assertTrue(Files.exists(dir.resolve("seqnums.dat.migrated")));
-        try (FileSessionStore again = new FileSessionStore(dir)) {
-            assertEquals(7, again.nextOutgoingSeq());
-            assertEquals("11=legacy\u0001", again.retrieve(5).body());
-        }
+        assertArrayEquals(seqBefore, Files.readAllBytes(dir.resolve("seqnums.dat")));
+        assertArrayEquals(msgBefore, Files.readAllBytes(dir.resolve("messages.dat")));
+        assertFalse(Files.exists(dir.resolve("seqnums.dat.migrated")));
+        assertFalse(Files.exists(dir.resolve("messages.dat.migrated")));
     }
 
     @Test

@@ -37,7 +37,7 @@ import java.util.Objects;
  * deterministic.</p>
  *
  * <p>The {@link ExposureProfile} overloads take a simulated profile from
- * {@link ExposureSimulator} instead: CVA and DVA on its stochastic
+ * {@link MultiCurrencyExposureSimulator} instead: CVA and DVA on its stochastic
  * discounting, and {@link #cvaWrongWay} for wrong-way risk through a
  * Gaussian copula between default and a market factor.</p>
  */

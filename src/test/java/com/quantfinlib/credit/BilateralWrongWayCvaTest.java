@@ -16,7 +16,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * brute-force simulation of the two default times, and positive wrong-way
  * loading raises the CVA (own tests).
  */
-@SuppressWarnings("removal") // exercises 2.x API deprecated for removal in 2.4.0
 class BilateralWrongWayCvaTest {
 
     private static YieldCurve dom() {
@@ -26,9 +25,9 @@ class BilateralWrongWayCvaTest {
     private static final double[] TIMES = {0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5};
 
     private static ExposureProfile profile() {
-        ExposureSimulator.Market m = ExposureSimulator.Market.ratesOnly(dom(), 0.05, 0.01);
-        ExposureSimulator.Swap s = new ExposureSimulator.Swap(100, 0.03, true, 0, 5, 1);
-        return ExposureSimulator.simulate(m, List.of(s), List.of(), null, TIMES, 4_000, 5L);
+        LegacyExposure.Market m = LegacyExposure.Market.ratesOnly(dom(), 0.05, 0.01);
+        MultiCurrencyExposureSimulator.SwapTerms s = new MultiCurrencyExposureSimulator.SwapTerms(100, 0.03, true, 0, 5, 1);
+        return LegacyExposure.simulate(m, List.of(s), List.of(), null, TIMES, 4_000, 5L);
     }
 
     private static CreditCurve flat(double spread) {

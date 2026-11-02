@@ -10,7 +10,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@SuppressWarnings("removal") // exercises 2.x API deprecated for removal in 2.4.0
 class ExecutionTest {
 
     // ---- TWAP / VWAP ------------------------------------------------
@@ -82,9 +81,9 @@ class ExecutionTest {
     // ---- Smart Order Router -----------------------------------------
 
     private static final List<VenueQuote> VENUES = List.of(
-            new VenueQuote("LIT_A", 99.98, 400, 100.02, 400, 0.0, 500_000, false),
-            new VenueQuote("LIT_B", 99.97, 600, 100.00, 300, 1.0, 800_000, false),
-            new VenueQuote("DARK_X", 99.98, 500, 100.02, 500, 0.2, 1_000_000, true));
+            new VenueQuote("LIT_A", 99.98, 400, 100.02, 400, 0.0, 500_000, false, Long.MAX_VALUE),
+            new VenueQuote("LIT_B", 99.97, 600, 100.00, 300, 1.0, 800_000, false, Long.MAX_VALUE),
+            new VenueQuote("DARK_X", 99.98, 500, 100.02, 500, 0.2, 1_000_000, true, Long.MAX_VALUE));
 
     @Test
     void sorPicksBestAllInPriceAcrossVenues() {
@@ -120,8 +119,8 @@ class ExecutionTest {
     @Test
     void preferDarkRoutesDarkFirstEvenWhenLitCompetitive() {
         List<VenueQuote> venues = List.of(
-                new VenueQuote("LIT", 99.99, 1_000, 100.00, 1_000, 0.0, 1, false),
-                new VenueQuote("DARK", 99.98, 300, 100.04, 300, 0.0, 1, true));  // dark mid 100.01 worse than lit ask
+                new VenueQuote("LIT", 99.99, 1_000, 100.00, 1_000, 0.0, 1, false, Long.MAX_VALUE),
+                new VenueQuote("DARK", 99.98, 300, 100.04, 300, 0.0, 1, true, Long.MAX_VALUE));  // dark mid 100.01 worse than lit ask
         SmartOrderRouter.RoutingPlan plan = SmartOrderRouter.route(Side.BUY, 500, venues, true);
         assertEquals("DARK", plan.legs().getFirst().venue());
         assertEquals(300, plan.legs().getFirst().quantity());
@@ -131,8 +130,8 @@ class ExecutionTest {
     @Test
     void sorExcludesNanFeeVenueInsteadOfPoisoningAllInPrice() {
         List<VenueQuote> venues = List.of(
-                new VenueQuote("BAD", 99.99, 1_000, 100.00, 1_000, Double.NaN, 1, false),
-                new VenueQuote("GOOD", 99.98, 1_000, 100.02, 1_000, 1.0, 1, false));
+                new VenueQuote("BAD", 99.99, 1_000, 100.00, 1_000, Double.NaN, 1, false, Long.MAX_VALUE),
+                new VenueQuote("GOOD", 99.98, 1_000, 100.02, 1_000, 1.0, 1, false, Long.MAX_VALUE));
         SmartOrderRouter.RoutingPlan plan = SmartOrderRouter.route(Side.BUY, 500, venues, false);
         assertEquals(1, plan.legs().size());
         assertEquals("GOOD", plan.legs().getFirst().venue());
@@ -167,9 +166,9 @@ class ExecutionTest {
     void sorRespectsLimitPriceExcludingBestVenue() {
         List<VenueQuote> venues = List.of(
                 // Best price but through the limit: must be excluded.
-                new VenueQuote("CHEAP_BUT_ABOVE_LIMIT", 99.90, 1_000, 100.05, 1_000, 0.0, 1, false),
+                new VenueQuote("CHEAP_BUT_ABOVE_LIMIT", 99.90, 1_000, 100.05, 1_000, 0.0, 1, false, Long.MAX_VALUE),
                 // Worse price but within the limit: should win instead.
-                new VenueQuote("COMPLIANT", 99.90, 1_000, 99.95, 1_000, 0.0, 1, false));
+                new VenueQuote("COMPLIANT", 99.90, 1_000, 99.95, 1_000, 0.0, 1, false, Long.MAX_VALUE));
         SmartOrderRouter.RoutingPlan plan = SmartOrderRouter.route(Side.BUY, 500, venues, false, 100.00);
         assertEquals(1, plan.legs().size());
         assertEquals("COMPLIANT", plan.legs().getFirst().venue());
@@ -179,7 +178,7 @@ class ExecutionTest {
     @Test
     void sorReportsShortfallWhenLimitPriceExcludesAllVenues() {
         List<VenueQuote> venues = List.of(
-                new VenueQuote("TOO_EXPENSIVE", 99.90, 1_000, 100.10, 1_000, 0.0, 1, false));
+                new VenueQuote("TOO_EXPENSIVE", 99.90, 1_000, 100.10, 1_000, 0.0, 1, false, Long.MAX_VALUE));
         SmartOrderRouter.RoutingPlan plan = SmartOrderRouter.route(Side.BUY, 500, venues, false, 100.00);
         assertEquals(0, plan.routedQty());
         assertEquals(500, plan.unroutedQty());

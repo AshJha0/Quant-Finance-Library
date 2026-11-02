@@ -2,7 +2,7 @@ package com.quantfinlib.credit;
 
 import com.quantfinlib.rates.CurveInterpolation;
 import com.quantfinlib.rates.DiscountCurve;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.SpecialFunctions;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
@@ -24,7 +24,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * (the Black formula for a lognormal basis is derived in
  * MultiCurrencySwapBasisTest); Monte Carlo checks use four standard errors.
  */
-@SuppressWarnings({"deprecation", "removal"}) // exercises 2.x types deprecated in 2.4.0
 class MultiCurrencyExposureSimulatorMutationTest {
 
     private static final LocalDate D0 = LocalDate.of(2026, 11, 2);
@@ -111,8 +110,8 @@ class MultiCurrencyExposureSimulatorMutationTest {
 
     @Test
     void tradeRecordsRejectNegativePairs() {
-        var sw = new ExposureSimulator.Swap(1, 0.03, true, 0, 2, 1);
-        var fw = new ExposureSimulator.FxForward(1, 1, 1);
+        var sw = new MultiCurrencyExposureSimulator.SwapTerms(1, 0.03, true, 0, 2, 1);
+        var fw = new MultiCurrencyExposureSimulator.FxForwardTerms(1, 1, 1);
         assertDoesNotThrow(() -> new MultiCurrencyExposureSimulator.ForeignSwap(0, sw, null));
         assertDoesNotThrow(() -> new MultiCurrencyExposureSimulator.FxForward(0, fw));
         assertThrows(IllegalArgumentException.class, () -> new MultiCurrencyExposureSimulator.ForeignSwap(-1, sw, null));
@@ -183,8 +182,8 @@ class MultiCurrencyExposureSimulatorMutationTest {
     void simulateBoundaries() {
         var mk = new MultiCurrencyExposureSimulator.Market(dom(0.01), List.of(eur()),
                 new double[][]{{1, 0, 0}, {0, 1, 0}, {0, 0, 1}});
-        var fw0 = List.of(new MultiCurrencyExposureSimulator.FxForward(0, new ExposureSimulator.FxForward(1, 1, 1)));
-        var fw1 = List.of(new MultiCurrencyExposureSimulator.FxForward(1, new ExposureSimulator.FxForward(1, 1, 1)));
+        var fw0 = List.of(new MultiCurrencyExposureSimulator.FxForward(0, new MultiCurrencyExposureSimulator.FxForwardTerms(1, 1, 1)));
+        var fw1 = List.of(new MultiCurrencyExposureSimulator.FxForward(1, new MultiCurrencyExposureSimulator.FxForwardTerms(1, 1, 1)));
         double[] t = {0.5};
         assertEquals(2, MultiCurrencyExposureSimulator.simulate(mk, List.of(), fw0, null, t, 2, 1L).paths());
         assertThrows(IllegalArgumentException.class,
@@ -210,8 +209,8 @@ class MultiCurrencyExposureSimulatorMutationTest {
     void forwardOnItsMaturityDateHasNoExposure() {
         var mk = new MultiCurrencyExposureSimulator.Market(dom(0.01), List.of(eur()),
                 new double[][]{{1, 0, 0}, {0, 1, 0}, {0, 0, 1}});
-        var fw = List.of(new MultiCurrencyExposureSimulator.FxForward(0, new ExposureSimulator.FxForward(100, 0.5, 1)));
-        var sw = List.of(new MultiCurrencyExposureSimulator.Swap(new ExposureSimulator.Swap(100, 0.01, true, 0, 2, 1),
+        var fw = List.of(new MultiCurrencyExposureSimulator.FxForward(0, new MultiCurrencyExposureSimulator.FxForwardTerms(100, 0.5, 1)));
+        var sw = List.of(new MultiCurrencyExposureSimulator.Swap(new MultiCurrencyExposureSimulator.SwapTerms(100, 0.01, true, 0, 2, 1),
                 null));
         var p = MultiCurrencyExposureSimulator.simulate(mk, sw, fw, null, new double[]{0.5, 1, 2}, 200, 3L);
         assertTrue(p.expectedExposure(0) > 50, "deep in-the-money forward before maturity");
@@ -225,7 +224,7 @@ class MultiCurrencyExposureSimulatorMutationTest {
         double rho = -0.5;
         var mk = new MultiCurrencyExposureSimulator.Market(dom(0.01), List.of(eur()),
                 new double[][]{{1, 0, rho}, {0, 1, 0}, {rho, 0, 1}});
-        var fw = List.of(new MultiCurrencyExposureSimulator.FxForward(0, new ExposureSimulator.FxForward(100, 1.1, 5)));
+        var fw = List.of(new MultiCurrencyExposureSimulator.FxForward(0, new MultiCurrencyExposureSimulator.FxForwardTerms(100, 1.1, 5)));
         int np = 20000;
         var p = MultiCurrencyExposureSimulator.simulate(mk, List.of(), fw, null, new double[]{0.25, 2}, np, 9L);
         for (int i = 0; i < 2; i++) {
@@ -259,7 +258,7 @@ class MultiCurrencyExposureSimulatorMutationTest {
         double a = 0.4, sb = 0.25, s = 3, e = 4, k = 0.034, tt = 2;
         var mk = new MultiCurrencyExposureSimulator.Market(dom(0), List.of(), new double[][]{{1}});
         var bf = new MultiCurrencyExposureSimulator.BasisFactor(a, sb, new double[]{0});
-        var sw = new ExposureSimulator.Swap(100, k, true, s, e, 1);
+        var sw = new MultiCurrencyExposureSimulator.SwapTerms(100, k, true, s, e, 1);
         int n = 40_000;
         ExposureProfile pr = MultiCurrencyExposureSimulator.simulate(mk,
                 List.of(new MultiCurrencyExposureSimulator.Swap(sw, c(IBOR))), List.of(), List.of(), bf, null,
@@ -269,7 +268,7 @@ class MultiCurrencyExposureSimulatorMutationTest {
         double fwdB = 100 * (1 + k) * p(OIS, e);
         double v = sb * sb * Math.exp(-2 * a * (s - tt)) * (1 - Math.exp(-2 * a * tt)) / (2 * a);
         double d1 = (Math.log(fwdA / fwdB) + 0.5 * v) / Math.sqrt(v), d2 = d1 - Math.sqrt(v);
-        double black = fwdA * MathUtils.normCdf(d1) - fwdB * MathUtils.normCdf(d2);
+        double black = fwdA * SpecialFunctions.normCdf(d1) - fwdB * SpecialFunctions.normCdf(d2);
         assertEquals(black, pr.discountedExpectedExposure(0), 4 * pr.discountedExpectedExposureStdError(0));
     }
 }

@@ -13,10 +13,18 @@ import java.util.TreeSet;
 /**
  * Monte Carlo exposure generator for a netting set of multi-curve swaps
  * and FX forwards on several currency pairs, each foreign currency with
- * its own stochastic short rate. It generalises {@link ExposureSimulator},
- * which stays the default: a market built with
- * {@code Market.fromLegacy} (deprecated, removed in 3.0) reproduces the 2.1
- * results to rounding, path for path, from the same seed.
+ * its own stochastic short rate. The output {@link ExposureProfile} feeds
+ * the profile overloads of {@link CvaApproximator}.
+ *
+ * <p>In 3.0 this class absorbed the single-currency {@code ExposureSimulator}
+ * of 2.1 to 2.4 (decision D4). A single-currency market is the special case
+ * with zero pairs, or one pair whose foreign rate vol is 0; on that case this
+ * engine reproduces the 2.4 single-currency results path for path from the
+ * same seed, to the tolerance pinned in {@code ExposureSimulatorFoldTest}
+ * (own test against values printed by the 2.4.0 code). The trade terms
+ * {@link SwapTerms}, {@link FxForwardTerms} and {@link Csa} are the 2.x
+ * {@code ExposureSimulator.Swap}, {@code FxForward} and {@code Csa} with the
+ * same components.</p>
  *
  * <p><b>Plain idea.</b> Every currency has a Hull-White short rate fitted
  * to its own discount curve, every pair has a lognormal spot, and all the
@@ -40,8 +48,16 @@ import java.util.TreeSet;
  *
  * <p>The quanto term {@code -rho sigma_c sigma_S} is the Girsanov shift
  * from the foreign to the domestic bank-account measure. Bond prices in
- * each currency use the closed form of {@link ExposureSimulator} with that
- * currency's (a, sigma, curve) and the state x_c. The zero-mean Gaussian
+ * each currency use the Hull-White closed form (Brigo and Mercurio, eq. 3.39)
+ * with that currency's (a, sigma, curve) and the state x_c:</p>
+ *
+ * <pre>
+ *   P(t,T) = P(0,T)/P(0,t) * exp( (V(t,T) - V(0,T) + V(0,t)) / 2 - B(t,T) x(t) )
+ *   B(t,T) = (1 - e^{-a (T-t)}) / a
+ *   V(t,T) = sigma^2/a^2 [ tau - 2 B(tau) + (1 - e^{-2 a tau}) / (2a) ],  tau = T - t
+ * </pre>
+ *
+ * <p> The zero-mean Gaussian
  * part of every state (x, its integral, and the Brownian levels) is drawn
  * exactly per grid step from its joint covariance, built from integrals
  * of products of the kernels {@code c0 + c1 e^{-a s}}; the quanto drift
@@ -84,8 +100,20 @@ import java.util.TreeSet;
  * <p>Wrong-way risk stays path-consistent: the rates driver of the
  * profile is the domestic Brownian W_d and the FX driver is W_S of the
  * pair chosen by {@code wrongWayFxPair}, read on the same paths that
- * produce the exposure (same convention as {@link ExposureSimulator}).
- * Swaps are domestic only. Research lane.</p>
+ * produce the exposure. Swaps are domestic only.</p>
+ *
+ * <p>Trades and collateral: a vanilla swap (fixed against a floating leg on
+ * the same schedule, accrual = time between dates) is valued at t from the
+ * simulated curves, with the floating coupon in progress fixed at its reset;
+ * reset dates are added to the internal grid. An FX forward to buy {@code N}
+ * foreign at strike K is worth {@code N (S P_f(t,T) - K P_d(t,T))}. A cash
+ * flow paid at t is not part of the value at t. Under a two-way CSA the
+ * target at a margin call on value V is {@code V - H} if V &gt; H,
+ * {@code V + H} if V &lt; -H, else 0, with threshold H; the balance moves to
+ * the target only when the change is at least the minimum transfer amount.
+ * The call for exposure date t is made on the value at {@code t - MPR}, so
+ * the collateralised exposure at t is {@code max(V(t) - C(t - MPR), 0)}
+ * (Gregory, The xVA Challenge, 3rd ed., 2015, ch. 7). Research lane.</p>
  */
 public final class MultiCurrencyExposureSimulator {
 
@@ -214,32 +242,88 @@ public final class MultiCurrencyExposureSimulator {
             }
             return c;
         }
+    }
 
-        /**
-         * The 2.1 market as a special case: one pair (if the legacy market
-         * has a foreign curve) with a deterministic foreign rate, FX-rate
-         * correlation as given, foreign mean reversion set to the domestic one
-         * (irrelevant at zero foreign vol).
-         *
-         * @param m legacy market
-         * @return the equivalent market
-         * @deprecated since 2.4.0, removed in 3.0 together with
-         *     {@code ExposureSimulator.Market}. Build the {@link Market} directly:
-         *     {@code new Market(new Domestic(Curve.of(dom), a, sigma), List.of(new Foreign(Curve.of(fgn), a, 0, spot, fxVol)),
-         *     new double[][]{{1, 0, rho}, {0, 1, 0}, {rho, 0, 1}})}, or with {@code List.of()} and
-         *     {@code {{1}}} when there is no FX.
-         */
-        @Deprecated(since = "2.4.0", forRemoval = true)
-        @SuppressWarnings("removal") // reads the deprecated 2.1 market it converts
-        public static Market fromLegacy(ExposureSimulator.Market m) {
-            Objects.requireNonNull(m, "market");
-            Domestic d = new Domestic(Curve.of(m.domestic()), m.meanReversion(), m.rateVol());
-            if (m.foreign() == null) {
-                return new Market(d, List.of(), new double[][]{{1}});
+    /**
+     * Vanilla fixed-for-floating swap.
+     *
+     * @param notional      notional, &gt; 0
+     * @param fixedRate     fixed rate, decimal
+     * @param payFixed      true for a payer swap (receive floating)
+     * @param startYears    first reset time, &ge; 0
+     * @param maturityYears last payment time, &gt; start
+     * @param paymentsPerYear payments per year, &ge; 1
+     */
+    public record SwapTerms(double notional, double fixedRate, boolean payFixed, double startYears,
+                       double maturityYears, int paymentsPerYear) {
+        /** Validates the terms. */
+        public SwapTerms {
+            if (!(notional > 0) || notional == Double.POSITIVE_INFINITY || !Double.isFinite(fixedRate)) {
+                throw new IllegalArgumentException("need positive notional and finite rate");
             }
-            Foreign f = new Foreign(Curve.of(m.foreign()), m.meanReversion(), 0, m.fxSpot(), m.fxVol());
-            double r = m.fxRateCorrelation();
-            return new Market(d, List.of(f), new double[][]{{1, 0, r}, {0, 1, 0}, {r, 0, 1}});
+            if (!(startYears >= 0) || !(maturityYears > startYears)
+                    || maturityYears == Double.POSITIVE_INFINITY || paymentsPerYear < 1) {
+                throw new IllegalArgumentException("need 0 <= start < maturity and frequency >= 1");
+            }
+        }
+
+        /** Schedule T_0 = start, ..., T_n = maturity (a short last period if needed). */
+        double[] dates() {
+            double step = 1.0 / paymentsPerYear;
+            int n = (int) Math.ceil((maturityYears - startYears) / step - 1e-9);
+            double[] d = new double[n + 1];
+            for (int j = 0; j < n; j++) {
+                d[j] = startYears + j * step;
+            }
+            d[n] = maturityYears;
+            return d;
+        }
+    }
+
+    /**
+     * FX forward: buy {@code foreignNotional} units of foreign currency at
+     * {@code strike} domestic per foreign at {@code maturityYears}; a
+     * negative notional sells.
+     *
+     * @param foreignNotional foreign units bought (sold if negative), non-zero
+     * @param strike          contract rate, &gt; 0
+     * @param maturityYears   settlement time, &gt; 0
+     */
+    public record FxForwardTerms(double foreignNotional, double strike, double maturityYears) {
+        /** Validates the terms. */
+        public FxForwardTerms {
+            if (!Double.isFinite(foreignNotional) || foreignNotional == 0
+                    || !(strike > 0) || strike == Double.POSITIVE_INFINITY
+                    || !(maturityYears > 0) || maturityYears == Double.POSITIVE_INFINITY) {
+                throw new IllegalArgumentException("need non-zero notional, positive strike and maturity");
+            }
+        }
+    }
+
+    /**
+     * Collateral agreement terms (two-way, symmetric).
+     *
+     * @param threshold        H, &ge; 0
+     * @param minimumTransfer  MTA, &ge; 0
+     * @param marginPeriodYears MPR in years, &ge; 0 (10 business days is about 10/250)
+     */
+    public record Csa(double threshold, double minimumTransfer, double marginPeriodYears) {
+        /** Validates the terms. */
+        public Csa {
+            if (!(threshold >= 0) || !(minimumTransfer >= 0) || !(marginPeriodYears >= 0)
+                    || !Double.isFinite(threshold + minimumTransfer + marginPeriodYears)) {
+                throw new IllegalArgumentException("CSA terms must be >= 0 and finite");
+            }
+        }
+
+        double target(double v) {
+            if (v > threshold) {
+                return v - threshold;
+            }
+            if (v < -threshold) {
+                return v + threshold;
+            }
+            return 0;
         }
     }
 
@@ -249,7 +333,7 @@ public final class MultiCurrencyExposureSimulator {
      * @param terms      swap terms
      * @param projection projection curve, or null to project on the discount curve
      */
-    public record Swap(ExposureSimulator.Swap terms, Curve projection) {
+    public record Swap(SwapTerms terms, Curve projection) {
         /** Validates. */
         public Swap {
             Objects.requireNonNull(terms, "terms");
@@ -262,7 +346,7 @@ public final class MultiCurrencyExposureSimulator {
      * @param pair  index into {@link Market#foreign()}
      * @param terms forward terms (notional in that foreign currency)
      */
-    public record FxForward(int pair, ExposureSimulator.FxForward terms) {
+    public record FxForward(int pair, FxForwardTerms terms) {
         /** Validates. */
         public FxForward {
             Objects.requireNonNull(terms, "terms");
@@ -284,7 +368,7 @@ public final class MultiCurrencyExposureSimulator {
      * @param terms      swap terms (notional in that foreign currency)
      * @param projection foreign projection curve, or null for the foreign discount curve
      */
-    public record ForeignSwap(int pair, ExposureSimulator.Swap terms, Curve projection) {
+    public record ForeignSwap(int pair, SwapTerms terms, Curve projection) {
         /** Validates. */
         public ForeignSwap {
             Objects.requireNonNull(terms, "terms");
@@ -360,7 +444,7 @@ public final class MultiCurrencyExposureSimulator {
      * Simulates a netting set with foreign-currency swaps and an optional
      * stochastic basis (added in 2.3). With no foreign swaps and a null
      * basis it equals
-     * {@link #simulate(Market, List, List, ExposureSimulator.Csa, double[], int, long, int)}
+     * {@link #simulate(Market, List, List, Csa, double[], int, long, int)}
      * path for path.
      *
      * @param market         market
@@ -377,7 +461,7 @@ public final class MultiCurrencyExposureSimulator {
      */
     public static ExposureProfile simulate(Market market, List<Swap> swaps, List<ForeignSwap> foreignSwaps,
                                            List<FxForward> forwards, BasisFactor basis,
-                                           ExposureSimulator.Csa csa, double[] times, int paths, long seed,
+                                           Csa csa, double[] times, int paths, long seed,
                                            int wrongWayFxPair) {
         Objects.requireNonNull(market, "market");
         Objects.requireNonNull(foreignSwaps, "foreignSwaps");
@@ -421,7 +505,7 @@ public final class MultiCurrencyExposureSimulator {
      * @return the exposure profile
      */
     public static ExposureProfile simulate(Market market, List<Swap> swaps, List<FxForward> forwards,
-                                           ExposureSimulator.Csa csa, double[] times, int paths, long seed) {
+                                           Csa csa, double[] times, int paths, long seed) {
         return simulate(market, swaps, forwards, csa, times, paths, seed, 0);
     }
 
@@ -440,14 +524,14 @@ public final class MultiCurrencyExposureSimulator {
      * @return the exposure profile
      */
     public static ExposureProfile simulate(Market market, List<Swap> swaps, List<FxForward> forwards,
-                                           ExposureSimulator.Csa csa, double[] times, int paths, long seed,
+                                           Csa csa, double[] times, int paths, long seed,
                                            int wrongWayFxPair) {
         return simulateChecked(market, swaps, List.of(), forwards, null, csa, times, paths, seed, wrongWayFxPair);
     }
 
     private static ExposureProfile simulateChecked(Market market, List<Swap> swaps, List<ForeignSwap> foreignSwaps,
                                                    List<FxForward> forwards, BasisFactor basis,
-                                                   ExposureSimulator.Csa csa, double[] times, int paths,
+                                                   Csa csa, double[] times, int paths,
                                                    long seed, int wrongWayFxPair) {
         Objects.requireNonNull(market, "market");
         Objects.requireNonNull(swaps, "swaps");
@@ -567,13 +651,13 @@ public final class MultiCurrencyExposureSimulator {
         private final double[] fxVol;
         private final double[] quanto;       // rho_{c,Sc} sigma_c sigma_Sc
         private final double[][] corr;
-        private final ExposureSimulator.Swap[] swaps;
+        private final SwapTerms[] swaps;
         private final Curve[] proj;
         private final double[][] swapDates;
         private final double[][] basis;       // k(S,T) per swap period
-        private final ExposureSimulator.FxForward[] fwds;
+        private final FxForwardTerms[] fwds;
         private final int[] fwdPair;
-        private final ExposureSimulator.Csa csa;
+        private final Csa csa;
         private final double[] times;
         private final double[] grid;
         private final int[] userIndex;
@@ -591,7 +675,7 @@ public final class MultiCurrencyExposureSimulator {
         private final double basRho;        // corr(W_d, W_b)
 
         Engine(Market mk, List<Swap> domSw, List<ForeignSwap> fSw, List<FxForward> fw, BasisFactor bf,
-               ExposureSimulator.Csa csa, double[] times, int wwPair) {
+               Csa csa, double[] times, int wwPair) {
             Domestic d = mk.domestic();
             dom = new Hw(d.discount(), d.meanReversion(), d.rateVol());
             int n = mk.foreign().size();
@@ -641,7 +725,7 @@ public final class MultiCurrencyExposureSimulator {
             this.csa = csa;
             this.times = times;
             this.wwPair = wwPair;
-            swaps = new ExposureSimulator.Swap[sw.size()];
+            swaps = new SwapTerms[sw.size()];
             proj = new Curve[sw.size()];
             swapDates = new double[sw.size()][];
             basis = new double[sw.size()][];
@@ -663,7 +747,7 @@ public final class MultiCurrencyExposureSimulator {
                     }
                 }
             }
-            fwds = new ExposureSimulator.FxForward[fw.size()];
+            fwds = new FxForwardTerms[fw.size()];
             fwdPair = new int[fw.size()];
             boolean[] used = new boolean[n];
             for (int i = 0; i < fwds.length; i++) {
@@ -786,7 +870,7 @@ public final class MultiCurrencyExposureSimulator {
         double value(double t, double xd, double[] fx, double[] xf, double[][] resetBond, double yb) {
             double v = 0;
             for (int k = 0; k < swaps.length; k++) {
-                ExposureSimulator.Swap s = swaps[k];
+                SwapTerms s = swaps[k];
                 double[] d = swapDates[k];
                 int n = d.length - 1;
                 if (t >= d[n]) {
@@ -818,7 +902,7 @@ public final class MultiCurrencyExposureSimulator {
                 v += s.payFixed() ? pv : -pv;
             }
             for (int i = 0; i < fwds.length; i++) {
-                ExposureSimulator.FxForward f = fwds[i];
+                FxForwardTerms f = fwds[i];
                 if (t >= f.maturityYears()) {
                     continue;
                 }

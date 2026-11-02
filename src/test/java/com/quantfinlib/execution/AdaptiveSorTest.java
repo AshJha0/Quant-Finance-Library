@@ -11,7 +11,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@SuppressWarnings("removal") // exercises 2.x API deprecated for removal in 2.4.0
 class AdaptiveSorTest {
 
     private static final long US = 1_000L;    // one microsecond in nanos
@@ -36,9 +35,9 @@ class AdaptiveSorTest {
         sor.register("DARK", 2);
 
         List<VenueQuote> venues = List.of(
-                new VenueQuote("A", 99.98, 0, 100.00, 10_000, 0, 120 * US, false),
-                new VenueQuote("B", 99.98, 0, 100.00, 8_000, 0, 80 * US, false),
-                new VenueQuote("DARK", 99.99, 5_000, 100.01, 5_000, 0, 200 * US, true));
+                new VenueQuote("A", 99.98, 0, 100.00, 10_000, 0, 120 * US, false, Long.MAX_VALUE),
+                new VenueQuote("B", 99.98, 0, 100.00, 8_000, 0, 80 * US, false, Long.MAX_VALUE),
+                new VenueQuote("DARK", 99.99, 5_000, 100.01, 5_000, 0, 200 * US, true, Long.MAX_VALUE));
 
         RoutingDecision d = sor.route(Side.BUY, 10_000, venues);
         assertEquals(10_000, d.routedQty());
@@ -68,8 +67,8 @@ class AdaptiveSorTest {
         sor.register("TAKER", 1);
         List<VenueQuote> venues = List.of(
                 // Same displayed ask, same latency; MAKER rebates (−fee).
-                new VenueQuote("MAKER", 0, 0, 100.00, 5_000, -0.2, 50 * US, false),
-                new VenueQuote("TAKER", 0, 0, 100.00, 5_000, 0.3, 50 * US, false));
+                new VenueQuote("MAKER", 0, 0, 100.00, 5_000, -0.2, 50 * US, false, Long.MAX_VALUE),
+                new VenueQuote("TAKER", 0, 0, 100.00, 5_000, 0.3, 50 * US, false, Long.MAX_VALUE));
         RoutingDecision d = sor.route(Side.BUY, 5_000, venues);
         assertEquals("MAKER", d.lit().get(0).venue(), "the rebate venue is cheaper all-in");
     }
@@ -81,8 +80,8 @@ class AdaptiveSorTest {
         sor.register("FAST", 0);
         sor.register("SLOW", 1);
         List<VenueQuote> venues = List.of(
-                new VenueQuote("FAST", 0, 0, 100.00, 5_000, 0, 50 * US, false),
-                new VenueQuote("SLOW", 0, 0, 100.00, 5_000, 0, 500 * US, false));
+                new VenueQuote("FAST", 0, 0, 100.00, 5_000, 0, 50 * US, false, Long.MAX_VALUE),
+                new VenueQuote("SLOW", 0, 0, 100.00, 5_000, 0, 500 * US, false, Long.MAX_VALUE));
         // Equal price+fee: the faster venue is cheaper-expected.
         assertEquals("FAST", sor.route(Side.BUY, 1_000, venues).lit().get(0).venue());
 
@@ -108,8 +107,8 @@ class AdaptiveSorTest {
             if (i % 2 == 0) card.onFill(1, 100 * US); else card.onMiss(1, 100 * US); // FLAKY ~0.5
         }
         List<VenueQuote> venues = List.of(
-                new VenueQuote("RELIABLE", 0, 0, 100.00, 5_000, 0, 100 * US, false),
-                new VenueQuote("FLAKY", 0, 0, 100.00, 5_000, 0, 100 * US, false));
+                new VenueQuote("RELIABLE", 0, 0, 100.00, 5_000, 0, 100 * US, false, Long.MAX_VALUE),
+                new VenueQuote("FLAKY", 0, 0, 100.00, 5_000, 0, 100 * US, false, Long.MAX_VALUE));
         assertEquals("RELIABLE", sor.route(Side.BUY, 1_000, venues).lit().get(0).venue());
     }
 
@@ -166,8 +165,8 @@ class AdaptiveSorTest {
         assertTrue(card.postFillMarkout(1) < 0, "TOXIC's fills revert");
 
         List<VenueQuote> venues = List.of(
-                new VenueQuote("TOXIC", 0, 0, 100.00, 5_000, 0, 100 * US, false),
-                new VenueQuote("CLEAN", 0, 0, 100.00, 5_000, 0, 100 * US, false));
+                new VenueQuote("TOXIC", 0, 0, 100.00, 5_000, 0, 100 * US, false, Long.MAX_VALUE),
+                new VenueQuote("CLEAN", 0, 0, 100.00, 5_000, 0, 100 * US, false, Long.MAX_VALUE));
         assertEquals("CLEAN", sor.route(Side.BUY, 1_000, venues).lit().get(0).venue(),
                 "two identical quotes are not equal when one venue's fills fade");
     }
@@ -182,7 +181,7 @@ class AdaptiveSorTest {
         AdaptiveSor sor = new AdaptiveSor(card);
         sor.register("DARK", 0);
         List<VenueQuote> venues = List.of(
-                new VenueQuote("DARK", 99.99, 1, 100.01, 1, 0, 200 * US, true));
+                new VenueQuote("DARK", 99.99, 1, 100.01, 1, 0, 200 * US, true, Long.MAX_VALUE));
         // Unknown pool: default probe (5,000), capped at 50% of 6,000 = 3,000.
         assertEquals(3_000, sor.route(Side.BUY, 6_000, venues).probes().get(0).quantity());
         // Learn that this pool typically fills ~1,200 shares.
@@ -199,7 +198,7 @@ class AdaptiveSorTest {
         AdaptiveSor sor = new AdaptiveSor(card);
         sor.register("DARK", 0);
         List<VenueQuote> venues = List.of(
-                new VenueQuote("DARK", 99.99, 5_000, 100.01, 5_000, 0, 200 * US, true));
+                new VenueQuote("DARK", 99.99, 5_000, 100.01, 5_000, 0, 200 * US, true, Long.MAX_VALUE));
         RoutingDecision d = sor.route(Side.BUY, 4_000, venues);
         assertEquals(0, d.routedQty());
         assertEquals(4_000, d.unrouted());
@@ -235,11 +234,11 @@ class AdaptiveSorTest {
         sor.register("MIDMATCH", 2);
         List<VenueQuote> venues = List.of(
                 new VenueQuote("EBS", 1.08500, 5_000_000, 1.08502, 5_000_000,
-                        0, 300 * US, false),
+                        0, 300 * US, false, Long.MAX_VALUE),
                 new VenueQuote("LSEG", 1.08500, 5_000_000, 1.08502, 8_000_000,
-                        0, 150 * US, false),
+                        0, 150 * US, false, Long.MAX_VALUE),
                 new VenueQuote("MIDMATCH", 1.08500, 0, 1.08502, 0,
-                        0, 400 * US, true));
+                        0, 400 * US, true, Long.MAX_VALUE));
         RoutingDecision d = sor.route(Side.BUY, 10_000_000, venues);
         assertEquals(10_000_000, d.routedQty());
         assertEquals("LSEG", d.lit().get(0).venue(), "same rate: lower latency first");
@@ -260,8 +259,8 @@ class AdaptiveSorTest {
         sor.register("A", 0);
         sor.register("B", 1);
         List<VenueQuote> venues = List.of(
-                new VenueQuote("A", 100.00, 3_000, 0, 0, 0, 100 * US, false),
-                new VenueQuote("B", 100.02, 3_000, 0, 0, 0, 100 * US, false));
+                new VenueQuote("A", 100.00, 3_000, 0, 0, 0, 100 * US, false, Long.MAX_VALUE),
+                new VenueQuote("B", 100.02, 3_000, 0, 0, 0, 100 * US, false, Long.MAX_VALUE));
         RoutingDecision d = sor.route(Side.SELL, 4_000, venues);
         assertEquals("B", d.lit().get(0).venue(), "highest bid first on a sell");
         assertEquals(3_000, litFor(d, "B"));
@@ -284,8 +283,8 @@ class AdaptiveSorTest {
         sor.register("PROVEN", 0);
         sor.register("UNTRIED", 1);
         java.util.List<VenueQuote> venues = java.util.List.of(
-                new VenueQuote("PROVEN", 0, 0, 100.00, 5_000, 0, 100 * US, false),
-                new VenueQuote("UNTRIED", 0, 0, 100.01, 5_000, 0, 100 * US, false));
+                new VenueQuote("PROVEN", 0, 0, 100.00, 5_000, 0, 100 * US, false, Long.MAX_VALUE),
+                new VenueQuote("UNTRIED", 0, 0, 100.01, 5_000, 0, 100 * US, false, Long.MAX_VALUE));
         assertEquals("PROVEN", sor.route(Side.BUY, 1_000, venues).lit().get(0).venue());
     }
 

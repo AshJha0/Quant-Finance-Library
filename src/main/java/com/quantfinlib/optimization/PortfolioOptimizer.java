@@ -126,18 +126,6 @@ public final class PortfolioOptimizer {
         }
     }
 
-    /**
-     * Kept for source compatibility: the solver is deterministic and the
-     * seed is ignored.
-     *
-     * @deprecated since 2.4.0, removed in 3.0; the seed has no effect. Use
-     *     {@link #PortfolioOptimizer(double[], double[][])}.
-     */
-    @Deprecated(since = "2.4.0", forRemoval = true)
-    public PortfolioOptimizer(double[] expectedReturns, double[][] covariance, long seed) {
-        this(expectedReturns, covariance);
-    }
-
     /** Maximum Sharpe ratio portfolio. {@code riskFreeRate} in the same periodicity as the inputs. */
     public Allocation maxSharpe(double riskFreeRate) {
         int n = expectedReturns.length;

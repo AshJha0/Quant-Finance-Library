@@ -20,7 +20,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * exposures match independent closed forms or quadrature within four
  * standard errors.
  */
-@SuppressWarnings("removal") // exercises 2.x API deprecated for removal in 2.4.0
 class MultiCurrencyExposureSimulatorTest {
 
     private static final LocalDate D0 = LocalDate.of(2026, 11, 2);
@@ -78,42 +77,6 @@ class MultiCurrencyExposureSimulatorTest {
                 corr);
     }
 
-    @Test
-    void legacyMarketReproducesTheTwoPointOneSimulator() {
-        ExposureSimulator.Market old = new ExposureSimulator.Market(legacyDom(), A, SIG, legacyFgn(),
-                1.10, 0.10, -0.4);
-        ExposureSimulator.Swap swap = new ExposureSimulator.Swap(100, 0.032, true, 0, 5, 2);
-        ExposureSimulator.FxForward fwd = new ExposureSimulator.FxForward(80, 1.12, 3);
-        ExposureSimulator.Csa csa = new ExposureSimulator.Csa(2, 0.5, 10.0 / 250);
-        double[] times = {0.25, 0.75, 1, 1.6, 2.5, 3.5, 4.5};
-        ExposureProfile a = ExposureSimulator.simulate(old, List.of(swap), List.of(fwd), csa, times, 2_000, 11L);
-        ExposureProfile n = MultiCurrencyExposureSimulator.simulate(
-                MultiCurrencyExposureSimulator.Market.fromLegacy(old),
-                List.of(new MultiCurrencyExposureSimulator.Swap(swap, null)),
-                List.of(new MultiCurrencyExposureSimulator.FxForward(0, fwd)), csa, times, 2_000, 11L);
-        for (int i = 0; i < times.length; i++) {
-            assertEquals(a.discountedExpectedExposure(i), n.discountedExpectedExposure(i), 1e-9);
-            assertEquals(a.discountedExpectedNegativeExposure(i), n.discountedExpectedNegativeExposure(i), 1e-9);
-            assertEquals(a.pfe(i, 0.95), n.pfe(i, 0.95), 1e-9);
-        }
-        CreditCurve c = CreditCurve.bootstrap(new int[]{5}, new double[]{0.02}, 0.4, legacyDom());
-        for (ExposureProfile.Factor f : ExposureProfile.Factor.values()) {
-            assertEquals(CvaApproximator.cvaWrongWay(a, c, 0.6, 0.4, f),
-                    CvaApproximator.cvaWrongWay(n, c, 0.6, 0.4, f), 1e-9);
-        }
-        // swap only, no CSA, projection given explicitly as the discount curve
-        ExposureSimulator.Market rates = ExposureSimulator.Market.ratesOnly(legacyDom(), A, SIG);
-        ExposureProfile a2 = ExposureSimulator.simulate(rates, List.of(swap), List.of(), null, times, 1_000, 3L);
-        ExposureProfile n2 = MultiCurrencyExposureSimulator.simulate(
-                MultiCurrencyExposureSimulator.Market.fromLegacy(rates),
-                List.of(new MultiCurrencyExposureSimulator.Swap(swap,
-                        MultiCurrencyExposureSimulator.Curve.of(legacyDom()))),
-                List.of(), null, times, 1_000, 3L);
-        for (int i = 0; i < times.length; i++) {
-            assertEquals(a2.discountedExpectedExposure(i), n2.discountedExpectedExposure(i), 1e-9);
-        }
-    }
-
     private static MultiCurrencyExposureSimulator.Market domesticOnly() {
         return new MultiCurrencyExposureSimulator.Market(
                 new MultiCurrencyExposureSimulator.Domestic(MultiCurrencyExposureSimulator.Curve.of(OIS), A, SIG),
@@ -133,8 +96,8 @@ class MultiCurrencyExposureSimulatorTest {
     @Test
     void multiCurveSwapDiscountedValueIsAMartingale() {
         double k = 0.034;
-        ExposureSimulator.Swap s = new ExposureSimulator.Swap(100, k, true, 0, 5, 1);
-        ExposureSimulator.Swap r = new ExposureSimulator.Swap(100, k, false, 0, 5, 1);
+        MultiCurrencyExposureSimulator.SwapTerms s = new MultiCurrencyExposureSimulator.SwapTerms(100, k, true, 0, 5, 1);
+        MultiCurrencyExposureSimulator.SwapTerms r = new MultiCurrencyExposureSimulator.SwapTerms(100, k, false, 0, 5, 1);
         MultiCurrencyExposureSimulator.Curve ibor = MultiCurrencyExposureSimulator.Curve.of(IBOR);
         double[] times = {0.5, 1, 1.5, 2.5, 3, 4.5};
         int n = 20_000;
@@ -161,7 +124,7 @@ class MultiCurrencyExposureSimulatorTest {
     @Test
     void multiCurveSwapEeAtResetMatchesQuadrature() {
         double k = 0.034;
-        ExposureSimulator.Swap s = new ExposureSimulator.Swap(100, k, true, 0, 5, 1);
+        MultiCurrencyExposureSimulator.SwapTerms s = new MultiCurrencyExposureSimulator.SwapTerms(100, k, true, 0, 5, 1);
         double[] times = {1, 2, 3};
         ExposureProfile prof = MultiCurrencyExposureSimulator.simulate(domesticOnly(),
                 List.of(new MultiCurrencyExposureSimulator.Swap(s, MultiCurrencyExposureSimulator.Curve.of(IBOR))),
@@ -227,7 +190,7 @@ class MultiCurrencyExposureSimulatorTest {
     void fxForwardEeMatchesBlackWithStochasticRates() {
         double[][] c = corr5(-0.5, 0.2);
         double tm = 5, strike = 1.15, notional = 100;
-        ExposureSimulator.FxForward fwd = new ExposureSimulator.FxForward(notional, strike, tm);
+        MultiCurrencyExposureSimulator.FxForwardTerms fwd = new MultiCurrencyExposureSimulator.FxForwardTerms(notional, strike, tm);
         double[] times = {1, 2.5, 4, 4.9};
         ExposureProfile prof = MultiCurrencyExposureSimulator.simulate(twoPairMarket(c), List.of(),
                 List.of(new MultiCurrencyExposureSimulator.FxForward(0, fwd)), null, times, 40_000, 23L);
@@ -255,8 +218,8 @@ class MultiCurrencyExposureSimulatorTest {
             double nf = pair == 0 ? 100 : 100 / 0.0068;
             double k = s0;
             DiscountCurve fc = pair == 0 ? EUR : JPY;
-            ExposureSimulator.FxForward lng = new ExposureSimulator.FxForward(nf, k, 5);
-            ExposureSimulator.FxForward sht = new ExposureSimulator.FxForward(-nf, k, 5);
+            MultiCurrencyExposureSimulator.FxForwardTerms lng = new MultiCurrencyExposureSimulator.FxForwardTerms(nf, k, 5);
+            MultiCurrencyExposureSimulator.FxForwardTerms sht = new MultiCurrencyExposureSimulator.FxForwardTerms(-nf, k, 5);
             ExposureProfile a = MultiCurrencyExposureSimulator.simulate(twoPairMarket(c), List.of(),
                     List.of(new MultiCurrencyExposureSimulator.FxForward(pair, lng)), null, times, n, 31L);
             ExposureProfile b = MultiCurrencyExposureSimulator.simulate(twoPairMarket(c), List.of(),
@@ -279,8 +242,8 @@ class MultiCurrencyExposureSimulatorTest {
                 {0, 0, 1, 0, 0},
                 {0, 0, 0, 1, 0},
                 {0, 0, 0, 0, 1}};
-        ExposureSimulator.FxForward eurFwd = new ExposureSimulator.FxForward(100, 1.10, 3);
-        ExposureSimulator.FxForward jpyFwd = new ExposureSimulator.FxForward(-1000, 0.0068, 3);
+        MultiCurrencyExposureSimulator.FxForwardTerms eurFwd = new MultiCurrencyExposureSimulator.FxForwardTerms(100, 1.10, 3);
+        MultiCurrencyExposureSimulator.FxForwardTerms jpyFwd = new MultiCurrencyExposureSimulator.FxForwardTerms(-1000, 0.0068, 3);
         double[] times = {0.5, 1, 1.5, 2, 2.5, 2.9};
         List<MultiCurrencyExposureSimulator.FxForward> trades = List.of(
                 new MultiCurrencyExposureSimulator.FxForward(0, eurFwd),
@@ -308,7 +271,7 @@ class MultiCurrencyExposureSimulatorTest {
         assertThrows(IllegalArgumentException.class, () -> twoPairMarket(notPsd));
         assertThrows(IllegalArgumentException.class, () -> twoPairMarket(new double[][]{{1}}));
         MultiCurrencyExposureSimulator.Market m = twoPairMarket(corr5(0, 0));
-        ExposureSimulator.FxForward f = new ExposureSimulator.FxForward(1, 1, 1);
+        MultiCurrencyExposureSimulator.FxForwardTerms f = new MultiCurrencyExposureSimulator.FxForwardTerms(1, 1, 1);
         assertThrows(IllegalArgumentException.class, () -> MultiCurrencyExposureSimulator.simulate(m, List.of(),
                 List.of(new MultiCurrencyExposureSimulator.FxForward(2, f)), null, new double[]{0.5}, 10, 1L));
         assertThrows(IllegalArgumentException.class, () -> MultiCurrencyExposureSimulator.simulate(m, List.of(),

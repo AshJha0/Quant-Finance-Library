@@ -1,6 +1,5 @@
 package com.quantfinlib.fix;
 
-import java.io.DataInputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -62,18 +61,12 @@ import java.util.zip.CRC32C;
  * Only an index (seq to file offset) of application messages is kept in
  * memory; bodies are read from the file on resend.
  *
- * <h2>Migration</h2>
- * A directory written by the v1 store ({@code seqnums.dat} and
- * {@code messages.dat}) is imported on first open and the old files are
- * renamed with a {@code .migrated} suffix.
- *
- * <p><b>3.0 notice.</b> This import of the v1 layout is deprecated in 2.4.0
- * and removed in 3.0 (owner decision D8): a 3.0 store opened on a v1
- * directory starts a fresh journal and leaves {@code seqnums.dat} and
- * {@code messages.dat} untouched. To migrate, open the directory once with
- * any 2.4 (or earlier 2.x) release before upgrading, for example with
- * {@code com.quantfinlib.examples.FixJournalMigration} from the
- * {@code examples} jar. No public signature changes.</p>
+ * <h2>v1 layout</h2>
+ * The v1 store files ({@code seqnums.dat} and {@code messages.dat}) are not
+ * read. Up to 2.4 an open imported them; 3.0 removed that import (decision
+ * D8), so a store opened on a v1 directory starts a fresh journal and leaves
+ * the v1 files untouched. Migrate such a directory by opening it once with a
+ * 2.4 release first (docs/MIGRATION_3.0.md, section 10).
  */
 public final class FileSessionStore implements FixSessionStore, AutoCloseable {
 
@@ -142,9 +135,6 @@ public final class FileSessionStore implements FixSessionStore, AutoCloseable {
             truncatedBytes = 0;
         } else {
             truncatedBytes = recover();
-        }
-        if (freshSeq && freshJournal) {
-            migrateLegacy();
         }
         writeSeqPage();
         this.periodPath = directory.resolve("session.period");
@@ -600,55 +590,5 @@ public final class FileSessionStore implements FixSessionStore, AutoCloseable {
         CRC32C crc = new CRC32C();
         crc.update(b.array());
         return (int) crc.getValue();
-    }
-
-    // ------------------------------------------------------------------
-    // v1 migration
-    // ------------------------------------------------------------------
-
-    private void migrateLegacy() throws IOException {
-        Path legacySeq = directory.resolve("seqnums.dat");
-        Path legacyMessages = directory.resolve("messages.dat");
-        long legacyOutgoing = 1;
-        if (Files.exists(legacySeq) && Files.size(legacySeq) >= 16) {
-            try (DataInputStream in = new DataInputStream(Files.newInputStream(legacySeq))) {
-                legacyOutgoing = in.readLong();
-                expectedIncoming = in.readLong();
-            }
-        }
-        if (Files.exists(legacyMessages)) {
-            try (DataInputStream in = new DataInputStream(new java.io.BufferedInputStream(
-                    Files.newInputStream(legacyMessages)))) {
-                java.util.TreeMap<Long, StoredMessage> imported = new java.util.TreeMap<>();
-                try {
-                    while (true) {
-                        long seq = in.readLong();
-                        String type = in.readUTF();
-                        String time = in.readUTF();
-                        byte[] body = new byte[in.readInt()];
-                        in.readFully(body);
-                        imported.put(seq, new StoredMessage(type,
-                                new String(body, StandardCharsets.ISO_8859_1), time));
-                    }
-                } catch (EOFException tornOrDone) {
-                    // v1 had no record framing; a torn tail simply ends the import
-                }
-                for (Map.Entry<Long, StoredMessage> e : imported.entrySet()) {
-                    if (e.getKey() < legacyOutgoing) {
-                        append(e.getKey(), e.getValue(), true);
-                    }
-                }
-                sync();
-            }
-            Files.move(legacyMessages, directory.resolve("messages.dat.migrated"),
-                    StandardCopyOption.REPLACE_EXISTING);
-        }
-        outgoingFloor = Math.max(outgoingFloor, legacyOutgoing);
-        if (Files.exists(legacySeq)) {
-            writeSeqPage();
-            seqChannel.force(false);
-            Files.move(legacySeq, directory.resolve("seqnums.dat.migrated"),
-                    StandardCopyOption.REPLACE_EXISTING);
-        }
     }
 }

@@ -17,8 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * exact, and E[D V] is the time-0 value at every date (martingale).
  * Monte Carlo checks allow four standard errors.
  */
-@SuppressWarnings("removal") // exercises 2.x API deprecated for removal in 2.4.0
-class ExposureSimulatorTest {
+class SingleCurrencyExposureTest {
 
     private static final double A = 0.05;
     private static final double SIG = 0.01;
@@ -32,8 +31,8 @@ class ExposureSimulatorTest {
         return YieldCurve.ofZeroRates(new double[]{1, 5, 10}, new double[]{0.01, 0.012, 0.015});
     }
 
-    private static final ExposureSimulator.Swap PAYER =
-            new ExposureSimulator.Swap(100, 0.032, true, 0, 5, 1);
+    private static final MultiCurrencyExposureSimulator.SwapTerms PAYER =
+            new MultiCurrencyExposureSimulator.SwapTerms(100, 0.032, true, 0, 5, 1);
 
     private static double p0(double t) {
         return t == 0 ? 1 : dom().discountFactor(t);
@@ -87,8 +86,8 @@ class ExposureSimulatorTest {
 
     @Test
     void swapExpectedExposureIsTheSwaptionAtEachReset() {
-        ExposureProfile prof = ExposureSimulator.simulate(
-                ExposureSimulator.Market.ratesOnly(dom(), A, SIG), List.of(PAYER), List.of(), null,
+        ExposureProfile prof = LegacyExposure.simulate(
+                LegacyExposure.Market.ratesOnly(dom(), A, SIG), List.of(PAYER), List.of(), null,
                 new double[]{1, 2, 3, 4}, 40_000, 7L);
         for (int i = 0; i < 4; i++) {
             double ref = payerSwaption(i + 1, 0.032);
@@ -103,8 +102,8 @@ class ExposureSimulatorTest {
     void zeroVolatilityGivesTheForwardValue() {
         // Exposure dates between resets exercise the fixed floating coupon.
         double[] times = {0.5, 1.5, 2.25, 4.75};
-        ExposureProfile prof = ExposureSimulator.simulate(
-                ExposureSimulator.Market.ratesOnly(dom(), A, 0), List.of(PAYER), List.of(), null,
+        ExposureProfile prof = LegacyExposure.simulate(
+                LegacyExposure.Market.ratesOnly(dom(), A, 0), List.of(PAYER), List.of(), null,
                 times, 10, 1L);
         for (int i = 0; i < times.length; i++) {
             double t = times[i];
@@ -125,10 +124,10 @@ class ExposureSimulatorTest {
     @Test
     void fxForwardExpectedExposureIsABlackCall() {
         double s0 = 1.10, vol = 0.12, k = 1.15;
-        ExposureSimulator.Market mk = new ExposureSimulator.Market(dom(), A, 0, fgn(), s0, vol, 0);
-        ExposureSimulator.FxForward fwd = new ExposureSimulator.FxForward(100, k, 3);
+        LegacyExposure.Market mk = new LegacyExposure.Market(dom(), A, 0, fgn(), s0, vol, 0);
+        MultiCurrencyExposureSimulator.FxForwardTerms fwd = new MultiCurrencyExposureSimulator.FxForwardTerms(100, k, 3);
         double[] times = {0.5, 1, 2, 2.9};
-        ExposureProfile prof = ExposureSimulator.simulate(mk, List.of(), List.of(fwd), null,
+        ExposureProfile prof = LegacyExposure.simulate(mk, List.of(), List.of(fwd), null,
                 times, 40_000, 11L);
         for (int i = 0; i < times.length; i++) {
             double t = times[i];
@@ -143,9 +142,9 @@ class ExposureSimulatorTest {
 
     @Test
     void discountedValueIsAMartingaleWithCorrelatedFactors() {
-        ExposureSimulator.Market mk = new ExposureSimulator.Market(dom(), A, SIG, fgn(), 1.10, 0.10, -0.4);
-        ExposureSimulator.FxForward fwd = new ExposureSimulator.FxForward(-100, 1.12, 4);
-        ExposureProfile prof = ExposureSimulator.simulate(mk, List.of(), List.of(fwd), null,
+        LegacyExposure.Market mk = new LegacyExposure.Market(dom(), A, SIG, fgn(), 1.10, 0.10, -0.4);
+        MultiCurrencyExposureSimulator.FxForwardTerms fwd = new MultiCurrencyExposureSimulator.FxForwardTerms(-100, 1.12, 4);
+        ExposureProfile prof = LegacyExposure.simulate(mk, List.of(), List.of(fwd), null,
                 new double[]{1, 2, 3}, 40_000, 3L);
         double v0 = -100 * (1.10 * fgn().discountFactor(4) - 1.12 * p0(4));
         for (int i = 0; i < 3; i++) {
@@ -157,17 +156,17 @@ class ExposureSimulatorTest {
 
     @Test
     void collateralReducesExposure() {
-        ExposureSimulator.Market mk = ExposureSimulator.Market.ratesOnly(dom(), A, SIG);
+        LegacyExposure.Market mk = LegacyExposure.Market.ratesOnly(dom(), A, SIG);
         double[] times = {0.5, 1, 1.5, 2, 2.5, 3};
-        ExposureProfile bare = ExposureSimulator.simulate(mk, List.of(PAYER), List.of(), null, times, 5_000, 5L);
-        ExposureProfile mpr = ExposureSimulator.simulate(mk, List.of(PAYER), List.of(),
-                new ExposureSimulator.Csa(0, 0, 10 / 250.0), times, 5_000, 5L);
-        ExposureProfile perfect = ExposureSimulator.simulate(mk, List.of(PAYER), List.of(),
-                new ExposureSimulator.Csa(0, 0, 0), times, 5_000, 5L);
-        ExposureProfile loose = ExposureSimulator.simulate(mk, List.of(PAYER), List.of(),
-                new ExposureSimulator.Csa(1e9, 0, 10 / 250.0), times, 5_000, 5L);
-        ExposureProfile mta = ExposureSimulator.simulate(mk, List.of(PAYER), List.of(),
-                new ExposureSimulator.Csa(1, 0.5, 10 / 250.0), times, 5_000, 5L);
+        ExposureProfile bare = LegacyExposure.simulate(mk, List.of(PAYER), List.of(), null, times, 5_000, 5L);
+        ExposureProfile mpr = LegacyExposure.simulate(mk, List.of(PAYER), List.of(),
+                new MultiCurrencyExposureSimulator.Csa(0, 0, 10 / 250.0), times, 5_000, 5L);
+        ExposureProfile perfect = LegacyExposure.simulate(mk, List.of(PAYER), List.of(),
+                new MultiCurrencyExposureSimulator.Csa(0, 0, 0), times, 5_000, 5L);
+        ExposureProfile loose = LegacyExposure.simulate(mk, List.of(PAYER), List.of(),
+                new MultiCurrencyExposureSimulator.Csa(1e9, 0, 10 / 250.0), times, 5_000, 5L);
+        ExposureProfile mta = LegacyExposure.simulate(mk, List.of(PAYER), List.of(),
+                new MultiCurrencyExposureSimulator.Csa(1, 0.5, 10 / 250.0), times, 5_000, 5L);
         for (int i = 0; i < times.length; i++) {
             assertEquals(0, perfect.expectedExposure(i), 0);
             // The lag dates refine the grid, so the draws differ: compare within MC error.
@@ -186,14 +185,14 @@ class ExposureSimulatorTest {
 
     @Test
     void cvaDvaAndWrongWay() {
-        ExposureSimulator.Market mk = ExposureSimulator.Market.ratesOnly(dom(), A, SIG);
+        LegacyExposure.Market mk = LegacyExposure.Market.ratesOnly(dom(), A, SIG);
         double[] times = new double[20];
         for (int i = 0; i < 20; i++) {
             times[i] = 0.25 * (i + 1);
         }
-        ExposureSimulator.Swap receiver = new ExposureSimulator.Swap(100, 0.032, false, 0, 5, 1);
-        ExposureProfile payer = ExposureSimulator.simulate(mk, List.of(PAYER), List.of(), null, times, 4_000, 9L);
-        ExposureProfile recv = ExposureSimulator.simulate(mk, List.of(receiver), List.of(), null, times, 4_000, 9L);
+        MultiCurrencyExposureSimulator.SwapTerms receiver = new MultiCurrencyExposureSimulator.SwapTerms(100, 0.032, false, 0, 5, 1);
+        ExposureProfile payer = LegacyExposure.simulate(mk, List.of(PAYER), List.of(), null, times, 4_000, 9L);
+        ExposureProfile recv = LegacyExposure.simulate(mk, List.of(receiver), List.of(), null, times, 4_000, 9L);
         CreditCurve cpty = CreditCurve.bootstrap(new int[]{5}, new double[]{0.02}, 0.4, dom());
         double cva = CvaApproximator.cva(payer, cpty, 0.6);
         assertTrue(cva > 0);
@@ -207,7 +206,7 @@ class ExposureSimulatorTest {
         assertTrue(wwPos > 1.2 * cva, wwPos + " vs " + cva);
         assertTrue(wwNeg < 0.8 * cva, wwNeg + " vs " + cva);
         // Deterministic rates: the profile overload equals the array form with the curve's DF.
-        ExposureProfile det = ExposureSimulator.simulate(ExposureSimulator.Market.ratesOnly(dom(), A, 0),
+        ExposureProfile det = LegacyExposure.simulate(LegacyExposure.Market.ratesOnly(dom(), A, 0),
                 List.of(PAYER), List.of(), null, times, 2, 1L);
         assertEquals(CvaApproximator.cva(det.expectedExposureCopy(), det.timesCopy(), cpty, dom(), 0.6),
                 CvaApproximator.cva(det, cpty, 0.6), 1e-12);
@@ -218,22 +217,22 @@ class ExposureSimulatorTest {
 
     @Test
     void validationAndDeterminism() {
-        ExposureSimulator.Market mk = ExposureSimulator.Market.ratesOnly(dom(), A, SIG);
-        ExposureProfile a = ExposureSimulator.simulate(mk, List.of(PAYER), List.of(), null, new double[]{1, 2}, 100, 42L);
-        ExposureProfile b = ExposureSimulator.simulate(mk, List.of(PAYER), List.of(), null, new double[]{1, 2}, 100, 42L);
+        LegacyExposure.Market mk = LegacyExposure.Market.ratesOnly(dom(), A, SIG);
+        ExposureProfile a = LegacyExposure.simulate(mk, List.of(PAYER), List.of(), null, new double[]{1, 2}, 100, 42L);
+        ExposureProfile b = LegacyExposure.simulate(mk, List.of(PAYER), List.of(), null, new double[]{1, 2}, 100, 42L);
         assertEquals(a.discountedExpectedExposure(1), b.discountedExpectedExposure(1), 0);
         assertEquals(100, a.paths());
         assertEquals(2, a.timesLength());
         assertEquals(2.0, a.time(1));
         assertThrows(IllegalArgumentException.class, () -> a.pfe(0, 1));
-        assertThrows(IllegalArgumentException.class, () -> ExposureSimulator.simulate(mk, List.of(), List.of(),
+        assertThrows(IllegalArgumentException.class, () -> LegacyExposure.simulate(mk, List.of(), List.of(),
                 null, new double[]{1}, 10, 1L));
-        assertThrows(IllegalArgumentException.class, () -> ExposureSimulator.simulate(mk, List.of(PAYER),
+        assertThrows(IllegalArgumentException.class, () -> LegacyExposure.simulate(mk, List.of(PAYER),
                 List.of(), null, new double[]{2, 1}, 10, 1L));
-        assertThrows(IllegalArgumentException.class, () -> ExposureSimulator.simulate(mk, List.of(),
-                List.of(new ExposureSimulator.FxForward(1, 1, 1)), null, new double[]{1}, 10, 1L));
-        assertThrows(IllegalArgumentException.class, () -> new ExposureSimulator.Swap(100, 0.03, true, 2, 1, 1));
-        assertThrows(IllegalArgumentException.class, () -> new ExposureSimulator.Csa(-1, 0, 0));
-        assertThrows(IllegalArgumentException.class, () -> ExposureSimulator.Market.ratesOnly(dom(), 0, 0.01));
+        assertThrows(IllegalArgumentException.class, () -> LegacyExposure.simulate(mk, List.of(),
+                List.of(new MultiCurrencyExposureSimulator.FxForwardTerms(1, 1, 1)), null, new double[]{1}, 10, 1L));
+        assertThrows(IllegalArgumentException.class, () -> new MultiCurrencyExposureSimulator.SwapTerms(100, 0.03, true, 2, 1, 1));
+        assertThrows(IllegalArgumentException.class, () -> new MultiCurrencyExposureSimulator.Csa(-1, 0, 0));
+        assertThrows(IllegalArgumentException.class, () -> LegacyExposure.Market.ratesOnly(dom(), 0, 0.01).toMarket());
     }
 }

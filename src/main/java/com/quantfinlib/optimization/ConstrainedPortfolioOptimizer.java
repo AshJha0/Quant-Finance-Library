@@ -50,17 +50,6 @@ public final class ConstrainedPortfolioOptimizer {
         java.util.Arrays.fill(maxWeights, 1.0);
     }
 
-    /**
-     * Kept for source compatibility; the solver is deterministic and the seed is ignored.
-     *
-     * @deprecated since 2.4.0, removed in 3.0; the seed has no effect. Use
-     *     {@link #ConstrainedPortfolioOptimizer(double[], double[][])}.
-     */
-    @Deprecated(since = "2.4.0", forRemoval = true)
-    public ConstrainedPortfolioOptimizer(double[] expectedReturns, double[][] covariance, long seed) {
-        this(expectedReturns, covariance);
-    }
-
     /** Per-asset weight bounds; must admit a fully-invested portfolio. */
     public ConstrainedPortfolioOptimizer withBounds(double[] min, double[] max) {
         if (min.length != expectedReturns.length || max.length != expectedReturns.length) {

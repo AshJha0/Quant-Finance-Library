@@ -17,7 +17,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * identity, and a single-bucket FX forward against direct quadrature of
  * E[D E(T) P(default | X)].
  */
-@SuppressWarnings("removal") // exercises 2.x API deprecated for removal in 2.4.0
 class WrongWayCvaTest {
 
     private static final double A = 0.05;
@@ -37,9 +36,9 @@ class WrongWayCvaTest {
         return times;
     }
 
-    private static ExposureProfile payer(ExposureSimulator.Csa csa) {
-        return ExposureSimulator.simulate(ExposureSimulator.Market.ratesOnly(dom(), A, SIG),
-                List.of(new ExposureSimulator.Swap(100, 0.032, true, 0, 5, 1)), List.of(), csa,
+    private static ExposureProfile payer(MultiCurrencyExposureSimulator.Csa csa) {
+        return LegacyExposure.simulate(LegacyExposure.Market.ratesOnly(dom(), A, SIG),
+                List.of(new MultiCurrencyExposureSimulator.SwapTerms(100, 0.032, true, 0, 5, 1)), List.of(), csa,
                 quarterly(), 4_000, 9L);
     }
 
@@ -67,7 +66,7 @@ class WrongWayCvaTest {
 
     @Test
     void collateralisedPayerIsWrongWayForPositiveRho() {
-        ExposureProfile prof = payer(new ExposureSimulator.Csa(0, 0, 10.0 / 250));
+        ExposureProfile prof = payer(new MultiCurrencyExposureSimulator.Csa(0, 0, 10.0 / 250));
         double indep = CvaApproximator.cva(prof, cpty(), 0.6);
         double ww = CvaApproximator.cvaWrongWay(prof, cpty(), 0.6, 0.5, ExposureProfile.Factor.RATES);
         assertTrue(ww >= indep, ww + " vs " + indep);
@@ -91,9 +90,9 @@ class WrongWayCvaTest {
     void singleBucketMatchesQuadrature() {
         YieldCurve f = YieldCurve.ofZeroRates(new double[]{1, 5, 10}, new double[]{0.01, 0.012, 0.015});
         double spot = 1.1, vol = 0.12, tMat = 2, strike = 1.12, notional = 100, t = 1.5;
-        ExposureSimulator.Market mk = new ExposureSimulator.Market(dom(), A, 0, f, spot, vol, 0);
-        ExposureProfile prof = ExposureSimulator.simulate(mk, List.of(),
-                List.of(new ExposureSimulator.FxForward(notional, strike, tMat)), null,
+        LegacyExposure.Market mk = new LegacyExposure.Market(dom(), A, 0, f, spot, vol, 0);
+        ExposureProfile prof = LegacyExposure.simulate(mk, List.of(),
+                List.of(new MultiCurrencyExposureSimulator.FxForwardTerms(notional, strike, tMat)), null,
                 new double[]{t}, 400_000, 3L);
         CreditCurve c = cpty();
         double k = SpecialFunctions.normInv(c.defaultProbability(t));

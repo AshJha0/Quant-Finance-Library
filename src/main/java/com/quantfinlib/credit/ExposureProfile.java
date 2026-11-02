@@ -3,7 +3,7 @@ package com.quantfinlib.credit;
 import java.util.Arrays;
 
 /**
- * Output of {@link ExposureSimulator}: per exposure date, the profile
+ * Output of {@link MultiCurrencyExposureSimulator}: per exposure date, the profile
  * statistics, and per path, the discounted exposures the wrong-way CVA in
  * {@link CvaApproximator} needs.
  *

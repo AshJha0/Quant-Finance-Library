@@ -1,4 +1,4 @@
-package com.quantfinlib.backtest.strategies;
+package com.quantfinlib.cli;
 
 import com.quantfinlib.backtest.Signal;
 import com.quantfinlib.backtest.TradingStrategy;
@@ -9,13 +9,12 @@ import com.quantfinlib.indicators.Indicators;
  * Bollinger Band mean reversion: buy when the close dips below the lower band,
  * sell when it recovers to the middle band or stretches above the upper band.
  *
- * @deprecated since 2.4.0, removed from the library in 3.0 (owner decision D3:
- *     sample strategies are not library function). An identical copy is
- *     {@code com.quantfinlib.examples.strategies.BollingerBandsStrategy} in the {@code examples} jar;
- *     copy it into your own code. {@link SmaCrossStrategy} stays.
+ * <p>Private copy for the {@code --strategy} option of {@link Main}, so
+ * command lines written against 2.x keep working. The public sample is
+ * {@code com.quantfinlib.examples.strategies.BollingerBandsStrategy} in the
+ * {@code examples} jar; the library type was removed in 3.0 (decision D3).</p>
  */
-@Deprecated(since = "2.4.0", forRemoval = true)
-public final class BollingerBandsStrategy implements TradingStrategy {
+final class BollingerBandsStrategy implements TradingStrategy {
 
     private final int period;
     private final double k;

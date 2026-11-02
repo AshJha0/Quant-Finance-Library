@@ -35,7 +35,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * toxic venue is found, and nothing is lost or poisoned at the
  * write/restore seam.
  */
-@SuppressWarnings("removal") // exercises 2.x API deprecated for removal in 2.4.0
 class OvernightLearningLoopTest {
 
     private static final int BUCKETS = 26;             // 15-min buckets
@@ -133,9 +132,9 @@ class OvernightLearningLoopTest {
                     // both venues must earn a markout history before the
                     // adverse-selection term can separate them.
                     var cleanQuote = new VenueQuote("CLEAN", mid - halfSpread, 25_000,
-                            mid + halfSpread, 25_000, 0, 100_000, false);
+                            mid + halfSpread, 25_000, 0, 100_000, false, Long.MAX_VALUE);
                     var toxicQuote = new VenueQuote("TOXIC", mid - halfSpread, 25_000,
-                            mid + halfSpread, 25_000, 0, 100_000, false);
+                            mid + halfSpread, 25_000, 0, 100_000, false, Long.MAX_VALUE);
                     var plan = sor.route(Side.BUY, due, (b & 1) == 0
                             ? List.of(cleanQuote, toxicQuote)
                             : List.of(toxicQuote, cleanQuote));

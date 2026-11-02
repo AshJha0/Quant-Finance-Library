@@ -1,9 +1,6 @@
 package com.quantfinlib.backtest;
 
 import com.quantfinlib.TestData;
-import com.quantfinlib.backtest.strategies.BollingerBandsStrategy;
-import com.quantfinlib.backtest.strategies.MacdStrategy;
-import com.quantfinlib.backtest.strategies.RsiStrategy;
 import com.quantfinlib.backtest.strategies.SmaCrossStrategy;
 import com.quantfinlib.core.BarSeries;
 import org.junit.jupiter.api.Test;
@@ -12,7 +9,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@SuppressWarnings("removal") // exercises 2.x API deprecated for removal in 2.4.0
 class BacktesterTest {
 
     @Test
@@ -30,7 +26,7 @@ class BacktesterTest {
     @Test
     void equityNeverNegativeAndMetricsConsistent() {
         BarSeries s = TestData.gbmSeries("GBM", 600, 100, 0.1, 0.25, 21);
-        BacktestResult result = Backtester.run(new MacdStrategy(), s, BacktestConfig.defaults());
+        BacktestResult result = Backtester.run(new SmaCrossStrategy(12, 26), s, BacktestConfig.defaults());
         for (double e : result.equityCurveCopy()) {
             assertTrue(e >= 0);
         }
@@ -154,9 +150,7 @@ class BacktesterTest {
         BarSeries s = TestData.gbmSeries("X", 400, 100, 0.08, 0.2, 33);
         for (TradingStrategy strat : new TradingStrategy[]{
                 new SmaCrossStrategy(10, 30),
-                new RsiStrategy(14, 30, 70),
-                new MacdStrategy(),
-                new BollingerBandsStrategy()}) {
+                new SmaCrossStrategy(5, 50)}) {
             BacktestResult r = Backtester.run(strat, s, BacktestConfig.defaults());
             assertFalse(r.equityCurveLength() == 0);
         }
