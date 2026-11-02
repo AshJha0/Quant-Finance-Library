@@ -1,6 +1,6 @@
 # Design for 4.0: a narrower stable promise
 
-Status: design, written for 3.1.0. Nothing on this page changes 3.x behaviour. The
+Status: design, written for 3.1.0 and revised for 3.2.0, which ships the replacement types and deprecations; 4.0.0 makes the moves. The
 rules in [STABILITY.md](STABILITY.md) govern when any of it may ship: each removal is deprecated, with its replacement, in at
 least one 3.x minor (3.2.0) before 4.0 removes it, and 3.x has no breaking changes.
 Revised in 3.2.0: the move list is smaller than the 3.1 draft, for the reasons in

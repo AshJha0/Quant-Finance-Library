@@ -865,7 +865,67 @@ Worked examples (own tests, `CatTable6061Test`):
    accepted with a reason in `cat-official-schema-deltas.txt`.
 
 *In this library:* `CatEventBuilder.start(type)` starts any type. `CatEventType.family()`
-groups them. The bundled schema now covers all 66 types. Recipes 480 to 482.
+groups them. The bundled schema now covers all 66 types. Recipes 480 to 483.
+
+
+### 17n. Maintaining the CAT transcription (3.2)
+
+The library's CAT checks rest on a transcription: the field tables of a PDF
+specification turned into a JSON file (`cat-im-schema-subset-4.1.0r14.json`) and a
+row of rules per event type. A transcription can be wrong in two ways. The script can
+misread the PDF, or CAT can publish a new version. Two tools tell those apart: the
+script that regenerates the file, and the nightly comparison with the official schema.
+
+Formally:
+
+- **Regenerating.** `scripts/cat-transcription/gen2.py` reads `cat-raw.txt` (the
+  output of `pdftotext -raw` on the specification, kept out of the repo) and writes
+  `schema.json` (the bundled file) and `meta.json` (per-type required fields, price
+  sentences and choice seqs). `genjava.py` reads `meta.json` and writes the text of the
+  `CatEventType` constants and the `CatTableRules` rows, to paste into the source. The output is diffed against the committed
+  file; a regenerated file that differs is reviewed line by line before it replaces it.
+- **The pin.** `scripts/reference-files.sha256` holds the SHA-256 of the official
+  file (`cat-im-schema-4.2.0.json`, from catnmsplan.com). The nightly job downloads
+  it, `sha256sum -c` fails the job on any change, and only then is `QFL_CAT_SCHEMA`
+  set. A changed hash means CAT republished the file: look at it before updating the
+  line. The file is never committed, because the site reserves redistribution.
+- **The comparison.** `CatOfficialSchemaTest` checks every event in both files: each
+  transcribed field must exist with the same dataType, JSONDataType and required value.
+  A difference is either fixed in the transcription or listed, with a reason, in
+  `cat-official-schema-deltas.txt`. An unlisted difference fails the job.
+
+Triaging a new CAT version, step by step:
+
+1. Download the new file locally, record its hash, and run the test with
+   `QFL_CAT_SCHEMA=<file>` and `QFL_REQUIRE_REFERENCE_FILES=true`. The failure message
+   lists every difference.
+2. For each one, open the table in the specification the library transcribes. If the
+   table says what the official file says, the transcription is wrong: fix the script,
+   regenerate, and the difference goes away.
+3. If the table says something else, the new version changed the field. Keep the
+   transcription (it stays tied to the PDF it cites) and add a line to the deltas file
+   naming the version and the change.
+4. Pin the new hash in the same commit, so the nightly job and the deltas file agree.
+
+Worked example (3.2.0, own triage of the official 4.2.0 file against the v4.1.0 r14
+tables): the comparison listed 33 differences.
+
+- 17 were transcription errors. destination and senderIMID print "Industry Member ID /
+  Exchange ID" in a cell that wraps over two lines, and pdftotext split it, so the 3.1
+  script kept only the first type. The script now reads the wrapped cell, and the
+  bundled file gives both types as an array.
+- Regenerating with the fixed script found one more: MLQS destination (Table 132
+  seq 12). 4.2.0 no longer defines MLQS, so the comparison could not have flagged it.
+  This is why the fix goes into the script, not into the JSON by hand.
+- 16 were version changes. 4.2.0 drops the eleven option and multi-leg quote events
+  (MONQ, MORQ, MOQR, MOQC, MOQM, MLNQ, MLRQ, MLQS, MLQR, MLQC, MLQM) and retires five
+  MENQ fields (RFQID, RFQFlag, bidRelativePrice, askRelativePrice, validUntilDuration).
+  These are the 16 lines of the deltas file. The library keeps those types at v4.1.0 r14
+  until a 4.2 specification is transcribed.
+
+*In this library:* `scripts/cat-transcription/`, `scripts/reference-files.sha256`,
+`CatOfficialSchemaTest`, `cat-official-schema-deltas.txt`. Diagram:
+[DIAGRAMS 115](../DIAGRAMS.md#115-the-nightly-reference-files-job-fetch-pin-test-32).
 
 
 ### 18. Scaling out and staying safe

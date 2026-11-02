@@ -10988,13 +10988,13 @@ has the full table.
 <dependency>
   <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
   <artifactId>quant-finance-library</artifactId>
-  <version>v3.1.0</version>
+  <version>v3.2.0</version>
 </dependency>
 <!-- trading lane; brings the stable tier with it -->
 <dependency>
   <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
   <artifactId>quant-finance-library-lowlatency</artifactId>
-  <version>v3.1.0</version>
+  <version>v3.2.0</version>
 </dependency>
 ```
 
@@ -11655,3 +11655,69 @@ redistribution, so it is fetched at nightly time from its public URL, checked
 against the SHA-256 in `scripts/reference-files.sha256`, and never committed.
 `CatOfficialSchemaTest` compares it with the bundled transcription field by
 field; accepted differences live in `cat-official-schema-deltas.txt`.
+
+## 483. Check a whole day of CAT events, all 66 types (3.2)
+
+The plain idea: a day's file can hold any of the 66 event types, so check it in
+three passes that each answer one question. Is each line well formed (schema)? Does
+each event follow its own table (record rules)? Do the events that link to each other
+find their parents (linkage)?
+
+Formally: `CatSchema.validateLines` applies CAT-S01 to S09 line by line,
+`CatEvent.validate()` applies the record rules (CAT-R01 to R23, each only where the
+type's table prints it), and `CatLinkageChecker.check` applies CAT-LK01 to LK05 over the
+whole list. Linkage covers the 19 types of 3.1; the 47 types added in 3.2 are checked by
+the first two passes only.
+
+```java
+List<CatEvent> day = List.of();                            // your day's events
+CatSchema schema = CatSchema.bundledSubset();              // 66 event definitions
+List<String> lines = new ArrayList<>();
+Map<CatEventFamily, Integer> failedByFamily = new EnumMap<>(CatEventFamily.class);
+for (CatEvent e : day) {
+    lines.add(schema.toJson(e));
+    if (!e.validate().isEmpty()) {
+        failedByFamily.merge(e.type().family(), 1, Integer::sum);
+    }
+}
+List<CatSchema.Issue> wellFormed = schema.validateLines(lines);
+List<CatLinkageChecker.Issue> links = CatLinkageChecker.check(day, "FRMA");
+int known = CatEventType.values().length;                   // 66
+```
+
+Worked example: a day with one MOCO child order that leaves out parentOrderID fails
+the second pass with "missing parentOrderID" and counts once under `CHILD_ORDER`; the
+first pass reports the same gap as CAT-S05 ("missing required field parentOrderID") on
+line 1, and the third
+pass says nothing, because MOCO is not linkage-checked. Grouping failures by family
+tells you which desk process to look at first. Several files of one day: use
+`CatLinkageChecker.checkFiles` (recipe 423) so keys opened in one file count in another.
+[LEARN 17m](learn/04-technology.md#17m-the-rest-of-tables-60-and-61-and-the-official-schema-32).
+
+## 484. Move from `data.*` loaders to `io.*` (the 3.2 deprecation path)
+
+The plain idea: in 4.0 the three file and HTTP loaders leave the stable jar for
+`quant-finance-library-io`. 3.2 already ships them under their 4.0 package, so you can
+change the import now, while both work, and the 4.0 upgrade becomes a dependency change.
+
+Formally: `data.CsvBarLoader`, `data.HttpBarFetcher` and `data.UniverseCsvLoader` are
+`@Deprecated(since = "3.2.0", forRemoval = true)` and delegate to `io.CsvBarLoader`,
+`io.HttpBarFetcher` and `io.UniverseCsvLoader`, which have the same methods. Results are
+identical. The rest of `data` (`PointInTimeUniverse`, the corporate-action classes,
+`SeriesAligner`) stays where it is.
+
+```java
+import com.quantfinlib.io.CsvBarLoader;
+import com.quantfinlib.io.UniverseCsvLoader;
+
+BarSeries bars = CsvBarLoader.load(Path.of("bars.csv"), "SPY");
+PointInTimeUniverse universe = UniverseCsvLoader.load(Path.of("universe.csv"));
+```
+
+Worked example: compile with `javac -Xlint:removal` (Maven:
+`<compilerArgs><arg>-Xlint:removal</arg></compilerArgs>`). Every use of the old class
+is reported as "[removal] CsvBarLoader in com.quantfinlib.data has been deprecated and
+marked for removal" (the import line itself is not). Change the import to `io`,
+recompile, and the warnings go. On 4.0 add the
+`quant-finance-library-io` dependency and `requires com.quantfinlib.io;`
+([MIGRATION_4.0](MIGRATION_4.0.md) row 4).
