@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * (divisor continuity, turnover) and private-market analytics (IRR,
  * multiples, KS-PME, Geltner round trip).
  */
-@SuppressWarnings("deprecation") // SwapPricer kept through 3.x; pinned here unchanged
+@SuppressWarnings("removal") // SwapPricer kept through 3.x; pinned here unchanged
 class AssetClassRoundTest {
 
     private static YieldCurve flat5() {

@@ -1,7 +1,7 @@
 package com.quantfinlib.cli;
 
 import com.quantfinlib.TestData;
-import com.quantfinlib.data.CsvBarLoader;
+import com.quantfinlib.io.CsvBarLoader;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;

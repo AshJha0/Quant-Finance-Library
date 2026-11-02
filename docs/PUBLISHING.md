@@ -96,7 +96,7 @@ JitPack builds from a tag on request, so a release is usable without further set
 <dependency>
   <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
   <artifactId>quant-finance-library</artifactId>   <!-- or quant-finance-library-lowlatency -->
-  <version>v3.1.0</version>
+  <version>v3.2.0</version>
 </dependency>
 ```
 

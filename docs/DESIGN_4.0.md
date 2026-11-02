@@ -1,8 +1,10 @@
 # Design for 4.0: a narrower stable promise
 
-Status: design, written for 3.1.0. Nothing on this page changes 3.x behaviour. The
+Status: design, written for 3.1.0 and revised for 3.2.0, which ships the replacement types and deprecations; 4.0.0 makes the moves. The
 rules in [STABILITY.md](STABILITY.md) govern when any of it may ship: each removal is deprecated, with its replacement, in at
 least one 3.x minor (3.2.0) before 4.0 removes it, and 3.x has no breaking changes.
+Revised in 3.2.0: the move list is smaller than the 3.1 draft, for the reasons in
+"What changed from the 3.1 design".
 
 ## Why
 
@@ -22,55 +24,83 @@ Stated formally, 4.0 makes three changes:
 2. Each package hierarchy lives in exactly one module.
 3. Core has no `java.net.http` and no `jdk.httpserver` dependency.
 
+Point 1 was narrowed less than planned; see the revised tables below.
+
 ## Target modules
+
+Revised in 3.2.0 (see "What changed from the 3.1 design" below).
 
 | 4.0 artifact | JPMS module | Tier | Packages (under `com.quantfinlib`) |
 |---|---|---|---|
-| `quant-finance-library` | `com.quantfinlib` | Stable | `core`, `stats`, `pricing`, `rates`, `credit`, `risk`, `crb`, `volatility`, `hedging`, `fx` (less `AggregatedBook`), `commodities`, `markets`, `indicators`, `optimization`, `alpha`, `backtest`, `backtest.portfolio`, `backtest.tick`, `backtest.validation`, `simulation`, `regulatory`, `internal` (qualified export) |
-| `quant-finance-library-io` | `com.quantfinlib.io` | Incubating | `data` (CSV, alignment, corporate actions, `HttpBarFetcher`), `persist`, `report` |
-| `quant-finance-library-research` | `com.quantfinlib.research` | Incubating | `screener`, `dsl`, `ml` |
-| `quant-finance-library-lowlatency` | `com.quantfinlib.lowlatency` | Reference | its 3.x packages, plus `execution` (`HftSor` and the router family), `microstructure` simulators, `rfq`, `marketdata.tick`, `fx.AggregatedBook` (as `marketdata.AggregatedBook`) |
-| examples classifier | none | Examples | `cli`, `backtest.strategies`, `examples` |
+| `quant-finance-library` | `com.quantfinlib` | Stable | `core`, `stats`, `pricing`, `rates`, `credit`, `risk`, `crb`, `volatility`, `hedging`, `fx` (less `AggregatedBook`), `commodities`, `markets`, `indicators`, `optimization`, `alpha`, `backtest`, `backtest.portfolio`, `backtest.validation`, `simulation`, `regulatory`, `data` (less its three I/O classes), `execution`, `microstructure`, `persist`, `screener`, `ml`, `internal` (qualified export) |
+| `quant-finance-library-io` | `com.quantfinlib.io` | Incubating | `io` (`CsvBarLoader`, `HttpBarFetcher`, `UniverseCsvLoader`), `report` |
+| `quant-finance-library-research` | `com.quantfinlib.research` | Incubating | `dsl` |
+| `quant-finance-library-lowlatency` | `com.quantfinlib.lowlatency` | Reference | its 3.x packages, plus `rfq`, `marketdata.tick`, `backtest.tick`, `marketdata.AggregatedBook` (new in 3.2) |
+| `examples` classifier of the lowlatency artifact | none | Examples | `cli`, `backtest.strategies`, `examples` |
 
 Incubating means: semantic versioning applies to the artifact, but a minor release may
 change its API with one minor of notice. Only the stable artifact carries the full
 promise.
 
+The graph is acyclic: lowlatency requires core transitively and io and research
+statically (only the examples jar uses them); io and research require core. Nothing
+requires lowlatency.
+
 ## The moves, one by one
 
-Each row says what moves, why, what a user does, and the earliest dates. "3.2" means
-the first release that announces the move in the class javadoc; removal from the old
-location is in 4.0, which is at least three months after 3.2.0 by policy.
+Each row says what moves, why and what a user does. Under the release policy of
+2026-11-02, 3.2.0 announces each move (and deprecates where a replacement type exists),
+and 4.0.0 follows 3.2.0 directly and makes the move.
 
-| Item | From | To (4.0) | Why | User action |
-|---|---|---|---|---|
-| `cli`, `backtest.strategies` | core | examples classifier | toy code under a stability promise | copy the strategy, or depend on the examples jar |
-| `execution.HftSor` and routing | core | lowlatency | hot-lane code | add the lowlatency dependency; package name unchanged |
-| `fx.AggregatedBook` | core | lowlatency `marketdata` | hot-lane code | change one import |
-| `microstructure` simulators | core | lowlatency | hot-lane code | add the dependency |
-| `rfq` | core | lowlatency | execution workflow, not pricing | add the dependency |
-| `marketdata.tick` | core | lowlatency | one `marketdata` hierarchy, one module | add the dependency; package name unchanged |
-| `data`, `persist`, `report` | core | `-io` | I/O and HTTP are not pricing | add `quant-finance-library-io` |
-| `screener`, `dsl`, `ml` | core | `-research` | research tools, incubating | add `quant-finance-library-research` |
-| `requires transitive java.net.http` | core | `-io` | one class needs it | none unless you used `HttpBarFetcher` |
+| Item | From | To (4.0) | Why | User action | 3.2.0 |
+|---|---|---|---|---|---|
+| `cli`, `backtest.strategies` | core | examples classifier | toy code under a stability promise | copy the strategy, or depend on the examples jar | announced |
+| `fx.AggregatedBook` | core | lowlatency `marketdata.AggregatedBook` | hot-lane code | change one import | replacement added, old class deprecated for removal |
+| `rfq` | core | lowlatency | execution workflow, not pricing | add the lowlatency dependency; package name unchanged | announced |
+| `marketdata.tick` | core | lowlatency | one `marketdata` hierarchy, one module | add the dependency; package name unchanged | announced |
+| `backtest.tick` | core | lowlatency | replays `marketdata.tick` files; it cannot stay in core once they leave | add the dependency; package name unchanged | announced |
+| `data.CsvBarLoader`, `data.HttpBarFetcher`, `data.UniverseCsvLoader` | core `data` | `-io`, package `io` | I/O and HTTP are not pricing | change the import to `com.quantfinlib.io`, add `quant-finance-library-io` | `io` package added in core, old classes deprecated for removal and delegating |
+| `report` | core | `-io` | file output, not pricing | add `quant-finance-library-io` | announced |
+| `dsl` | core | `-research` | research tool, incubating | add `quant-finance-library-research` | announced |
+| `requires transitive java.net.http` | core | `-io` | one class needs it | none unless you used `HttpBarFetcher` | - |
+| `rates.SwapPricer` | core | removed | replaced by `VanillaSwap` and `LegConvention` in 3.1 | see MIGRATION_3.1.md | deprecated since 3.1.0 |
 
-### Why most moves cannot be `@Deprecated` in 3.x
+### What changed from the 3.1 design
+
+The 3.1 table also moved `execution`, the `microstructure` simulators, `persist`,
+`screener`, `ml` and the whole of `data`. A package-level dependency scan of 3.1.0
+(`grep` of imports across `core/src/main`) showed that stable packages use each of
+them:
+
+| Package | Used by stable code in |
+|---|---|
+| `microstructure` (`Execution`, `MarketImpactModel`, `TickSizeSchedule`, ...) | `backtest` (9 files), `backtest.tick`, `alpha`, `execution` |
+| `execution` (`SmartOrderRouter`, `IcebergOrder`, ...) | `backtest` (`ExecutionAlgoBacktester`, `IcebergExecution`, `SorExecution`) |
+| `persist.Checkpoint` | `crb`, `fx`, `execution`, `microstructure`, `rfq` |
+| `screener` (`Fundamentals`, ...) | `alpha` |
+| `ml.IntradayLiquidityForecaster` | `execution.VwapScheduler` |
+| `data.PointInTimeUniverse`, `CorporateActions`, ... | `alpha`, `backtest.portfolio`, `screener` |
+
+Moving any of them out would make core require the module it moved to while that
+module requires core: a cycle, which JPMS rejects. Splitting a package between jars is
+also forbidden. So these stay in the stable jar; for `data`, only the three I/O
+classes leave, under a new package name with a deprecation path. The stable tier is
+therefore wider than the 3.1 page hoped. The alternative, moving `backtest` and
+`alpha` out of the stable tier too, would break far more users for little gain.
+
+### Deprecation versus announcement
 
 A move to another jar keeps the package and class names. JPMS forbids the same package
 in two modules, so 3.x cannot ship the new location next to the old one, and there is
-no replacement type to point `@Deprecated(forRemoval = true)` at. Marking these
-classes deprecated would tell users the API is going away, which is false: it is
-changing jar. So in 3.x the moves are announced in three places instead:
+no replacement type to point `@Deprecated(forRemoval = true)` at. Marking such a class
+deprecated would tell users the API is going away, which is false: it is changing jar.
+These moves are announced in three places: this page, a "Moves in 4.0" paragraph in each
+affected `package-info.java` (from 3.2.0), and docs/MIGRATION_4.0.md.
 
-1. This page.
-2. From 3.2, a "Moves in 4.0" paragraph in each affected package's `package-info.java`.
-3. A MIGRATION_4.0.md written with the 4.0 branch, with a dependency snippet per row.
-
-`@Deprecated(since = "3.x", forRemoval = true)` is used only where a replacement type
-exists in the same 3.x release. The one 3.1.0 deprecation, `rates.SwapPricer`
-(`@Deprecated(since = "3.1.0")`, replaced by the convention-driven leg model; see
-MIGRATION_3.1.md), is outside Phase D. No Phase D item has a replacement type in 3.1,
-so 3.1.0 adds no Phase D deprecation.
+`@Deprecated(since = "3.2.0", forRemoval = true)` is used only where a replacement type
+exists in 3.2.0: `fx.AggregatedBook` (replacement `marketdata.AggregatedBook` in
+lowlatency) and the three `data` I/O classes (replacements in `io`). With
+`rates.SwapPricer` (deprecated since 3.1.0), these are all the 4.0 removals.
 
 ## The large classes
 
@@ -106,10 +136,11 @@ change that breaks it is a breaking change.
 ## Order of work
 
 1. 3.1.0: this page; internal splits; trade-buffer presize; allocation tests.
-2. 3.2.0: "Moves in 4.0" paragraphs in each affected `package-info.java`; the `-io`
-   and `-research` modules built in a branch, not released.
-3. 4.0.0, no earlier than three months after 3.2.0: modules split, `java.net.http`
-   gone from core, MIGRATION_4.0.md, japicmp run with the 4.0 break list.
+2. 3.2.0: the revised tables above; "Moves in 4.0" paragraphs in each affected
+   `package-info.java`; the `io` package and `marketdata.AggregatedBook` with
+   deprecations of the types they replace; MIGRATION_4.0.md.
+3. 4.0.0, directly after 3.2.0: modules split, `java.net.http` gone from core, the
+   deprecated types removed, japicmp run against 3.0.0 with the 4.0 break list.
 
 ## Worked example: a pricing user in 4.0
 
@@ -118,4 +149,5 @@ and transitively gets `java.net.http`. In 4.0 the same dependency gives the same
 classes (`pricing`, `rates`, `risk`) and no HTTP client: their `module-info.java` and
 build file do not change. A user who loads bars with `HttpBarFetcher` adds one
 dependency, `quant-finance-library-io`, and one `requires com.quantfinlib.io;`; the
-import line stays `com.quantfinlib.data.HttpBarFetcher`.
+import line changes once, from `com.quantfinlib.data.HttpBarFetcher` to
+`com.quantfinlib.io.HttpBarFetcher` (a change they can make on 3.2.0 already).

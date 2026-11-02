@@ -588,11 +588,12 @@ CAT-LK01.
 sources it was given, so a missing source skips its rules), `UtiHistory`,
 `InMemoryUtiHistory`, `CurrencyRegistry`; `regreporting/cat/CatLinkageChecker`
 and the event types MENQ, MONO, MOOR and MONQ (rules CAT-R13 to CAT-R16).
-Still not checked for EMIR: 1009-08 (client code prefix) and 2001-04 (2.1 against 2.2 to
-2.4), whose fields this package does not populate, and third-country regulated markets in
-1003-01. For CAT the option lifecycle, multi-leg and supplement events, linkage across
-files and the schema gate came later in 3.1 (17j to 17l); still not checked are the other
-events of Tables 60 and 61, reference data and the official schema file. `check` is
+Since 3.2 the builder fills 2.2 to 2.4 and the validator checks 2001-04 (2.1 against 2.2 to
+2.4, with its siblings 2002-02, 2003-05 and 2004-04); `withColumnAdCodes()` reports the row 13
+client code prefix as 1009-08, column AD's number for it (recipes 470 and 471). Still not
+checked for EMIR: third-country regulated markets in 1003-01. For CAT the option lifecycle, multi-leg and supplement events, linkage across
+files and the schema gate came later in 3.1 (17j to 17l), and the other events of Tables 60
+and 61 in 3.2 (17m); still not checked are their linkage and reference data. `check` is
 batch-local, so pass a whole day's events for a firm, or use `checkFiles`. Recipes 364 and 365.
 
 #### Branches, venues, a changed UTI, and dates the repository remembers (3.1)
@@ -814,6 +815,119 @@ Worked examples:
 `CatLinkageChecker.checkFiles` with `Batch` and `FileIssue` is the cross-file check. The
 JSON reader is package-private and has no dependency. Recipes 423 and 424.
 
+### 17m. The rest of Tables 60 and 61, and the official schema (3.2)
+
+Tables 60 and 61 list every option event CAT knows: 35 simple option types and 25
+multi-leg types. By 3.1 the library had the ones a plain order life needs (new, route,
+accept, modify, cancel, trade, fill, supplements). The other 47 follow the same order
+through the firm: internal routes between desks, child orders, route modifications and
+cancels, modification and cancel requests, adjustments, the quote lifecycle (routed,
+received, modified, cancelled), fulfillment amendments, allocations and effective events.
+Each one is a table of fields, so adding it is mostly careful transcription.
+
+Formally:
+
+- **Required fields.** For each type, the required fields are the non-Boolean fields its
+  table marks R, the same reading as in 3.1 (a missing Boolean is read as false, Table 3).
+  For example, Table 76 (MOCO, child option order) marks parentOrderKeyDate,
+  parentOrderID and openCloseIndicator R.
+- **Price (CAT-R22).** Each table words its price rule. Option order events say "must be
+  greater than or equal to zero", required with LMT and blank with MKT (Table 65 seq 20).
+  Multi-leg events give a net price that may be negative, a credit (Table 104 seq 20).
+  Allocations and fulfillment amendments have the non-negative rule only (Table 96
+  seq 17). The library applies to each type exactly the sentences its table prints, and
+  the message names the table and seq.
+- **Choices (CAT-R23, Appendix G).** initiator is C or F. senderType has two lists:
+  E, F or O on order events, and F, N or S on quote events (MOQR, MLQR). priceType is PU,
+  TC or TS and is required with LMT on multi-leg orders.
+- **The official schema.** CAT publishes the schema JSON on its public website, with no
+  login. The site's legal notice reserves copying and redistribution, so the library does
+  not commit it. The nightly job fetches it with a pinned SHA-256 and compares it, field
+  by field, with the library's transcription. These are published references.
+
+The library's readings are two:
+
+- The new types are not linkage-checked yet. `CatLinkageChecker` skips them, so its
+  results for the 3.1 types are unchanged.
+- Each type has a family (`CatEventFamily`), taken from the columns of Tables 60 and 61.
+  It is there to group the work, and it does not change any check.
+
+Worked examples (own tests, `CatTable6061Test`):
+
+1. **A route modified with a negative price.** An MOMR with price -1 gives "price must be
+   greater than or equal to zero (Table 65 seq 20)". The same price on an MLMR (multi-leg)
+   passes, because a net credit is negative.
+2. **A quote received from an exchange.** An MOQR with senderType E fails, because E is an
+   order-event value; N (foreign) passes.
+3. **Schema drift.** The schema published in 2026 is version 4.2.0, while the library
+   transcribes the v4.1.0 r14 tables. The nightly comparison lists every field whose
+   dataType, JSONDataType or required flag differs. Each one is then either fixed or
+   accepted with a reason in `cat-official-schema-deltas.txt`.
+
+*In this library:* `CatEventBuilder.start(type)` starts any type. `CatEventType.family()`
+groups them. The bundled schema now covers all 66 types. Recipes 480 to 483.
+
+
+### 17n. Maintaining the CAT transcription (3.2)
+
+The library's CAT checks rest on a transcription: the field tables of a PDF
+specification turned into a JSON file (`cat-im-schema-subset-4.1.0r14.json`) and a
+row of rules per event type. A transcription can be wrong in two ways. The script can
+misread the PDF, or CAT can publish a new version. Two tools tell those apart: the
+script that regenerates the file, and the nightly comparison with the official schema.
+
+Formally:
+
+- **Regenerating.** `scripts/cat-transcription/gen2.py` reads `cat-raw.txt` (the
+  output of `pdftotext -raw` on the specification, kept out of the repo) and writes
+  `schema.json` (the bundled file) and `meta.json` (per-type required fields, price
+  sentences and choice seqs). `genjava.py` reads `meta.json` and writes the text of the
+  `CatEventType` constants and the `CatTableRules` rows, to paste into the source. The output is diffed against the committed
+  file; a regenerated file that differs is reviewed line by line before it replaces it.
+- **The pin.** `scripts/reference-files.sha256` holds the SHA-256 of the official
+  file (`cat-im-schema-4.2.0.json`, from catnmsplan.com). The nightly job downloads
+  it, `sha256sum -c` fails the job on any change, and only then is `QFL_CAT_SCHEMA`
+  set. A changed hash means CAT republished the file: look at it before updating the
+  line. The file is never committed, because the site reserves redistribution.
+- **The comparison.** `CatOfficialSchemaTest` checks every event in both files: each
+  transcribed field must exist with the same dataType, JSONDataType and required value.
+  A difference is either fixed in the transcription or listed, with a reason, in
+  `cat-official-schema-deltas.txt`. An unlisted difference fails the job.
+
+Triaging a new CAT version, step by step:
+
+1. Download the new file locally, record its hash, and run the test with
+   `QFL_CAT_SCHEMA=<file>` and `QFL_REQUIRE_REFERENCE_FILES=true`. The failure message
+   lists every difference.
+2. For each one, open the table in the specification the library transcribes. If the
+   table says what the official file says, the transcription is wrong: fix the script,
+   regenerate, and the difference goes away.
+3. If the table says something else, the new version changed the field. Keep the
+   transcription (it stays tied to the PDF it cites) and add a line to the deltas file
+   naming the version and the change.
+4. Pin the new hash in the same commit, so the nightly job and the deltas file agree.
+
+Worked example (3.2.0, own triage of the official 4.2.0 file against the v4.1.0 r14
+tables): the comparison listed 33 differences.
+
+- 17 were transcription errors. destination and senderIMID print "Industry Member ID /
+  Exchange ID" in a cell that wraps over two lines, and pdftotext split it, so the 3.1
+  script kept only the first type. The script now reads the wrapped cell, and the
+  bundled file gives both types as an array.
+- Regenerating with the fixed script found one more: MLQS destination (Table 132
+  seq 12). 4.2.0 no longer defines MLQS, so the comparison could not have flagged it.
+  This is why the fix goes into the script, not into the JSON by hand.
+- 16 were version changes. 4.2.0 drops the eleven option and multi-leg quote events
+  (MONQ, MORQ, MOQR, MOQC, MOQM, MLNQ, MLRQ, MLQS, MLQR, MLQC, MLQM) and retires five
+  MENQ fields (RFQID, RFQFlag, bidRelativePrice, askRelativePrice, validUntilDuration).
+  These are the 16 lines of the deltas file. The library keeps those types at v4.1.0 r14
+  until a 4.2 specification is transcribed.
+
+*In this library:* `scripts/cat-transcription/`, `scripts/reference-files.sha256`,
+`CatOfficialSchemaTest`, `cat-official-schema-deltas.txt`. Diagram:
+[DIAGRAMS 115](../DIAGRAMS.md#115-the-nightly-reference-files-job-fetch-pin-test-32).
+
+
 ### 18. Scaling out and staying safe
 
 One core, one engine has a throughput ceiling. The scaling answer here is
@@ -960,23 +1074,29 @@ type is an interface, `core.QuantFinException`, and
 from the caller, such as a negative size, stays a plain `IllegalArgumentException`.
 See [ARCHITECTURE.md](../ARCHITECTURE.md#exception-policy).
 
-### 20b. Where the library is going: the 4.0 design (3.1)
+### 20b. Where the library is going: the 4.0 design (3.1, revised 3.2)
 
 `docs/DESIGN_4.0.md` is the plan for the next major release. The plain idea: the
 stable jar should promise only what one maintainer can check, and a pricing user
-should not get an HTTP client. Formally, 4.0 narrows the stable module to the pricing,
-rates, credit, risk, stats, volatility and hedging hierarchy and its shared types. It
-moves I/O (`data`, `persist`, `report`) to an incubating `-io` module and research
-tools (`screener`, `dsl`, `ml`) to `-research`. Hot-lane code (`HftSor`,
-`AggregatedBook`, the microstructure simulators, `rfq`, `marketdata.tick`) goes to the
-low-latency module, and `cli` and the toy strategies go to examples. Package names
-stay the same, so most users change a dependency, not an import.
+should not get an HTTP client. Formally, 4.0 moves the file and HTTP loaders (the new
+`io` package) and `report` to an incubating `-io` module, `dsl` to `-research`,
+hot-lane code (`AggregatedBook`, `rfq`, `marketdata.tick`, `backtest.tick`) to the
+low-latency module, and `cli` and the toy strategies to an examples jar. Most package
+names stay the same, so most users change a dependency, not an import.
 
-None of this can be `@Deprecated` in 3.x. Java modules forbid one package in two
-jars, so there is no new home to point at until 4.0 exists, and "deprecated" would
-wrongly say the API is going away. The move is announced in the design page, in
-`package-info` javadoc from 3.2, and in a MIGRATION_4.0.md. By the release policy
-4.0 ships no earlier than three months after 3.2.0.
+The 3.1 draft wanted to move more (`execution`, `microstructure`, `persist`,
+`screener`, `ml`, all of `data`). A scan of imports showed stable code uses each of
+them, for example `backtest` uses `microstructure.Execution` in nine files. Moving such
+a package would make core require a module that requires core, and Java modules reject
+a cycle. Worked example: `alpha.Factors` reads `screener.Fundamentals`, so `screener`
+stays wherever `alpha` is, which is the stable jar.
+
+A jar move cannot be `@Deprecated`: Java modules forbid one package in two jars, so
+there is no new home to point at until 4.0 exists. Where 3.2 could add a replacement
+type, it did and deprecated the old one for removal: `io.CsvBarLoader` and two others
+replace their `data` namesakes, and `marketdata.AggregatedBook` replaces
+`fx.AggregatedBook`. Every move is announced in `package-info` javadoc and in
+MIGRATION_4.0.md, and 4.0 follows 3.2.0 directly.
 
 Meanwhile 3.1 split the three largest classes internally. `Indicators`,
 `MultiCurrencyExposureSimulator` and `FixSession` are now facades over package-private

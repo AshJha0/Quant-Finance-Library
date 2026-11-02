@@ -134,11 +134,13 @@ land on the entry, one click from the section.
 - [17j. An option order's life after the new-order event (3.1)](learn/04-technology.md#17j-an-option-orders-life-after-the-new-order-event-31)
 - [17k. Multi-leg orders and supplements (3.1)](learn/04-technology.md#17k-multi-leg-orders-and-supplements-31)
 - [17l. Linkage across files, and the schema gate (3.1)](learn/04-technology.md#17l-linkage-across-files-and-the-schema-gate-31)
+- [17m. The rest of Tables 60 and 61, and the official schema (3.2)](learn/04-technology.md#17m-the-rest-of-tables-60-and-61-and-the-official-schema-32)
+- [17n. Maintaining the CAT transcription (3.2)](learn/04-technology.md#17n-maintaining-the-cat-transcription-32)
 - <a id="18-scaling-out-and-staying-safe"></a>[18. Scaling out and staying safe](learn/04-technology.md#18-scaling-out-and-staying-safe)
 - <a id="19-how-this-codebase-tests-itself"></a>[19. How this codebase tests itself](learn/04-technology.md#19-how-this-codebase-tests-itself)
 - [19b. Can I trust the jar I downloaded? (3.1)](learn/04-technology.md#19b-can-i-trust-the-jar-i-downloaded-31)
 - <a id="20-modules-and-exceptions"></a>[20. Modules and exceptions](learn/04-technology.md#20-modules-and-exceptions)
-- [20b. Where the library is going: the 4.0 design (3.1)](learn/04-technology.md#20b-where-the-library-is-going-the-40-design-31)
+- [20b. Where the library is going: the 4.0 design (3.1, revised 3.2)](learn/04-technology.md#20b-where-the-library-is-going-the-40-design-31-revised-32)
 
 ### <a id="part-iii--your-learning-path"></a>[Part III — Your learning path](learn/05-learning-path.md#part-iii--your-learning-path)
 

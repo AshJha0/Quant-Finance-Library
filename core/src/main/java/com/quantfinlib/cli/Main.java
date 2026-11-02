@@ -9,7 +9,7 @@ import com.quantfinlib.backtest.strategies.SmaCrossStrategy;
 import com.quantfinlib.backtest.validation.ParameterGrid;
 import com.quantfinlib.backtest.validation.WalkForwardAnalyzer;
 import com.quantfinlib.core.BarSeries;
-import com.quantfinlib.data.CsvBarLoader;
+import com.quantfinlib.io.CsvBarLoader;
 import com.quantfinlib.report.ReportGenerator;
 
 import java.nio.file.Path;

@@ -1,5 +1,6 @@
-package com.quantfinlib.data;
+package com.quantfinlib.io;
 
+import com.quantfinlib.data.PointInTimeUniverse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * pinned against the InterestRateSwap methods they wrap and against a
  * DV01 rebuilt from shifted curves by hand.
  */
-@SuppressWarnings("deprecation") // SwapPricer kept through 3.x; pinned here unchanged
+@SuppressWarnings("removal") // SwapPricer kept through 3.x; pinned here unchanged
 class SwapPricerMutationTest {
 
     private static final double Z = 0.04;

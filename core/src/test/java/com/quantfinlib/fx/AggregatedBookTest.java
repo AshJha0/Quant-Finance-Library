@@ -12,6 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * pulls, crossed-composite reporting, sweepable-size sums, and the
  * zero-allocation guarantee on the quote path.
  */
+@SuppressWarnings("removal")
 class AggregatedBookTest {
 
     @Test

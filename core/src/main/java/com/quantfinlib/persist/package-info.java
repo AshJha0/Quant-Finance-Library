@@ -24,6 +24,11 @@
  * not persistable: its state is keyed by price level, and overnight the
  * price ladder moves. Restoring it would attribute yesterday's icebergs
  * to today's unrelated levels.</p>
+ *
+ * <p><b>4.0.</b> This package stays in the stable jar in 4.0. The 3.1 design
+ * proposed moving it out, but stable packages ({@code crb, fx, execution,
+ * microstructure}) depend on it, and a move would make the module graph
+ * cyclic. See docs/DESIGN_4.0.md.</p>
  */
 @NullMarked
 package com.quantfinlib.persist;

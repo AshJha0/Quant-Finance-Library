@@ -148,11 +148,34 @@ public final class EmirStatefulValidator {
                     + "the UTI (history form); column AC numbers it 7 after a second 6, so the code is taken "
                     + "from column AD", WB + "row 186 (field 2.153)", Evidence.LIBRARY_READING));
 
+    private static final List<RuleProvenance> RULES_32 = List.of(
+            new RuleProvenance("EMIR-VR-2001-04/2002-02/2003-05/2004-04", "2.1, 2.2, 2.3 and 2.4 hold "
+                    + "different codes where given (builder keys uti, reportTrackingNumber, priorUti, "
+                    + "subsequentPositionUti); applied by every validator, as it needs no state",
+                    WB + "rows 26, 27, 28 and 29 (fields 2.1 to 2.4)", Evidence.PUBLISHED_REFERENCE),
+            new RuleProvenance("EMIR-VR-1009-08", "with 1.8 false, for NEWT and POSC the client code in 1.9 "
+                    + "starts with the LEI in 1.4; reported under this code only with withColumnAdCodes(), "
+                    + "otherwise as EMIR-VR-1009-07 by EmirRefitReport", WB + "row 13 (field 1.9): column AC "
+                    + "prints the condition as '8 7.', column AD lists it as code 8; the AD numbering is the "
+                    + "library's reading, as for 1009-09", Evidence.LIBRARY_READING));
+
+    /** Row 13 codes as printed in column AC (second number) mapped to column AD, for {@link #withColumnAdCodes()}. */
+    private static final java.util.Map<String, String> AD_CODES = java.util.Map.of(
+            "EMIR-VR-1009-05:", "EMIR-VR-1009-06:", "EMIR-VR-1009-06:", "EMIR-VR-1009-07:",
+            "EMIR-VR-1009-07:", "EMIR-VR-1009-08:");
+
+    private static final List<String> ID_KEYS = List.of("uti", "reportTrackingNumber", "priorUti",
+            "subsequentPositionUti");
+    private static final List<String> ID_NUMS = List.of("2.1", "2.2", "2.3", "2.4");
+    private static final List<String> ID_CODES = List.of("EMIR-VR-2001-04", "EMIR-VR-2002-02",
+            "EMIR-VR-2003-05", "EMIR-VR-2004-04");
+
     private static final List<RuleProvenance> ALL_RULES;
 
     static {
         List<RuleProvenance> all = new ArrayList<>(RULES);
         all.addAll(RULES_31B);
+        all.addAll(RULES_32);
         ALL_RULES = List.copyOf(all);
     }
 
@@ -161,10 +184,12 @@ public final class EmirStatefulValidator {
     private final @Nullable CurrencyRegistry currencies;
     private final @Nullable MicRegistry mics;
     private final @Nullable Function<EmirRefitReport, String> tradeKey;
+    private final boolean adCodes;
 
     private EmirStatefulValidator(@Nullable UtiHistory history, @Nullable LeiRegistry leis,
             @Nullable CurrencyRegistry currencies, @Nullable MicRegistry mics,
-            @Nullable Function<EmirRefitReport, String> tradeKey) {
+            @Nullable Function<EmirRefitReport, String> tradeKey, boolean adCodes) {
+        this.adCodes = adCodes;
         this.history = history;
         this.leis = leis;
         this.currencies = currencies;
@@ -178,7 +203,7 @@ public final class EmirStatefulValidator {
      * @return the validator
      */
     public static EmirStatefulValidator create() {
-        return new EmirStatefulValidator(null, null, null, null, null);
+        return new EmirStatefulValidator(null, null, null, null, null, false);
     }
 
     /**
@@ -188,7 +213,7 @@ public final class EmirStatefulValidator {
      * @return a new validator
      */
     public EmirStatefulValidator withHistory(UtiHistory h) {
-        return new EmirStatefulValidator(h, leis, currencies, mics, tradeKey);
+        return new EmirStatefulValidator(h, leis, currencies, mics, tradeKey, adCodes);
     }
 
     /**
@@ -198,7 +223,7 @@ public final class EmirStatefulValidator {
      * @return a new validator
      */
     public EmirStatefulValidator withLeiRegistry(LeiRegistry r) {
-        return new EmirStatefulValidator(history, r, currencies, mics, tradeKey);
+        return new EmirStatefulValidator(history, r, currencies, mics, tradeKey, adCodes);
     }
 
     /**
@@ -208,7 +233,7 @@ public final class EmirStatefulValidator {
      * @return a new validator
      */
     public EmirStatefulValidator withCurrencies(CurrencyRegistry c) {
-        return new EmirStatefulValidator(history, leis, c, mics, tradeKey);
+        return new EmirStatefulValidator(history, leis, c, mics, tradeKey, adCodes);
     }
 
     /**
@@ -221,7 +246,7 @@ public final class EmirStatefulValidator {
      */
     public EmirStatefulValidator withMicRegistry(MicRegistry m) {
         return new EmirStatefulValidator(history, leis, currencies, java.util.Objects.requireNonNull(m, "m"),
-                tradeKey);
+                tradeKey, adCodes);
     }
 
     /**
@@ -239,7 +264,26 @@ public final class EmirStatefulValidator {
      */
     public EmirStatefulValidator withTradeKey(Function<EmirRefitReport, String> key) {
         return new EmirStatefulValidator(history, leis, currencies, mics,
-                java.util.Objects.requireNonNull(key, "key"));
+                java.util.Objects.requireNonNull(key, "key"), adCodes);
+    }
+
+    /**
+     * A copy that reports the field 1.9 rules of sheet row 13 under the codes of column AD.
+     * Column AC numbers the last four conditions twice ("6 5.", "7 6.", "8 7.", "9 8."), and
+     * {@link EmirRefitReport#validate()} keeps the second number for 1009-05 to -07, as it has
+     * since 3.0. Column AD lists nine codes, so under its numbering the same checks are
+     * 1009-06 (1.4 and 1.9 differ), 1009-07 (72 alphanumerics) and 1009-08 (client code starts
+     * with 1.4). This copy rewrites those three message prefixes; nothing else changes.
+     *
+     * <p>Worked example (own test): a NEWT whose natural-person client code does not start
+     * with the LEI in 1.4 gives {@code EMIR-VR-1009-07: ...} by default and
+     * {@code EMIR-VR-1009-08: ...} from this copy.</p>
+     *
+     * @return a new validator
+     * @since 3.2.0
+     */
+    public EmirStatefulValidator withColumnAdCodes() {
+        return new EmirStatefulValidator(history, leis, currencies, mics, tradeKey, true);
     }
 
     /**
@@ -276,8 +320,12 @@ public final class EmirStatefulValidator {
     }
 
     private List<String> check(EmirRefitReport report, @Nullable Instant receivedByTr) {
-        List<String> out = new ArrayList<>(report.validate());
+        List<String> out = new ArrayList<>();
+        for (String e : report.validate()) {
+            out.add(adCodes ? relabel(e) : e);
+        }
         java.util.Map<String, String> f = report.fields();
+        checkDistinctIds(f, out);
         @Nullable EmirActionType action = action(f.getOrDefault("actionType", ""));
         @Nullable Instant reported = instant(f.getOrDefault("reportingTimestamp", ""));
         if (receivedByTr != null && reported != null) {
@@ -304,6 +352,32 @@ public final class EmirStatefulValidator {
             checkTradeKey(report, f, out);
         }
         return out;
+    }
+
+    private static String relabel(String e) {
+        for (java.util.Map.Entry<String, String> m : AD_CODES.entrySet()) {
+            if (e.startsWith(m.getKey())) {
+                return m.getValue() + e.substring(m.getKey().length());
+            }
+        }
+        return e;
+    }
+
+    /** EMIR-VR-2001-04, 2002-02, 2003-05 and 2004-04: fields 2.1 to 2.4 differ pairwise where given. */
+    private static void checkDistinctIds(java.util.Map<String, String> f, List<String> out) {
+        for (int i = 0; i < ID_KEYS.size(); i++) {
+            String a = f.getOrDefault(ID_KEYS.get(i), "");
+            if (a.isEmpty()) {
+                continue;
+            }
+            for (int j = 0; j < ID_KEYS.size(); j++) {
+                if (j != i && a.equals(f.getOrDefault(ID_KEYS.get(j), ""))) {
+                    out.add(ID_CODES.get(i) + ": field " + ID_NUMS.get(i) + " " + a + " equals field "
+                            + ID_NUMS.get(j));
+                    break;
+                }
+            }
+        }
     }
 
     private void currency(String code, String rule, String field, List<String> out) {

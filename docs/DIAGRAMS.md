@@ -20,7 +20,7 @@ flowchart LR
         WS["WebSocket live<br/>(feed)"]
         SBE_IN["Binary SBE stream<br/>(sbe)"]
         QFLT["QFLT tick files<br/>(data)"]
-        UNIV["Universe CSV<br/>(data.UniverseCsvLoader)"]
+        UNIV["Universe CSV<br/>(io.UniverseCsvLoader)"]
     end
 
     subgraph HOT["Hot lane: zero allocation"]
@@ -4692,25 +4692,28 @@ tags are never moved) is in [PUBLISHING.md](PUBLISHING.md).
 
 ## 113. The 4.0 module plan: what moves where
 
-Design only; 3.x ships none of these moves. Solid arrows are `requires`; the
-dashed arrows show where 3.x packages go. Details and dates are in
-[DESIGN_4.0.md](DESIGN_4.0.md).
+3.2.0 announces these moves and ships the replacement types; 4.0.0 makes them. Solid
+arrows are `requires`; dashed arrows show where 3.x packages go. The table was revised
+in 3.2.0: `microstructure`, `execution`, `persist`, `screener`, `ml` and the rest of
+`data` stay in the stable jar, because moving them would create a module cycle.
+Details and evidence are in [DESIGN_4.0.md](DESIGN_4.0.md); what to change is in
+[MIGRATION_4.0.md](MIGRATION_4.0.md).
 
 ```mermaid
 flowchart LR
     subgraph S23["quant-finance-library (stable, no java.net.http)"]
-        ST23["core, stats, pricing, rates, credit,<br/>risk, crb, volatility, hedging, fx,<br/>indicators, optimization, alpha, backtest"]
+        ST23["core, stats, pricing, rates, credit, risk, crb,<br/>volatility, hedging, fx, indicators, optimization,<br/>alpha, backtest, data, execution, microstructure,<br/>persist, screener, ml, ..."]
     end
     subgraph IO23["-io (incubating)"]
-        IOP23["data (incl. HttpBarFetcher),<br/>persist, report"]
+        IOP23["io (CsvBarLoader, HttpBarFetcher,<br/>UniverseCsvLoader), report"]
     end
     subgraph RS23["-research (incubating)"]
-        RSP23["screener, dsl, ml"]
+        RSP23["dsl"]
     end
     subgraph LL23["-lowlatency (reference)"]
-        LLP23["3.x lane packages<br/>+ execution, microstructure sims,<br/>rfq, marketdata.tick, AggregatedBook"]
+        LLP23["3.x lane packages<br/>+ rfq, marketdata.tick, backtest.tick,<br/>marketdata.AggregatedBook"]
     end
-    EX23["examples classifier<br/>cli, backtest.strategies"]
+    EX23["examples classifier<br/>cli, backtest.strategies, examples"]
     IO23 --> S23
     RS23 --> S23
     LL23 --> S23
@@ -4721,6 +4724,58 @@ flowchart LR
     C30 -.-> LLP23
     C30 -.-> EX23
 ```
+
+## 114. CAT event families (3.2)
+
+The 66 CAT event types the library knows (equity, simple option and multi-leg), grouped
+by `CatEventType.family()` (12 families). A family is a stage in an order's life inside the firm;
+the grouping comes from the columns of Tables 60/61 and changes no check.
+
+```mermaid
+flowchart LR
+    ORD_114["ORDER (new, accepted)<br/>MENO, MONO, MLNO, MOOA, MLOA"]
+    ORD_114 --> RT_114["ROUTE<br/>MEOR, MOOR, MOMR, MOCR,<br/>MLOR, MLMR, MLCR"]
+    ORD_114 --> IR_114["INTERNAL_ROUTE<br/>MOIR, MOIM, MOIC, MOIMR, MOICR,<br/>MLIR, MLIM, MLIC, MLIMR, MLICR"]
+    ORD_114 --> CO_114["CHILD_ORDER<br/>MOCO, MOCOM, MOCOC,<br/>MLCO, MLCOM, MLCOC"]
+    ORD_114 --> MOD_114["MODIFICATION<br/>MOOM, MOOMR, MOOJ, MLOM, MLOMR"]
+    ORD_114 --> CXL_114["CANCELLATION<br/>MOOC, MOOCR, MLOC, MLOCR"]
+    ORD_114 --> SUP_114["SUPPLEMENT<br/>MENOS, MONOS, MLOS, MOORS, MOMRS,<br/>MOCRS, MOOMS, MOOFS, MLQS"]
+    ORD_114 --> TR_114["TRADE<br/>MEOT, MOOT"]
+    TR_114 --> FF_114["FULFILLMENT<br/>MEOF, MOOF, MOFA"]
+    FF_114 --> AL_114["ALLOCATION<br/>MOPA, MOAA"]
+    ORD_114 --> EF_114["EFFECTIVE<br/>MOOE, MLOE"]
+    Q_114["QUOTE<br/>MENQ, MONQ, MORQ, MOQR, MOQC, MOQM,<br/>MLNQ, MLRQ, MLQR, MLQC, MLQM"]
+```
+
+Every type gets the schema gate (CAT-S01 to S09) and the record rules its table
+prints (CAT-R22 price, CAT-R23 choices). Linkage (CAT-LK01 to LK05) covers the 19
+types of 3.1 only. Recipes 480 to 483, LEARN 17m.
+
+## 115. The nightly reference-files job: fetch, pin, test (3.2)
+
+Three outside references are never committed: the ISDA CDS Standard Model test
+grids (copyright), the ESMA XSDs and, from 3.2, the official CAT IM schema (its site
+reserves redistribution). Each night the job fetches them from their public URLs and
+fails on any change it has not been told about.
+
+```mermaid
+flowchart TD
+    PIN_115["scripts/reference-files.sha256<br/>sha256, file name, public URL"] --> FET_115
+    FET_115["fetch-reference-files.sh<br/>curl each URL"] --> CHK_115{"sha256sum -c"}
+    CHK_115 -->|mismatch or download error| RED_115["job fails:<br/>a file was republished,<br/>review before re-pinning"]
+    CHK_115 -->|match| ENV_115["export QFL_ISDA_GRID_DIR, QFL_ESMA_*_XSD,<br/>QFL_CAT_SCHEMA,<br/>QFL_REQUIRE_REFERENCE_FILES=true"]
+    ENV_115 --> TST_115["IsdaGridVerificationTest, Auth016XmlTest,<br/>Auth016EnvelopeTest, StatusAdviceTest,<br/>EsmaXsdGoldenTest, IsdaGoldenSubsetTest,<br/>CatOfficialSchemaTest"]
+    DEL_115["cat-official-schema-deltas.txt<br/>accepted differences, each with a reason"] --> TST_115
+    TST_115 --> SK_115{"any test skipped?"}
+    SK_115 -->|yes| RED_115
+    SK_115 -->|no| OK_115["green"]
+```
+
+An entry in the pin file marked `UNPINNED` is downloaded, its hash printed and the
+file deleted, so its test fails until a maintainer has looked at the file and pinned
+it. Pull requests run committed stand-ins instead (`IsdaGoldenSubsetTest`,
+`EsmaXsdGoldenTest`); the CAT comparison has no stand-in, because nothing from the
+official file may be committed. LEARN 17n describes triaging a new CAT version.
 
 ## Where to go next
 

@@ -41,7 +41,7 @@ class CatRulesTest {
     @Test
     void catalogueIsCompleteOrderedAndHonest() {
         List<RuleProvenance> rules = CatEvent.rules();
-        assertEquals(21, rules.size());
+        assertEquals(23, rules.size());
         for (int i = 0; i < rules.size(); i++) {
             assertEquals(String.format("CAT-R%02d", i + 1), rules.get(i).id());
             assertFalse(rules.get(i).evidence() == Evidence.UNCONFIRMED, rules.get(i).id());

@@ -1,4 +1,4 @@
-package com.quantfinlib.data;
+package com.quantfinlib.io;
 
 import com.quantfinlib.core.BarSeries;
 import com.sun.net.httpserver.HttpServer;
