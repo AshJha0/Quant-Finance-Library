@@ -1,0 +1,5 @@
+# Accepted differences between the library's CAT schema transcription (v4.1.0 r14 tables,
+# cat-im-schema-subset-4.1.0r14.json) and the official CAT IM schema file the nightly job
+# fetches (CatOfficialSchemaTest). One key per line, as the test prints it (for example
+# MENO.fieldName.required), then a reason. Empty until the first nightly comparison has been
+# reviewed: an unreviewed difference fails the job.

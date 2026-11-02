@@ -41,8 +41,11 @@ import java.util.regex.Pattern;
  * types are checked by the rules of Table 3 whatever the file says; a {@code dataTypes}
  * entry can only narrow a length. {@link #rules()} lists every check with its citation.</p>
  *
- * <p>The official schema file is published on the CAT public website and is not bundled.
- * {@link #bundledSubset()} is the library's own transcription of the nineteen event tables
+ * <p>The official schema file is published on the CAT public website and is not bundled:
+ * the site's legal notice reserves copying and redistribution. The nightly CI job fetches it
+ * from its public URL with a pinned SHA-256 and compares this transcription with it
+ * (scripts/reference-files.sha256, {@code CatOfficialSchemaTest}).
+ * {@link #bundledSubset()} is the library's own transcription of the event tables
  * this package supports (Tables 16 to 139, see the resource's {@code _provenance}). Use
  * {@link #load(Path)} with the official file when you have it.</p>
  *
@@ -284,12 +287,18 @@ public final class CatSchema {
             }
         }
         Object v = top.get("schemaVersion");
+        if (v == null) {
+            // the official file published on the CAT website names it "version" (seen 2026-11-02)
+            v = top.get("version");
+        }
         return new CatSchema(v instanceof String s ? s : "", Collections.unmodifiableMap(events),
                 Collections.unmodifiableMap(choices), Collections.unmodifiableMap(maxLengths));
     }
 
     /**
-     * The schema version given in the file (section 6.1.5.1), or an empty string.
+     * The schema version given in the file (section 6.1.5.1), or an empty string. Read from
+     * {@code schemaVersion}, or since 3.2.0 from {@code version} when that is absent, which is
+     * the name the official file uses.
      *
      * @return the version
      */

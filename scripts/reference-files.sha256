@@ -2,7 +2,13 @@
 # They are not committed: the ISDA grids are copyright ISDA / IHS Markit, the ESMA
 # schemas are published by ESMA for download. A changed hash fails the nightly job
 # on purpose: look at what was republished before updating a line here.
+# The CAT IM schema (catnmsplan.com, Specifications > Industry Member) is reserved by the
+# site's legal notice (no copying or redistribution without the Participants' consent), so it
+# is fetched, never committed. UNPINNED means the hash has not been recorded yet: the fetch
+# script prints the hash it got and leaves QFL_CAT_SCHEMA unset, so CatOfficialSchemaTest
+# fails the job until a maintainer has looked at the file and pinned the line.
 # sha256  file  url
 6fae58e4aff4ebc95fea42db9b5c031d03dde1ce669cc560a5725f3386ef845c  USD_SOFR_20210426.zip  https://www.cdsmodel.com/assets/cds-model/rfr-test-grids/USD/USD_SOFR_20210426.zip
 4ecf867697c1a6b4e0966743727820bf8b81f9db60e0e4fe55c1c804f4b981da  USD_SOFR_20220621.zip  https://www.cdsmodel.com/assets/cds-model/rfr-test-grids/USD/USD_SOFR_20220621.zip
 50166c5d21c639d9f4819105c3ce6e0a5b8e417be2bf89a0af1b8d08ad03c005  esma65-8-2598_annex_2.zip  https://www.esma.europa.eu/sites/default/files/library/esma65-8-2598_annex_2_mifir_transaction_reporting_iso20022_xml_schemas.zip
+UNPINNED  cat-im-schema-4.2.0.json  https://www.catnmsplan.com/sites/default/files/2026-08/08.14.26-IM-4.2.0.json
