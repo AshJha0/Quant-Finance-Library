@@ -19,6 +19,9 @@ import com.quantfinlib.stats.SpecialFunctions;
  *
  * A p-value below the chosen significance (e.g. 0.05) rejects the model.
  *
+ * <p>{@link #trafficLight(int, int)} is the Basel supervisory zone test on the
+ * exception count (MAR32, MAR99).</p>
+ *
  * <p>{@link #acerbiSzekelyZ2} backtests expected shortfall, which FRTB makes
  * the capital measure and which an exception count alone cannot validate.</p>
  */
@@ -189,11 +192,119 @@ public final class VarBacktest {
         return count * Math.log(probability);
     }
 
-    /** χ²(1) survival function via the normal CDF. */
-    private static double chiSquare1PValue(double statistic) {
-        if (statistic <= 0) {
+    /**
+     * χ²(1) survival function, {@code P(chi2_1 > x) = erfc(sqrt(x / 2)) = 2 Phi(-sqrt(x))}.
+     * Taking the lower normal tail directly keeps relative accuracy far out:
+     * the form {@code 2 (1 - Phi(sqrt x))} used before 3.1 cancelled to 0 once
+     * the p-value fell below about 1e-16 (x above about 70), so a badly wrong
+     * model reported p = 0. The two forms differ by at most a few 1e-16
+     * absolute, so no accept/reject decision at a usual significance level changes.
+     */
+    static double chiSquare1PValue(double statistic) {
+        if (!(statistic > 0)) {
             return 1;
         }
-        return 2 * (1 - SpecialFunctions.normCdf(Math.sqrt(statistic)));
+        return 2 * SpecialFunctions.normCdf(-Math.sqrt(statistic));
+    }
+
+    /** Backtesting zones of the Basel internal models approach (MAR32.8). */
+    public enum Zone {
+        /** No sign of a problem with the model: cumulative probability below 95 %. */
+        GREEN,
+        /** Questions, not conclusive: from 95 % up to 99.99 %. */
+        AMBER,
+        /** Almost certainly a problem: 99.99 % or more. */
+        RED
+    }
+
+    /**
+     * Result of the Basel traffic-light test.
+     *
+     * @param zone                  green, amber or red
+     * @param exceptions            number of exceptions in the sample
+     * @param observations          sample size
+     * @param cumulativeProbability P(X &le; exceptions) for X ~ Binomial(observations, 1 - coverage)
+     * @param multiplier            the backtesting-dependent multiplier of MAR32.9 Table 1
+     *                              (1.50 to 2.00) for a 250-observation sample at 99 %
+     *                              coverage; NaN otherwise, where the Basel text defines
+     *                              the zones but no multipliers
+     */
+    public record TrafficLight(Zone zone, int exceptions, int observations, double cumulativeProbability,
+                               double multiplier) {
+    }
+
+    // MAR32.9 Table 1 (Basel Framework): multiplier by exceptions in 250
+    // observations, index 0..10 (10 = "10 or more").
+    private static final double[] MAR32_MULTIPLIER = {1.50, 1.50, 1.50, 1.50, 1.50,
+        1.70, 1.76, 1.83, 1.88, 1.92, 2.00};
+
+    /**
+     * Basel traffic light for 99 % VaR, the supervisory backtest of the bank-wide
+     * model (Basel Framework MAR32.8-32.9 and MAR99.17, Table 2).
+     *
+     * <p><b>Plain idea.</b> With a correct 99 % VaR the exception count in a year
+     * of 250 days is Binomial(250, 1 %), about 2.5 on average. A count you would
+     * reach or exceed with a correct model at most about 5 % of the time puts
+     * the model in the amber zone; about 0.01 % of the time, the red zone.</p>
+     *
+     * <p><b>Formal statement.</b> With {@code F} the Binomial(n, 1 - coverage)
+     * CDF, the zone is GREEN if {@code F(x) < 0.95}, AMBER if
+     * {@code 0.95 <= F(x) < 0.9999} and RED otherwise (MAR99.17: the amber zone
+     * begins where the cumulative probability equals or exceeds 95 %, the red
+     * zone where it equals or exceeds 99.99 %).</p>
+     *
+     * <p><b>Worked example.</b> n = 250: F(4) = 89.22 % and F(5) = 95.88 %, so
+     * 0-4 exceptions are green and 5 amber; F(9) = 99.97 % and F(10) = 99.99 %,
+     * so 10 or more are red. Those are the boundaries and cumulative
+     * probabilities of MAR99 Table 2 (tested). Seven exceptions give AMBER with
+     * multiplier 1.83.</p>
+     *
+     * @param exceptions   exceptions observed, 0 &le; exceptions &le; observations
+     * @param observations sample size, &gt; 0 (250 for the regulatory test)
+     * @return zone, cumulative probability and, for 250 observations, the multiplier
+     */
+    public static TrafficLight trafficLight(int exceptions, int observations) {
+        return trafficLight(exceptions, observations, 0.99);
+    }
+
+    /**
+     * Traffic light at another VaR coverage, with the same 95 % / 99.99 % zone
+     * boundaries (the Basel text fixes 99 %; other levels are an extension for
+     * internal desk monitoring). The multiplier is set only for 250
+     * observations at 99 % coverage.
+     *
+     * @param exceptions   exceptions observed, 0 &le; exceptions &le; observations
+     * @param observations sample size, &gt; 0
+     * @param coverage     VaR confidence level in (0, 1), e.g. 0.99
+     * @return zone and cumulative probability
+     */
+    public static TrafficLight trafficLight(int exceptions, int observations, double coverage) {
+        if (observations <= 0 || exceptions < 0 || exceptions > observations) {
+            throw new IllegalArgumentException("need 0 <= exceptions <= observations and observations > 0, got "
+                    + exceptions + "/" + observations);
+        }
+        if (!(coverage > 0 && coverage < 1)) {
+            throw new IllegalArgumentException("coverage must be in (0,1), got " + coverage);
+        }
+        double cdf = binomialCdf(exceptions, observations, 1 - coverage);
+        Zone zone = cdf < 0.95 ? Zone.GREEN : cdf < 0.9999 ? Zone.AMBER : Zone.RED;
+        double multiplier = observations == 250 && coverage == 0.99
+                ? MAR32_MULTIPLIER[Math.min(exceptions, 10)] : Double.NaN;
+        return new TrafficLight(zone, exceptions, observations, cdf, multiplier);
+    }
+
+    /** P(X &le; k) for X ~ Binomial(n, p), from the pmf recursion in logs. */
+    static double binomialCdf(int k, int n, double p) {
+        if (k >= n) {
+            return 1;
+        }
+        double logRatio = Math.log(p) - Math.log1p(-p);
+        double logPmf = n * Math.log1p(-p);
+        double sum = 0;
+        for (int i = 0; i <= k; i++) {
+            sum += Math.exp(logPmf);
+            logPmf += Math.log((double) (n - i) / (i + 1)) + logRatio;
+        }
+        return Math.min(1, sum);
     }
 }

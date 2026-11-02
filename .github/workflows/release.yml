@@ -1,20 +1,93 @@
 name: Release
 
+# A release is cut by pushing a tag v<version>. Order of jobs:
+#   tag-guard  refuses a tag that was used before (force-pushed, already released,
+#              or deleted and pushed again at another commit), so a failed release
+#              becomes a patch release, never a moved tag;
+#   ci         the whole CI workflow (ci.yml) on the tagged commit;
+#   docs       the same javadoc build the Docs workflow publishes;
+#   release    only when all three pass: build, attach jars, then dispatch Docs on
+#              main so the site picks up the new tag whichever was pushed first,
+#              the tag or the merge (docs/PUBLISHING.md, release checklist).
+
 on:
   push:
     tags: ['v*']
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
+  tag-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Refuse a re-pointed or reused tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FORCED: ${{ github.event.forced }}
+        run: |
+          set -euo pipefail
+          tag="$GITHUB_REF_NAME"
+          if [ "$FORCED" = "true" ]; then
+            echo "::error::Tag $tag was force-pushed. Tags are immutable: cut a patch release instead."
+            exit 1
+          fi
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::A release for $tag already exists. Tags are immutable: cut a patch release instead."
+            exit 1
+          fi
+          # A tag deleted and pushed again at another commit is not "forced";
+          # an earlier Release run for the same tag name at another SHA gives it away.
+          other=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow release.yml --limit 200 \
+                    --json headBranch,headSha,databaseId \
+                    -q ".[] | select(.headBranch == \"$tag\" and .headSha != \"$GITHUB_SHA\") | .databaseId" | head -n 1)
+          if [ -n "$other" ]; then
+            echo "::error::Tag $tag was used before at another commit (Release run $other). Cut a patch release instead."
+            exit 1
+          fi
+          echo "tag $tag at $GITHUB_SHA is new"
+
+  ci:
+    needs: tag-guard
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  docs:
+    needs: tag-guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Generate javadoc (as the Docs workflow does)
+        run: ./mvnw -B --no-transfer-progress -DskipTests -Djacoco.skip=true package
+      - name: Check both javadoc trees exist
+        run: |
+          for m in core lowlatency; do
+            test -f "$m/target/site/apidocs/index.html" || test -f "$m/target/reports/apidocs/index.html" \
+              || { echo "::error::no javadoc for $m"; exit 1; }
+          done
+
   release:
+    needs: [tag-guard, ci, docs]
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: write
+      actions: write
     steps:
       - uses: actions/checkout@v7
       - name: Set up JDK 25
@@ -42,3 +115,7 @@ jobs:
             core/target/quant-finance-library-*.jar             lowlatency/target/quant-finance-library-lowlatency-*.jar \
             --title "quantfinlib $GITHUB_REF_NAME" \
             --generate-notes
+      - name: Republish the site from main with the new tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run docs.yml --repo "$GITHUB_REPOSITORY" --ref main
