@@ -5,7 +5,6 @@ import com.quantfinlib.credit.IsdaCdsModel.Conventions;
 import com.quantfinlib.credit.IsdaRateCurve.Swap;
 import com.quantfinlib.rates.BusinessCalendar;
 import com.quantfinlib.rates.HolidayCalendars;
-import com.quantfinlib.rates.HolidayCalendars.Market;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
@@ -16,65 +15,73 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
- * The ISDA grid check that runs on every pull request. The full ISDA RFR grids
- * are copyright and are fetched only by the nightly job; this test reads a small
- * committed subset ({@code isda-golden-subset.csv}): 24 contracts (12 per grid),
- * the 19 swap rates of each grid's curve, and the clean upfront and cash
- * settlement amount that this library computed for them. The SHA-256 of each
- * grid zip is pinned in {@code scripts/reference-files.sha256}.
+ * The ISDA CDS model check that runs on every pull request. The ISDA RFR test
+ * grids are copyright and nothing from them is committed: the nightly job
+ * fetches them (SHA-256 pinned in {@code scripts/reference-files.sha256}) and
+ * {@link IsdaGridVerificationTest} ties the model to ISDA's expected values.
  *
- * <p>Evidence: on pull requests this is self-consistency (today's code reproduces
- * the committed outputs). {@link #goldenRowsMatchIsdaGrid()} runs nightly against
- * the fetched grid and ties every committed output to the ISDA expected value of
- * the same row, which makes the subset externally anchored.</p>
+ * <p>This test is a regression set on inputs we made up ourselves: two
+ * invented swap curves, invented trade dates, and a sweep of maturities,
+ * coupons, quoted spreads and recoveries. The committed file
+ * {@code isda-regression-set.csv} holds this library's clean upfront and cash
+ * settlement for each contract, computed with the conventions of the grid test
+ * (half-day accrual on; weekends-only and New York calendars). Evidence class:
+ * self-consistency. A change in the model's numbers fails here on the pull
+ * request; the nightly grid test says whether the new numbers are right.</p>
  *
- * <p>Regenerate (needs the grids, see {@link IsdaGridVerificationTest}):
- * {@code ./mvnw -pl core test -Dtest=IsdaGoldenSubsetTest#writeGolden
- * -Dqfl.isda.writeGolden=<absolute path of isda-golden-subset.csv>}.</p>
+ * <p>Regenerate (no grids needed) only after a deliberate change that the
+ * nightly grid test accepts: {@code ./mvnw -pl core test
+ * -Dtest=IsdaGoldenSubsetTest#writeGolden -Dqfl.isda.writeGolden=<absolute path
+ * of isda-regression-set.csv>}.</p>
  */
 class IsdaGoldenSubsetTest {
 
-    static final String RESOURCE = "isda-golden-subset.csv";
-    static final String[] STEMS = {"USD_SOFR_20210426", "USD_SOFR_20220621"};
-    static final int STRIDE = 597;
-    static final int PER_GRID = 12;
+    static final String RESOURCE = "isda-regression-set.csv";
 
-    record Golden(String stem, LocalDate trade, LocalDate maturity, double couponBp, double quoteBp,
-                  double recovery, double upfront, double cashSettle) {
+    /** One invented market: trade date, calendar and swap curve (our rates, not ISDA's). */
+    record Scenario(String name, LocalDate trade, BusinessCalendar cal, List<Swap> swaps) {
     }
 
-    record Subset(List<Golden> rows, Map<String, List<Swap>> curves) {
+    static List<Scenario> scenarios() {
+        String[] tenors = {"1M", "3M", "6M", "1Y", "2Y", "3Y", "5Y", "7Y", "10Y", "15Y", "20Y", "30Y"};
+        double[] upward = {0.0300, 0.0310, 0.0320, 0.0330, 0.0340, 0.0350, 0.0365, 0.0375, 0.0385, 0.0395,
+            0.0400, 0.0405};
+        double[] inverted = {0.0520, 0.0515, 0.0505, 0.0490, 0.0460, 0.0440, 0.0420, 0.0410, 0.0405, 0.0405,
+            0.0400, 0.0395};
+        List<Swap> up = new ArrayList<>();
+        List<Swap> inv = new ArrayList<>();
+        for (int i = 0; i < tenors.length; i++) {
+            up.add(new Swap(tenors[i], upward[i]));
+            inv.add(new Swap(tenors[i], inverted[i]));
+        }
+        return List.of(
+                new Scenario("UPWARD_WEEKENDS", LocalDate.of(2025, 3, 12), BusinessCalendar.weekendsOnly(), up),
+                new Scenario("INVERTED_NY", LocalDate.of(2024, 7, 3),
+                        HolidayCalendars.calendar(HolidayCalendars.Market.NEW_YORK_FED, 2020, 2060), inv));
     }
 
-    static BusinessCalendar calendar(String stem) {
-        return stem.endsWith("20220621")
-                ? HolidayCalendars.calendar(Market.NEW_YORK_FED, 2020, 2045)
-                : BusinessCalendar.weekendsOnly();
+    record Case(String scenario, LocalDate maturity, double couponBp, double quoteBp, double recovery,
+                double upfront, double cashSettle) {
     }
 
-    /** Our outputs for one contract: {clean upfront, cash settlement on 10mm}. */
-    static double[] compute(LocalDate trade, LocalDate maturity, double coupon, double quote, double recovery,
-                            IsdaCurve disc, BusinessCalendar cal) {
-        Contract c = IsdaGridVerificationTest.contract(trade, maturity, coupon, recovery, cal);
-        Conventions conv = new Conventions(cal, true);
-        double u = IsdaCdsModel.quotedSpreadToUpfront(c, quote, disc, conv);
-        double accrued = IsdaCdsModel.accruedYearFraction(c) * coupon;
+    static double[] compute(Scenario s, LocalDate maturity, double couponBp, double quoteBp, double recovery,
+                            IsdaCurve disc) {
+        Contract c = IsdaGridVerificationTest.contract(s.trade(), maturity, couponBp * 1e-4, recovery, s.cal());
+        Conventions conv = new Conventions(s.cal(), true);
+        double u = IsdaCdsModel.quotedSpreadToUpfront(c, quoteBp * 1e-4, disc, conv);
+        double accrued = IsdaCdsModel.accruedYearFraction(c) * couponBp * 1e-4;
         return new double[] {u, IsdaGridVerificationTest.NOTIONAL * (u - accrued)};
     }
 
-    static Subset load() throws IOException {
-        List<Golden> rows = new ArrayList<>();
-        Map<String, List<Swap>> curves = new LinkedHashMap<>();
+    static List<Case> load() throws IOException {
+        List<Case> out = new ArrayList<>();
         try (InputStream in = IsdaGoldenSubsetTest.class.getResourceAsStream(RESOURCE)) {
             assertNotNull(in, RESOURCE);
             for (String raw : new String(in.readAllBytes(), StandardCharsets.UTF_8).split("\n")) {
@@ -83,90 +90,52 @@ class IsdaGoldenSubsetTest {
                     continue;
                 }
                 String[] f = line.split(",");
-                if (f[0].equals("C")) {
-                    curves.computeIfAbsent(f[1], k -> new ArrayList<>())
-                            .add(new Swap(f[2], Double.parseDouble(f[3])));
-                } else if (f[0].equals("G")) {
-                    rows.add(new Golden(f[1], LocalDate.parse(f[2]), LocalDate.parse(f[3]),
-                            Double.parseDouble(f[4]), Double.parseDouble(f[5]), Double.parseDouble(f[6]),
-                            Double.parseDouble(f[7]), Double.parseDouble(f[8])));
+                out.add(new Case(f[0], LocalDate.parse(f[1]), Double.parseDouble(f[2]), Double.parseDouble(f[3]),
+                        Double.parseDouble(f[4]), Double.parseDouble(f[5]), Double.parseDouble(f[6])));
+            }
+        }
+        return out;
+    }
+
+    @Test
+    void reproducesPinnedOutputs() throws IOException {
+        List<Case> cases = load();
+        assertEquals(48, cases.size());
+        for (Scenario s : scenarios()) {
+            IsdaCurve disc = IsdaRateCurve.bootstrapSwaps(s.trade(), s.swaps(), s.cal());
+            for (Case k : cases) {
+                if (k.scenario().equals(s.name())) {
+                    double[] out = compute(s, k.maturity(), k.couponBp(), k.quoteBp(), k.recovery(), disc);
+                    assertEquals(k.upfront(), out[0], 1e-13, k.toString());
+                    assertEquals(k.cashSettle(), out[1], 1e-6, k.toString());
                 }
             }
         }
-        return new Subset(rows, curves);
     }
 
-    @Test
-    void reproducesCommittedOutputs() throws IOException {
-        Subset s = load();
-        assertEquals(STEMS.length * PER_GRID, s.rows().size());
-        Map<String, IsdaCurve> disc = new LinkedHashMap<>();
-        for (Golden g : s.rows()) {
-            IsdaCurve d = disc.computeIfAbsent(g.stem(),
-                    k -> IsdaRateCurve.bootstrapSwaps(g.trade(), s.curves().get(k), calendar(k)));
-            double[] out = compute(g.trade(), g.maturity(), g.couponBp() * 1e-4, g.quoteBp() * 1e-4,
-                    g.recovery(), d, calendar(g.stem()));
-            assertEquals(g.upfront(), out[0], 1e-13, g.toString());
-            assertEquals(g.cashSettle(), out[1], 1e-6, g.toString());
-        }
-    }
-
-    private static IsdaGridVerificationTest.Row find(List<IsdaGridVerificationTest.Row> grid, Golden g) {
-        return grid.stream()
-                .filter(x -> x.trade().equals(g.trade()) && x.maturity().equals(g.maturity())
-                        && Math.abs(x.coupon() - g.couponBp() * 1e-4) < 1e-12
-                        && Math.abs(x.quote() - g.quoteBp() * 1e-4) < 1e-12
-                        && Math.abs(x.recovery() - g.recovery()) < 1e-12)
-                .findFirst().orElseThrow(() -> new AssertionError("not in grid: " + g));
-    }
-
-    /** Nightly: every committed output equals the ISDA expected value of the same grid row. */
-    @Test
-    void goldenRowsMatchIsdaGrid() throws IOException {
-        Path dir = IsdaGridVerificationTest.gridDir();
-        Subset s = load();
-        for (String stem : STEMS) {
-            List<IsdaGridVerificationTest.Row> grid =
-                    IsdaGridVerificationTest.readGrid(dir.resolve(stem + "_grid.csv"));
-            assertEquals(IsdaGridVerificationTest.readCurve(dir.resolve(stem + "_curve.csv")),
-                    s.curves().get(stem), stem + " curve");
-            List<Golden> mine = s.rows().stream().filter(g -> g.stem().equals(stem)).toList();
-            assertFalse(mine.isEmpty(), stem);
-            for (Golden g : mine) {
-                IsdaGridVerificationTest.Row r = find(grid, g);
-                assertEquals(r.cleanUpfront(), g.upfront(), 1e-12, g.toString());
-                assertEquals(r.cashSettle(), g.cashSettle(), 1e-5, g.toString());
-            }
-        }
-    }
-
-    /** Writes the subset; runs only with -Dqfl.isda.writeGolden=FILE and the grids present. */
+    /** Writes the regression set; runs only with -Dqfl.isda.writeGolden=FILE. */
     @Test
     void writeGolden() throws IOException {
         String target = System.getProperty("qfl.isda.writeGolden");
         Assumptions.assumeTrue(target != null, "qfl.isda.writeGolden not set");
-        Path dir = IsdaGridVerificationTest.gridDir();
         StringBuilder sb = new StringBuilder();
-        sb.append("# ISDA CDS Standard Model RFR test grids (cdsmodel.com), 12-row subset per grid.\n")
-                .append("# Contract inputs and curve rates from the grids; upfront and cashSettle are this\n")
-                .append("# library's outputs. Grid zips and their SHA-256: scripts/reference-files.sha256.\n")
-                .append("# G,stem,trade,maturity,couponBp,quoteBp,recovery,upfront,cashSettle\n")
-                .append("# C,stem,tenor,rate\n");
-        for (String stem : STEMS) {
-            List<IsdaGridVerificationTest.Row> grid =
-                    IsdaGridVerificationTest.readGrid(dir.resolve(stem + "_grid.csv"));
-            List<Swap> curve = IsdaGridVerificationTest.readCurve(dir.resolve(stem + "_curve.csv"));
-            BusinessCalendar cal = calendar(stem);
-            IsdaCurve disc = IsdaRateCurve.bootstrapSwaps(grid.get(0).trade(), curve, cal);
-            for (Swap w : curve) {
-                sb.append("C,").append(stem).append(',').append(w.tenor()).append(',').append(w.rate()).append('\n');
-            }
-            for (int i = 0; i < PER_GRID; i++) {
-                IsdaGridVerificationTest.Row r = grid.get(i * STRIDE);
-                double[] out = compute(r.trade(), r.maturity(), r.coupon(), r.quote(), r.recovery(), disc, cal);
-                sb.append(String.format(Locale.ROOT, "G,%s,%s,%s,%s,%s,%s,%s,%s%n", stem, r.trade(),
-                        r.maturity(), Math.round(r.coupon() * 1e10) / 1e6, Math.round(r.quote() * 1e10) / 1e6,
-                        r.recovery(), out[0], out[1]));
+        sb.append("# Invented contracts and curves (IsdaGoldenSubsetTest.scenarios); nothing from the ISDA grids.\n")
+                .append("# upfront and cashSettle (10mm notional) are this library's outputs.\n")
+                .append("# scenario,maturity,couponBp,quoteBp,recovery,upfront,cashSettle\n");
+        int[] years = {1, 3, 5, 10};
+        double[][] couponQuote = {{100, 35}, {100, 240}, {500, 180}};
+        double[] recoveries = {0.25, 0.40};
+        for (Scenario s : scenarios()) {
+            IsdaCurve disc = IsdaRateCurve.bootstrapSwaps(s.trade(), s.swaps(), s.cal());
+            for (int y : years) {
+                LocalDate maturity = LocalDate.of(s.trade().getYear() + y, 12, 20);
+                for (double[] cq : couponQuote) {
+                    for (double r : recoveries) {
+                        double[] out = compute(s, maturity, cq[0], cq[1], r, disc);
+                        sb.append(String.format(Locale.ROOT, "%s,%s,%s,%s,%s,%s,%s%n", s.name(), maturity,
+                                cq[0], cq[1], r, out[0], out[1]));
+                    }
+                }
             }
         }
         Files.writeString(Path.of(target), sb.toString().replace("\r\n", "\n"));
