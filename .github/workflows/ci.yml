@@ -61,6 +61,8 @@ jobs:
           name: coverage-report
           path: |
             core/target/site/jacoco
+            io/target/site/jacoco
+            research/target/site/jacoco
             lowlatency/target/site/jacoco
           if-no-files-found: ignore
 

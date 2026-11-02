@@ -9,13 +9,10 @@ import com.quantfinlib.crb.CrbAutoHedger;
 import com.quantfinlib.crb.InternalizationEngine;
 import com.quantfinlib.execution.HftSor;
 import com.quantfinlib.execution.Ucb1Selector;
-import com.quantfinlib.fx.AggregatedBook;
 import com.quantfinlib.fx.CurrencyPair;
 import com.quantfinlib.fx.FixingRisk;
 import com.quantfinlib.fx.FxVolSurface;
 import com.quantfinlib.fx.SwapPointsCurve;
-import com.quantfinlib.marketdata.tick.TickFileReader;
-import com.quantfinlib.marketdata.tick.TickFileWriter;
 import com.quantfinlib.microstructure.CircuitBreakers;
 import com.quantfinlib.microstructure.DayTypeProfiles;
 import com.quantfinlib.microstructure.EwmaCovariance;
@@ -33,14 +30,7 @@ import com.quantfinlib.risk.GaussianCopula;
 import com.quantfinlib.stats.Numerics;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
-import java.io.BufferedOutputStream;
-import java.io.DataOutputStream;
-import java.lang.management.ManagementFactory;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.SplittableRandom;
 
@@ -239,19 +229,6 @@ class AllocationClaimsTest {
     }
 
     @Test
-    @SuppressWarnings("removal")
-    void aggregatedBookIsAllocationFree() throws Exception {
-        AggregatedBook book = new AggregatedBook(4);
-        assertAllocationFree("AggregatedBook (zero-alloc multi-venue BBO)", i -> {
-            int v = i & 3;
-            double px = 1.0800 + (i & 15) * 1e-5;
-            book.onQuote(v, px, 1e6, px + 2e-5, 2e6);
-            return book.bestBid() + book.bestAsk() + book.mid() + book.spread() + book.bestBidVenue()
-                    + book.totalBidSizeAtBest(1e-9) + book.totalAskSizeAtBest(1e-9) + (book.isCrossed() ? 1 : 0);
-        });
-    }
-
-    @Test
     void swapPointsCurveLookupsAreAllocationFree() throws Exception {
         LocalDate trade = LocalDate.of(2026, 3, 2);
         SwapPointsCurve c = SwapPointsCurve.builder(CurrencyPair.of("EURUSD"), trade, 1.0850)
@@ -267,79 +244,6 @@ class AllocationClaimsTest {
             LocalDate d = dates[i & 127];
             return c.forwardPoints(d) + c.outright(d) + c.impliedCarry(d);
         });
-    }
-
-    // ------------------------------------------------------------------
-    // marketdata.tick
-    // ------------------------------------------------------------------
-
-    private static long threadBytes() {
-        return ((com.sun.management.ThreadMXBean) ManagementFactory.getThreadMXBean())
-                .getCurrentThreadAllocatedBytes();
-    }
-
-    private static void writeV1(Path f, int ticks) throws Exception {
-        try (DataOutputStream out = new DataOutputStream(new BufferedOutputStream(Files.newOutputStream(f)))) {
-            out.writeInt(0x51464C54 /* "QFLT", TickFileWriter.MAGIC */);
-            out.writeByte(1);
-            out.writeByte(1 /* TYPE_SYMBOL */);
-            out.writeInt(0);
-            byte[] name = "BTC".getBytes(StandardCharsets.UTF_8);
-            out.writeShort(name.length);
-            out.write(name);
-            for (int i = 0; i < ticks; i++) {
-                out.writeByte(0 /* TYPE_TICK */);
-                out.writeInt(0);
-                out.writeDouble(100 + (i & 63));
-                out.writeDouble(1);
-                out.writeLong(i);
-            }
-        }
-    }
-
-    /**
-     * "Allocation-free per tick" is a per-tick claim on a call that opens a
-     * stream (a fixed cost), so the test replays a small and a large v1 file
-     * and requires the extra ticks to add essentially nothing.
-     */
-    @Test
-    void tickFileV1ReplayIsAllocationFreePerTick(@TempDir Path dir) throws Exception {
-        AllocationProbe.bestBatchBytes(i -> 0);   // enables thread allocation counting (or skips)
-        Path small = dir.resolve("small.qflt");
-        Path large = dir.resolve("large.qflt");
-        int extra = 200_000;
-        writeV1(small, 1_000);
-        writeV1(large, 1_000 + extra);
-        double[] acc = new double[1];
-        TickFileReader.ReplayHandler h = (id, price, size, ts) -> acc[0] += price;
-        for (int w = 0; w < 20; w++) {
-            TickFileReader.replay(small, h);
-            TickFileReader.replay(large, h);
-        }
-        long best = Long.MAX_VALUE;
-        for (int a = 0; a < 5; a++) {
-            long b0 = threadBytes();
-            TickFileReader.replay(small, h);
-            long b1 = threadBytes();
-            long ticks = TickFileReader.replay(large, h);
-            long b2 = threadBytes();
-            assertEquals(1_000 + extra, ticks);
-            best = Math.min(best, (b2 - b1) - (b1 - b0));
-        }
-        assertTrue(best <= AllocationProbe.TOLERANCE_BYTES,
-                "TickFileReader v1 replay per tick: " + extra + " extra ticks allocated " + best + " bytes");
-    }
-
-    @Test
-    void tickFileWriterSteadyStreamIsAllocationFree(@TempDir Path dir) throws Exception {
-        try (TickFileWriter w = new TickFileWriter(dir.resolve("w.qflt"))) {
-            w.defineSymbol(0, "BTC");
-            // 29 bytes per tick: tens of thousands of calls cross many block flushes
-            assertAllocationFree("TickFileWriter steady stream (per block)", i -> {
-                w.write(0, 100 + (i & 63), 1, i);
-                return w.tickCount();
-            });
-        }
     }
 
     // ------------------------------------------------------------------

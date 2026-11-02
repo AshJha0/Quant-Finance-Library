@@ -35,10 +35,11 @@ default fills at bar t+1's open. `withFillPolicy(FillPolicy.NEXT_CLOSE)` or
 `FillPolicy.CLOSE` (the v1 behaviour, which has look-ahead) are explicit
 options.
 
-Or without writing code at all:
+Or without writing code at all (`QFL_CP` is the class path of the four modules,
+see GETTING_STARTED.md; `cli` is in the examples jar since 4.0):
 
 ```bash
-java -jar core/target/quant-finance-library-*.jar backtest --csv bars.csv --symbol EURUSD \
+java -cp "$QFL_CP" com.quantfinlib.cli.Main backtest --csv bars.csv --symbol EURUSD \
      --strategy sma --fast 20 --slow 50 --out report.html
 ```
 
@@ -1492,21 +1493,21 @@ The `cli.Main` entry point runs backtests, walk-forward validation and market re
 
 ```bash
 # Backtest: strategies sma|ema|rsi|macd|bollinger, HTML tear sheet optional.
-java -jar core/target/quant-finance-library-*.jar backtest \
+java -cp "$QFL_CP" com.quantfinlib.cli.Main backtest \
      --csv bars.csv --symbol EURUSD \
      --strategy bollinger --period 20 --k 2.0 \
      --capital 250000 --out bt.html
 
 # RSI variant has its own knobs:
-java -jar core/target/quant-finance-library-*.jar backtest --csv bars.csv --symbol EURUSD \
+java -cp "$QFL_CP" com.quantfinlib.cli.Main backtest --csv bars.csv --symbol EURUSD \
      --strategy rsi --period 14 --oversold 30 --overbought 70
 
 # Walk-forward: re-optimize an SMA grid per train window, score unseen bars only.
-java -jar core/target/quant-finance-library-*.jar walkforward --csv bars.csv --symbol EURUSD \
+java -cp "$QFL_CP" com.quantfinlib.cli.Main walkforward --csv bars.csv --symbol EURUSD \
      --train 252 --test 63 --fast 5,10,20 --slow 40,60 --out wf.html
 
 # Market snapshot report: technicals, price chart, drawdown.
-java -jar core/target/quant-finance-library-*.jar report --csv bars.csv --symbol EURUSD \
+java -cp "$QFL_CP" com.quantfinlib.cli.Main report --csv bars.csv --symbol EURUSD \
      --out market.html
 ```
 
@@ -3730,7 +3731,7 @@ The missing middle between the curve (bootstrapped from par swaps) and
 actual position. Since 3.1 the leg model does this on dated schedules:
 `FixedLeg` and an `OvernightLeg` (or `TermRateLeg`) under a `LegConvention`,
 paired in a `VanillaSwap`. The old `SwapPricer` (annual tenors on a
-`YieldCurve`) is deprecated; see `docs/MIGRATION_3.1.md`.
+`YieldCurve`) was deprecated in 3.1 and removed in 4.0; see `docs/MIGRATION_3.1.md`.
 
 ```java
 static DiscountCurve flat(LocalDate val, double z) {    // continuously-compounded zero z
@@ -8895,10 +8896,10 @@ bars, and its `run(String[])` entry returns an exit code instead of calling
 `System.exit`: so a nightly job can assert on it.
 
 ```bash
-java -jar core/target/quant-finance-library-*.jar backtest --csv bars.csv --symbol EURUSD \
+java -cp "$QFL_CP" com.quantfinlib.cli.Main backtest --csv bars.csv --symbol EURUSD \
      --strategy bollinger --period 20 --k 2.0 --capital 250000 --out bt.html
 
-java -jar core/target/quant-finance-library-*.jar walkforward --csv bars.csv --symbol EURUSD \
+java -cp "$QFL_CP" com.quantfinlib.cli.Main walkforward --csv bars.csv --symbol EURUSD \
      --train 252 --test 63 --fast 5,10,20 --slow 40,60 --out wf.html
 ```
 

@@ -70,7 +70,7 @@ decomposition of equity and FX products onto named factors
 | Delta, gamma, vega, theta, rho | `pricing.BlackScholes.greeks` |
 | Vanna, volga, cross-gamma | `pricing.HigherOrderGreeks` |
 | Per-tick Greeks | `pricing.IncrementalGreeks` (delta-gamma Taylor update with theta between re-anchors) |
-| Duration, convexity, DV01 | `rates.BondPricer`, `rates.SwapPricer` |
+| Duration, convexity, DV01 | `rates.BondPricer`, `rates.VanillaSwap`, `rates.MultiCurveRisk` |
 | Key-rate durations | `rates.KeyRateDurations` (slices sum to the parallel DV01) |
 | Book scenario grids and P&L explain | `hedging.OptionsBook` (delta, gamma, vega, vanna, volga, theta) |
 

@@ -3,17 +3,23 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.quantfinlib</groupId>
     <artifactId>quant-finance-library-parent</artifactId>
-    <version>3.1.0</version>
+    <version>4.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
     <name>Quant-Finance-Library (parent)</name>
     <description>Pure-JDK quantitative finance library: pricing, market risk, alpha research and backtesting, plus a reference low-latency trading lane.</description>
-    <!-- Two artifacts since 3.0: the stable tier (core/, artifactId
+    <!-- Four artifacts since 4.0: core, io (quant-finance-library-io,
+         module com.quantfinlib.io, incubating), research
+         (quant-finance-library-research, module com.quantfinlib.research,
+         incubating) and lowlatency. docs/DESIGN_4.0.md. Before 4.0, two
+         artifacts: the stable tier (core/, artifactId
          quant-finance-library, module com.quantfinlib) and the reference-tier
          trading lane (lowlatency/, artifactId quant-finance-library-lowlatency,
          module com.quantfinlib.lowlatency). docs/STABILITY.md: the tiers are
          the modules. -->
     <modules>
         <module>core</module>
+        <module>io</module>
+        <module>research</module>
         <module>lowlatency</module>
     </modules>
     <url>https://github.com/AshJha0/Quant-Finance-Library</url>

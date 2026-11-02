@@ -24,7 +24,7 @@ connectivity stack; see [docs/STABILITY.md](docs/STABILITY.md).
   across files and a schema check, allocation-regression tests for every
   "allocation-free" claim, and nightly reference, fuzz and mutation checks. The
   bundled CAT schema is the library's own transcription of the PDF
-  specification, not the official CAT schema file. `SwapPricer` is deprecated, not removed.
+  specification, not the official CAT schema file.
   [docs/MIGRATION_3.1.md](docs/MIGRATION_3.1.md) and [CHANGELOG.md](CHANGELOG.md)
   list every change.
 - At 3.1.0 the full suite (`./mvnw verify -Pfull`) runs 2,164 tests (core 1,464,
@@ -82,13 +82,19 @@ connectivity stack; see [docs/STABILITY.md](docs/STABILITY.md).
 
 ### JitPack
 
-Since 3.0 the library is two artifacts. Research, pricing and risk users need only
-the first; users of the trading lane depend on the second, which pulls in the first.
+Since 4.0 the library is four artifacts. Pricing, rates, credit and risk users need
+only the first. Each of the others requires the first transitively.
 
-| Artifact | JPMS module | What it holds |
-|---|---|---|
-| `quant-finance-library` | `com.quantfinlib` | the stable tier: pricing, rates, credit, risk, research, backtesting, execution analytics |
-| `quant-finance-library-lowlatency` | `com.quantfinlib.lowlatency` | the reference trading lane: `trading`, `marketdata`, `orderbook`, `fix`, `sbe`, `feed`, `entitlements`, `regreporting`, `util` |
+| Artifact | JPMS module | Tier | What it holds |
+|---|---|---|---|
+| `quant-finance-library` | `com.quantfinlib` | stable | pricing, rates, credit, risk, alpha research, backtesting, execution analytics; requires only `java.base` |
+| `quant-finance-library-io` | `com.quantfinlib.io` | incubating | `io` (CSV bars and universes, CSV over HTTP) and `report` |
+| `quant-finance-library-research` | `com.quantfinlib.research` | incubating | `dsl`, the rule-based strategy builder |
+| `quant-finance-library-lowlatency` | `com.quantfinlib.lowlatency` | reference | the trading lane: `trading`, `marketdata` (with `marketdata.tick` and `AggregatedBook`), `orderbook`, `fix`, `sbe`, `feed`, `entitlements`, `regreporting`, `rfq`, `backtest.tick`, `util` |
+
+The lowlatency artifact also has an `examples` classifier jar: the command line
+(`cli`), the sample strategies (`backtest.strategies`) and the demos. It is not a module;
+put it on the class path with the other four jars.
 
 ```xml
 <repositories>
@@ -102,30 +108,54 @@ the first; users of the trading lane depend on the second, which pulls in the fi
 <dependency>
   <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
   <artifactId>quant-finance-library</artifactId>
-  <version>v3.1.0</version>
+  <version>v4.0.0</version>
 </dependency>
 
-<!-- or the trading lane, which brings the stable tier with it -->
+<!-- CSV and HTTP loaders, reports -->
+<dependency>
+  <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
+  <artifactId>quant-finance-library-io</artifactId>
+  <version>v4.0.0</version>
+</dependency>
+
+<!-- the strategy DSL -->
+<dependency>
+  <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
+  <artifactId>quant-finance-library-research</artifactId>
+  <version>v4.0.0</version>
+</dependency>
+
+<!-- the trading lane -->
 <dependency>
   <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
   <artifactId>quant-finance-library-lowlatency</artifactId>
-  <version>v3.1.0</version>
+  <version>v4.0.0</version>
+</dependency>
+
+<!-- the command line, sample strategies and demos -->
+<dependency>
+  <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
+  <artifactId>quant-finance-library-lowlatency</artifactId>
+  <version>v4.0.0</version>
+  <classifier>examples</classifier>
 </dependency>
 ```
 
-Gradle: `implementation("com.github.AshJha0.Quant-Finance-Library:quant-finance-library:v3.1.0")`
-(or `quant-finance-library-lowlatency`) with `maven("https://jitpack.io")` in
-`repositories`. JitPack names the group `com.github.<user>.<repo>` for a multi-module
-build; 2.x was a single module and used `com.github.AshJha0:Quant-Finance-Library`.
+Gradle: `implementation("com.github.AshJha0.Quant-Finance-Library:quant-finance-library:v4.0.0")`
+(or any other artifact above) with `maven("https://jitpack.io")` in `repositories`.
+JitPack names the group `com.github.<user>.<repo>` for a multi-module build; 2.x was a
+single module and used `com.github.AshJha0:Quant-Finance-Library`.
 
 The jars attached to each GitHub release can also be put on a classpath directly.
 Publishing to Maven Central is not set up yet; see [docs/PUBLISHING.md](docs/PUBLISHING.md).
-Upgrading from 2.x: [docs/MIGRATION_3.0.md](docs/MIGRATION_3.0.md).
+Upgrading from 3.x: [docs/MIGRATION_4.0.md](docs/MIGRATION_4.0.md), one row per move,
+each with its dependency snippet. From 2.x: [docs/MIGRATION_3.0.md](docs/MIGRATION_3.0.md).
 
 ### Module path
 
 Add `requires com.quantfinlib;` to your `module-info.java`, or
-`requires com.quantfinlib.lowlatency;` for the trading lane (it reads
+`requires com.quantfinlib.io;`, `requires com.quantfinlib.research;` or
+`requires com.quantfinlib.lowlatency;` for the other modules (each reads
 `com.quantfinlib` transitively), or use the jars on the class path as before. Faults
 in external input throw types that implement `core.QuantFinException`
 (`WireProtocolException`, `MalformedDataException`, `ConfigurationException`); each
@@ -146,13 +176,16 @@ the build, the command-line backtester, the paper-trading demo and the benchmark
 
 ## Quick start
 
+This example uses the stable jar, the io jar (`CsvBarLoader`) and the examples jar
+(`SmaCrossStrategy`).
+
 ```java
 import com.quantfinlib.backtest.BacktestConfig;
 import com.quantfinlib.backtest.BacktestResult;
 import com.quantfinlib.backtest.Backtester;
 import com.quantfinlib.backtest.strategies.SmaCrossStrategy;
 import com.quantfinlib.core.BarSeries;
-import com.quantfinlib.data.CsvBarLoader;
+import com.quantfinlib.io.CsvBarLoader;
 import com.quantfinlib.pricing.BlackScholes;
 import com.quantfinlib.pricing.BlackScholes.OptionType;
 import com.quantfinlib.risk.TailRisk;
@@ -190,7 +223,7 @@ public class QuickStart {
 The same backtest runs without writing Java through the bundled command line:
 
 ```bash
-java -jar core/target/quant-finance-library-3.1.0.jar backtest \
+java -cp "core/target/classes:io/target/classes:research/target/classes:lowlatency/target/classes" com.quantfinlib.cli.Main backtest \
     --csv bars.csv --symbol SPY --strategy sma --fast 10 --slow 30 --out report.html
 ```
 
@@ -338,6 +371,7 @@ Benchmark method, environment and results are in [docs/BENCHMARKS.md](docs/BENCH
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Package map, data flow, design rules |
 | [STABILITY.md](docs/STABILITY.md) | Stable APIs, reference implementations, versioning policy |
 | [DESIGN_4.0.md](docs/DESIGN_4.0.md) | The planned 4.0 module split, its reasons and schedule |
+| [MIGRATION_4.0.md](docs/MIGRATION_4.0.md) | The 4.0 moves and removals, one row each with its dependency snippet |
 | [MIGRATION_3.1.md](docs/MIGRATION_3.1.md) | The 3.1 deprecations (`SwapPricer`, non-integral `BondPricer` use) and their replacements |
 | [MIGRATION_3.0.md](docs/MIGRATION_3.0.md) | What 3.0 removes or moves, and the 2.4 replacement for each |
 | [MIGRATION_2.4.md](docs/MIGRATION_2.4.md) | 2.4 deprecations, new opt-in behaviour, unconfirmed readings |

@@ -3439,7 +3439,7 @@ and bilateral CVA. Diagram 51 is the survival curve this consumes.
 
 One yield curve prices a vanilla swap three ways that must agree: the par
 rate zeroes the swap, the annuity is the DV01's backbone, and a
-one-basis-point bump reprices the risk. `SwapPricer` builds all three off
+one-basis-point bump reprices the risk. `VanillaSwap` builds all three off
 the same discount factors.
 
 ```mermaid
@@ -3493,7 +3493,7 @@ flowchart TD
     end
     SHORT83["shortRate = b0 + b1<br/>(the t->0 limit)"]
     LONG83["longRate = b0<br/>(the t->infinity limit)"]
-    USE83(["zeroRate(t) -> DF(t) -><br/>SwapPricer / BondPricer;<br/>rmse reports fit quality:<br/>prefer NS unless the extra hump<br/>earns its 2 parameters"])
+    USE83(["zeroRate(t) -> DF(t) -><br/>VanillaSwap / BondPricer;<br/>rmse reports fit quality:<br/>prefer NS unless the extra hump<br/>earns its 2 parameters"])
 
     TENORS83 --> B0_83
     TENORS83 --> B1_83
@@ -4690,33 +4690,36 @@ tags are never moved) is in [PUBLISHING.md](PUBLISHING.md).
 
 ---
 
-## 113. The 4.0 module plan: what moves where
+## 113. The 4.0 modules: what moved where
 
-Design only; 3.x ships none of these moves. Solid arrows are `requires`; the
-dashed arrows show where 3.x packages go. Details and dates are in
-[DESIGN_4.0.md](DESIGN_4.0.md).
+Since 4.0. Solid arrows are `requires`; the dashed arrows show where 3.x core packages
+went. Everything not listed stayed in the stable module, including `execution`,
+`microstructure`, `persist`, `screener`, `ml` and most of `data`, because stable code
+uses them (the reasons are in [DESIGN_4.0.md](DESIGN_4.0.md); the user steps in
+[MIGRATION_4.0.md](MIGRATION_4.0.md)).
 
 ```mermaid
 flowchart LR
-    subgraph S23["quant-finance-library (stable, no java.net.http)"]
-        ST23["core, stats, pricing, rates, credit,<br/>risk, crb, volatility, hedging, fx,<br/>indicators, optimization, alpha, backtest"]
+    subgraph S23["quant-finance-library (stable, java.base only)"]
+        ST23["core, stats, pricing, rates, credit,<br/>risk, crb, volatility, hedging, fx,<br/>indicators, optimization, alpha, backtest,<br/>data, execution, microstructure,<br/>persist, screener, ml"]
     end
     subgraph IO23["-io (incubating)"]
-        IOP23["data (incl. HttpBarFetcher),<br/>persist, report"]
+        IOP23["io (CsvBarLoader, HttpBarFetcher,<br/>UniverseCsvLoader), report"]
     end
     subgraph RS23["-research (incubating)"]
-        RSP23["screener, dsl, ml"]
+        RSP23["dsl"]
     end
     subgraph LL23["-lowlatency (reference)"]
-        LLP23["3.x lane packages<br/>+ execution, microstructure sims,<br/>rfq, marketdata.tick, AggregatedBook"]
+        LLP23["3.x lane packages<br/>+ rfq, marketdata.tick, backtest.tick,<br/>marketdata.AggregatedBook"]
     end
-    EX23["examples classifier<br/>cli, backtest.strategies"]
+    EX23["examples classifier<br/>cli, backtest.strategies, examples"]
     IO23 --> S23
     RS23 --> S23
     LL23 --> S23
+    LL23 -. "requires static" .-> IO23
+    LL23 -. "requires static" .-> RS23
     EX23 --> LL23
-    C30["3.x core exports"] -.-> ST23
-    C30 -.-> IOP23
+    C30["3.x core exports"] -.-> IOP23
     C30 -.-> RSP23
     C30 -.-> LLP23
     C30 -.-> EX23

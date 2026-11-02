@@ -70,6 +70,8 @@ jobs:
           path: |
             analysis.log
             core/target/spotbugsXml.xml
+            io/target/spotbugsXml.xml
+            research/target/spotbugsXml.xml
             lowlatency/target/spotbugsXml.xml
           if-no-files-found: ignore
 
@@ -99,14 +101,14 @@ jobs:
         run: bash scripts/fetch-reference-files.sh "$RUNNER_TEMP/qfl-ref" >> "$GITHUB_ENV"
       - name: Reference tests (required, not skippable)
         run: >-
-          ./mvnw -B --no-transfer-progress -pl core,lowlatency test -Djacoco.skip=true
+          ./mvnw -B --no-transfer-progress -pl core,io,research,lowlatency test -Djacoco.skip=true
           -Dsurefire.failIfNoSpecifiedTests=false
           -Dtest=IsdaGridVerificationTest,IsdaGoldenSubsetTest,Auth016XmlTest,Auth016EnvelopeTest,StatusAdviceTest,EsmaXsdGoldenTest
       - name: Check nothing was skipped
         run: |
           set -euo pipefail
           # writeGolden is the generator and is meant to skip; nothing else may.
-          skipped=$(grep -l '<skipped' core/target/surefire-reports/TEST-*.xml lowlatency/target/surefire-reports/TEST-*.xml                     | xargs -r grep -h -B1 '<skipped' | grep -o '<testcase name="[^"]*"' | grep -v '"writeGolden"' || true)
+          skipped=$(grep -l '<skipped' core/target/surefire-reports/TEST-*.xml io/target/surefire-reports/TEST-*.xml research/target/surefire-reports/TEST-*.xml lowlatency/target/surefire-reports/TEST-*.xml                     | xargs -r grep -h -B1 '<skipped' | grep -o '<testcase name="[^"]*"' | grep -v '"writeGolden"' || true)
           if [ -n "$skipped" ]; then echo "::error::skipped reference tests: $skipped"; exit 1; fi
 
   mutation:
@@ -189,7 +191,7 @@ jobs:
           -Dpit.mutationThreshold=83
           "-Dpit.targets=com.quantfinlib.regreporting.*,com.quantfinlib.fix.FixDecoder*,com.quantfinlib.fix.FixOrderEncoder*,com.quantfinlib.fix.FixParse*,com.quantfinlib.fix.FixMessage*,com.quantfinlib.fix.FixGroup*,com.quantfinlib.fix.FixExecReportView*,com.quantfinlib.fix.FixMarketDataView*,com.quantfinlib.fix.FixDictionary*"
           "-Dpit.targetTests=com.quantfinlib.regreporting.*,com.quantfinlib.fix.*"
-          -pl core,lowlatency test-compile org.pitest:pitest-maven:mutationCoverage
+          -pl core,io,research,lowlatency test-compile org.pitest:pitest-maven:mutationCoverage
       - name: Summary and per-package floors
         if: always() && hashFiles('lowlatency/target/pit-reports/mutations.xml') != ''
         run: |

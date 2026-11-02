@@ -49,9 +49,10 @@ jobs:
         run: |
           mkdir -p _site/api
           cp docs/index.html _site/
-          # one javadoc tree per artifact: api/ (stable) and api/lowlatency/
-          for m in core lowlatency; do
-            dest=_site/api; [ "$m" = lowlatency ] && dest=_site/api/lowlatency
+          # one javadoc tree per artifact: api/ (stable), api/io/, api/research/
+          # and api/lowlatency/
+          for m in core io research lowlatency; do
+            dest=_site/api; [ "$m" != core ] && dest=_site/api/$m
             mkdir -p "$dest"
             if [ -d "$m/target/site/apidocs" ]; then
               cp -r "$m/target/site/apidocs/"* "$dest/"

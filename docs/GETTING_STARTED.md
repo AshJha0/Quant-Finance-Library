@@ -28,25 +28,33 @@ cd Quant-Finance-Library
 
 `verify` compiles with `-Xlint:all`, runs the default test set, checks line coverage
 (the build fails below 90 % overall or 80 % in any package, per module) and packages
-the jars. Since 3.0 the build has two modules, `core/` and `lowlatency/`:
+the jars. Since 4.0 the build has four modules, `core/`, `io/`, `research/` and
+`lowlatency/` (docs/MIGRATION_4.0.md):
 
 | Jar | Contents |
 |---|---|
-| `core/target/quant-finance-library-<version>.jar` | The stable library. Its manifest main class is the command line, `com.quantfinlib.cli.Main`. |
-| `lowlatency/target/quant-finance-library-lowlatency-<version>.jar` | The trading lane (`trading`, `marketdata`, `orderbook`, `fix`, `sbe`, `feed`, `entitlements`, `regreporting`, `util`). |
-| `lowlatency/target/quant-finance-library-lowlatency-<version>-examples.jar` | Demos, hand-written benchmarks and sample strategies (`com.quantfinlib.examples`). |
+| `core/target/quant-finance-library-<version>.jar` | The stable library. Requires only `java.base`. |
+| `io/target/quant-finance-library-io-<version>.jar` | CSV and HTTP loaders (`io`) and reports (`report`). |
+| `research/target/quant-finance-library-research-<version>.jar` | The strategy DSL (`dsl`). |
+| `lowlatency/target/quant-finance-library-lowlatency-<version>.jar` | The trading lane (`trading`, `marketdata`, `marketdata.tick`, `orderbook`, `fix`, `sbe`, `feed`, `entitlements`, `regreporting`, `rfq`, `backtest.tick`, `util`). |
+| `lowlatency/target/quant-finance-library-lowlatency-<version>-examples.jar` | The command line (`cli`, main class `com.quantfinlib.cli.Main`), sample strategies (`backtest.strategies`), demos and hand-written benchmarks (`examples`). |
 | `-sources.jar`, `-javadoc.jar` | Sources and API documentation, per module. |
 
-For a faster loop while editing, `./mvnw -DskipTests compile` builds
-`core/target/classes` and `lowlatency/target/classes` only.
+For a faster loop while editing, `./mvnw -DskipTests compile` builds the four
+`target/classes` directories only. The commands below use them through one variable
+(use `;` as the separator on Windows):
 
-The stable jar is the named module `com.quantfinlib` and the lane jar
-`com.quantfinlib.lowlatency`. From your own modular code, add
-`requires com.quantfinlib;` (or `requires com.quantfinlib.lowlatency;`, which reads
-the stable module transitively) to `module-info.java`; on the class path nothing is
-needed. The examples jar has no module descriptor, so run the demos on the class
-path with both library jars, for example
-`java -cp quant-finance-library-3.0.0.jar:quant-finance-library-lowlatency-3.0.0.jar:quant-finance-library-lowlatency-3.0.0-examples.jar com.quantfinlib.examples.QuickStartDemo`
+```bash
+QFL_CP=core/target/classes:io/target/classes:research/target/classes:lowlatency/target/classes
+```
+
+The stable jar is the named module `com.quantfinlib`; the others are
+`com.quantfinlib.io`, `com.quantfinlib.research` and `com.quantfinlib.lowlatency`, each
+reading the stable module transitively. From your own modular code, add the matching
+`requires` line to `module-info.java`; on the class path nothing is needed. The
+examples jar has no module descriptor, so run the demos and the command line on the
+class path with all four library jars, for example
+`java -cp quant-finance-library-4.0.0.jar:quant-finance-library-io-4.0.0.jar:quant-finance-library-research-4.0.0.jar:quant-finance-library-lowlatency-4.0.0.jar:quant-finance-library-lowlatency-4.0.0-examples.jar com.quantfinlib.examples.QuickStartDemo`
 (use `;` as the separator on Windows).
 
 Two invalid-input behaviours changed in 2.1. `Stats.quantile` (formerly
@@ -79,7 +87,7 @@ date,open,high,low,close,volume
 Run a moving-average crossover and write an HTML report:
 
 ```bash
-java -jar core/target/quant-finance-library-*.jar backtest \
+java -cp "$QFL_CP" com.quantfinlib.cli.Main backtest \
     --csv bars.csv --symbol SPY --strategy sma --fast 10 --slow 30 \
     --capital 100000 --out report.html
 ```
@@ -93,15 +101,15 @@ Two more commands use the same CSV input:
 
 ```bash
 # Walk-forward: optimise the SMA windows on 252 bars, test on the next 63, roll forward.
-java -jar core/target/quant-finance-library-*.jar walkforward \
+java -cp "$QFL_CP" com.quantfinlib.cli.Main walkforward \
     --csv bars.csv --symbol SPY --train 252 --test 63 --fast 5,10,20 --slow 40,60 \
     --out walkforward.html
 
 # Market report: price chart, drawdown from peak and an indicator summary.
-java -jar core/target/quant-finance-library-*.jar report --csv bars.csv --symbol SPY --out market.html
+java -cp "$QFL_CP" com.quantfinlib.cli.Main report --csv bars.csv --symbol SPY --out market.html
 ```
 
-`java -jar core/target/quant-finance-library-*.jar help` prints the usage. The exit code
+`java -cp "$QFL_CP" com.quantfinlib.cli.Main help` prints the usage. The exit code
 is 0 on success, 1 for a usage error and 2 when the run fails. If your shell does
 not expand the `*`, write the full jar name.
 

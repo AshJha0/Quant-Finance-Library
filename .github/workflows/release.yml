@@ -111,14 +111,18 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME#v}"
           cp core/target/bom.json "core/target/quant-finance-library-$version-sbom.cdx.json"
+          cp io/target/bom.json "io/target/quant-finance-library-io-$version-sbom.cdx.json"
+          cp research/target/bom.json "research/target/quant-finance-library-research-$version-sbom.cdx.json"
           cp lowlatency/target/bom.json "lowlatency/target/quant-finance-library-lowlatency-$version-sbom.cdx.json"
       - name: Create GitHub release with jars
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
-            core/target/quant-finance-library-*.jar             lowlatency/target/quant-finance-library-lowlatency-*.jar \
-            core/target/*-sbom.cdx.json lowlatency/target/*-sbom.cdx.json \
+            core/target/quant-finance-library-*.jar io/target/quant-finance-library-io-*.jar \
+            research/target/quant-finance-library-research-*.jar lowlatency/target/quant-finance-library-lowlatency-*.jar \
+            core/target/*-sbom.cdx.json io/target/*-sbom.cdx.json research/target/*-sbom.cdx.json \
+            lowlatency/target/*-sbom.cdx.json \
             --title "quantfinlib $GITHUB_REF_NAME" \
             --generate-notes
       - name: Republish the site from main with the new tag

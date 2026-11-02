@@ -1,7 +1,8 @@
 # Migrating to 4.0
 
-Status: written for 3.2.0, which announces every change below; 4.0.0 follows 3.2.0
-directly and makes them. The design and its reasons are in
+Status: implemented for 4.0.0. 3.2.0 announced every change below; 4.0.0 follows
+3.2.0 directly and makes them. japicmp against 3.0.0 reports MAJOR, and its gate run
+excludes exactly the rows below (core/pom.xml, execution `api-stable-gate`). The design and its reasons are in
 [DESIGN_4.0.md](DESIGN_4.0.md). On 3.2.0, compiling with `-Xlint:removal` lists every
 line that uses a type 4.0 removes, and each of those has a replacement you can switch to
 on 3.2.0 already.

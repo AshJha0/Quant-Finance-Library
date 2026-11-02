@@ -43,7 +43,6 @@ class ValueClassCopyContractTest {
             "com.quantfinlib.alpha.TurnoverAwareOptimizer$Result",
             "com.quantfinlib.backtest.ParentOrder",
             "com.quantfinlib.backtest.portfolio.PortfolioBacktester$Result",
-            "com.quantfinlib.backtest.tick.TickBacktester$TickBacktestResult",
             "com.quantfinlib.backtest.validation.GridSearchOptimizer$Candidate",
             "com.quantfinlib.backtest.validation.OverfitProbability$Result",
             "com.quantfinlib.backtest.validation.PurgedKFold$Split",

@@ -5,7 +5,7 @@ package com.quantfinlib.marketdata;
  * one symbol into the consolidated best bid/ask, the size available at those
  * prices, and a bitmask of which venues are at the inside — the three inputs
  * a smart order router actually consumes. The equities counterpart of
- * {@code fx.AggregatedBook}, in integer ticks.
+ * {@code marketdata.AggregatedBook}, in integer ticks.
  *
  * <p>Zero allocation per update; single-writer (one consolidated-feed
  * thread). Recomputation is a linear scan over venues — with the ≤ 64 venues

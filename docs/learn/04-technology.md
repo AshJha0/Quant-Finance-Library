@@ -924,30 +924,35 @@ runtime: for core only `jspecify` (annotations), for lowlatency core plus `jspec
 
 ### 20. Modules and exceptions
 
-A Java module is a jar that says what it offers and what it needs. Since 3.0 the
-library is two modules, and the split is the stability promise. The stable one,
+A Java module is a jar that says what it offers and what it needs. Since 4.0 the
+library is four modules, and the split is the stability promise. The stable one,
 `com.quantfinlib` (artifact `quant-finance-library`), holds pricing, risk, research
-and backtesting. The reference one, `com.quantfinlib.lowlatency` (artifact
-`quant-finance-library-lowlatency`), holds the trading lane: order books, FIX and
-SBE, feeds, the market-data bus, gateways and regulatory reporting.
+and backtesting. Two incubating ones hold file and HTTP I/O (`com.quantfinlib.io`:
+`io`, `report`) and the strategy DSL (`com.quantfinlib.research`). The reference one,
+`com.quantfinlib.lowlatency` (artifact `quant-finance-library-lowlatency`), holds the
+trading lane: order books, FIX and SBE, feeds, the market-data bus and tick files,
+gateways, RFQ and regulatory reporting. (3.x had two modules; MIGRATION_4.0.md lists
+what moved.)
 
-Formally: the low-latency module `requires transitive com.quantfinlib`, so anything
-that reads it also reads the stable module, and dependencies run one way only. A
+Formally: each of the other three modules `requires transitive com.quantfinlib`, so
+anything that reads one also reads the stable module, and dependencies run one way
+only. A
 package belongs to exactly one module, which is why a few types changed package in
 3.0: the order side became `core.Side` because stable `execution` and `backtest`
 signatures use it, while `StrategyRunner` moved to `trading` because its paper
 engine is a lane class. The stable module exports a helper package, `internal`, to
-the lane module alone (a qualified export); to everyone else it does not exist. The
-stable module needs only `java.net.http`; `jdk.httpserver` and `java.xml` are lane
-needs, and a test runs `jdeps` on the stable classes to keep it that way.
+the lane module alone (a qualified export); to everyone else it does not exist. Since
+4.0 the stable module needs only `java.base`: `java.net.http` belongs to io and the
+lane, `jdk.httpserver` and `java.xml` to the lane, and a test runs `jdeps` on the
+stable classes to keep it that way.
 
 Worked example. A research project writes `requires com.quantfinlib;` and gets
 `pricing`, `risk` and `backtest`; trying to import `com.quantfinlib.trading` fails
 at compile time, because that package is not in the module it reads. A trading
 project writes `requires com.quantfinlib.lowlatency;` and can import both
 `trading.HftOrderGateway` and `core.Side` with no second line. On the class path
-neither descriptor matters; put both jars on it. The demos in
-`com.quantfinlib.examples` are not exported and ship in the low-latency artifact's
+no descriptor matters; put the jars you need on it. The demos, the command line and
+the sample strategies are not exported and ship in the low-latency artifact's
 `examples` jar.
 
 Exceptions follow one rule: a fault in external input (a broken FIX or SBE frame, a
@@ -960,15 +965,15 @@ type is an interface, `core.QuantFinException`, and
 from the caller, such as a negative size, stays a plain `IllegalArgumentException`.
 See [ARCHITECTURE.md](../ARCHITECTURE.md#exception-policy).
 
-### 20b. Where the library is going: the 4.0 design (3.1, revised 3.2)
+### 20b. The 4.0 module split (designed in 3.1, revised in 3.2, shipped in 4.0)
 
-`docs/DESIGN_4.0.md` is the plan for the next major release. The plain idea: the
-stable jar should promise only what one maintainer can check, and a pricing user
-should not get an HTTP client. Formally, 4.0 moves the file and HTTP loaders (the new
-`io` package) and `report` to an incubating `-io` module, `dsl` to `-research`,
-hot-lane code (`AggregatedBook`, `rfq`, `marketdata.tick`, `backtest.tick`) to the
-low-latency module, and `cli` and the toy strategies to an examples jar. Most package
-names stay the same, so most users change a dependency, not an import.
+`docs/DESIGN_4.0.md` explains the split. The plain idea: the stable jar should promise
+only what one maintainer can check, and a pricing user should not get an HTTP client.
+Formally, 4.0 moved the file and HTTP loaders (the `io` package) and `report` to the
+incubating `-io` module, `dsl` to `-research`, hot-lane code (`AggregatedBook`,
+`rfq`, `marketdata.tick`, `backtest.tick`) to the low-latency module, and `cli` and
+the toy strategies to an examples jar. Most package names stayed the same, so most
+users changed a dependency, not an import.
 
 The 3.1 draft wanted to move more (`execution`, `microstructure`, `persist`,
 `screener`, `ml`, all of `data`). A scan of imports showed stable code uses each of
@@ -978,11 +983,12 @@ a cycle. Worked example: `alpha.Factors` reads `screener.Fundamentals`, so `scre
 stays wherever `alpha` is, which is the stable jar.
 
 A jar move cannot be `@Deprecated`: Java modules forbid one package in two jars, so
-there is no new home to point at until 4.0 exists. Where 3.2 could add a replacement
+there was no new home to point at before 4.0 existed. Where 3.2 could add a replacement
 type, it did and deprecated the old one for removal: `io.CsvBarLoader` and two others
-replace their `data` namesakes, and `marketdata.AggregatedBook` replaces
-`fx.AggregatedBook`. Every move is announced in `package-info` javadoc and in
-MIGRATION_4.0.md, and 4.0 follows 3.2.0 directly.
+replaced their `data` namesakes, and `marketdata.AggregatedBook` replaced
+`fx.AggregatedBook`. 4.0 removed those and the single-curve swap pricer. japicmp against 3.0.0 reports
+the release as MAJOR, and a second japicmp run excludes exactly the MIGRATION_4.0 rows
+and fails on any other break.
 
 Meanwhile 3.1 split the three largest classes internally. `Indicators`,
 `MultiCurrencyExposureSimulator` and `FixSession` are now facades over package-private

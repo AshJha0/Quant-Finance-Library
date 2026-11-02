@@ -1,8 +1,12 @@
 # JitPack builds the reactor from the root POM and publishes every installed
-# module: com.github.AshJha0.Quant-Finance-Library:quant-finance-library and
-# com.github.AshJha0.Quant-Finance-Library:quant-finance-library-lowlatency
-# (plus the parent POM, which both reference). Since 3.0 the build has two
-# modules; verify a JitPack build of a test tag before the release tag.
+# module under group com.github.AshJha0.Quant-Finance-Library:
+# quant-finance-library, quant-finance-library-io,
+# quant-finance-library-research and quant-finance-library-lowlatency (with its
+# examples classifier), plus the parent POM, which all reference. Since 4.0 the
+# build has four modules. Each module POM lists its own coordinates before
+# <parent>, because JitPack's artifact scan reads the first
+# groupId/artifactId/version in the file. Verify a JitPack build of a test tag
+# before the release tag.
 jdk:
   - openjdk25
 install:

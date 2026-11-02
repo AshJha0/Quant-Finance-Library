@@ -5,7 +5,7 @@ import java.util.Objects;
 /**
  * A fixed-for-floating swap built from two convention-driven legs: the
  * replacement for the single-curve, annual, {@code tau = 1} methods of the
- * deprecated {@link SwapPricer}. Each leg carries its own frequency, day
+ * {@code SwapPricer} (removed in 4.0). Each leg carries its own frequency, day
  * count, calendar, roll, stub and payment lag ({@link LegConvention}); the
  * floating leg is a compounded overnight leg ({@link OvernightLeg}, with
  * lookback, observation shift, lockout and realised fixings) or a term-rate

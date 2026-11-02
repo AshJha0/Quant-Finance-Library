@@ -21,7 +21,7 @@ import java.nio.ByteBuffer;
  * offset 54  2 bytes padding
  * </pre>
  * A pulled side reads back as NaN price, the convention
- * {@code fx.AggregatedBook} consumes.
+ * {@code marketdata.AggregatedBook} consumes.
  */
 public final class QuoteFlyweight {
     /** Creates an instance; the explicit form of the default constructor. */

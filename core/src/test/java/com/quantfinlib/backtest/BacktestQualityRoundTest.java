@@ -2,7 +2,6 @@ package com.quantfinlib.backtest;
 
 import com.quantfinlib.TestData;
 import com.quantfinlib.backtest.strategies.SmaCrossStrategy;
-import com.quantfinlib.backtest.tick.TickBacktester;
 import com.quantfinlib.backtest.validation.GridSearchOptimizer;
 import com.quantfinlib.backtest.validation.ParameterGrid;
 import com.quantfinlib.backtest.validation.StrategyFactory;
@@ -323,9 +322,5 @@ class BacktestQualityRoundTest {
 
     // --------------------------------------------------------------- tick config
 
-    @Test
-    void tickConfigRefusesZeroSamplingInterval() {
-        assertThrows(IllegalArgumentException.class,
-                () -> TickBacktester.Config.defaults().withEquitySampleEvery(0));
-    }
+
 }
