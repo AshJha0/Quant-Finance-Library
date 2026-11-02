@@ -20,7 +20,9 @@ import java.util.Objects;
  * {@link SimmRiskClass} and the {@link SimmRiskMeasure}.</p>
  *
  * <p>Supported risk types: {@code Risk_IRCurve}, {@code Risk_Inflation}
- * (treated as an IR delta with label2 {@code Inflation}), {@code Risk_IRVol},
+ * (treated as an IR delta with label2 {@code Inflation}), {@code Risk_XCcyBasis}
+ * (an IR delta with label2 {@code XCcy}), {@code Risk_IRVol}, {@code Risk_InflationVol}
+ * (an IR vega with label2 {@code Inflation}),
  * {@code Risk_CreditQ}, {@code Risk_CreditVol}, {@code Risk_BaseCorr},
  * {@code Risk_CreditNonQ}, {@code Risk_CreditVolNonQ}, {@code Risk_Equity},
  * {@code Risk_EquityVol}, {@code Risk_Commodity}, {@code Risk_CommodityVol},
@@ -45,6 +47,8 @@ public record CrifSensitivity(SimmProductClass productClass, String riskType,
         map("Risk_IRCurve", SimmRiskClass.INTEREST_RATE, SimmRiskMeasure.DELTA);
         map("Risk_Inflation", SimmRiskClass.INTEREST_RATE, SimmRiskMeasure.DELTA);
         map("Risk_IRVol", SimmRiskClass.INTEREST_RATE, SimmRiskMeasure.VEGA);
+        map("Risk_InflationVol", SimmRiskClass.INTEREST_RATE, SimmRiskMeasure.VEGA);
+        map("Risk_XCcyBasis", SimmRiskClass.INTEREST_RATE, SimmRiskMeasure.DELTA);
         map("Risk_CreditQ", SimmRiskClass.CREDIT_QUALIFYING, SimmRiskMeasure.DELTA);
         map("Risk_CreditVol", SimmRiskClass.CREDIT_QUALIFYING, SimmRiskMeasure.VEGA);
         map("Risk_BaseCorr", SimmRiskClass.CREDIT_QUALIFYING, SimmRiskMeasure.BASE_CORRELATION);
@@ -79,8 +83,12 @@ public record CrifSensitivity(SimmProductClass productClass, String riskType,
         bucket = bucket == null ? "" : bucket.trim();
         label1 = label1 == null ? "" : label1.trim();
         label2 = label2 == null ? "" : label2.trim();
-        if ("risk_inflation".equalsIgnoreCase(riskType) && label2.isEmpty()) {
+        if (("risk_inflation".equalsIgnoreCase(riskType) || "risk_inflationvol".equalsIgnoreCase(riskType))
+                && label2.isEmpty()) {
             label2 = "Inflation";
+        }
+        if ("risk_xccybasis".equalsIgnoreCase(riskType) && label2.isEmpty()) {
+            label2 = "XCcy";
         }
     }
 
