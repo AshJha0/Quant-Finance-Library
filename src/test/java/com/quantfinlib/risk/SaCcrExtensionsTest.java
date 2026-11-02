@@ -90,6 +90,19 @@ class SaCcrExtensionsTest {
     }
 
     @Test
+    void subNettingSetReplacementCostIsPerPart() {
+        // BCBS 279 para 185: the sub-netting-set split applies to RC as well as PFE.
+        SaCcr.Margin csa = new SaCcr.Margin(0, 5, 0, 10);
+        SaCcr.SubNettingSet margined = new SaCcr.SubNettingSet(
+                List.of(SaCcrTrade.fx("EURUSD", 1_000, 1, -1, -30)), 0, csa);
+        SaCcr.SubNettingSet unmargined = new SaCcr.SubNettingSet(
+                List.of(SaCcrTrade.fx("GBPUSD", 1_000, 1, 1, 50)), 0, null);
+        SaCcr.Result r = SaCcr.subNettingSets(List.of(margined, unmargined));
+        // RC = max(-30, 5, 0) + max(50, 0) = 55; netting first would give max(20, 5) = 20
+        assertEquals(55, r.replacementCost(), 1e-12);
+    }
+
+    @Test
     void supervisoryHaircuts() {
         assertEquals(0.06, SaCcrHaircuts.haircut10Day(SaCcrHaircuts.CollateralKind.OTHER_DEBT,
                 SaCcrHaircuts.DebtRating.A_TO_BBB, 3), 0);
@@ -113,5 +126,39 @@ class SaCcrExtensionsTest {
         assertEquals(-1_040, SaCcrHaircuts.collateralValue(1_000,
                 SaCcrHaircuts.CollateralKind.SOVEREIGN_DEBT, SaCcrHaircuts.DebtRating.AAA_TO_AA, 7,
                 false, 10, false), 1e-9);
+    }
+
+    @Test
+    void cre22Haircuts() {
+        // Basel Framework CRE22.49 (external-ratings table) and CRE22.52 (8% FX)
+        SaCcrHaircuts.Table t = SaCcrHaircuts.Table.CRE22;
+        SaCcrHaircuts.CollateralKind sov = SaCcrHaircuts.CollateralKind.SOVEREIGN_DEBT;
+        SaCcrHaircuts.CollateralKind oth = SaCcrHaircuts.CollateralKind.OTHER_DEBT;
+        SaCcrHaircuts.DebtRating aaa = SaCcrHaircuts.DebtRating.AAA_TO_AA;
+        SaCcrHaircuts.DebtRating a = SaCcrHaircuts.DebtRating.A_TO_BBB;
+        double[] years = {0.5, 2, 4, 7, 15};
+        double[][] expected = {
+            {0.005, 0.02, 0.02, 0.04, 0.04}, {0.01, 0.03, 0.03, 0.06, 0.06},
+            {0.01, 0.03, 0.04, 0.06, 0.12}, {0.02, 0.04, 0.06, 0.12, 0.20}};
+        for (int i = 0; i < years.length; i++) {
+            assertEquals(expected[0][i], SaCcrHaircuts.haircut10Day(t, sov, aaa, years[i]), 0);
+            assertEquals(expected[1][i], SaCcrHaircuts.haircut10Day(t, sov, a, years[i]), 0);
+            assertEquals(expected[2][i], SaCcrHaircuts.haircut10Day(t, oth, aaa, years[i]), 0);
+            assertEquals(expected[3][i], SaCcrHaircuts.haircut10Day(t, oth, a, years[i]), 0);
+        }
+        // bucket tops are inclusive: 3y falls in the 1y-3y bucket
+        assertEquals(0.03, SaCcrHaircuts.haircut10Day(t, oth, aaa, 3), 0);
+        assertEquals(0.15, SaCcrHaircuts.haircut10Day(t, sov, SaCcrHaircuts.DebtRating.BB, 20), 0);
+        assertThrows(IllegalArgumentException.class,
+                () -> SaCcrHaircuts.haircut10Day(t, oth, SaCcrHaircuts.DebtRating.BB, 2));
+        assertEquals(0.20, SaCcrHaircuts.haircut10Day(t, SaCcrHaircuts.CollateralKind.GOLD, null, 0), 0);
+        assertEquals(0.30, SaCcrHaircuts.haircut10Day(t,
+                SaCcrHaircuts.CollateralKind.OTHER_LISTED_EQUITY, null, 0), 0);
+        assertEquals(0, SaCcrHaircuts.haircut10Day(t, SaCcrHaircuts.CollateralKind.CASH, null, 0), 0);
+        // held A-rated 3y corporate, FX mismatch, 10 days: 1,000 * (1 - 0.04 - 0.08) = 880
+        assertEquals(880, SaCcrHaircuts.collateralValue(t, 1_000, oth, a, 3, true, 10, true), 1e-9);
+        // the 2006 table is unchanged: 860
+        assertEquals(860, SaCcrHaircuts.collateralValue(SaCcrHaircuts.Table.BASEL_II_2006, 1_000,
+                oth, a, 3, true, 10, true), 1e-9);
     }
 }
