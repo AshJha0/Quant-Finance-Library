@@ -175,7 +175,6 @@ public final class DropCopyReconciler {
         }
     }
 
-    /** Reconciles the ledger's fill log against a drop copy. */
     /**
      * Reconciles the ledger's executions, as they stand after any busts and
      * corrections, against a drop copy of plain executions. With no busts or
