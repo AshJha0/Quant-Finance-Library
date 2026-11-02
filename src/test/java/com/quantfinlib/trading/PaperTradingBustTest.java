@@ -156,6 +156,6 @@ class PaperTradingBustTest {
                 DropCopyReconciler.reconcile(ledger, dropCopy, adjustments, 1e-9);
         assertTrue(report.isClean(), report.format());
         assertEquals(90, ledger.netPosition(0, 0, 0));
-        assertEquals(gw.position("X"), ledger.netPosition(0, 0, 0), 1e-9);
+        assertEquals(gw.position("X"), (double) ledger.netPosition(0, 0, 0), 1e-9);
     }
 }

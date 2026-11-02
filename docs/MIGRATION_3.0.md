@@ -1,7 +1,7 @@
 # Migrating to 3.0
 
 Status: draft, published with 2.4.0. 3.0 is not released yet. Everything below
-is the owner-signed plan (docs review folder, `v3.0_API_Proposal.md`, decisions
+is the owner-signed 3.0 API plan (decisions
 D1 to D9, 2026-11-02). 2.4.0 already deprecates every member that 3.0 removes,
 so compiling against 2.4.0 with `-Xlint:removal` lists every line you need to
 change. Nothing in 2.4.0 changes a result.
