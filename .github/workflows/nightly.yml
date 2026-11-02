@@ -69,7 +69,8 @@ jobs:
           name: analysis-reports
           path: |
             analysis.log
-            target/spotbugsXml.xml
+            core/target/spotbugsXml.xml
+            lowlatency/target/spotbugsXml.xml
           if-no-files-found: ignore
 
   mutation:
@@ -86,14 +87,14 @@ jobs:
           java-version: '25'
           cache: maven
       - name: Mutation testing
-        run: ./mvnw -B --no-transfer-progress -Pmutation -Dpit.threads=4 test-compile org.pitest:pitest-maven:mutationCoverage
+        run: ./mvnw -B --no-transfer-progress -Pmutation -Dpit.threads=4 -pl core test-compile org.pitest:pitest-maven:mutationCoverage
       - name: Summary
-        if: always() && hashFiles('target/pit-reports/mutations.xml') != ''
-        run: python3 scripts/pit-summary.py target/pit-reports/mutations.xml >> "$GITHUB_STEP_SUMMARY"
+        if: always() && hashFiles('core/target/pit-reports/mutations.xml') != ''
+        run: python3 scripts/pit-summary.py core/target/pit-reports/mutations.xml >> "$GITHUB_STEP_SUMMARY"
       - name: Upload report
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: mutation-report
-          path: target/pit-reports
+          path: core/target/pit-reports
           if-no-files-found: ignore

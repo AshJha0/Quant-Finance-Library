@@ -140,7 +140,7 @@
          thread caught, so the caller can inspect or rethrow it. It is a
          diagnostic hand-off, not state the object depends on. -->
     <Match>
-        <Class name="com.quantfinlib.data.TickCapture"/>
+        <Class name="com.quantfinlib.marketdata.TickCapture"/>
         <Method name="failure"/>
         <Field name="failure"/>
         <Bug pattern="EI_EXPOSE_REP"/>

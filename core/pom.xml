@@ -1,0 +1,284 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.quantfinlib</groupId>
+        <artifactId>quant-finance-library-parent</artifactId>
+        <version>3.0.0-SNAPSHOT</version>
+    </parent>
+    <artifactId>quant-finance-library</artifactId>
+    <packaging>jar</packaging>
+    <name>Quant-Finance-Library</name>
+    <description>Stable tier of Quant-Finance-Library: pricing, rates, credit, market risk, alpha research, backtesting and execution analytics. Pure JDK.</description>
+    <properties>
+        <qfl.module>com.quantfinlib</qfl.module>
+    </properties>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.5.1</version>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <mainClass>com.quantfinlib.cli.Main</mainClass>
+                        </manifest>
+                    </archive>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+    <profiles>
+        <!-- API compatibility gate (japicmp) against the released 2.4.0 jar
+             (api.baseline.version in the parent POM). Every package of this
+             module is stable tier and fails the build on a binary-incompatible
+             change, except the intended 3.0 breaks listed by <exclude> below,
+             each with its row in docs/MIGRATION_3.0.md. Packages that moved to
+             the low-latency module are not compared here.
+               bash scripts/fetch-api-baseline.sh
+               ./mvnw -Papi-compat -DskipTests verify
+             Report: core/target/japicmp/api-stable.html. -->
+        <profile>
+            <id>api-compat</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>com.github.siom79.japicmp</groupId>
+                        <artifactId>japicmp-maven-plugin</artifactId>
+                        <version>${japicmp.version}</version>
+                        <configuration>
+                            <oldVersion>
+                                <file>
+                                    <path>${api.baseline.jar}</path>
+                                </file>
+                            </oldVersion>
+                            <newVersion>
+                                <file>
+                                    <path>${project.build.directory}/${project.build.finalName}.jar</path>
+                                </file>
+                            </newVersion>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>api-stable</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>cmp</goal>
+                                </goals>
+                                <configuration>
+                                    <parameter>
+                                        <onlyModified>true</onlyModified>
+                                        <accessModifier>protected</accessModifier>
+                                        <ignoreMissingClasses>true</ignoreMissingClasses>
+                                        <breakBuildOnBinaryIncompatibleModifications>true</breakBuildOnBinaryIncompatibleModifications>
+                                        <breakBuildOnSourceIncompatibleModifications>false</breakBuildOnSourceIncompatibleModifications>
+                                        <includes>
+                                            <include>com.quantfinlib.*</include>
+                                        </includes>
+                                        <!-- 3.0 allow-list: every intended break against 2.4.0, one
+                                             entry per moved or removed type and per member whose
+                                             signature changed, each with the section of
+                                             docs/MIGRATION_3.0.md that explains it. A break not on
+                                             this list fails the build. Empty this list (and move the
+                                             baseline to 3.0.0) after the 3.0.0 tag. -->
+                                        <excludes>
+                                            <!-- MIGRATION_3.0 s.2: package entitlements moved to the low-latency module -->
+                                            <exclude>com.quantfinlib.entitlements.*</exclude>
+                                            <!-- MIGRATION_3.0 s.2: package feed moved to the low-latency module -->
+                                            <exclude>com.quantfinlib.feed.*</exclude>
+                                            <!-- MIGRATION_3.0 s.2: package fix moved to the low-latency module -->
+                                            <exclude>com.quantfinlib.fix.*</exclude>
+                                            <!-- MIGRATION_3.0 s.2: package marketdata moved to the low-latency module -->
+                                            <exclude>com.quantfinlib.marketdata.*</exclude>
+                                            <!-- MIGRATION_3.0 s.2: package orderbook moved to the low-latency module -->
+                                            <exclude>com.quantfinlib.orderbook.*</exclude>
+                                            <!-- MIGRATION_3.0 s.2: package sbe moved to the low-latency module -->
+                                            <exclude>com.quantfinlib.sbe.*</exclude>
+                                            <!-- MIGRATION_3.0 s.2: package trading moved to the low-latency module -->
+                                            <exclude>com.quantfinlib.trading.*</exclude>
+                                            <!-- MIGRATION_3.0 s.7: reporting renamed regreporting (low-latency module) -->
+                                            <exclude>com.quantfinlib.reporting.*</exclude>
+                                            <!-- MIGRATION_3.0 s.4: MathUtils removed (D9) -->
+                                            <exclude>com.quantfinlib.util.MathUtils</exclude>
+                                            <!-- MIGRATION_3.0 s.8: moved to non-exported internal -->
+                                            <exclude>com.quantfinlib.util.ValueArrays</exclude>
+                                            <!-- MIGRATION_3.0 s.8: moved to non-exported internal -->
+                                            <exclude>com.quantfinlib.util.Immutable</exclude>
+                                            <!-- MIGRATION_3.0 s.2: util latency helper moved to the low-latency module -->
+                                            <exclude>com.quantfinlib.util.HiccupMonitor</exclude>
+                                            <!-- MIGRATION_3.0 s.2: util latency helper moved to the low-latency module -->
+                                            <exclude>com.quantfinlib.util.IdleStrategy*</exclude>
+                                            <!-- MIGRATION_3.0 s.2: util latency helper moved to the low-latency module -->
+                                            <exclude>com.quantfinlib.util.LatencyRecorder</exclude>
+                                            <!-- MIGRATION_3.0 s.2: util latency helper moved to the low-latency module -->
+                                            <exclude>com.quantfinlib.util.NanoClock</exclude>
+                                            <!-- MIGRATION_3.0 s.2: util latency helper moved to the low-latency module -->
+                                            <exclude>com.quantfinlib.util.ThreadPlacement</exclude>
+                                            <!-- MIGRATION_3.0 s.8: moved to trading.StrategyRunner -->
+                                            <exclude>com.quantfinlib.backtest.StrategyRunner*</exclude>
+                                            <!-- MIGRATION_3.0 s.9: sample strategy removed (D3) -->
+                                            <exclude>com.quantfinlib.backtest.strategies.BollingerBandsStrategy</exclude>
+                                            <!-- MIGRATION_3.0 s.9: sample strategy removed (D3) -->
+                                            <exclude>com.quantfinlib.backtest.strategies.EmaCrossStrategy</exclude>
+                                            <!-- MIGRATION_3.0 s.9: sample strategy removed (D3) -->
+                                            <exclude>com.quantfinlib.backtest.strategies.MacdStrategy</exclude>
+                                            <!-- MIGRATION_3.0 s.9: sample strategy removed (D3) -->
+                                            <exclude>com.quantfinlib.backtest.strategies.RsiStrategy</exclude>
+                                            <!-- MIGRATION_3.0 s.6: folded into MultiCurrencyExposureSimulator (D4) -->
+                                            <exclude>com.quantfinlib.credit.ExposureSimulator*</exclude>
+                                            <!-- MIGRATION_3.0 s.8: moved to marketdata.tick -->
+                                            <exclude>com.quantfinlib.data.TickFileReader*</exclude>
+                                            <!-- MIGRATION_3.0 s.8: moved to marketdata.tick -->
+                                            <exclude>com.quantfinlib.data.TickFileWriter*</exclude>
+                                            <!-- MIGRATION_3.0 s.8: moved to marketdata (low-latency module) -->
+                                            <exclude>com.quantfinlib.data.TickCapture</exclude>
+                                            <!-- MIGRATION_3.0 s.8: moved to marketdata (low-latency module) -->
+                                            <exclude>com.quantfinlib.data.AsyncTickCapture</exclude>
+                                            <!-- MIGRATION_3.0 s.8: moved to marketdata.CrossRateEngine; Op became fx.CrossOp -->
+                                            <exclude>com.quantfinlib.fx.CrossRateEngine*</exclude>
+                                            <!-- MIGRATION_3.0 s.8: implements marketdata.tick.TickFileReader.ReplayHandler (was data.TickFileReader.ReplayHandler) -->
+                                            <exclude>com.quantfinlib.backtest.tick.TickBacktester</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.backtest.ExecutionAlgoBacktester#run(com.quantfinlib.core.BarSeries,com.quantfinlib.orderbook.Side,long,com.quantfinlib.execution.BenchmarkExecutor$Benchmark,double)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.backtest.ExecutionAlgoBacktester#run(com.quantfinlib.core.BarSeries,com.quantfinlib.orderbook.Side,long,com.quantfinlib.execution.BenchmarkExecutor$Benchmark)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.backtest.ExecutionModel#execute(com.quantfinlib.orderbook.Side,long,com.quantfinlib.core.BarSeries,int)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.backtest.ExecutionModel#onParentOrder(com.quantfinlib.orderbook.Side,long,int)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.backtest.ParentOrder#side()</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.backtest.ParentOrder#ParentOrder(com.quantfinlib.orderbook.Side,int,double,java.lang.String,java.util.List,int[])</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.backtest.tick.TickTradingContext#submitLimit(int,com.quantfinlib.orderbook.Side,double,long)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.backtest.tick.TickTradingContext#submitMarket(int,com.quantfinlib.orderbook.Side,long)</exclude>
+                                            <!-- MIGRATION_3.0 s.6: ExposureSimulator terms became SwapTerms/FxForwardTerms/Csa -->
+                                            <exclude>com.quantfinlib.credit.MultiCurrencyExposureSimulator#simulate(com.quantfinlib.credit.MultiCurrencyExposureSimulator$Market,java.util.List,java.util.List,java.util.List,com.quantfinlib.credit.MultiCurrencyExposureSimulator$BasisFactor,com.quantfinlib.credit.ExposureSimulator$Csa,double[],int,long,int)</exclude>
+                                            <!-- MIGRATION_3.0 s.6: ExposureSimulator terms became SwapTerms/FxForwardTerms/Csa -->
+                                            <exclude>com.quantfinlib.credit.MultiCurrencyExposureSimulator#simulate(com.quantfinlib.credit.MultiCurrencyExposureSimulator$Market,java.util.List,java.util.List,com.quantfinlib.credit.ExposureSimulator$Csa,double[],int,long)</exclude>
+                                            <!-- MIGRATION_3.0 s.6: ExposureSimulator terms became SwapTerms/FxForwardTerms/Csa -->
+                                            <exclude>com.quantfinlib.credit.MultiCurrencyExposureSimulator#simulate(com.quantfinlib.credit.MultiCurrencyExposureSimulator$Market,java.util.List,java.util.List,com.quantfinlib.credit.ExposureSimulator$Csa,double[],int,long,int)</exclude>
+                                            <!-- MIGRATION_3.0 s.6: ExposureSimulator terms became SwapTerms/FxForwardTerms/Csa -->
+                                            <exclude>com.quantfinlib.credit.MultiCurrencyExposureSimulator$ForeignSwap#terms()</exclude>
+                                            <!-- MIGRATION_3.0 s.6: ExposureSimulator terms became SwapTerms/FxForwardTerms/Csa -->
+                                            <exclude>com.quantfinlib.credit.MultiCurrencyExposureSimulator$ForeignSwap#ForeignSwap(int,com.quantfinlib.credit.ExposureSimulator$Swap,com.quantfinlib.credit.MultiCurrencyExposureSimulator$Curve)</exclude>
+                                            <!-- MIGRATION_3.0 s.6: ExposureSimulator terms became SwapTerms/FxForwardTerms/Csa -->
+                                            <exclude>com.quantfinlib.credit.MultiCurrencyExposureSimulator$FxForward#terms()</exclude>
+                                            <!-- MIGRATION_3.0 s.6: ExposureSimulator terms became SwapTerms/FxForwardTerms/Csa -->
+                                            <exclude>com.quantfinlib.credit.MultiCurrencyExposureSimulator$FxForward#FxForward(int,com.quantfinlib.credit.ExposureSimulator$FxForward)</exclude>
+                                            <!-- MIGRATION_3.0 s.6: ExposureSimulator terms became SwapTerms/FxForwardTerms/Csa -->
+                                            <exclude>com.quantfinlib.credit.MultiCurrencyExposureSimulator$Market#fromLegacy(com.quantfinlib.credit.ExposureSimulator$Market)</exclude>
+                                            <!-- MIGRATION_3.0 s.6: ExposureSimulator terms became SwapTerms/FxForwardTerms/Csa -->
+                                            <exclude>com.quantfinlib.credit.MultiCurrencyExposureSimulator$Swap#terms()</exclude>
+                                            <!-- MIGRATION_3.0 s.6: ExposureSimulator terms became SwapTerms/FxForwardTerms/Csa -->
+                                            <exclude>com.quantfinlib.credit.MultiCurrencyExposureSimulator$Swap#Swap(com.quantfinlib.credit.ExposureSimulator$Swap,com.quantfinlib.credit.MultiCurrencyExposureSimulator$Curve)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.execution.AdaptiveSor#route(com.quantfinlib.orderbook.Side,long,java.util.List)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.execution.BenchmarkExecutor#of(com.quantfinlib.orderbook.Side,long,com.quantfinlib.execution.BenchmarkExecutor$Benchmark)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.execution.BenchmarkExecutor#pov(com.quantfinlib.orderbook.Side,long,double)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.execution.BenchmarkExecutor#side()</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.execution.BenchmarkExecutor#BenchmarkExecutor(com.quantfinlib.orderbook.Side,long,com.quantfinlib.execution.BenchmarkExecutor$Benchmark,double,double,double)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.execution.DarkPoolSimulator#restingQty(com.quantfinlib.orderbook.Side)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.execution.DarkPoolSimulator#submit(com.quantfinlib.orderbook.Side,long,long)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.execution.HftSor#route(com.quantfinlib.orderbook.Side,long,int,long[])</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.execution.MidPegTracker#MidPegTracker(com.quantfinlib.orderbook.Side,double,double,double)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.execution.SmartOrderRouter#route(com.quantfinlib.orderbook.Side,long,java.util.List,boolean)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.execution.SmartOrderRouter#route(com.quantfinlib.orderbook.Side,long,java.util.List,boolean,double)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.execution.SmartOrderRouter#route(com.quantfinlib.orderbook.Side,long,java.util.List,boolean,double,long,long)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.execution.VenueBenchmark$Sample#side()</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.execution.VenueBenchmark$Sample#Sample(java.lang.String,com.quantfinlib.orderbook.Side,double,long,double,double,long,boolean)</exclude>
+                                            <!-- MIGRATION_3.0 s.5: 8-argument VenueQuote constructor removed -->
+                                            <exclude>com.quantfinlib.execution.VenueQuote#VenueQuote(java.lang.String,double,long,double,long,double,long,boolean)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: CrossRateEngine.Op became fx.CrossOp -->
+                                            <exclude>com.quantfinlib.fx.SyntheticCross#buySavings(double,com.quantfinlib.fx.CrossRateEngine$Op,double,double,double,double)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: CrossRateEngine.Op became fx.CrossOp -->
+                                            <exclude>com.quantfinlib.fx.SyntheticCross#buySyntheticWins(double,com.quantfinlib.fx.CrossRateEngine$Op,double,double,double,double)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: CrossRateEngine.Op became fx.CrossOp -->
+                                            <exclude>com.quantfinlib.fx.SyntheticCross#sellSavings(double,com.quantfinlib.fx.CrossRateEngine$Op,double,double,double,double)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: CrossRateEngine.Op became fx.CrossOp -->
+                                            <exclude>com.quantfinlib.fx.SyntheticCross#sellSyntheticWins(double,com.quantfinlib.fx.CrossRateEngine$Op,double,double,double,double)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: CrossRateEngine.Op became fx.CrossOp -->
+                                            <exclude>com.quantfinlib.fx.SyntheticCross#syntheticAsk(com.quantfinlib.fx.CrossRateEngine$Op,double,double,double,double)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: CrossRateEngine.Op became fx.CrossOp -->
+                                            <exclude>com.quantfinlib.fx.SyntheticCross#syntheticBid(com.quantfinlib.fx.CrossRateEngine$Op,double,double,double,double)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.microstructure.Execution#side()</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.microstructure.Execution#Execution(java.lang.String,com.quantfinlib.orderbook.Side,double,long,long,java.lang.String)</exclude>
+                                            <!-- MIGRATION_3.0 s.5: ignored-seed constructor removed -->
+                                            <exclude>com.quantfinlib.optimization.ConstrainedPortfolioOptimizer#ConstrainedPortfolioOptimizer(double[],double[][],long)</exclude>
+                                            <!-- MIGRATION_3.0 s.5: ignored-seed constructor removed -->
+                                            <exclude>com.quantfinlib.optimization.PortfolioOptimizer#PortfolioOptimizer(double[],double[][],long)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.regulatory.BestExecutionAnalyzer#implementationShortfall(com.quantfinlib.orderbook.Side,double,double,double[],double[],double,double)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.regulatory.BestExecutionAnalyzer$OrderOutcome#side()</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.regulatory.BestExecutionAnalyzer$OrderOutcome#OrderOutcome(java.lang.String,java.lang.String,com.quantfinlib.orderbook.Side,long,double,double,long,boolean)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.regulatory.MarketQualityMetrics#effectiveSpreadBps(com.quantfinlib.orderbook.Side,double,double)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.regulatory.MarketQualityMetrics#priceImpactBps(com.quantfinlib.orderbook.Side,double,double)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.regulatory.MarketQualityMetrics#realizedSpreadBps(com.quantfinlib.orderbook.Side,double,double)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.risk.PreTradeLimitChecker$OrderRequest#side()</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.risk.PreTradeLimitChecker$OrderRequest#OrderRequest(java.lang.String,com.quantfinlib.orderbook.Side,long,double,java.lang.String)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side (interface method now takes core.Side) -->
+                                            <exclude>com.quantfinlib.backtest.ExecutionModel#execute(com.quantfinlib.core.Side,long,com.quantfinlib.core.BarSeries,int)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.backtest.IcebergExecution#execute(com.quantfinlib.orderbook.Side,long,com.quantfinlib.core.BarSeries,int)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.backtest.IcebergExecution#onParentOrder(com.quantfinlib.orderbook.Side,long,int)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.backtest.InstantExecution#execute(com.quantfinlib.orderbook.Side,long,com.quantfinlib.core.BarSeries,int)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.backtest.LastLookExecution#execute(com.quantfinlib.orderbook.Side,long,com.quantfinlib.core.BarSeries,int)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.backtest.LastLookExecution#onParentOrder(com.quantfinlib.orderbook.Side,long,int)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.backtest.SorExecution#execute(com.quantfinlib.orderbook.Side,long,com.quantfinlib.core.BarSeries,int)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side (interface method now takes core.Side) -->
+                                            <exclude>com.quantfinlib.backtest.tick.TickTradingContext#submitLimit(int,com.quantfinlib.core.Side,double,long)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side (interface method now takes core.Side) -->
+                                            <exclude>com.quantfinlib.backtest.tick.TickTradingContext#submitMarket(int,com.quantfinlib.core.Side,long)</exclude>
+                                            <!-- MIGRATION_3.0 s.6: ExposureSimulator terms became SwapTerms/FxForwardTerms/Csa -->
+                                            <exclude>com.quantfinlib.credit.MultiCurrencyExposureSimulator$ForeignSwap#MultiCurrencyExposureSimulator$ForeignSwap(int,com.quantfinlib.credit.ExposureSimulator$Swap,com.quantfinlib.credit.MultiCurrencyExposureSimulator$Curve)</exclude>
+                                            <!-- MIGRATION_3.0 s.6: ExposureSimulator terms became SwapTerms/FxForwardTerms/Csa -->
+                                            <exclude>com.quantfinlib.credit.MultiCurrencyExposureSimulator$FxForward#MultiCurrencyExposureSimulator$FxForward(int,com.quantfinlib.credit.ExposureSimulator$FxForward)</exclude>
+                                            <!-- MIGRATION_3.0 s.6: ExposureSimulator terms became SwapTerms/FxForwardTerms/Csa -->
+                                            <exclude>com.quantfinlib.credit.MultiCurrencyExposureSimulator$Swap#MultiCurrencyExposureSimulator$Swap(com.quantfinlib.credit.ExposureSimulator$Swap,com.quantfinlib.credit.MultiCurrencyExposureSimulator$Curve)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.execution.VenueBenchmark$Sample#VenueBenchmark$Sample(java.lang.String,com.quantfinlib.orderbook.Side,double,long,double,double,long,boolean)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.regulatory.BestExecutionAnalyzer$OrderOutcome#BestExecutionAnalyzer$OrderOutcome(java.lang.String,java.lang.String,com.quantfinlib.orderbook.Side,long,double,double,long,boolean)</exclude>
+                                            <!-- MIGRATION_3.0 s.8: orderbook.Side moved to core.Side -->
+                                            <exclude>com.quantfinlib.risk.PreTradeLimitChecker$OrderRequest#PreTradeLimitChecker$OrderRequest(java.lang.String,com.quantfinlib.orderbook.Side,long,double,java.lang.String)</exclude>
+                                        </excludes>
+                                    </parameter>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+</project>
