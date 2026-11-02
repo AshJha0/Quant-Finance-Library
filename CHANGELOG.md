@@ -6,6 +6,10 @@ Entries for 1.x releases are archived in [docs/history/CHANGELOG-1.x.md](docs/hi
 
 ## [Unreleased]
 
+### Changed
+
+- Release policy: the "at most one minor release a month" rule and the three-month waits (deprecation to removal, 3.2.0 to 4.0) are dropped. Kept in [docs/STABILITY.md](docs/STABILITY.md): no breaking changes within a major after its .0, a deprecation ships in at least one minor (with its replacement) before the major that removes it, a migration guide per major, tags never move.
+
 ## [3.1.0] - 2026-11-02
 
 Minor release, additive over 3.0.0: no public member is removed, no signature changes, and no existing result changes unless noted under Fixed. It is the first release under the cadence in [docs/STABILITY.md](docs/STABILITY.md) (at most one minor a month, no breaking changes in 3.x). japicmp against the released 3.0.0 jars: semver MINOR for both modules, no binary-incompatible change, no allow-list. Migration notes: [docs/MIGRATION_3.1.md](docs/MIGRATION_3.1.md). The release was built in two parts; part 2 adds the remaining EMIR and CAT rules, the schema check, allocation-regression tests, the LEARN split, DESIGN_4.0, the SBOM and the reproducible-build check.
