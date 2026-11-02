@@ -11886,3 +11886,31 @@ Worked example: to run the command line from a checkout,
 `java -cp "$QFL_CP" com.quantfinlib.cli.Main report --csv bars.csv --symbol SPY --out market.html` (GETTING_STARTED.md
 shows how to build `QFL_CP`). For production code, copy the strategy you need into your
 own project rather than depending on this jar.
+
+## 490. EMIR: field 1.3 and a third-country venue (4.0)
+
+The plain idea: field 1.3 (entity responsible for reporting) is left blank for a trade on a
+regulated market, and also for one on a non-EEA market the EU treats as equivalent to a
+regulated market. That equivalence is a legal decision, not something a MIC says, so you
+supply the list.
+
+Formally: ESMA74-362-2683, sheet Validations_Cpty_derivative, row 7, column AC, condition 1
+names "a third-country market considered as equivalent to a regulated market"; the regime is
+Article 2a of EMIR (Regulation (EU) No 648/2012), under which ESMA publishes the list of such
+markets. The library does not bundle it. A non-EEA venue (country from the MIC registry) is
+treated as regulated when your list holds its MIC on the date of 2.42.
+
+```java
+MicRegistry mics = Iso10383MicRegistry.load(Path.of("ISO10383_MIC.csv"));
+ThirdCountryMarkets equivalent = new InMemoryThirdCountryMarkets()
+    .add("XNYS", LocalDate.of(2020, 1, 1));   // your copy of the list; dates illustrative
+EmirStatefulValidator validator = EmirStatefulValidator.create()
+    .withMicRegistry(mics)
+    .withThirdCountryMarkets(equivalent);
+```
+
+Worked example (own test): a NEWT executed on XNYS on 2026-03-02 with 1.3 blank passes
+EMIR-VR-1003-01; with an empty list the same report fails it ("field 1.3 must be
+populated"). Without `withThirdCountryMarkets` a non-EEA venue skips the rule, as in 3.x, so
+existing output is unchanged. The XNYS entry above is an example, not a statement that NYSE
+is on ESMA's list; check the published list. [LEARN 17i](learn/04-technology.md#17i-emir-rules-that-need-state-and-cat-linkage-keys-31).
