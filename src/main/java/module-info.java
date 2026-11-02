@@ -32,6 +32,7 @@ module com.quantfinlib {
     exports com.quantfinlib.credit;
     exports com.quantfinlib.data;
     exports com.quantfinlib.dsl;
+    exports com.quantfinlib.entitlements;
     exports com.quantfinlib.execution;
     exports com.quantfinlib.feed;
     exports com.quantfinlib.fix;
@@ -49,6 +50,7 @@ module com.quantfinlib {
     exports com.quantfinlib.rates;
     exports com.quantfinlib.regulatory;
     exports com.quantfinlib.report;
+    exports com.quantfinlib.reporting;
     exports com.quantfinlib.rfq;
     exports com.quantfinlib.risk;
     exports com.quantfinlib.sbe;
