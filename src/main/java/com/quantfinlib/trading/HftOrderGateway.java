@@ -88,6 +88,8 @@ public final class HftOrderGateway implements AutoCloseable {
     private final AtomicLong execSeq = new AtomicLong();
     private final AtomicLong fillListenerErrors =
             new AtomicLong();
+    private final AtomicLong tradeAdjustments = new AtomicLong();
+    private final AtomicLong rejectedTradeAdjustments = new AtomicLong();
     private final Dispatcher dispatcher = new Dispatcher();
 
     private final StridedSequences tradingCounters = new StridedSequences(6);
@@ -538,6 +540,93 @@ public final class HftOrderGateway implements AutoCloseable {
             }
         }
         return true;
+    }
+
+    /**
+     * Venue busted an execution (FIX ExecType H, trade cancel; ExecRefID
+     * names the execution). The risk gate's position is reversed by
+     * {@code quantity} and every {@link FillListener#onBust} is called, which
+     * books the reversal in a ledger wired with {@link LedgerFillListener}.
+     * The order's state and cumulative quantity are not reopened: venues do
+     * not reopen a busted order either, they report the bust after the fact.
+     * The gateway keeps no execution history, so it checks only the order and
+     * that {@code quantity} does not exceed what the order has filled; the
+     * ledger rejects an unknown ExecRefID.
+     *
+     * @param execId    id of the bust report
+     * @param execRefId execution being cancelled (tag 19)
+     * @param quantity  quantity of that execution
+     * @return false (counted) for an unknown order or an impossible quantity
+     * @since 2.3.0
+     */
+    public boolean onTradeBust(long orderId, long execId, long execRefId, long quantity,
+                               long timestampNanos) {
+        int slot = orders.slotOf(orderId);
+        if (slot < 0 || quantity <= 0 || quantity > orders.filled(slot) || execRefId == 0) {
+            rejectedTradeAdjustments.incrementAndGet();
+            return false;
+        }
+        int symbolId = orders.symbols[slot];
+        Side side = orders.side(slot);
+        riskGate.onFill(symbolId, side.opposite(), quantity);
+        tradeAdjustments.incrementAndGet();
+        for (FillListener l : fillListeners) {
+            try {
+                l.onBust(execId, execRefId, orderId, symbolId, side, quantity, timestampNanos);
+            } catch (RuntimeException e) {
+                fillListenerErrors.incrementAndGet();
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Venue corrected an execution (FIX ExecType G): execution
+     * {@code execRefId}, originally {@code originalQuantity}, now stands at
+     * {@code quantity} and {@code price}. The risk gate's position moves by
+     * the difference and every {@link FillListener#onCorrect} is called. As
+     * with {@link #onTradeBust}, the order's state is left as it is.
+     *
+     * @return false (counted) for an unknown order or impossible quantities
+     * @since 2.3.0
+     */
+    public boolean onTradeCorrect(long orderId, long execId, long execRefId, long originalQuantity,
+                                  long quantity, double price, long timestampNanos) {
+        int slot = orders.slotOf(orderId);
+        if (slot < 0 || quantity <= 0 || originalQuantity <= 0
+                || originalQuantity > orders.filled(slot) || !Double.isFinite(price)
+                || execRefId == 0) {
+            rejectedTradeAdjustments.incrementAndGet();
+            return false;
+        }
+        int symbolId = orders.symbols[slot];
+        Side side = orders.side(slot);
+        long delta = quantity - originalQuantity;
+        if (delta > 0) {
+            riskGate.onFill(symbolId, side, delta);
+        } else if (delta < 0) {
+            riskGate.onFill(symbolId, side.opposite(), -delta);
+        }
+        tradeAdjustments.incrementAndGet();
+        for (FillListener l : fillListeners) {
+            try {
+                l.onCorrect(execId, execRefId, orderId, symbolId, side, quantity, price,
+                        timestampNanos);
+            } catch (RuntimeException e) {
+                fillListenerErrors.incrementAndGet();
+            }
+        }
+        return true;
+    }
+
+    /** Busts and corrections accepted by {@link #onTradeBust} and {@link #onTradeCorrect}. @since 2.3.0 */
+    public long tradeAdjustmentCount() {
+        return tradeAdjustments.get();
+    }
+
+    /** Busts and corrections refused (unknown order, impossible quantity). @since 2.3.0 */
+    public long rejectedTradeAdjustmentCount() {
+        return rejectedTradeAdjustments.get();
     }
 
     /** Venue confirmed a cancel (requested, IOC remainder, or unsolicited). */

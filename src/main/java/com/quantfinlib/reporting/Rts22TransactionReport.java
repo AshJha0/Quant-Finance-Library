@@ -15,8 +15,8 @@ import java.util.regex.Pattern;
  *
  * <p>{@link #validate()} applies the checks this library can make without
  * reference data: mandatory library fields present, LEI check digits on fields 4
- * and 6 (and on 7/16 when they are 20 characters, that is, when they look like an
- * LEI rather than a national client identifier), ISIN check digit on field 41,
+ * and 6 (and on 7/16 when they are 20 characters ending in two digits, that is, when
+ * they look like an LEI rather than a CONCAT or national client identifier), ISIN check digit on field 41,
  * MIC shape on field 36, currency shapes, the code lists for fields 1, 29 and the
  * true/false fields, and the field 28 timestamp format. It does not check that an
  * LEI is issued and active (needs the GLEIF file), that the ISIN is admitted to
@@ -40,7 +40,7 @@ public final class Rts22TransactionReport implements TransactionReport {
             Rts22Field.SUBMITTING_ENTITY_ID, Rts22Field.BUYER_ID, Rts22Field.SELLER_ID,
             Rts22Field.TRANSMISSION_OF_ORDER_INDICATOR, Rts22Field.TRADING_DATE_TIME,
             Rts22Field.TRADING_CAPACITY, Rts22Field.QUANTITY, Rts22Field.PRICE,
-            Rts22Field.VENUE, Rts22Field.INSTRUMENT_ID,
+            Rts22Field.VENUE,
             Rts22Field.SECURITIES_FINANCING_TRANSACTION_INDICATOR);
 
     private final EnumMap<Rts22Field, String> values;
@@ -83,6 +83,13 @@ public final class Rts22TransactionReport implements TransactionReport {
                 errs.add(tag(f) + " is mandatory and blank");
             }
         }
+        // Field 41 may be blank when the instrument is described in fields 42-56: auth.016
+        // FinInstrm is a choice of Id or Othr, and Othr carries the ISIN only optionally.
+        if (get(Rts22Field.INSTRUMENT_ID).isBlank() && get(Rts22Field.INSTRUMENT_FULL_NAME).isBlank()
+                && get(Rts22Field.INSTRUMENT_CLASSIFICATION).isBlank()) {
+            errs.add(tag(Rts22Field.INSTRUMENT_ID)
+                    + " is mandatory and blank unless fields 42-56 describe the instrument");
+        }
         oneOf(errs, Rts22Field.REPORT_STATUS, "NEWT", "CANC");
         oneOf(errs, Rts22Field.TRADING_CAPACITY, "DEAL", "MTCH", "AOTC");
         oneOf(errs, Rts22Field.INVESTMENT_FIRM_INDICATOR, "true", "false");
@@ -90,6 +97,13 @@ public final class Rts22TransactionReport implements TransactionReport {
         oneOf(errs, Rts22Field.SECURITIES_FINANCING_TRANSACTION_INDICATOR, "true", "false");
         oneOf(errs, Rts22Field.DERIVATIVE_NOTIONAL_CHANGE, "INCR", "DECR");
         oneOf(errs, Rts22Field.SHORT_SELLING_INDICATOR, "SESH", "SSEX", "SELL", "UNDI");
+        oneOf(errs, Rts22Field.COMMODITY_DERIVATIVE_INDICATOR, "true", "false");
+        oneOf(errs, Rts22Field.OPTION_TYPE, "PUTO", "CALL", "OTHR");
+        oneOf(errs, Rts22Field.OPTION_EXERCISE_STYLE, "EURO", "AMER", "ASIA", "BERM", "OTHR");
+        oneOf(errs, Rts22Field.DELIVERY_TYPE, "PHYS", "CASH", "OPTL");
+        allOf(errs, Rts22Field.WAIVER_INDICATOR, "RFPT", "NLIQ", "OILQ", "PRIC", "SIZE", "ILQD");
+        allOf(errs, Rts22Field.OTC_POST_TRADE_INDICATOR, "BENC", "ACTX", "LRGS", "ILQD", "SIZE", "CANC",
+                "AMND", "SDIV", "RPRI", "DUPL", "TNCP", "TPAC", "XFPH");
         lei(errs, Rts22Field.EXECUTING_ENTITY_ID, true);
         lei(errs, Rts22Field.SUBMITTING_ENTITY_ID, true);
         lei(errs, Rts22Field.BUYER_ID, false);
@@ -153,9 +167,80 @@ public final class Rts22TransactionReport implements TransactionReport {
         errs.add(tag(f) + " '" + v + "' not in " + String.join("/", allowed));
     }
 
+    private void allOf(List<String> errs, Rts22Field f, String... allowed) {
+        for (String v : Auth016Writer.list(get(f))) {
+            if (!List.of(allowed).contains(v)) {
+                errs.add(tag(f) + " '" + v + "' not in " + String.join("/", allowed));
+            }
+        }
+    }
+
+    /**
+     * ESMA validation rules for MiFIR transaction reports that can be decided
+     * from this report alone, without reference data, the GLEIF file, the MIC
+     * registry or earlier submissions.
+     *
+     * <p>Plain idea: many fields only make sense together. A firm dealing on own
+     * account must appear as buyer or seller; an off-venue trade has no venue
+     * transaction id; an option needs an option type, and so on. ESMA lists these
+     * as numbered rules with CON error codes, and an NCA rejects a report that
+     * breaks one.
+     *
+     * <p>Source (published reference): ESMA65-8-2594, Annex 1 to the MiFIR
+     * transaction reporting instructions, sheet TransactionDataValidations,
+     * version 1.7. Each message starts with the ESMA error code. Rules checked:
+     * CON-030 (XOFF/XXXX part only), 073, 074, 110, 122, 123, 150, 163, 164, 200,
+     * 212, 213, 240, 251, 290, 361 (XXXX needs the full description), 362, 372
+     * (XOFF/XXXX part), 431, 441, 450, 480, 481, 490, 500, 501, 502, 510, 511,
+     * 530, 531, 540, 541, 542, 550, 551, 552, 560, 570, 571, 572, 574, 591 and
+     * 610 (XOFF/XXXX part). The CFI-based rules apply when field 43 is populated,
+     * that is, when the report carries its own instrument description. Messages
+     * starting {@code XSD} are element cardinalities of the auth.016 usage
+     * guideline that the flat field layout cannot enforce (field 59 is mandatory,
+     * monetary prices need a currency, field 2 is {@code [A-Z0-9]{1,52}}, a full
+     * instrument description needs fields 42, 43, 46, 47 or 48, and 56).
+     *
+     * <p>Not checked, because they need data outside the report: LEI status in
+     * GLEIF, MIC and SI status, country and currency validity on the trading date,
+     * instrument presence in FIRDS, uniqueness and cancellation history of field
+     * 2, and the date the file reaches the NCA. Cancellations are only checked
+     * for field 2, since auth.016 carries just fields 2, 4 and 6 for them.
+     *
+     * <p>Worked example ({@code Rts22EsmaRulesTest}, own test): a DEAL fill built
+     * with the default builder and no field 57 breaks CON-570 and the XSD rule for
+     * field 59; setting 57 and 59 to algorithm codes clears both.
+     *
+     * @return rule violations, empty when none
+     */
+    public List<String> validateEsmaRules() {
+        return EsmaRules.check(this);
+    }
+
+    /**
+     * This report as a one-transaction ISO 20022 auth.016.001.01 document
+     * (namespace {@code urn:iso:std:iso:20022:tech:xsd:auth.016.001.01}). How
+     * the flat fields map to message elements, and the conventions callers must
+     * follow for party, person and instrument fields, is in the package
+     * documentation.
+     */
+    public String toAuth016Xml() {
+        return Auth016Writer.document(List.of(this));
+    }
+
+    /**
+     * Several reports as one auth.016.001.01 document, one {@code Tx} each, in
+     * order. The business application header (head.001) and
+     * file envelope (head.003) are not written.
+     */
+    public static String toAuth016Xml(List<Rts22TransactionReport> reports) {
+        return Auth016Writer.document(List.copyOf(reports));
+    }
+
     private void lei(List<String> errs, Rts22Field f, boolean mustBeLei) {
         String v = get(f);
-        if (v.isBlank() || (!mustBeLei && v.length() != 20)) {
+        // A 20-character CONCAT code (fields 7/16) ends in a letter or '#'; an LEI ends in two check digits.
+        boolean leiShaped = v.length() == 20 && Character.isDigit(v.charAt(18)) && Character.isDigit(v.charAt(19));
+        if (v.isBlank() || (!mustBeLei && !leiShaped)) {
             return;
         }
         if (!ReportingIdentifiers.isValidLei(v)) {
@@ -163,7 +248,7 @@ public final class Rts22TransactionReport implements TransactionReport {
         }
     }
 
-    private static String tag(Rts22Field f) {
+    static String tag(Rts22Field f) {
         return "field " + f.number() + " (" + f.name() + ")";
     }
 

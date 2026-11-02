@@ -59,6 +59,15 @@ From 2.2 the gateway also publishes each accepted fill to its registered
                                                                         v
                                                 PositionLedger --> DropCopyReconciler
    execution reports --> reporting.Rts22ReportBuilder --> TransactionReportSink
+                                 (also reporting.cat, reporting.emir builders)
+                                                     |
+                                     reporting.registry.ReferenceDataChecker
+                                     (GLEIF, FIRDS, ISO 10383) --> downstream sink
+
+   venue bust / correction (ExecType H / G)
+     --> HftOrderGateway.onTradeBust / onTradeCorrect
+     --> FillListener.onBust / onCorrect --> PositionLedger (adjustment entry,
+         rebuild from surviving fills) --> DropCopyReconciler (effective fills)
 ```
 
 A listener that throws is counted in `fillListenerErrorCount` and the gateway
@@ -79,16 +88,18 @@ carries on. Without a listener nothing changes from 2.1.
 | `orderbook` | Matching engines and book analytics | `OrderBook` (readable reference), `HftOrderBook` (price ladder, pooled nodes, self-trade prevention), `AuctionBook` (opening and closing call auctions), `BookAnalytics` |
 | `trading` | Order entry and pre-trade risk | `HftRiskGate`, `HftOrderGateway`, `OrderStateMachine`, `OrderRingBuffer`, `OrderListener`, `HftQuoter`, `AutoHedger`, `OrderThrottle`, `LastLookGate`, `LoopbackVenue`, `PaperTradingGateway`, `TradingDashboard`, `ShardedTradingEngine`, `GlobalRiskAggregator`, `PositionLedger`, `FillListener`, `LedgerFillListener`, `DropCopyReconciler`, `LimitsConfig`, `LimitsManager` |
 | `entitlements` | Who may trade what, where and when | `EntitlementService`, `Grant`, `Permission`, `Decision`, `EntitlementPreTradeCheck` |
-| `reporting` | Regulatory transaction reports | `TransactionReport`, `TransactionReportSink`, `Rts22ReportBuilder`, `Rts22TransactionReport`, `ReportingIdentifiers` |
+| `reporting` | Regulatory transaction reports | `TransactionReport`, `TransactionReportSink`, `Rts22ReportBuilder`, `Rts22TransactionReport`, `ReportingIdentifiers` (`Rts22TransactionReport.toAuth016Xml`, `validateEsmaRules` from 2.3) |
+| `reporting.registry` | Reference data for reports (2.3) | `LeiRegistry`, `GleifGoldenCopyLeiRegistry`, `GleifApiLeiRegistry`, `InstrumentRegistry`, `FirdsInstrumentRegistry`, `MicRegistry`, `Iso10383MicRegistry`, `ReferenceDataChecker` |
+| `reporting.cat` | US CAT order events, indicative (2.3) | `CatEventBuilder`, `CatEvent`, `CatEventType`, `CatJsonLinesSink` |
+| `reporting.emir` | EMIR Refit derivative reports, indicative (2.3) | `EmirRefitReportBuilder`, `EmirRefitReport`, `EmirActionType`, `EmirEventType` |
 | `indicators` | Technical indicators | `Indicators` (batch), `StreamingIndicators` (one update per tick) |
 | `pricing` | Option pricing and volatility surfaces | `BlackScholes`, `Black76`, `Bachelier`, `ImpliedVolatility`, `BinomialTree`, `Heston`, `SabrModel`, `VolSurface`, `BarrierOption`, `DigitalOption`, `TouchOption`, `AsianOption`, `QuantoOption`, `ExchangeOption`, `VarianceSwap`, `VannaVolga`, `HestonCos`, `HestonCalibrator`, `SviSlice`, `SsviSurface`, `SviSurface`, `TotalVarianceSurface`, `DupireLocalVol`, `LocalVolMonteCarlo`, `LocalVolPde`, `DividendTree`, `Autocallable`, `StructuredNotes`, `IncrementalGreeks`, `HigherOrderGreeks` |
 | `rates` | Fixed income | `YieldCurve` (single curve), `DiscountCurve`, `MultiCurveBootstrap`, `MultiCurveRisk`, curve instruments (`Deposit`, `Fra`, `RateFuture`, `OisSwap`, `InterestRateSwap`), `BondPricer`, `DayCount`, `BusinessCalendar`, `HolidayCalendars`, `SwapPricer`, `RatesOptions`, `NelsonSiegel`, `Svensson`, `ShortRateModels`, `KeyRateDurations` |
-| `credit` | Credit curves, CDS and counterparty exposure | `CreditCurve`, `CdsPricer`, `IsdaCdsModel`, `IsdaCurve`, `CreditSpreads`, `ExposureSimulator`, `MultiCurrencyExposureSimulator`, `ExposureProfile`, `CvaApproximator` |
+| `credit` | Credit curves, CDS and counterparty exposure | `CreditCurve`, `CdsPricer`, `IsdaCdsModel`, `IsdaCurve`, `IsdaRateCurve`, `CreditSpreads`, `ExposureSimulator`, `MultiCurrencyExposureSimulator`, `ExposureProfile`, `CvaApproximator` |
 | `fx` | FX conventions, instruments and e-FX structure | `CurrencyPair`, `SwapPointsCurve`, `FxSwap`, `Ndf`, `FxVolSurface`, `FixingRisk`, `VannaVolgaTouch`, `AggregatedBook`, `CrossRateEngine`, `FxTierBook`, `LpScorecard`, `LpRouter`, `SyntheticCross` |
 | `commodities`, `markets` | Futures curves; index and private-market analytics | `CommodityCurve`, `IndexConstruction`, `PrivateMarketAnalytics` |
 | `volatility` | Volatility models | `EwmaVolatility`, `Garch11`, `GjrGarch11`, `Egarch11` (maximum likelihood), `HarRv`, `RangeVolatility`, `VolatilityIndex`, `VolatilityDecomposition`, `InformationCriteria` |
 | `risk` | Market, credit and limit risk | `TailRisk`, `VarEngine`, `RiskMetrics`, `FrtbEs`, `PnlAttribution`, `VarBacktest`, `ExtremeValueTheory`, `StressTester`, `ComponentVar`, `CovarianceShrinkage`, `PsdMatrices`, `GaussianCopula`, `Dependence`, `Pca`, `PreTradeLimitChecker`, `CounterpartyExposureTracker`, `SaCcr`, `SaCcrHaircuts`, `FrtbSa`, `FrtbDrc`, `FrtbRrao`, `FrtbNmrf`, `FactorRiskModel` |
-| `risk.simm` | ISDA SIMM initial margin (calibration supplied by the caller) | `SimmCalculator`, `SimmParameters`, `CrifSensitivity`, `SimmResult` |
 | `crb` | Central risk book | `CentralRiskBook`, `InternalizationEngine`, `SkewedQuoter`, `HedgeOptimizer`, `CrbHedgeUniverse`, `CrbAutoHedger`, `CrbRouter`, `CrbPnlLedger` |
 | `hedging` | Hedging | `DeltaHedger`, `HedgingSimulator`, `GreekHedger`, `OptionsBook`, `MinimumVarianceHedge`, `FxHedger`, `PairsHedger`, `CointegrationTest`, `WhalleyWilmott` |
 | `optimization` | Portfolio construction | `QuadraticProgram` (active-set), `PortfolioOptimizer`, `ConstrainedPortfolioOptimizer`, `RiskParityOptimizer`, `BlackLitterman`, `NelderMead` |
@@ -138,13 +149,15 @@ carries on. Without a listener nothing changes from 2.1.
 The library jar is the named module `com.quantfinlib`
 (`src/main/java/module-info.java`). It exports every package that was public in 2.0,
 the reference packages (`fix`, `sbe`, `feed`, `marketdata`, `orderbook`, `trading`,
-`util`), the `stats` package added in 2.1, and `risk.simm`, `entitlements` and
-`reporting` added in 2.2. Exporting a package does not make it
+`util`), the `stats` package added in 2.1, and `entitlements` and
+`reporting` added in 2.2, and `reporting.registry`, `reporting.cat` and
+`reporting.emir` added in 2.3. Exporting a package does not make it
 stable; the tiers are those of [STABILITY.md](STABILITY.md).
 
 | Directive | Why |
 |---|---|
-| `requires java.net.http` | `data.HttpBarFetcher` and `feed.WebSocketFeed` |
+| `requires transitive java.net.http` | `data.HttpBarFetcher`, `feed.WebSocketFeed`, and `reporting.registry.GleifApiLeiRegistry`, whose public constructor takes an `HttpClient` |
+| `requires java.xml` | FIRDS and auth.016 XML in `reporting` and `reporting.registry` |
 | `requires jdk.httpserver` | `trading.TradingDashboard` |
 | `requires static org.jspecify` | `@NullMarked` and `@Nullable` annotations; compile time only, nothing at run time |
 

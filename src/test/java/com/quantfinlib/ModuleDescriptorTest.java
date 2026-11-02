@@ -58,6 +58,6 @@ class ModuleDescriptorTest {
             }
             requires.add(r.name());
         }
-        assertEquals(Set.of("java.base", "java.net.http", "jdk.httpserver", "org.jspecify"), requires);
+        assertEquals(Set.of("java.base", "java.net.http", "java.xml", "jdk.httpserver", "org.jspecify"), requires);
     }
 }

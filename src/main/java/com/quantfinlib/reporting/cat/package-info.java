@@ -1,0 +1,19 @@
+/**
+ * US Consolidated Audit Trail (CAT) order-lifecycle events for industry members.
+ *
+ * <p>The plain idea: CAT asks a broker to report each step in an order's life (accepted,
+ * routed, filled, traded) as a separate event, and to link the steps by a firm-assigned
+ * order ID so the regulator can stitch the chain back together. This package builds those
+ * events as {@link com.quantfinlib.reporting.TransactionReport}s and writes them as JSON
+ * lines.</p>
+ *
+ * <p><b>Not certified.</b> Field names follow the published CAT Reporting Technical
+ * Specifications for Industry Members (event types MENO, MEOR, MEOT, MEOF), but only a core
+ * subset is populated (listed on {@link com.quantfinlib.reporting.cat.CatEventBuilder}), and
+ * the output has not been validated against the CAT JSON schema or submitted to the CAT
+ * test environment. Use it as a structured starting point, not as a filing.</p>
+ */
+@NullMarked
+package com.quantfinlib.reporting.cat;
+
+import org.jspecify.annotations.NullMarked;

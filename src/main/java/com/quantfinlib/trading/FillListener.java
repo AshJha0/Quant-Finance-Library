@@ -30,4 +30,32 @@ public interface FillListener {
      */
     void onFill(long execId, long orderId, int symbolId, Side side, long quantity, double price,
                 long timestampNanos);
+
+    /**
+     * The venue busted (ExecType H, trade cancel) the execution
+     * {@code execRefId}: it did not happen. The default does nothing, so
+     * listeners written for 2.2 keep compiling and ignore busts.
+     *
+     * @param execId         id of the bust report itself
+     * @param execRefId      id of the execution being cancelled (FIX tag 19)
+     * @param quantity       quantity of the busted execution, as the caller knows it
+     * @since 2.3.0
+     */
+    default void onBust(long execId, long execRefId, long orderId, int symbolId, Side side,
+                        long quantity, long timestampNanos) {
+    }
+
+    /**
+     * The venue corrected (ExecType G) the execution {@code execRefId} to
+     * {@code quantity} at {@code price}. The default does nothing.
+     *
+     * @param execId    id of the correction report
+     * @param execRefId id of the execution being corrected (FIX tag 19)
+     * @param quantity  corrected quantity of that execution (replaces, not adds)
+     * @param price     corrected price
+     * @since 2.3.0
+     */
+    default void onCorrect(long execId, long execRefId, long orderId, int symbolId, Side side,
+                           long quantity, double price, long timestampNanos) {
+    }
 }

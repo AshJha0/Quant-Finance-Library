@@ -4526,37 +4526,82 @@ flowchart LR
 Entitlements answer "may this user trade this?" and the risk gate answers
 "is this order within limits?"; they are separate checks. Fills flow to the
 ledger only through a registered listener, so a gateway without one behaves
-as in 2.1. Busts and corrections are not handled. See LEARN section 17c and
-recipes 339, 340 and 342.
+as in 2.1. Busts and corrections follow the path in diagram 109, and the
+reference-data checks before a report goes out are in diagram 110. See LEARN
+section 17c and recipes 339, 340 and 342.
 
 ---
 
-## 108. Capital and margin: FRTB SA and SIMM
+## 108. Capital: FRTB SA
 
 ```mermaid
 flowchart TB
     SENS_108["sensitivities s_k<br/>(caller computes)"]
-    WS_108["weighted WS_k = RW_k s_k<br/>(SIMM: x concentration CR_k)"]
+    WS_108["weighted WS_k = RW_k s_k"]
     KB_108["bucket K_b, S_b<br/>intra-bucket rho"]
-    AGG_108["across buckets, gamma_bc"]
-    SC_108["FrtbSa: LOW / MEDIUM / HIGH<br/>correlation scenarios, take the max"]
+    SC_108["FrtbSa: LOW / MEDIUM / HIGH<br/>scale rho and gamma per scenario"]
+    AGG_108["across buckets, gamma_bc:<br/>plain S_b first; clamp S_b to K_b<br/>only if the root goes negative"]
+    MAX_108["take the max of the three"]
     DRC_108["FrtbDrc + FrtbRrao"]
     SBM_108["FRTB SA capital"]
-    CAL_108["SimmParameters<br/>calibration file (licensed)"]
-    PC_108["SimmCalculator: risk classes,<br/>psi within product class,<br/>product classes add"]
-    IM_108["SIMM initial margin"]
 
-    SENS_108 --> WS_108 --> KB_108 --> AGG_108
-    AGG_108 --> SC_108 --> SBM_108
+    SENS_108 --> WS_108 --> SC_108 --> KB_108 --> AGG_108
+    AGG_108 --> MAX_108 --> SBM_108
     DRC_108 --> SBM_108
-    CAL_108 --> WS_108
-    AGG_108 --> PC_108 --> IM_108
 ```
 
-The two share the bucket-then-across-buckets shape. FRTB SA uses fixed
-regulatory weights and three correlation scenarios; SIMM takes its weights
-from a calibration file and has no scenarios. See LEARN sections 10o and
-10p and recipes 336 and 337.
+Weighted sensitivities aggregate within a bucket, then across buckets, under
+each of the three correlation scenarios, and the charge is the largest of the
+three. Across buckets the plain sum S_b is used first and the clamped
+alternative only when the expression under the root is negative (MAR21.4(5));
+until 2.3 the library clamped first. Curvature applies the scenario to the
+squared correlation (MAR21.101).
+See LEARN section 10o and recipe 336.
+
+---
+
+## 109. A trade bust or correction (2.3)
+
+```mermaid
+flowchart LR
+    VEN_109["venue execution report<br/>ExecType H (bust) or G (correct),<br/>ExecRefID(19) names the original"]
+    GW_109["HftOrderGateway<br/>onTradeBust / onTradeCorrect:<br/>adjusts filled quantity,<br/>order is not reopened"]
+    FL_109["FillListener<br/>onBust / onCorrect<br/>(default: ignore)"]
+    LED_109["PositionLedger<br/>adjustment entry; original kept;<br/>book rebuilt from surviving fills"]
+    EFF_109["effectiveFills()"]
+    REC_109["DropCopyReconciler<br/>effective fills vs adjusted drop copy;<br/>adjustments matched by exec id"]
+
+    VEN_109 --> GW_109 --> FL_109 --> LED_109 --> EFF_109 --> REC_109
+```
+
+A bust removes the original execution and a correction replaces its quantity
+and price. The ledger keeps the original in its log and recomputes average cost
+and realised P&L as if the busted trade had never been booked. See LEARN
+section 17d and recipe 344.
+
+---
+
+## 110. Reports and reference data (2.3)
+
+```mermaid
+flowchart LR
+    FILL_110["execution"]
+    RTS_110["Rts22ReportBuilder<br/>validate, validateEsmaRules,<br/>toAuth016Xml"]
+    CAT_110["reporting.cat<br/>CatEventBuilder (MENO/MEOR/MEOT/MEOF)"]
+    EMIR_110["reporting.emir<br/>EmirRefitReportBuilder"]
+    CHK_110["reporting.registry<br/>ReferenceDataChecker"]
+    REG_110["GLEIF golden copy or API,<br/>FIRDS FULINS, ISO 10383 MIC"]
+    SINK_110["TransactionReportSink<br/>(e.g. CatJsonLinesSink)"]
+
+    FILL_110 --> RTS_110 --> CHK_110
+    FILL_110 --> CAT_110 --> CHK_110
+    FILL_110 --> EMIR_110 --> CHK_110
+    REG_110 --> CHK_110 -->|clean| SINK_110
+```
+
+Every report type shares the `TransactionReport` view, so one checker serves
+them all. CAT and EMIR are indicative and not certified. See LEARN section 17e
+and recipes 347 to 349.
 
 ---
 

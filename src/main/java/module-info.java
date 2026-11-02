@@ -15,7 +15,8 @@
  * is a compile-time dependency only ({@code requires static}).</p>
  */
 module com.quantfinlib {
-    requires java.net.http;
+    requires transitive java.net.http;
+    requires java.xml;
     requires jdk.httpserver;
     requires static org.jspecify;
 
@@ -51,9 +52,11 @@ module com.quantfinlib {
     exports com.quantfinlib.regulatory;
     exports com.quantfinlib.report;
     exports com.quantfinlib.reporting;
+    exports com.quantfinlib.reporting.cat;
+    exports com.quantfinlib.reporting.emir;
+    exports com.quantfinlib.reporting.registry;
     exports com.quantfinlib.rfq;
     exports com.quantfinlib.risk;
-    exports com.quantfinlib.risk.simm;
     exports com.quantfinlib.sbe;
     exports com.quantfinlib.screener;
     exports com.quantfinlib.simulation;

@@ -68,7 +68,10 @@ import java.util.TreeSet;
  * with zero spread volatility). The floating coupon pays
  * {@code k / P_d(S,T) - 1} per unit notional at T, fixed at S. With the
  * projection equal to the discount curve, k = 1 and the 2.1 single-curve
- * swap is recovered.</p>
+ * swap is recovered. Since 2.3 the basis may instead be stochastic
+ * ({@link BasisFactor}), and swaps may be written in a foreign currency
+ * ({@link ForeignSwap}); both are opt-in through the ten-argument
+ * {@code simulate}.</p>
  *
  * <p><b>Worked example.</b> A 5y EUR/USD forward (domestic USD) with
  * sigma_S = 12 %, sigma_EUR = 1 %, rho(EUR rate, spot) = -0.5: the
@@ -263,6 +266,142 @@ public final class MultiCurrencyExposureSimulator {
     }
 
     /**
+     * A swap in a foreign currency (added in 2.3). Its legs are valued with
+     * that currency's Hull-White curve and state, in foreign units, and
+     * converted to domestic at the simulated spot of the pair, so the
+     * domestic-measure value {@code S_c(t) * V_c(t)} is a martingale after
+     * discounting with the domestic bank account (tested). The projection
+     * basis, if any, is deterministic against the foreign discount curve.
+     *
+     * @param pair       index into {@link Market#foreign()}
+     * @param terms      swap terms (notional in that foreign currency)
+     * @param projection foreign projection curve, or null for the foreign discount curve
+     */
+    public record ForeignSwap(int pair, ExposureSimulator.Swap terms, Curve projection) {
+        /** Validates. */
+        public ForeignSwap {
+            Objects.requireNonNull(terms, "terms");
+            if (pair < 0) {
+                throw new IllegalArgumentException("pair must be >= 0");
+            }
+        }
+    }
+
+    /**
+     * Stochastic projection-discount basis for domestic swaps that carry a
+     * projection curve (added in 2.3). Leaving it out (null) keeps the
+     * deterministic basis of 2.2.
+     *
+     * <p><b>Plain idea.</b> The basis between the projection and the
+     * discount curve is not fixed: it widens in stress and drifts back.
+     * One mean-reverting factor y_b moves the log basis of every period,
+     * and it may be correlated with the rate and FX factors.</p>
+     *
+     * <p><b>Formal statement.</b> Under the domestic measure
+     * {@code dy_b = -a_b y_b dt + sigma_b dW_b}, y_b(0) = 0. For a period
+     * (S, T) with today's basis {@code k0 = [P^f(0,S)/P^f(0,T)] / [P_d(0,S)/P_d(0,T)]},
+     * the simulated projection ratio is</p>
+     *
+     * <pre>
+     *   X(t) = k0 * m(t) * P_d(t,S) / P_d(t,T),  m(t) = exp(e^{-a_b (S-t)} y_b(t) + D(t)),  t &lt;= S
+     *   D(t) = int_0^t [rho_db sigma_b sigma_d e^{-a_b (S-u)} B_d(S-u) - sigma_b^2 e^{-2 a_b (S-u)} / 2] du
+     * </pre>
+     *
+     * <p>so at the fixing the log basis multiplier is y_b(S) + D(S), and
+     * before it the factor loads through its own conditional mean
+     * {@code e^{-a_b(S-t)} y_b(t)}. D is the drift that makes X a martingale
+     * under the T-forward measure, the condition that the forward
+     * projection rate be fair (Mercurio 2009, section 2; the drift is own
+     * algebra from the Girsanov shift {@code dW^T = dW + sigma_d B_d(T-t) dt}
+     * and is checked by a Monte Carlo martingale test). The floating
+     * coupon is worth {@code k0 m(t) P_d(t,S) - P_d(t,T)} before the fixing and
+     * {@code (k0 m(S) / P_d(S,T) - 1) P_d(t,T)} after. With sigma_b = 0 the
+     * factor is not simulated and results equal the deterministic basis
+     * path for path (tested). Foreign swaps keep a deterministic basis.</p>
+     *
+     * <p><b>Worked example.</b> sigma_b = 0.3 %, a_b = 0.5, rho = 0: a
+     * period fixing in 5y has log-basis standard deviation
+     * {@code 0.003 * sqrt((1 - e^{-5}) / 1)}, about 0.30 % at the fixing
+     * (own arithmetic).</p>
+     *
+     * @param meanReversion a_b, &gt; 0
+     * @param vol           sigma_b, &ge; 0
+     * @param correlation   correlation of W_b with each market factor
+     *                      {@code [W_d, W_1, W_S1, ...]}, length 1 + 2 n
+     */
+    public record BasisFactor(double meanReversion, double vol, double[] correlation) {
+        /** Validates and copies. */
+        public BasisFactor {
+            checkHw(meanReversion, vol);
+            Objects.requireNonNull(correlation, "correlation");
+            correlation = correlation.clone();
+            for (double r : correlation) {
+                if (!(r >= -1) || !(r <= 1)) {
+                    throw new IllegalArgumentException("basis correlation must be in [-1, 1]");
+                }
+            }
+        }
+
+        /** Defensive copy. */
+        @Override
+        public double[] correlation() {
+            return correlation.clone();
+        }
+    }
+
+    /**
+     * Simulates a netting set with foreign-currency swaps and an optional
+     * stochastic basis (added in 2.3). With no foreign swaps and a null
+     * basis it equals
+     * {@link #simulate(Market, List, List, ExposureSimulator.Csa, double[], int, long, int)}
+     * path for path.
+     *
+     * @param market         market
+     * @param swaps          domestic swaps (may be empty)
+     * @param foreignSwaps   foreign-currency swaps (may be empty)
+     * @param forwards       FX forwards (may be empty)
+     * @param basis          stochastic basis factor, or null for the deterministic basis
+     * @param csa            collateral terms, or null
+     * @param times          exposure dates, strictly ascending, &gt; 0
+     * @param paths          paths, &ge; 2
+     * @param seed           seed
+     * @param wrongWayFxPair pair whose spot Brownian is the profile's FX driver
+     * @return the exposure profile
+     */
+    public static ExposureProfile simulate(Market market, List<Swap> swaps, List<ForeignSwap> foreignSwaps,
+                                           List<FxForward> forwards, BasisFactor basis,
+                                           ExposureSimulator.Csa csa, double[] times, int paths, long seed,
+                                           int wrongWayFxPair) {
+        Objects.requireNonNull(market, "market");
+        Objects.requireNonNull(foreignSwaps, "foreignSwaps");
+        for (ForeignSwap f : foreignSwaps) {
+            if (f.pair() >= market.foreign().size()) {
+                throw new IllegalArgumentException("foreign swap on unknown pair " + f.pair());
+            }
+        }
+        if (basis != null) {
+            double[][] corr = market.correlation();
+            int n = corr.length;
+            double[] rb = basis.correlation();
+            if (rb.length != n) {
+                throw new IllegalArgumentException("basis correlation must have length " + n);
+            }
+            double[][] ext = new double[n + 1][n + 1];
+            for (int i = 0; i < n; i++) {
+                System.arraycopy(corr[i], 0, ext[i], 0, n);
+                ext[i][n] = rb[i];
+                ext[n][i] = rb[i];
+            }
+            ext[n][n] = 1;
+            if (!positiveSemiDefinite(ext)) {
+                throw new IllegalArgumentException("correlation with basis factor is not positive semi-definite");
+            }
+        }
+        return simulateChecked(market, swaps, foreignSwaps, forwards, basis, csa, times, paths, seed,
+                wrongWayFxPair);
+    }
+
+    /**
      * Simulates the netting set with the FX wrong-way driver taken from pair 0.
      *
      * @param market   market
@@ -296,11 +435,18 @@ public final class MultiCurrencyExposureSimulator {
     public static ExposureProfile simulate(Market market, List<Swap> swaps, List<FxForward> forwards,
                                            ExposureSimulator.Csa csa, double[] times, int paths, long seed,
                                            int wrongWayFxPair) {
+        return simulateChecked(market, swaps, List.of(), forwards, null, csa, times, paths, seed, wrongWayFxPair);
+    }
+
+    private static ExposureProfile simulateChecked(Market market, List<Swap> swaps, List<ForeignSwap> foreignSwaps,
+                                                   List<FxForward> forwards, BasisFactor basis,
+                                                   ExposureSimulator.Csa csa, double[] times, int paths,
+                                                   long seed, int wrongWayFxPair) {
         Objects.requireNonNull(market, "market");
         Objects.requireNonNull(swaps, "swaps");
         Objects.requireNonNull(forwards, "forwards");
         Objects.requireNonNull(times, "times");
-        if (swaps.isEmpty() && forwards.isEmpty()) {
+        if (swaps.isEmpty() && forwards.isEmpty() && foreignSwaps.isEmpty()) {
             throw new IllegalArgumentException("netting set has no trades");
         }
         for (FxForward f : forwards) {
@@ -324,7 +470,8 @@ public final class MultiCurrencyExposureSimulator {
             }
             prev = t;
         }
-        return new Engine(market, swaps, forwards, csa, times.clone(), wrongWayFxPair).run(paths, seed);
+        return new Engine(market, swaps, foreignSwaps, forwards, basis, csa, times.clone(), wrongWayFxPair)
+                .run(paths, seed);
     }
 
     private static void checkHw(double a, double sigma) {
@@ -429,9 +576,15 @@ public final class MultiCurrencyExposureSimulator {
         private final int[] sIdx;   // per pair, index of W_S, or -1 if not simulated
         private final int[] yIdx;   // per pair, index of y_c (I_c is +1), or -1
         private final int wwPair;
+        private final int[] swapCcy;        // -1 domestic, else pair index
+        private final boolean[] stochBasis;  // domestic projected swap under the basis factor
+        private final int bIdx;             // index of y_b, or -1
+        private final double basA;
+        private final double basSig;
+        private final double basRho;        // corr(W_d, W_b)
 
-        Engine(Market mk, List<Swap> sw, List<FxForward> fw, ExposureSimulator.Csa csa, double[] times,
-               int wwPair) {
+        Engine(Market mk, List<Swap> domSw, List<ForeignSwap> fSw, List<FxForward> fw, BasisFactor bf,
+               ExposureSimulator.Csa csa, double[] times, int wwPair) {
             Domestic d = mk.domestic();
             dom = new Hw(d.discount(), d.meanReversion(), d.rateVol());
             int n = mk.foreign().size();
@@ -439,7 +592,38 @@ public final class MultiCurrencyExposureSimulator {
             spot = new double[n];
             fxVol = new double[n];
             quanto = new double[n];
-            corr = mk.correlation();
+            boolean withBasis = bf != null && bf.vol() > 0;
+            double[][] mc = mk.correlation();
+            if (withBasis) {
+                int nf0 = mc.length;
+                double[] rb = bf.correlation();
+                corr = new double[nf0 + 1][nf0 + 1];
+                for (int i = 0; i < nf0; i++) {
+                    System.arraycopy(mc[i], 0, corr[i], 0, nf0);
+                    corr[i][nf0] = rb[i];
+                    corr[nf0][i] = rb[i];
+                }
+                corr[nf0][nf0] = 1;
+                basA = bf.meanReversion();
+                basSig = bf.vol();
+                basRho = rb[0];
+            } else {
+                corr = mc;
+                basA = 1;
+                basSig = 0;
+                basRho = 0;
+            }
+            List<Swap> sw = new ArrayList<>(domSw);
+            int nDom = domSw.size();
+            for (ForeignSwap f : fSw) {
+                sw.add(new Swap(f.terms(), f.projection()));
+            }
+            swapCcy = new int[sw.size()];
+            stochBasis = new boolean[sw.size()];
+            for (int k = 0; k < sw.size(); k++) {
+                swapCcy[k] = k < nDom ? -1 : fSw.get(k - nDom).pair();
+                stochBasis[k] = withBasis && k < nDom && sw.get(k).projection() != null;
+            }
             for (int c = 0; c < n; c++) {
                 Foreign f = mk.foreign().get(c);
                 fgn[c] = new Hw(f.discount(), f.meanReversion(), f.rateVol());
@@ -467,7 +651,8 @@ public final class MultiCurrencyExposureSimulator {
                         double s = swapDates[k][j], e = swapDates[k][j + 1];
                         double pfs = s == 0 ? 1 : proj[k].discountFactor(s);
                         double pfe = proj[k].discountFactor(e);
-                        basis[k][j] = (pfs / pfe) / (dom.p0(s) / dom.p0(e));
+                        Hw h = hw(k);
+                        basis[k][j] = (pfs / pfe) / (h.p0(s) / h.p0(e));
                     }
                 }
             }
@@ -478,6 +663,11 @@ public final class MultiCurrencyExposureSimulator {
                 fwds[i] = fw.get(i).terms();
                 fwdPair[i] = fw.get(i).pair();
                 used[fwdPair[i]] = true;
+            }
+            for (int k = 0; k < swapCcy.length; k++) {
+                if (swapCcy[k] >= 0) {
+                    used[swapCcy[k]] = true;
+                }
             }
             // Domestic y, I, W first (the 2.1 draw order), then per used pair W_S, y_c, I_c.
             double a = dom.a(), s = dom.sigma();
@@ -500,6 +690,14 @@ public final class MultiCurrencyExposureSimulator {
                     kernels.add(new Kernel(1 + 2 * c, 0, sc, ac));
                     kernels.add(new Kernel(1 + 2 * c, sc / ac, -sc / ac, ac));
                 }
+            }
+            if (withBasis) {
+                int fb = corr.length - 1;
+                bIdx = kernels.size();
+                kernels.add(new Kernel(fb, 0, basSig, basA));
+                kernels.add(new Kernel(fb, basSig / basA, -basSig / basA, basA));
+            } else {
+                bIdx = -1;
             }
 
             TreeSet<Double> set = new TreeSet<>();
@@ -560,7 +758,25 @@ public final class MultiCurrencyExposureSimulator {
             return iy - quanto[c] * (t - fgn[c].b(t)) / fgn[c].a();
         }
 
-        double value(double t, double xd, double[] fx, double[] xf, double[][] resetBond) {
+        Hw hw(int k) {
+            return swapCcy[k] < 0 ? dom : fgn[swapCcy[k]];
+        }
+
+        /**
+         * Log basis multiplier ln m(t) for a period fixing at s, with y = y_b(t), t &lt;= s.
+         */
+        double logBasis(double t, double s, double y) {
+            double w1 = s - t, ad = dom.a();
+            double f1 = fInt(basA, w1, s), f2 = fInt(basA + ad, w1, s), f3 = fInt(2 * basA, w1, s);
+            double drift = basRho * basSig * dom.sigma() / ad * (f1 - f2) - 0.5 * basSig * basSig * f3;
+            return Math.exp(-basA * w1) * y + drift;
+        }
+
+        private static double fInt(double k, double w1, double w2) {
+            return (Math.exp(-k * w1) - Math.exp(-k * w2)) / k;
+        }
+
+        double value(double t, double xd, double[] fx, double[] xf, double[][] resetBond, double yb) {
             double v = 0;
             for (int k = 0; k < swaps.length; k++) {
                 ExposureSimulator.Swap s = swaps[k];
@@ -569,21 +785,29 @@ public final class MultiCurrencyExposureSimulator {
                 if (t >= d[n]) {
                     continue;
                 }
+                int ccy = swapCcy[k];
+                Hw h = hw(k);
+                double x = ccy < 0 ? xd : xf[ccy];
                 double fixed = 0, flt = 0;
                 for (int j = 1; j <= n; j++) {
                     if (d[j] <= t) {
                         continue;
                     }
-                    double pe = dom.bond(t, d[j], xd);
+                    double pe = h.bond(t, d[j], x);
                     fixed += (d[j] - d[j - 1]) * pe;
                     double kb = basis[k][j - 1];
                     if (d[j - 1] >= t) {
-                        flt += kb * dom.bond(t, d[j - 1], xd) - pe;
+                        double mb = stochBasis[k] ? Math.exp(logBasis(t, d[j - 1], yb)) : 1;
+                        flt += kb * mb * h.bond(t, d[j - 1], x) - pe;
                     } else {
+                        // resetBond holds P(S,T) / m(S) for stochastic-basis periods
                         flt += (kb / resetBond[k][j - 1] - 1) * pe;
                     }
                 }
                 double pv = s.notional() * (flt - s.fixedRate() * fixed);
+                if (ccy >= 0) {
+                    pv *= fx[ccy];
+                }
                 v += s.payFixed() ? pv : -pv;
             }
             for (int i = 0; i < fwds.length; i++) {
@@ -625,6 +849,9 @@ public final class MultiCurrencyExposureSimulator {
                     isY[yIdx[c]] = true;
                 }
             }
+            if (bIdx >= 0) {
+                isY[bIdx] = true;
+            }
 
             double[][] discPos = new double[paths][m];
             double[][] discNeg = new double[paths][m];
@@ -637,7 +864,7 @@ public final class MultiCurrencyExposureSimulator {
 
             double[] fx0 = spot.clone();
             double[] xf = new double[nf];
-            double v0 = value(0, 0, fx0, xf, initialResets());
+            double v0 = value(0, 0, fx0, xf, initialResets(), 0);
             SplittableRandom rng = new SplittableRandom(seed);
             double[] vOnGrid = new double[ng];
             double[] dOnGrid = new double[ng];
@@ -658,7 +885,8 @@ public final class MultiCurrencyExposureSimulator {
                 Arrays.fill(st, 0);
                 vOnGrid[0] = v0;
                 dOnGrid[0] = 1;
-                fillResets(resets, resetAt, 0, 0);
+                Arrays.fill(xf, 0);
+                fillResets(resets, resetAt, 0, 0, xf, 0);
                 for (int g = 1; g < ng; g++) {
                     for (int i = 0; i < nk; i++) {
                         z[i] = rng.nextGaussian();
@@ -691,22 +919,24 @@ public final class MultiCurrencyExposureSimulator {
                     double disc = dom.p0(t) * Math.exp(-0.5 * dom.v(t) - st[1]);
                     dOnGrid[g] = disc;
                     double xd = st[0];
-                    fillResets(resets, resetAt, g, xd);
+                    double yb = bIdx >= 0 ? st[bIdx] : 0;
+                    for (int cc = 0; cc < nf; cc++) {
+                        xf[cc] = yIdx[cc] >= 0 ? fgnX(cc, t, st[yIdx[cc]]) : 0;
+                    }
+                    fillResets(resets, resetAt, g, xd, xf, yb);
                     if (needV[g]) {
                         for (int cc = 0; cc < nf; cc++) {
                             if (sIdx[cc] < 0) {
                                 continue;
                             }
-                            double y = yIdx[cc] >= 0 ? st[yIdx[cc]] : 0;
                             double iy = yIdx[cc] >= 0 ? st[yIdx[cc] + 1] : 0;
                             Hw h = fgn[cc];
-                            xf[cc] = yIdx[cc] >= 0 ? fgnX(cc, t, y) : 0;
                             double ix = yIdx[cc] >= 0 ? fgnIntX(cc, t, iy) : 0;
                             double accF = h.p0(t) * Math.exp(-0.5 * h.v(t) - ix);
                             double sv = fxVol[cc];
                             fx[cc] = spot[cc] * accF / disc * Math.exp(-0.5 * sv * sv * t + sv * st[sIdx[cc]]);
                         }
-                        vOnGrid[g] = value(t, xd, fx, xf, resets);
+                        vOnGrid[g] = value(t, xd, fx, xf, resets, yb);
                     }
                 }
                 double balance = 0;
@@ -775,11 +1005,16 @@ public final class MultiCurrencyExposureSimulator {
             return out;
         }
 
-        private void fillResets(double[][] resets, int[][] resetAt, int g, double x) {
+        private void fillResets(double[][] resets, int[][] resetAt, int g, double x, double[] xf, double yb) {
             int[] r = resetAt[g];
             for (int i = 0; i < r.length; i += 2) {
                 int k = r[i], j = r[i + 1];
-                resets[k][j] = dom.bond(grid[g], swapDates[k][j + 1], x);
+                double xs = swapCcy[k] < 0 ? x : xf[swapCcy[k]];
+                double pb = hw(k).bond(grid[g], swapDates[k][j + 1], xs);
+                if (stochBasis[k]) {
+                    pb /= Math.exp(logBasis(grid[g], grid[g], yb));
+                }
+                resets[k][j] = pb;
             }
         }
     }

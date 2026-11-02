@@ -209,19 +209,22 @@ library.
 ## Not implemented
 
 - Certification of the FRTB standardised approach (`risk.FrtbSa`, `FrtbDrc`,
-  `FrtbRrao`, styled after BCBS d457), securitisation, and the inputs left to the
-  caller: CSR inter-bucket correlations, GIRR inflation and basis correlations,
-  equity repo.
+  `FrtbRrao`, following BCBS d457 with MAR paragraph citations), and the default
+  risk charge for securitisations. Since 2.3 the supervisory correlations for CSR
+  buckets, GIRR inflation and cross-currency basis, equity repo, CTP and
+  securitisation non-CTP are built in.
 - The risk-factor eligibility test. NMRF stress capital (`risk.FrtbNmrf`) aggregates
-  scenario charges the caller computes.
-- The official ISDA SIMM calibration and ISDA's unit tests (licensed);
-  `risk.simm` ships an illustrative calibration only. See [SIMM.md](SIMM.md).
-- CVA capital. SA-CCR (`risk.SaCcr`) haircuts follow Basel II paragraph 151, not the
-  CRE22 (2017) table.
-- xVA beyond CVA, DVA (unilateral and first-to-default bilateral) and wrong-way CVA
-  in `credit.CvaApproximator`. `credit.MultiCurrencyExposureSimulator` has multi-curve
-  swaps and several FX pairs with stochastic foreign rates, but no foreign-currency
-  swaps, no stochastic basis, and no wrong-way risk together with bilateral CVA.
+  scenario charges the caller computes (MAR33.17).
+- ISDA SIMM: not included; ISDA licenses SIMM for use.
+- CVA capital. SA-CCR (`risk.SaCcr`) haircuts follow the Basel II table (BCBS 128
+  para 151, currency add-on para 152) by default, or CRE22.49 with
+  `SaCcrHaircuts.Table.CRE22`; the CRE22.50 table and securitisation collateral are
+  not implemented.
+- xVA beyond CVA, DVA (unilateral and first-to-default bilateral) and wrong-way CVA,
+  unilateral or bilateral, in `credit.CvaApproximator`.
+  `credit.MultiCurrencyExposureSimulator` has multi-curve swaps, foreign-currency
+  swaps, several FX pairs with stochastic foreign rates and an optional stochastic
+  basis for domestic swaps; foreign swaps do not see the basis yet.
 - Smile risk on the SVI, SSVI and local-volatility surfaces is not wired into the VaR
   engines; scenario revaluation on them is left to the caller.
 - A scenario or market-data store; scenarios are arrays supplied by the caller.

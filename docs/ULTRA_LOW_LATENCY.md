@@ -125,7 +125,11 @@ trips when an exposed symbol has no reference price.
 
 **FIX (`fix`).** FIX 4.4 by default; `FixSessionOptions.withVersion` selects FIX 4.2
 or FIX 5.0 SP2 over FIXT.1.1, and `FixDictionary` validates repeating groups on
-receipt. `FixSession` handles logon, heartbeats, test requests, resend
+receipt. From 2.3 the hot-path `FixOrderEncoder` writes all three versions, with a
+per-message ApplVerID(1128) under FIXT.1.1, and `FixExecReportView` and
+`FixMarketDataView` detect the version and read groups through `FixDictionary`
+(`execType()` gives the 4.4 meaning for a 4.2 report; `rawExecType()` the wire
+value). `FixSession` handles logon, heartbeats, test requests, resend
 requests, sequence resets and logout, with validation of CompIDs, SendingTime
 (default tolerance 120 s), PossDup and OrigSendingTime. An application message before
 Logon disconnects; a well-framed message with a bad field gets a session Reject
@@ -256,14 +260,16 @@ symbol-routing facade. A symbol can be registered on several shards;
 
 - Kernel-bypass networking, thread affinity and NIC hardware timestamps (need native
   code).
-- The hot-path order encoder (`FixOrderEncoder`) writes FIX 4.4 only, message views
-  are not dictionary-driven, and there is no per-message ApplVerID.
+- The hot-path views read only the repeating groups they need (NoMDEntries, a count of
+  NoPartyIDs); they do not expose party or leg contents in place.
 - Order audit trails for regulators. Entitlement checks (`entitlements`) and RTS 22
   reports (`reporting`) exist; drop-copy reconciliation
   (`trading.DropCopyReconciler`) compares fills the caller supplies, and nothing
   connects a drop-copy session.
-- Trade busts and corrections. Gateway fills reach `trading.PositionLedger` through
-  `LedgerFillListener` once it is registered with `HftOrderGateway.addFillListener`.
+- Busts and corrections in `PaperTradingGateway`, and reopening an order after a bust.
+  From 2.3 `HftOrderGateway.onTradeBust` and `onTradeCorrect` (ExecType H and G) reach
+  each `FillListener` and `trading.PositionLedger`, which rebuilds the book from the
+  surviving fills; `DropCopyReconciler` compares effective fills.
 - `orderbook.AuctionBook` leaves out the market-pressure step some venues apply
   before the reference-price tie-break.
 - Venue certification; the adapters have only run against in-process venues and

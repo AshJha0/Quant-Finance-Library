@@ -104,7 +104,7 @@
     <h1>quantfinlib</h1>
     <p class="lead">A Java library for quantitative finance research and risk, using only the
       JDK at runtime, with a reference low-latency trading lane.</p>
-    <p class="meta">Version 2.2.0 &middot; Java 25 &middot; MIT licence &middot;
+    <p class="meta">Version 2.3.0 &middot; Java 25 &middot; MIT licence &middot;
       <a href="https://github.com/AshJha0/Quant-Finance-Library">Source on GitHub</a></p>
   </header>
 
@@ -114,12 +114,12 @@
     <thead><tr><th>Area</th><th>Packages</th><th>Examples</th></tr></thead>
     <tbody>
       <tr><td>Pricing</td><td><code>pricing</code>, <code>fx</code></td><td>Black-Scholes-Merton, Black-76, Bachelier, implied volatility, Heston (COS, calibration), SABR, SVI and SSVI, Dupire local volatility, barriers, touches, Asian, quanto, vanna-volga, FX volatility surface</td></tr>
-      <tr><td>Rates and credit</td><td><code>rates</code>, <code>credit</code></td><td>Multi-curve OIS bootstrap with DV01, street-convention bonds, swaps, swaptions, caps, day counts, ISDA CDS model with holiday calendars, single- and multi-currency exposure simulation, CVA, bilateral CVA, Z-spread</td></tr>
-      <tr><td>Market risk</td><td><code>risk</code>, <code>volatility</code>, <code>crb</code></td><td>VaR and Acerbi-Tasche ES, filtered historical simulation, EVT, stress tests, VaR backtests, FRTB-style ES, FRTB standardised approach, SA-CCR with haircuts, ISDA SIMM structure (<code>risk.simm</code>, bring your own calibration), factor risk model, GARCH by maximum likelihood, central risk book</td></tr>
+      <tr><td>Rates and credit</td><td><code>rates</code>, <code>credit</code></td><td>Multi-curve OIS bootstrap with DV01, street-convention bonds, swaps, swaptions, caps, day counts, ISDA CDS model with holiday calendars and the swap-only ISDA rate curve, single- and multi-currency exposure simulation with foreign-currency swaps and a stochastic basis, CVA, bilateral and wrong-way CVA, Z-spread</td></tr>
+      <tr><td>Market risk</td><td><code>risk</code>, <code>volatility</code>, <code>crb</code></td><td>VaR and Acerbi-Tasche ES, filtered historical simulation, EVT, stress tests, VaR backtests, FRTB-style ES, FRTB standardised approach, SA-CCR with haircuts, factor risk model, GARCH by maximum likelihood, central risk book</td></tr>
       <tr><td>Portfolio and research</td><td><code>optimization</code>, <code>alpha</code>, <code>backtest</code></td><td>Active-set QP optimiser, risk parity, Black-Litterman, factor IC with Newey-West errors, alpha combination and attribution, capacity curves, next-open backtests, corporate events, walk-forward, deflated Sharpe</td></tr>
       <tr><td>Execution</td><td><code>microstructure</code>, <code>execution</code></td><td>Almgren-Chriss, impact and queue models, VWAP/TWAP/POV/IS algorithms, smart order routing</td></tr>
-      <tr><td>Trading lane (reference)</td><td><code>marketdata</code>, <code>trading</code>, <code>orderbook</code>, <code>fix</code>, <code>sbe</code>, <code>feed</code></td><td>Ring buffers, risk gate with kill switch, order state machine with cancel/replace, matching engine, call auctions, position ledger fed from gateway fills, versioned limits, FIX 4.2/4.4/5.0 SP2 sessions with journal, schedules and repeating groups, SBE schema 2, ITCH 5.0</td></tr>
-      <tr><td>Controls and reporting (reference)</td><td><code>entitlements</code>, <code>reporting</code></td><td>Deny-overrides entitlements with an audit log and a pre-trade check, MiFIR RTS 22 transaction reports with LEI, ISIN and MIC checks</td></tr>
+      <tr><td>Trading lane (reference)</td><td><code>marketdata</code>, <code>trading</code>, <code>orderbook</code>, <code>fix</code>, <code>sbe</code>, <code>feed</code></td><td>Ring buffers, risk gate with kill switch, order state machine with cancel/replace, matching engine, call auctions, position ledger fed from gateway fills with busts and corrections, versioned limits, FIX 4.2/4.4/5.0 SP2 sessions and hot-path encoder with journal, schedules and repeating groups, SBE schema 2, ITCH 5.0</td></tr>
+      <tr><td>Controls and reporting (reference)</td><td><code>entitlements</code>, <code>reporting</code></td><td>Deny-overrides entitlements with an audit log and a pre-trade check, MiFIR RTS 22 transaction reports with auth.016 output and ESMA rules, GLEIF, FIRDS and ISO 10383 lookups, CAT and EMIR Refit reports (not certified)</td></tr>
     </tbody>
   </table>
   </div>
@@ -134,7 +134,7 @@
 &lt;dependency&gt;
   &lt;groupId&gt;com.github.AshJha0&lt;/groupId&gt;
   &lt;artifactId&gt;Quant-Finance-Library&lt;/artifactId&gt;
-  &lt;version&gt;v2.2.0&lt;/version&gt;
+  &lt;version&gt;v2.3.0&lt;/version&gt;
 &lt;/dependency&gt;</code></pre>
   <p>Or build from source with a JDK 25:</p>
 <pre><code>git clone https://github.com/AshJha0/Quant-Finance-Library.git
@@ -154,7 +154,7 @@ cd Quant-Finance-Library
     <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/ULTRA_LOW_LATENCY.md">Trading lane</a><span>Order lifecycle, risk gate, protocols, tuning</span></li>
     <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/BENCHMARKS.md">Benchmarks</a><span>Method and results</span></li>
     <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/STABILITY.md">Stability</a><span>Stable APIs and versioning policy</span></li>
-    <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/SIMM.md">SIMM</a><span>The SIMM calculator, calibration keys and licensing</span></li>
+    <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/MIGRATION_2.3.md">Migrating to 2.3</a><span>Removed SIMM package and the result changes in 2.3</span></li>
     <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/MIGRATION_2.2.md">Migrating to 2.2</a><span>Two default changes and how to keep 2.1 behaviour</span></li>
     <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/MIGRATION_2.1.md">Migrating to 2.1</a><span>New APIs and behaviour notes</span></li>
     <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/MIGRATION_2.0.md">Migrating to 2.0</a><span>Breaking changes from 1.x</span></li>
@@ -163,11 +163,11 @@ cd Quant-Finance-Library
 
   <h2>Not implemented</h2>
   <ul>
-    <li>The official ISDA SIMM calibration and ISDA unit tests (licensed); FRTB SA certification and securitisation</li>
-    <li>SA-CCR CRE22 (2017) haircut table</li>
-    <li>Exposure for foreign-currency swaps, stochastic basis, wrong-way risk with bilateral CVA</li>
-    <li>Trade busts and corrections; FIX 4.4 only on the hot-path order encoder</li>
-    <li>MiFIR XSD validation, registry lookups, CAT and EMIR reports</li>
+    <li>ISDA SIMM: not included; ISDA licenses SIMM for use</li>
+    <li>FRTB SA certification and the securitisation default risk charge</li>
+    <li>SA-CCR CRE22.50 haircut table and securitisation collateral</li>
+    <li>Stochastic basis for foreign-currency swaps; busts in the paper-trading gateway</li>
+    <li>Certification of the CAT and EMIR reports; MiFIR reference-data rules and the head.001 envelope</li>
     <li>Live venue connectivity and certification</li>
   </ul>
 

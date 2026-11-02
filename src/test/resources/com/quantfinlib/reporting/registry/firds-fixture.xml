@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Hand-made fixture shaped like a FIRDS FULINS file. Not real ESMA data. -->
+<BizData xmlns="urn:iso:std:iso:20022:tech:xsd:head.003.001.01">
+  <Pyld>
+    <Document xmlns="urn:iso:std:iso:20022:tech:xsd:auth.017.001.02">
+      <FinInstrmRptgRefDataRpt>
+        <RefData>
+          <FinInstrmGnlAttrbts>
+            <Id>US0378331005</Id>
+            <FullNm>TEST EQUITY ORD</FullNm>
+            <ShrtNm>TEST/EQ</ShrtNm>
+            <ClssfctnTp>ESVUFR</ClssfctnTp>
+            <NtnlCcy>USD</NtnlCcy>
+          </FinInstrmGnlAttrbts>
+          <Issr>TESTLEI0000000000A01</Issr>
+          <TradgVnRltdAttrbts>
+            <Id>TSTA</Id>
+            <AdmssnApprvlDtByIssr>2020-01-01T00:00:00Z</AdmssnApprvlDtByIssr>
+          </TradgVnRltdAttrbts>
+        </RefData>
+        <RefData>
+          <FinInstrmGnlAttrbts>
+            <Id>US0378331005</Id>
+            <FullNm>TEST EQUITY ORD</FullNm>
+            <ClssfctnTp>ESVUFR</ClssfctnTp>
+          </FinInstrmGnlAttrbts>
+          <TradgVnRltdAttrbts>
+            <Id>TSTB</Id>
+          </TradgVnRltdAttrbts>
+        </RefData>
+        <RefData>
+          <FinInstrmGnlAttrbts>
+            <Id>DE0005140008</Id>
+            <FullNm>SECOND TEST SHARE</FullNm>
+          </FinInstrmGnlAttrbts>
+          <TradgVnRltdAttrbts>
+            <Id>TSTX</Id>
+          </TradgVnRltdAttrbts>
+        </RefData>
+      </FinInstrmRptgRefDataRpt>
+    </Document>
+  </Pyld>
+</BizData>

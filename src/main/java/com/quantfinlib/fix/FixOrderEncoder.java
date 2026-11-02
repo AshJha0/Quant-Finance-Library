@@ -7,7 +7,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 
 /**
- * Garbage-free FIX 4.4 order-entry encoder: NewOrderSingle (35=D),
+ * Garbage-free FIX 4.2 / 4.4 / 5.0 SP2 (FIXT.1.1) order-entry encoder (4.4 by default): NewOrderSingle (35=D),
  * OrderCancelRequest (35=F) and OrderCancelReplaceRequest (35=G), so the
  * whole order lifecycle stays allocation-free. It is — the hot-lane counterpart of
  * the String-based {@link NewOrderSingle}/{@link FixMessage} codec, for
@@ -18,7 +18,7 @@ import java.time.format.DateTimeFormatter;
  * <p>Techniques, all standard in commercial garbage-free FIX engines:</p>
  * <ul>
  *   <li><b>One reusable byte buffer</b> — the body is written at a fixed
- *       offset, then the {@code 8=FIX.4.4|9=len|} prefix is written
+ *       offset, then the {@code 8=<BeginString>|9=len|} prefix is written
  *       backwards in front of it (no copy, no second pass), and
  *       {@code 10=checksum|} appended;</li>
  *   <li><b>ASCII digit writers</b> — longs and scaled decimal prices are
@@ -47,6 +47,9 @@ public final class FixOrderEncoder {
     private static final int PREFIX_RESERVE = 32;
 
     private final byte[] buffer;
+    private final FixVersion version;
+    private final byte[] beginString;   // e.g. "FIX.4.2", "FIX.4.4", "FIXT.1.1"
+    private byte[] applVerId;           // per-message ApplVerID(1128) value, or null
     private final byte[] header34; // "49=SENDER|56=TARGET|34=" — constant per session
     private final byte[][] symbols;
     private int start;
@@ -64,6 +67,36 @@ public final class FixOrderEncoder {
      */
     public FixOrderEncoder(String senderCompId, String targetCompId, int maxSymbols,
                            int bufferSize) {
+        this(senderCompId, targetCompId, maxSymbols, bufferSize, FixVersion.FIX_4_4);
+    }
+
+    /**
+     * Encoder for a given protocol version.
+     *
+     * <p>Plain idea: the version changes the BeginString(8) and a handful of
+     * fields, never the encoding technique, so every encode stays
+     * allocation-free. Formal statement, per version:
+     * <ul>
+     *   <li>FIX 4.2: {@code 8=FIX.4.2}; NewOrderSingle carries
+     *       HandlInst(21)=1 (automated, private), a required field of the 4.2
+     *       NewOrderSingle message table (FIX 4.2 Vol 1, 35=D). Evidence class:
+     *       published reference.</li>
+     *   <li>FIX 4.4: {@code 8=FIX.4.4}; unchanged from earlier releases.</li>
+     *   <li>FIX 5.0 SP2: {@code 8=FIXT.1.1}; the application version is the one
+     *       the session announced in DefaultApplVerID(1137) on Logon, unless
+     *       {@link #applVerId(String)} sets a per-message ApplVerID(1128), which
+     *       is written straight after MsgType(35) as the FIXT 1.1 standard header
+     *       orders it.</li>
+     * </ul>
+     * Example: {@code new FixOrderEncoder("QFL", "VENUE", 16, 512, FixVersion.FIX_4_2)}
+     * encodes {@code 8=FIX.4.2|9=..|35=D|...|21=1|...}.
+     *
+     * @param version protocol version (BeginString and version-specific fields)
+     */
+    public FixOrderEncoder(String senderCompId, String targetCompId, int maxSymbols,
+                           int bufferSize, FixVersion version) {
+        this.version = java.util.Objects.requireNonNull(version, "version");
+        this.beginString = version.beginString().getBytes(StandardCharsets.US_ASCII);
         if (senderCompId.isEmpty() || targetCompId.isEmpty() || maxSymbols <= 0
                 || bufferSize < 256) {
             throw new IllegalArgumentException(
@@ -75,6 +108,31 @@ public final class FixOrderEncoder {
         String head = "49=" + senderCompId + (char) SOH
                 + "56=" + targetCompId + (char) SOH + "34=";
         this.header34 = head.getBytes(StandardCharsets.US_ASCII);
+    }
+
+    /** The protocol version this encoder writes. */
+    public FixVersion version() {
+        return version;
+    }
+
+    /**
+     * Sets the ApplVerID(1128) written into the header of every following
+     * message (cold path; call between encodes, not per order when the value
+     * is constant). {@code null} removes it. Only FIXT.1.1 has the field.
+     *
+     * @param applVerId enumeration value, e.g. "9" for FIX50SP2, or null
+     * @return this encoder
+     * @throws IllegalStateException when the version is not FIXT-based
+     */
+    public FixOrderEncoder applVerId(String applVerId) {
+        if (applVerId != null && !version.isFixt()) {
+            throw new IllegalStateException("ApplVerID(1128) needs FIXT.1.1, not " + version);
+        }
+        if (applVerId != null && applVerId.isEmpty()) {
+            throw new IllegalArgumentException("empty ApplVerID");
+        }
+        this.applVerId = applVerId == null ? null : applVerId.getBytes(StandardCharsets.US_ASCII);
+        return this;
     }
 
     /** Registers a tradeable symbol (cold path, before trading). */
@@ -201,6 +259,11 @@ public final class FixOrderEncoder {
         p = tag(p, '3', '5');
         buffer[p++] = (byte) msgType;
         buffer[p++] = SOH;
+        if (applVerId != null) {
+            p = tag4(p, '1', '1', '2', '8');
+            p = raw(p, applVerId);
+            buffer[p++] = SOH;
+        }
         p = raw(p, header34);
         p = digits(p, msgSeqNum);
         buffer[p++] = SOH;
@@ -221,6 +284,11 @@ public final class FixOrderEncoder {
         p = tag(p, '1', '1');
         p = digits(p, clOrdId);
         buffer[p++] = SOH;
+        if (version == FixVersion.FIX_4_2) {
+            p = tag(p, '2', '1');              // HandlInst, required in 4.2
+            buffer[p++] = '1';
+            buffer[p++] = SOH;
+        }
         p = tag(p, '5', '5');
         p = raw(p, symbol);
         buffer[p++] = SOH;
@@ -257,13 +325,9 @@ public final class FixOrderEncoder {
         buffer[--q] = '=';
         buffer[--q] = '9';
         buffer[--q] = SOH;
-        buffer[--q] = '4';
-        buffer[--q] = '.';
-        buffer[--q] = '4';
-        buffer[--q] = '.';
-        buffer[--q] = 'X';
-        buffer[--q] = 'I';
-        buffer[--q] = 'F';
+        for (int i = beginString.length - 1; i >= 0; i--) {
+            buffer[--q] = beginString[i];
+        }
         buffer[--q] = '=';
         buffer[--q] = '8';
         this.start = q;
@@ -348,6 +412,16 @@ public final class FixOrderEncoder {
     private int tag(int p, char a, char b) {
         buffer[p++] = (byte) a;
         buffer[p++] = (byte) b;
+        buffer[p++] = '=';
+        return p;
+    }
+
+    /** Writes {@code ABCD=}. */
+    private int tag4(int p, char a, char b, char c, char d) {
+        buffer[p++] = (byte) a;
+        buffer[p++] = (byte) b;
+        buffer[p++] = (byte) c;
+        buffer[p++] = (byte) d;
         buffer[p++] = '=';
         return p;
     }
