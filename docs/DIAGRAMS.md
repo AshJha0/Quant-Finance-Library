@@ -4594,8 +4594,9 @@ flowchart LR
     FILL_110["execution"]
     RTS_110["Rts22ReportBuilder<br/>validate, validateEsmaRules,<br/>validateWithReferenceData (2.4)"]
     SUB_110["toSubmissionXml (2.4)<br/>head.003 envelope, head.001 header,<br/>auth.016 payload"]
-    CAT_110["regreporting.cat<br/>CatEventBuilder (MENO/MEOR/MEOT/MEOF;<br/>MENQ/MONO/MOOR/MONQ from 3.1)"]
-    LINK_110["CatLinkageChecker (3.1)<br/>Order/Trade/Fulfillment/Quote Keys<br/>across a batch"]
+    CAT_110["regreporting.cat<br/>CatEventBuilder (MENO/MEOR/MEOT/MEOF;<br/>MENQ/MONO/MOOR/MONQ, option lifecycle,<br/>supplements, multi-leg from 3.1)"]
+    CSCH_110["CatSchema (3.1)<br/>JSON line vs schema file"]
+    LINK_110["CatLinkageChecker (3.1)<br/>Order/Trade/Fulfillment/Quote Keys<br/>across a batch or several files"]
     EMIR_110["regreporting.emir<br/>EmirRefitReportBuilder"]
     STATE_110["EmirStatefulValidator (3.1, opt-in)<br/>UTI history, receipt time,<br/>GLEIF status, ISO 4217"]
     CHK_110["regreporting.registry<br/>ReferenceDataChecker"]
@@ -4603,7 +4604,7 @@ flowchart LR
     SINK_110["TransactionReportSink<br/>(e.g. CatJsonLinesSink)"]
 
     FILL_110 --> RTS_110 --> CHK_110
-    FILL_110 --> CAT_110 --> LINK_110 --> CHK_110
+    FILL_110 --> CAT_110 --> CSCH_110 --> LINK_110 --> CHK_110
     FILL_110 --> EMIR_110 --> STATE_110 --> CHK_110
     REG_110 --> CHK_110 -->|clean| SINK_110
     REG_110 -.->|ReferenceData| RTS_110
@@ -4619,6 +4620,37 @@ linkage keys, and EMIR reports can be checked against the repository's state
 (history per UTI, receipt time, GLEIF status, ISO 4217) by the opt-in
 `EmirStatefulValidator`. See LEARN sections 17e, 17g and 17i and recipes 347 to
 349, 353, 364 and 365.
+
+## 111. CAT event chains and the schema gate (3.1)
+
+```mermaid
+flowchart LR
+    subgraph FILE_A["file A (FRMA)"]
+        MONO_111["MONO<br/>opens Order Key K1"]
+    end
+    subgraph FILE_B["file B (FRMA)"]
+        MONOS_111["MONOS<br/>supplement, key K1"]
+        MOOR_111["MOOR<br/>route, key K1"]
+        MOOM_111["MOOM<br/>prior K1, opens K2"]
+        MOOC_111["MOOC<br/>cancel, key K2"]
+    end
+    LINE_111["JSON line"] --> SCH_111["CatSchema<br/>CAT-S01..S09"]
+    MONO_111 -->|LK04| MONOS_111
+    MONO_111 -->|LK02| MOOR_111
+    MONO_111 -->|LK05 via prior key| MOOM_111
+    MOOM_111 -->|LK05| MOOC_111
+```
+
+The schema gate runs first and record by record: one JSON object per line,
+known type and field names, required fields, JSON types, Table 3 data types and
+choice values. Linkage runs after it, over keys rather than file order. Each
+arrow is the rule that fails when the parent is missing: a supplement without
+its order is CAT-LK04, a route CAT-LK02, a modify or cancel CAT-LK05. A MOOM
+with priorOrderKeyDate and priorOrderID moves the order to a new key, so the
+later cancel links to K2. `CatLinkageChecker.checkFiles` reads files A and B
+as one key space; `check` on file B alone reports all four children.
+Multi-leg orders (MLNO, MLOR, MLOC, MLOS) chain the same way on a key without
+a symbol. Recipes 420 to 424.
 
 ## 22. CI, nightly and release gates
 

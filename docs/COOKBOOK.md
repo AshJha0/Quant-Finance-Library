@@ -11257,9 +11257,9 @@ Option events carry `optionID` in place of `symbol` and take side B or S only
 (CAT-R13). The linkage check works on keys (section 2.6.1, Table 5): a MOOR
 without a MONO of the same Order Key is CAT-LK02, two NEW events with one key
 are CAT-LK01 for each of them, and a missing key field is CAT-LK03. The file
-IMID fills in a blank CATReporterIMID. The check is batch-local, while CAT
-links across files, so pass a whole day for a firm. Quotes use `newQuote()` or
-`newOptionQuote()` with `quoteKey(quoteId, time)`. LEARN 17i.
+IMID fills in a blank CATReporterIMID. `check` is batch-local, while CAT
+links across files; recipe 423 checks several files together. Quotes use
+`newQuote()` or `newOptionQuote()` with `quoteKey(quoteId, time)`. LEARN 17i.
 
 ## 366. Property and fuzz tests: running deeper, reproducing a failure (3.1)
 
@@ -11280,3 +11280,155 @@ fails when a parser throws anything other than its documented exception
 (`FixParseException`, `WireProtocolException` or `IOException`), so a new
 parser should declare that exception and get a fuzz test with a small seed
 corpus. LEARN section 19.
+
+## 420. CAT option lifecycle: accept, modify with a new key, cancel (3.1)
+
+```java
+Instant t0 = Instant.parse("2026-03-02T14:30:00Z");
+Instant t1 = Instant.parse("2026-03-02T14:31:00Z");
+String osi = "AAPL  260320C00150000";
+CatEvent mooa = CatEventBuilder.optionAccepted()              // Table 70
+    .reporter("FRMB", "A1").orderKey("B-1", t0).eventTimestamp(t0).optionId(osi)
+    .sidePriceQty("S", new BigDecimal("2.10"), new BigDecimal("5"))
+    .field("receiverIMID", "123:FRMB").field("senderIMID", "456:FRMA").field("senderType", "F")
+    .field("routedOrderID", "R-9").field("deptType", "A").field("orderType", "LMT")
+    .field("timeInForce", "DAY=20260302").field("tradingSession", "REG")
+    .build();
+CatEvent moom = CatEventBuilder.optionModified()              // Table 79, new Order Key B-2
+    .reporter("FRMB", "A2").orderKey("B-2", t1).eventTimestamp(t1).optionId(osi)
+    .field("priorOrderKeyDate", mooa.fields().get("orderKeyDate")).field("priorOrderID", "B-1")
+    .sidePriceQty("S", new BigDecimal("2.05"), new BigDecimal("5"))
+    .field("leavesQty", "5").field("initiator", "C").field("orderType", "LMT")
+    .field("timeInForce", "DAY=20260302").field("tradingSession", "REG").field("representativeInd", "N")
+    .build();
+CatEvent mooc = CatEventBuilder.optionCancelled()             // Table 83
+    .reporter("FRMB", "A3").orderKey("B-2", t1).eventTimestamp(t1).optionId(osi)
+    .field("cancelQty", "5").field("leavesQty", "0").field("initiator", "C")
+    .build();
+
+List<String> each = mooa.validate();                          // [] ; same for moom, mooc
+List<CatLinkageChecker.Issue> chain =
+    CatLinkageChecker.check(List.of(mooa, moom, mooc), "FRMB"); // [] : B-1 -> B-2 -> cancel
+```
+
+A MOOA opens an Order Key the same way a MONO does. A MOOM that carries
+`priorOrderKeyDate` and `priorOrderID` (Table 79 seq 9-10) links back through
+the prior key and opens its own, so the cancel above links to B-2, not B-1.
+Without the prior fields a MOOM acts on its own key. A modify or cancel with
+no order behind it is CAT-LK05. Single-record rules: senderType E, F or O,
+initiator C or F (CAT-R17), cancelQty and leavesQty as Real Quantity
+(CAT-R18), price not negative and LMT/MKT presence (CAT-R20). LEARN 17j.
+
+## 421. CAT option trade and option fulfillment (3.1)
+
+```java
+Instant t = Instant.parse("2026-03-02T14:30:00Z");
+String osi = "AAPL  260320C00150000";
+CatEvent moot = CatEventBuilder.optionTrade()                 // Table 90
+    .reporter("FRMA", "T1").tradeKey("TR-1", t).eventTimestamp(t).optionId(osi)
+    .field("quantity", "5").field("price", "2.15").field("capacity", "A")
+    .field("tapeTradeID", "X1").field("marketCenterID", "C").field("clearingFirm", "123")
+    .field("sideDetailsInd", "BUY").field("buyDetails", "[{\"orderID\":\"O-1\",\"side\":\"B\"}]")
+    .build();
+CatEvent moof = CatEventBuilder.optionFulfillment()           // Table 92
+    .reporter("FRMA", "F1").fillKey("FL-1", t).eventTimestamp(t).optionId(osi)
+    .field("quantity", "5").field("price", "2.15").field("fulfillmentLinkType", "O")
+    .field("clientDetails", "[{\"orderID\":\"O-7\",\"side\":\"B\"}]")
+    .build();
+List<String> e1 = moot.validate();                            // []
+List<String> e2 = moof.validate();                            // []
+```
+
+Option fulfillments take the option values of fulfillmentLinkType, O, OS or
+OE (Appendix G); the equity values FOR, Y and YE are refused on a MOOF
+(CAT-R17). The trade's sideDetailsInd works as on MEOT (CAT-R10, CAT-R11).
+Both open a Trade or Fulfillment Key keyed on optionID, and two of them with
+one key are CAT-LK01.
+
+## 422. Multi-leg option orders: legs, route and cancel (3.1)
+
+```java
+Instant t = Instant.parse("2026-03-02T14:30:00Z");
+CatEvent mlno = CatEventBuilder.multiLegNewOrder()            // Table 100
+    .reporter("FRMA", "M1").orderKey("ML-1", t).eventTimestamp(t)
+    .field("deptType", "A").field("price", "-0.35").field("quantity", "10")
+    .field("orderType", "LMT").field("priceType", "PU")
+    .field("timeInForce", "DAY=20260302").field("tradingSession", "REG")
+    .field("firmDesignatedID", "ACCT1").field("accountHolderType", "I").field("representativeInd", "N")
+    .optionLeg("AAPL  260320C00150000", "B", BigDecimal.ONE, "Open")   // Table 101
+    .optionLeg("AAPL  260320P00140000", "S", BigDecimal.ONE, "Open")
+    .build();
+String legs = mlno.fields().get("legDetails");   // [{"optionID":"AAPL  260320C00150000",...}, ...]
+String n = mlno.fields().get("numberOfLegs");    // "2", set because it was left blank
+List<String> errors = mlno.validate();           // []
+```
+
+A multi-leg event has no symbol and no optionID at the top level (CAT-R21);
+each leg names exactly one of them, with side B or S on an option leg and B,
+SL, SS or SX on an equity leg (`equityLeg`), a Real Quantity ratio, and no
+openCloseIndicator on an equity leg (CAT-R19). The net price may be negative
+(a credit, Table 100 seq 16), and priceType is required with LMT. The Order
+Key of a multi-leg order has no symbol: orderKeyDate, CATReporterIMID,
+orderID. MLOR, MLOC and MLOS link to the MLNO with that key (CAT-LK02,
+CAT-LK05, CAT-LK04).
+
+## 423. Supplements and linkage across files (3.1)
+
+```java
+Instant t0 = Instant.parse("2026-03-02T14:30:00Z");
+String osi = "AAPL  260320C00150000";
+CatEvent mono = CatEventBuilder.newOptionOrder()
+    .reporter("FRMA", "R1").orderKey("O-1", t0).eventTimestamp(t0).optionId(osi)
+    .sidePriceQty("B", new BigDecimal("2.15"), new BigDecimal("10"))
+    .field("orderType", "LMT").field("timeInForce", "DAY=20260302").field("tradingSession", "REG")
+    .field("deptType", "A").field("firmDesignatedID", "PENDING").field("accountHolderType", "I")
+    .field("representativeInd", "N")
+    .build();
+CatEvent monos = CatEventBuilder.optionOrderSupplement()     // Table 63: the FDID, once known
+    .reporter("FRMA", "S1").orderKey("O-1", t0).eventTimestamp(t0.plusSeconds(3600))
+    .optionId(osi).field("firmDesignatedID", "ACCT1")
+    .build();
+
+List<CatLinkageChecker.FileIssue> issues = CatLinkageChecker.checkFiles(List.of(
+    new CatLinkageChecker.Batch("FRMA_20260302_orders.json", "FRMA", List.of(mono)),
+    new CatLinkageChecker.Batch("FRMA_20260302_late.json", "FRMA", List.of(monos))));
+// [] ; checked alone, the second file gives CAT-LK04 for S1
+```
+
+`checkFiles` puts the events of every file into one key space, which is what
+CAT does: keys are unique per CATReporterIMID, not per file (section 2.6.1,
+Table 5). A key used in two files is CAT-LK01 in both, and each issue names
+the file of its event. Pass the earlier days' files too when orders rest
+overnight. The single-batch `check` gives the same results as before for the
+equity, MONO, MOOR and quote types; the new rules only fire on the new
+types.
+
+## 424. Checking JSON lines against the CAT schema (3.1)
+
+```java
+CatSchema schema = CatSchema.bundledSubset();    // library transcription of 19 event tables
+// CatSchema schema = CatSchema.load(Path.of("IM_Schema_4.1.0.json"));  // the official file
+Instant t = Instant.parse("2026-03-02T14:30:00Z");
+CatEvent meno = CatEventBuilder.newOrder()
+    .reporter("FRMA", "R1").orderKey("O-1", t).eventTimestamp(t).symbol("XYZ")
+    .sidePriceQty("B", new BigDecimal("10.01"), new BigDecimal("500"))
+    .field("orderType", "LMT").field("timeInForce", "DAY=20260302").field("tradingSession", "REG")
+    .field("deptType", "A").field("representativeInd", "N").field("firmDesignatedID", "ACCT1")
+    .field("accountHolderType", "I")
+    .build();
+String line = schema.toJson(meno);   // {"actionType":"NEW",...,"price":10.01,"timeInForce":{"DAY":20260302},...}
+List<CatSchema.Issue> ok = schema.validateLine(line);                                  // []
+List<CatSchema.Issue> bad = schema.validateLine(line.replace("\"price\":10.01", "\"price\":\"10.01\""));
+// [Issue[line=1, field=price, ruleId=CAT-S06, message=price must be JSON NUMBER, not STRING]]
+```
+
+The checks are those CAT runs before linkage: one line of at most 8190 bytes
+(CAT-S01), one JSON object (S02), a known event type (S03), known field names
+(S04), required fields present (S05, not Booleans, not on DEL), the JSON type
+(S06), the Table 3 data type (S07, for example Real Quantity has no trailing
+zeros, so `500.0` fails), the choice values (S08) and no empty values (S09).
+`CatEvent.toJson()` writes every value as a string and is kept as it was; use
+`CatSchema.toJson` for a file you will submit. The bundled schema is not the
+official file, which CAT publishes on its website; `load` reads that file in
+the section 6.1.5.2 layout. Name/Value Pair and multi-dimensional array
+contents are checked only for their JSON type. LEARN 17k.
