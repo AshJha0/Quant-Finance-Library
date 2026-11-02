@@ -46,7 +46,7 @@ Minor release. No 2.3 public signature in a stable package is removed or changed
 
 ### Tests and quality
 
-- New tests for paper busts and corrections, the securitisation DRC and haircut tables, the reference-data rules and the submission envelope, and the moved numerics. The suite count is recorded after the full gate on the release branch.
+- New tests for paper busts and corrections, the securitisation DRC and haircut tables, the reference-data rules and the submission envelope, and the moved numerics. 1,893 tests in the full suite (1,825 in 2.3.0).
 - Mutation score: `SwapPricer` 44% to 100%, `HolidayCalendars` 79% to 97% (Easter checked against Oudin's algorithm for 1583 to 4099), `ExposureSimulator` and `MultiCurrencyExposureSimulator` inner classes at 85% or more.
 
 ### Docs
