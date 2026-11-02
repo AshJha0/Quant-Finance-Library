@@ -4,11 +4,11 @@
     <!-- Own coordinates first: JitPack's artifact scan reads the first groupId/artifactId/version in the file. -->
     <groupId>com.quantfinlib</groupId>
     <artifactId>quant-finance-library</artifactId>
-    <version>3.0.0</version>
+    <version>3.1.0</version>
     <parent>
         <groupId>com.quantfinlib</groupId>
         <artifactId>quant-finance-library-parent</artifactId>
-        <version>3.0.0</version>
+        <version>3.1.0</version>
     </parent>
     <packaging>jar</packaging>
     <name>Quant-Finance-Library</name>

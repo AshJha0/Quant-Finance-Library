@@ -3,7 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.quantfinlib</groupId>
     <artifactId>quant-finance-library-parent</artifactId>
-    <version>3.0.0</version>
+    <version>3.1.0</version>
     <packaging>pom</packaging>
     <name>Quant-Finance-Library (parent)</name>
     <description>Pure-JDK quantitative finance library: pricing, market risk, alpha research and backtesting, plus a reference low-latency trading lane.</description>

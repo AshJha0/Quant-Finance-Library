@@ -147,3 +147,18 @@ deleted. [MIGRATION_3.0.md](MIGRATION_3.0.md) lists each item and its replacemen
 
 Deprecated API is marked with `@Deprecated` and stays for at least one minor release
 before removal in the next major.
+
+## Release cadence from 3.1.0
+
+The 2.x to 3.0 releases came too fast for anyone to depend on: six releases in about
+a day, and one deprecation that lived 45 minutes. From 3.1.0 the project keeps these
+rules.
+
+- At most one minor release a month. Patch releases are not limited.
+- A deprecation lives for at least one minor release **and** three months before the
+  major that removes it. The changelog gives the earliest removal date.
+- 3.x has no breaking changes. New behaviour arrives as new classes, methods or
+  options; the old path stays and is deprecated.
+- The next major (4.0) ships no earlier than three months after 3.2.0.
+- Tags are never moved. A release that fails after tagging is fixed by a new patch
+  release.
