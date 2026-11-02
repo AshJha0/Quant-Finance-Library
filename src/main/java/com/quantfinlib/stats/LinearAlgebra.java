@@ -8,7 +8,7 @@ package com.quantfinlib.stats;
  * <p>Added in 2.4.0 as the home of the matrix routines of
  * {@code util.MathUtils}, which is removed in 3.0. The code is moved, not
  * rewritten: results are bit-identical to the 2.3 {@code MathUtils}
- * methods (own test: {@code LinearAlgebraTest}).</p>
+ * methods (own test: {@code MovedFromMathUtilsTest}, pinned to the 2.3.0 jar).</p>
  *
  * @since 2.4.0
  */
