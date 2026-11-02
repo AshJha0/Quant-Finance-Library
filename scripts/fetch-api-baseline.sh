@@ -3,13 +3,13 @@
 # compares against. The jar is a GitHub release asset; 2.0.0 is not on
 # Maven Central.
 #
-#   scripts/fetch-api-baseline.sh            # version 2.0.0
+#   scripts/fetch-api-baseline.sh            # version 2.2.0 (current baseline)
 #   scripts/fetch-api-baseline.sh 2.1.0      # another release
 #
 # Then: ./mvnw -Papi-compat -DskipTests verify
 set -euo pipefail
 
-version="${1:-2.0.0}"
+version="${1:-2.2.0}"
 repo="AshJha0/Quant-Finance-Library"
 dir="${HOME}/.m2/api-baseline"
 jar="quant-finance-library-${version}.jar"
