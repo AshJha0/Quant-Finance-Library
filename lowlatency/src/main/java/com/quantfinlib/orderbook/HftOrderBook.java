@@ -150,11 +150,15 @@ public final class HftOrderBook {
     private long tradeSeq;
 
     // Trades buffered during matching, emitted once the book is consistent.
-    private long[] bufSeq = new long[256];
-    private long[] bufMaker = new long[256];
-    private long[] bufTaker = new long[256];
-    private int[] bufTick = new int[256];
-    private long[] bufQty = new long[256];
+    // Sized to maxOrders at construction: every buffered fill consumes or
+    // partly fills a distinct resting order (a fully filled node is freed
+    // but only re-used by rest(), after matching ends), so one call can
+    // never buffer more than maxOrders fills and the buffer never grows.
+    private final long[] bufSeq;
+    private final long[] bufMaker;
+    private final long[] bufTaker;
+    private final int[] bufTick;
+    private final long[] bufQty;
     private int bufCount;
     private long bufTs;
 
@@ -165,6 +169,12 @@ public final class HftOrderBook {
     private int restingOrders;
 
     /**
+     * Allocates every array the book will use. Memory is about
+     * {@code 32 * ladder + 69 * maxOrders} bytes, plus the id map (12 bytes a
+     * slot, 2 to 4 slots an order). Since 3.1 this includes a trade buffer of
+     * {@code maxOrders} fills (36 bytes each), so a sweep of any size buffers
+     * its fills without allocating.
+     *
      * @param minPriceTick lowest representable price, in ticks (inclusive)
      * @param maxPriceTick highest representable price, in ticks (inclusive)
      * @param maxOrders    resting-order capacity (pool size, fixed forever)
@@ -197,6 +207,11 @@ public final class HftOrderBook {
         }
         nodeNext[maxOrders - 1] = NONE;
         this.freeHead = 0;
+        this.bufSeq = new long[maxOrders];
+        this.bufMaker = new long[maxOrders];
+        this.bufTaker = new long[maxOrders];
+        this.bufTick = new int[maxOrders];
+        this.bufQty = new long[maxOrders];
 
         // 2× capacity, power of two: max load factor 0.5 keeps probes short.
         int cap = Integer.highestOneBit(Math.max(16, maxOrders * 2 - 1)) << 1;
@@ -633,14 +648,6 @@ public final class HftOrderBook {
     }
 
     private void bufferTrade(long maker, long taker, int tick, long qty) {
-        if (bufCount == bufQty.length) {
-            int n = bufCount * 2;
-            bufSeq = java.util.Arrays.copyOf(bufSeq, n);
-            bufMaker = java.util.Arrays.copyOf(bufMaker, n);
-            bufTaker = java.util.Arrays.copyOf(bufTaker, n);
-            bufTick = java.util.Arrays.copyOf(bufTick, n);
-            bufQty = java.util.Arrays.copyOf(bufQty, n);
-        }
         bufSeq[bufCount] = ++tradeSeq;
         bufMaker[bufCount] = maker;
         bufTaker[bufCount] = taker;
