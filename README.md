@@ -16,7 +16,7 @@ connectivity stack; see [docs/STABILITY.md](docs/STABILITY.md).
 ## Status
 
 - Version 2.4.0. Requires Java 25 (LTS). The full suite (`./mvnw verify -Pfull`) ran
-  1,893 tests at 2.4.0 (5 skipped without the optional ESMA and ISDA inputs).
+  1,893 tests at 2.4.0 (5 skipped that need optional external files or network: ISDA grids, ESMA XSDs, GLEIF).
 - Version 2.4 is additive over 2.3 and changes no result by default. It deprecates
   for removal everything 3.0 takes out (`util.MathUtils`, which now delegates to the
   new `stats.SpecialFunctions`, `LinearAlgebra` and `Numerics`; seedless optimizer
