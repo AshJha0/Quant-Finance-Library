@@ -684,7 +684,7 @@ public final class FrtbSa {
         }
 
         /** Senior IG risk weights, buckets 1-8 (MAR21.64 Table 8). */
-        public static final double[] SENIOR_IG_RW =
+        private static final double[] SENIOR_IG_RW =
             {0.009, 0.015, 0.02, 0.02, 0.008, 0.012, 0.012, 0.014};
         /** Bucket 25 risk weight (MAR21.67). */
         public static final double OTHER_RW = 0.035;
