@@ -51,6 +51,7 @@ module com.quantfinlib {
     exports com.quantfinlib.report;
     exports com.quantfinlib.rfq;
     exports com.quantfinlib.risk;
+    exports com.quantfinlib.risk.simm;
     exports com.quantfinlib.sbe;
     exports com.quantfinlib.screener;
     exports com.quantfinlib.simulation;
