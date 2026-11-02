@@ -11201,3 +11201,82 @@ case, so any other sample size or coverage returns NaN for it; the zone is
 still computed. The Kupiec and Christoffersen p-values in `VarBacktest.test`
 use `2 Phi(-sqrt x)` for the chi-squared(1) tail since 3.1. It stays accurate
 far out in the tail (P(chi2 > 100) = 1.52e-23), where the old form returned 0.
+
+## 364. EMIR checks that need history, GLEIF and ISO 4217 (3.1)
+
+```java
+InMemoryUtiHistory history = new InMemoryUtiHistory();
+EmirStatefulValidator validator = EmirStatefulValidator.create()
+    .withHistory(history)                                   // rows 8, 13 and 184
+    .withLeiRegistry(leiRegistry)                           // e.g. a GLEIF golden copy
+    .withCurrencies(CurrencyRegistry.of(List.of("EUR", "USD", "GBP")));   // your ISO 4217 list
+
+List<String> problems = validator.validate(report, receivedByTr);
+// ... send it; once the trade repository has accepted it:
+history.accept(report);
+
+for (RuleProvenance r : EmirStatefulValidator.rules()) {    // 15 rules, each with its sheet row
+    System.out.println(r.id() + " " + r.citation());
+}
+```
+
+`EmirStatefulValidator` runs `EmirRefitReport.validate()` first and then the
+stateful rules of ESMA74-362-2683 for the sources you configured; a source
+you leave out skips its rules rather than failing them. Record a report in
+the history only after the repository accepted it, or a rejected NEWT makes
+the corrected one fail EMIR-VR-2151-03. The library does not ship the ISO
+4217 list (SIX changes it several times a year), so load your copy. The
+GLEIF branch tests, EMIR-VR-1003-01, 2001-03/04 and the "reported for that
+UTI" date rules are not checked; the package javadoc lists them. LEARN 17i.
+
+## 365. CAT option orders, routes and the linkage check (3.1)
+
+```java
+Instant t = Instant.parse("2026-03-02T14:30:00Z");
+String osi = "AAPL  260320C00150000";           // OSI: root, expiry, C or P, strike x 1000
+CatEvent mono = CatEventBuilder.newOptionOrder()
+    .reporter("FRMA", "R1").orderKey("O-1", t).eventTimestamp(t)
+    .optionId(osi).sidePriceQty("B", new BigDecimal("2.15"), new BigDecimal("10"))
+    .field("orderType", "LMT").field("timeInForce", "DAY=20260302").field("tradingSession", "REG")
+    .field("deptType", "A").field("firmDesignatedID", "ACCT1").field("accountHolderType", "I")
+    .field("representativeInd", "N")
+    .build();
+CatEvent moor = CatEventBuilder.optionRoute()
+    .reporter("FRMA", "R2").orderKey("O-1", t).eventTimestamp(t)
+    .optionId(osi).sidePriceQty("B", new BigDecimal("2.15"), new BigDecimal("10"))
+    .field("orderType", "LMT").field("timeInForce", "DAY=20260302").field("tradingSession", "REG")
+    .field("destinationType", "E")
+    .build();
+
+List<String> single = mono.validate();                       // [] (CAT-R01 to CAT-R16)
+List<CatLinkageChecker.Issue> links =
+    CatLinkageChecker.check(List.of(mono, moor), "FRMA");     // [] : same Order Key
+```
+
+Option events carry `optionID` in place of `symbol` and take side B or S only
+(CAT-R13). The linkage check works on keys (section 2.6.1, Table 5): a MOOR
+without a MONO of the same Order Key is CAT-LK02, two NEW events with one key
+are CAT-LK01 for each of them, and a missing key field is CAT-LK03. The file
+IMID fills in a blank CATReporterIMID. The check is batch-local, while CAT
+links across files, so pass a whole day for a firm. Quotes use `newQuote()` or
+`newOptionQuote()` with `quoteKey(quoteId, time)`. LEARN 17i.
+
+## 366. Property and fuzz tests: running deeper, reproducing a failure (3.1)
+
+```bash
+# core property tests at 20,000 cases instead of 1,000
+./mvnw -Djacoco.skip=true -Dqfl.cases=20000 -Dtest=PricingInvariantPropertiesTest \
+    -Dsurefire.failIfNoSpecifiedTests=false -pl core test
+
+# parser fuzzing: only the *FuzzTest classes, 200,000 cases each (the nightly job)
+./mvnw -Pfuzz -Djacoco.skip=true -pl lowlatency -am test
+./mvnw -Pfuzz -Dfuzz.tries=5000 -Djacoco.skip=true -pl lowlatency -am test   # a quick run
+```
+
+Every randomised test draws from a `SplittableRandom` with a fixed seed per
+test, and a failure message names the seed and the case index. Rerun the same
+test with the same `qfl.cases` and it fails at the same case. A fuzz test
+fails when a parser throws anything other than its documented exception
+(`FixParseException`, `WireProtocolException` or `IOException`), so a new
+parser should declare that exception and get a fuzz test with a small seed
+corpus. LEARN section 19.

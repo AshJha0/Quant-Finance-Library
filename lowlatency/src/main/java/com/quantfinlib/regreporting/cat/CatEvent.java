@@ -19,9 +19,9 @@ import java.util.regex.Pattern;
  *
  * <p>Every check made by {@link #validate()} is listed by {@link #rules()} with its citation
  * and evidence class, checked against the CAT Reporting Technical Specifications for
- * Industry Members v4.1.0 r14 (2026-02-13); see {@link #CHECKED_AGAINST}. Only the four
- * equity event types and only single-record rules are checked: linkage, reference data
- * (symbol master, IMID list, FDID), late-reporting and option or quote events are not.
+ * Industry Members v4.1.0 r14 (2026-02-13); see {@link #CHECKED_AGAINST}. Up to 3.0 only the four
+ * equity event types and only single-record rules were checked; linkage, reference data
+ * (symbol master, IMID list, FDID), late-reporting and option or quote events were not.
  * Since 3.1.0 the new-quote (MENQ), new option order (MONO), option route (MOOR) and new
  * option quote (MONQ) types are also checked (rules CAT-R13 to CAT-R16), and
  * {@link CatLinkageChecker} checks linkage keys across a batch of events.</p>

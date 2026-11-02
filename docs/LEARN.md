@@ -1771,7 +1771,21 @@ buckets and inter-bucket correlations, GIRR inflation and cross-currency
 correlations, equity repo, CTP and securitisation non-CTP. NMRF uses
 separate roots for the credit and equity idiosyncratic groups, verified
 against the printed formula in MAR33.17. The default risk charge for
-securitisations is not implemented. Recipe 336.
+securitisations is in `risk/FrtbDrcSecuritisation.java` (3.0, recipe 351).
+Recipe 336.
+
+Since 3.1 the parameters are also checked table by table. `FrtbSaTableTest`
+reads three CSVs transcribed by hand from the consolidated Basel Framework,
+each row citing its paragraph, table and page: the full 10x10 GIRR tenor
+correlation matrix (MAR21.46 Table 2), 89 risk weights (MAR21.42 Table 1,
+MAR21.53 Table 4, MAR21.77 Table 10, MAR21.82 and MAR21.83 Tables 11 and 12,
+MAR22.24 Table 2 and the MAR22.12 LGDs) and the 55 off-diagonal CSR sector
+correlations of MAR21.57 Table 5. Each library value must match the printed
+one to within half its rounding (0.05 percentage points for Table 2).
+MAR21 prints no worked capital calculation, so the class example K = 0.98182
+is an independent recomputation from the printed Table 1 and Table 2 values,
+not a BCBS number; the only printed worked numbers are two correlations
+(footnotes 284 and 292), pinned in `FrtbSaParametersTest`.
 
 ### 10p. Removed in 2.3.0
 
@@ -2615,7 +2629,8 @@ Specifications v4.1.0 r14, single-record rules only; `EmirRefitReport.rules()`
 and `CatEvent.rules()` list each check with its source and evidence class
 (`RuleProvenance`). EMIR field numbers and formats are checked against the
 Annex of Regulation 2022/1860. Section 17g covers the ESMA rules that
-need reference data and the submission envelope (2.4). Swap legs are not
+need reference data and the submission envelope (2.4); section 17i the EMIR
+rules that need state and the CAT linkage keys (3.1). Swap legs are not
 implemented. Recipes 347 to 349.
 
 ### 17f. One order encoder, three FIX versions
@@ -2696,7 +2711,59 @@ would reject it with CON-411.
 *In this library:* `Rts22StatusTracker` (`submit`, `revalidate`, `restore`),
 `StatusAdvice` (`of`, `toXml`, `toFeedbackXml`, `parse`), `BusinessHeader`,
 `RecordOutcome`, `RecordStatus`. That a pending report blocks reuse of its
-reference under CON-023 is the library's reading of para 71. Recipe 355.
+reference under CON-023 is the library's reading of para 71. Recipe 358.
+
+### 17i. EMIR rules that need state, and CAT linkage keys (3.1)
+
+A trade repository and the CAT processor both remember. A repository refuses a
+second "new" report for a trade it already holds and a report stamped after it
+arrived; CAT refuses a route whose order it cannot find. None of this is visible
+in one report: the repository needs its own history and clock, CAT needs the
+other events in the batch.
+
+Formally, for EMIR (ESMA74-362-2683, sheet Validations_Cpty_derivative, columns
+AC and AD; published reference) the action types of one (field 1.4, UTI) pair
+follow a small state machine (row 184). The first report must be NEWT or POSC
+(EMIR-VR-2151-02); there is one NEWT per pair (-03); after EROR only REVI is
+accepted (-04); a trade that is no longer outstanding takes only CORR, EROR or
+REVI (-05), and REVI is refused while it is outstanding (-06). The library reads
+"outstanding" as: the last of TERM or REVI was not TERM, and the expiration or
+early-termination date (2.44, 2.45) is not before the date of field 1.1. That
+reading is the library's, not the workbook's. Row 5 compares the reporting
+timestamp with the repository's receipt time (-1001-02: stamped after receipt;
+-1001-03: the date is earlier than the day before receipt), rows 6 to 13 check
+GLEIF status on the date of field 1.1, and rows 47 and 82 the official ISO 4217
+list.
+
+For CAT (IM Technical Specifications v4.1.0 r14, section 2.6.1, Table 5;
+published reference) events link by keys, not by time or file order: the Order
+Key of MENO, MEOR, MONO and MOOR is (orderKeyDate, CATReporterIMID, symbol or
+optionID, orderID). Two NEW events may not share a key (CAT-LK01, and every
+event with the key is reported), a route needs a new-order event with its key
+(CAT-LK02), and a keyed event must carry its key fields (CAT-LK03). COR and RPR
+records reuse the key of the record they replace and are not keyed again.
+
+Worked example (own tests). A NEWT for one UTI is accepted and recorded with
+`InMemoryUtiHistory.accept`; a second NEWT from the same counterparty fails
+EMIR-VR-2151-03, while the other counterparty's own NEWT passes. After an EROR, a
+VALU fails -2151-04 and a REVI passes. A reporting timestamp of
+2026-03-02T10:00:00Z received at 09:59:59Z fails -1001-02; received at
+2026-03-04T00:00:00Z it fails -1001-03. On the CAT side, a MENO and a MEOR with
+orderID O-1 link; a MOOR with O-1 next to that MENO does not (an option route
+never links to an equity order) and fails CAT-LK02; two MENOs with O-1 both fail
+CAT-LK01.
+
+*In this library:* `regreporting/emir/EmirStatefulValidator` (opt-in; it runs
+`EmirRefitReport.validate()` first and then the 15 stateful rules for whichever
+sources it was given, so a missing source skips its rules), `UtiHistory`,
+`InMemoryUtiHistory`, `CurrencyRegistry`; `regreporting/cat/CatLinkageChecker`
+and the event types MENQ, MONO, MOOR and MONQ (rules CAT-R13 to CAT-R16). Still
+not checked: the GLEIF branch tests (`LeiRecord` has no entity category),
+EMIR-VR-1003-01 (venue MIC), 1008-02, 1009-08, 2001-03/04, 2042-03,
+2045-03/06/07/08 and 2153-06/08; for CAT the other option lifecycle events,
+multi-leg and supplement events, linkage across files, reference data and the
+JSON schema. The checker is batch-local, so pass a whole day's events for a
+firm. Recipes 364 and 365.
 
 ### 18. Scaling out and staying safe
 
@@ -2742,7 +2809,26 @@ Worth studying as a checklist for your own projects:
   the spec.
 - **Property tests**: for example "a FOK either fills entirely or changes
   nothing," asserted over thousands of randomized books; "symmetric last
-  look rejects both directions 50/50" asserted over randomized moves.
+  look rejects both directions 50/50" asserted over randomized moves. Since
+  3.1 `PricingInvariantPropertiesTest` checks put-call parity (Black-Scholes,
+  Black-76), Merton's no-arbitrage bounds, monotonicity in strike, spot and
+  volatility, convexity in strike, American >= European and >= intrinsic, and
+  implied-volatility round trips. These are plain JUnit tests driven by a
+  `SplittableRandom` with a fixed seed per test; the number of cases is the
+  system property `qfl.cases` (default 1000), and a failure names the seed and
+  case index, so it reproduces exactly. No property-testing library is used.
+- **Mutation fuzzing of parsers**: `FixParserFuzzTest` and
+  `ReferenceParsersFuzzTest` feed `FixMessage.parse`, `FixDecoder` and the
+  FIRDS XML, CFI XLSX, GLEIF CSV and ISO 10383 CSV loaders with seed inputs
+  edited 1 to 8 times (bit flips, interesting bytes, inserts, deletes,
+  duplicates, truncation) and with random bytes. The only exceptions allowed
+  out are the parser's own (`FixParseException`, `WireProtocolException`,
+  `IOException`). The default build runs 1000 cases per test; `-Pfuzz` runs
+  only the fuzz tests, at 200,000 cases each (`-Dfuzz.tries=N`), and the
+  nightly `fuzz` job runs that. There is no coverage feedback, so this is
+  mutation fuzzing, not Jazzer or AFL.
+- **Tables as data**: `FrtbSaTableTest` compares the FRTB parameters with
+  hand-transcribed MAR21/MAR22 tables, one cited row per value (section 10o).
 - **Differential tests**: the optimized NBBO fast path vs brute-force
   recomputation, 20,000 random updates.
 - **Load and timing tests**: throughput tripwires set far below measured

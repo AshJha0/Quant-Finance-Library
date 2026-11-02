@@ -55,6 +55,13 @@ The nightly PIT jobs fail when a package falls below its floor in
 needs a reason in the commit message. A new loader states its limits in
 [docs/INPUT_LIMITS.md](docs/INPUT_LIMITS.md).
 
+Randomised tests (property tests, fuzz tests) are plain JUnit tests driven by a
+`SplittableRandom` with a fixed seed per test and `qfl.cases` cases (default
+1000); the failure message must name the seed and case index. Fuzz test classes
+end in `FuzzTest`: `./mvnw -Pfuzz -Djacoco.skip=true -pl lowlatency -am test`
+runs only those, at 200,000 cases each (`-Dfuzz.tries=N`), as the nightly `fuzz`
+job does. A new parser should get one, with a small seed corpus.
+
 The nightly workflow runs everything. If you add a test that depends on how fast
 the machine is, tag it. Prefer polling with a deadline over a fixed sleep.
 

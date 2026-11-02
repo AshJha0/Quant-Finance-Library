@@ -4594,15 +4594,17 @@ flowchart LR
     FILL_110["execution"]
     RTS_110["Rts22ReportBuilder<br/>validate, validateEsmaRules,<br/>validateWithReferenceData (2.4)"]
     SUB_110["toSubmissionXml (2.4)<br/>head.003 envelope, head.001 header,<br/>auth.016 payload"]
-    CAT_110["regreporting.cat<br/>CatEventBuilder (MENO/MEOR/MEOT/MEOF)"]
+    CAT_110["regreporting.cat<br/>CatEventBuilder (MENO/MEOR/MEOT/MEOF;<br/>MENQ/MONO/MOOR/MONQ from 3.1)"]
+    LINK_110["CatLinkageChecker (3.1)<br/>Order/Trade/Fulfillment/Quote Keys<br/>across a batch"]
     EMIR_110["regreporting.emir<br/>EmirRefitReportBuilder"]
+    STATE_110["EmirStatefulValidator (3.1, opt-in)<br/>UTI history, receipt time,<br/>GLEIF status, ISO 4217"]
     CHK_110["regreporting.registry<br/>ReferenceDataChecker"]
     REG_110["GLEIF golden copy or API,<br/>FIRDS FULINS, ISO 10383 MIC"]
     SINK_110["TransactionReportSink<br/>(e.g. CatJsonLinesSink)"]
 
     FILL_110 --> RTS_110 --> CHK_110
-    FILL_110 --> CAT_110 --> CHK_110
-    FILL_110 --> EMIR_110 --> CHK_110
+    FILL_110 --> CAT_110 --> LINK_110 --> CHK_110
+    FILL_110 --> EMIR_110 --> STATE_110 --> CHK_110
     REG_110 --> CHK_110 -->|clean| SINK_110
     REG_110 -.->|ReferenceData| RTS_110
     RTS_110 --> SUB_110
@@ -4612,8 +4614,11 @@ Every report type shares the `TransactionReport` view, so one checker serves
 them all. CAT and EMIR are indicative and not certified. Since 2.4 the RTS 22
 report also runs the ESMA rules that need reference data and writes the
 submission file; the shipped loaders read status only, so the dated rules need
-richer reference data. See LEARN sections 17e and 17g and recipes 347 to 349
-and 353.
+richer reference data. Since 3.1 a batch of CAT events can be checked for
+linkage keys, and EMIR reports can be checked against the repository's state
+(history per UTI, receipt time, GLEIF status, ISO 4217) by the opt-in
+`EmirStatefulValidator`. See LEARN sections 17e, 17g and 17i and recipes 347 to
+349, 353, 364 and 365.
 
 ## 22. CI, nightly and release gates
 
@@ -4625,12 +4630,13 @@ can this tag be published (release).
 flowchart TD
     subgraph PR22["every push and PR (ci.yml)"]
         T22["tests, JDK 25<br/>+ committed stand-ins:<br/>IsdaGoldenSubsetTest, EsmaXsdGoldenTest"]
-        API22["api-compat (japicmp)"]
+        API22["api-compat (japicmp)<br/>vs the 3.0.0 jars, no allow-list"]
     end
     subgraph NIGHT22["nightly.yml"]
         FULL22["full-tests<br/>(load, timing)"]
         AN22["analysis<br/>(SpotBugs, Error Prone)"]
         REF22["reference-files<br/>fetch ISDA grids + ESMA XSDs,<br/>check SHA-256 pins,<br/>QFL_REQUIRE_REFERENCE_FILES=true,<br/>fail on any skip"]
+        FUZ22["fuzz<br/>-Pfuzz parser fuzz tests (200,000 cases),<br/>pricing properties (20,000 cases)"]
         MUT22["mutation (core)<br/>mutation-lowlatency<br/>(regreporting, FIX codecs)<br/>floors: pit-thresholds.txt"]
     end
     subgraph REL22["v* tag (release.yml)"]

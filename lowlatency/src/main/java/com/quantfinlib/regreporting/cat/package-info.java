@@ -14,7 +14,7 @@
  * Only a core subset of fields is populated (listed on
  * {@link com.quantfinlib.regreporting.cat.CatEventBuilder}); linkage, reference data (symbol
  * master, IMID list, FDID), Name/Value pair contents, conditional fields other than price
- * and errorROEID, option and quote events, and the CAT JSON schema itself are not checked,
+ * and errorROEID, and the CAT JSON schema itself are not checked,
  * and nothing has been submitted to the CAT test environment. Use it as a structured
  * starting point, not as a filing.</p>
  *
@@ -22,7 +22,9 @@
  * Table 39), new option order (MONO, Table 62), option order route (MOOR, Table 64) and new
  * option quote (MONQ, Table 85). {@link com.quantfinlib.regreporting.cat.CatLinkageChecker}
  * checks Order, Trade, Fulfillment and Quote Keys across a batch (section 2.6.1, Table 5).
- * Other option events, multi-leg events and cross-file linkage are still not covered.</p>
+ * Still not covered in 3.1.0: the other option lifecycle events (modify, cancel, fill and
+ * the rest), multi-leg events, supplement events, linkage across files or days (the checker
+ * is batch-local), reference data, and the CAT JSON schema.</p>
  *
  * <p><b>3.0 notice.</b> Renamed to {@code com.quantfinlib.regreporting.cat} in 3.0
  * (the {@code report} and {@code reporting} names were one letter apart with
