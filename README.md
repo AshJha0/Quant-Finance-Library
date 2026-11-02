@@ -16,7 +16,7 @@ connectivity stack; see [docs/STABILITY.md](docs/STABILITY.md).
 ## Status
 
 - Version 2.2.0. Requires Java 25 (LTS). The full suite (`./mvnw verify -Pfull`) runs
-  1,659 tests.
+  1,745 tests.
 - Version 2.2 is additive over 2.1 apart from two default changes:
   `StrategyRunner` now trades whole shares, and SIMM reads equity, commodity and FX
   vega amounts as raw dV/dsigma. New: holiday calendars and ISDA conventions,

@@ -42,7 +42,7 @@ Minor release. No 2.1 public signature is removed or changed, and the API-compat
 
 ### Tests and quality
 
-- 1,659 tests in the full suite. PIT mutation score for `volatility` rose from 63% to 82% and for `risk` from 74% to 80%. The Heston COS test pins a 40-digit reference value at 1e-10. Haug's table values are reproduced by independent computation (53 cells).
+- 1,745 tests in the full suite. PIT mutation score for `volatility` rose from 63% to 82% and for `risk` from 74% to 80%. The Heston COS test pins a 40-digit reference value at 1e-10. Haug's table values are reproduced by independent computation (53 cells).
 
 ### Docs
 
