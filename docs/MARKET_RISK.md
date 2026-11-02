@@ -152,7 +152,7 @@ then infinite.
 | Kupiec proportion of failures | `risk.VarBacktest` |
 | Christoffersen independence and conditional coverage | `risk.VarBacktest` |
 | Acerbi-Szekely Z2 for ES | `risk.VarBacktest.acerbiSzekelyZ2` (thresholds -0.70 at 5 % and -1.80 at 0.01 %, from Acerbi and Szekely 2014) |
-| Basel traffic light | `risk.FrtbEs.TrafficLight` (0-4 green, 5-9 amber, 10 or more red, over 250 days at 99 %) |
+| Basel traffic light | `risk.FrtbEs.TrafficLight` (0-4 green, 5-9 amber, 10 or more red, over 250 days at 99 %); since 3.1 `risk.VarBacktest.trafficLight` for any sample size and coverage, with the MAR32.9 multiplier at 250 days and 99 % (recipe 363) |
 | P&L attribution test | `risk.PnlAttribution` (step 12) |
 
 ## 12. Regulatory measures (FRTB internal models)

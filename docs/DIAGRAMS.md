@@ -4615,6 +4615,39 @@ submission file; the shipped loaders read status only, so the dated rules need
 richer reference data. See LEARN sections 17e and 17g and recipes 347 to 349
 and 353.
 
+## 22. CI, nightly and release gates
+
+Three workflows, each answering a different question: is this change safe to
+merge (CI), does the library still match its outside references (nightly), and
+can this tag be published (release).
+
+```mermaid
+flowchart TD
+    subgraph PR22["every push and PR (ci.yml)"]
+        T22["tests, JDK 25<br/>+ committed stand-ins:<br/>IsdaGoldenSubsetTest, EsmaXsdGoldenTest"]
+        API22["api-compat (japicmp)"]
+    end
+    subgraph NIGHT22["nightly.yml"]
+        FULL22["full-tests<br/>(load, timing)"]
+        AN22["analysis<br/>(SpotBugs, Error Prone)"]
+        REF22["reference-files<br/>fetch ISDA grids + ESMA XSDs,<br/>check SHA-256 pins,<br/>QFL_REQUIRE_REFERENCE_FILES=true,<br/>fail on any skip"]
+        MUT22["mutation (core)<br/>mutation-lowlatency<br/>(regreporting, FIX codecs)<br/>floors: pit-thresholds.txt"]
+    end
+    subgraph REL22["v* tag (release.yml)"]
+        TG22["tag-guard<br/>no forced push, no existing release,<br/>no re-used tag name"]
+        CI22["ci (reusable ci.yml)"]
+        DOC22["docs (javadoc build)"]
+        R22["release<br/>attach jars"]
+        DD22["dispatch docs.yml on main"]
+    end
+    TG22 --> CI22 --> R22
+    TG22 --> DOC22 --> R22
+    R22 --> DD22
+```
+
+The release checklist (tag the PR head first, then merge with `--merge`;
+tags are never moved) is in [PUBLISHING.md](PUBLISHING.md).
+
 ---
 
 ## Where to go next

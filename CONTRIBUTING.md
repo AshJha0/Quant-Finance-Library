@@ -43,6 +43,18 @@ unless the matching environment variable is set:
 | `QFL_SIX_CFI_XLSX` | SIX ISO 10962 CFI code list (xlsx) | full-list check in `CfiCodeRegistryTest` |
 | `QFL_NETWORK_TESTS=1` | (flag) | live GLEIF API call in `RegistryTest` |
 
+Reference tests call `ReferenceFiles.require(...)`, which skips when the file is
+missing unless `QFL_REQUIRE_REFERENCE_FILES=true`, and then fails. The nightly
+`reference-files` job fetches every file with `scripts/fetch-reference-files.sh`
+(SHA-256 pinned in `scripts/reference-files.sha256`) and sets that flag, so a new
+reference test must be added to that job and the pin file. The PR-time stand-ins
+are `IsdaGoldenSubsetTest` (`isda-regression-set.csv`) and `EsmaXsdGoldenTest`.
+
+The nightly PIT jobs fail when a package falls below its floor in
+`scripts/pit-thresholds.txt`. Raise a floor when a score rises; lowering one
+needs a reason in the commit message. A new loader states its limits in
+[docs/INPUT_LIMITS.md](docs/INPUT_LIMITS.md).
+
 The nightly workflow runs everything. If you add a test that depends on how fast
 the machine is, tag it. Prefer polling with a deadline over a fixed sleep.
 

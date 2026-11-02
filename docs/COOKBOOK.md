@@ -11153,3 +11153,51 @@ they match QuantLib's dirty price and durations to 1e-10 and its convexity
 to 1e-9.
 `convexityAnalytic` is the closed form of the old `convexity` (same schedule)
 and matches it to 1e-6 relative.
+
+## 362. CVA on a coarse grid: the bucket-average form (3.1)
+
+```java
+YieldCurve discount = YieldCurve.ofZeroRates(
+        new double[]{1, 2, 3, 5}, new double[]{0.03, 0.03, 0.03, 0.03});
+CreditCurve counterparty = CreditCurve.bootstrap(
+        new int[]{1, 3, 5}, new double[]{0.010, 0.015, 0.020}, 0.40, discount);
+double[] ee = {120_000, 180_000, 210_000, 160_000, 90_000};    // EE at each bucket end
+double[] bucketEnd = {1, 2, 3, 4, 5};
+
+double endPoint = CvaApproximator.cva(ee, bucketEnd, counterparty, discount, 0.60);
+double averaged = CvaApproximator.cvaBucketAverage(0.0, ee, bucketEnd, counterparty, discount, 0.60);
+```
+
+`cva` charges each bucket's default probability against the exposure at the
+bucket's end. That is the textbook sum, and its error shrinks only in
+proportion to the bucket width. `cvaBucketAverage` uses the trapezoid instead:
+each bucket's charge uses the mean of the discounted EE at its two ends, so it
+needs EE(0) as well (0 for a trade at par with no collateral imbalance). On
+EE = 1mm (1 + t^2) with annual buckets, measured against a 200,000-step
+integral, the end-point sum is 27.6 % high and the averaged one 1.8 % high.
+Halving the bucket width halves the first error and quarters the second.
+`cva` is unchanged, so numbers you already reconcile do not move; pick the
+averaged form for new work on coarse grids.
+
+## 363. The Basel traffic light for a VaR backtest (3.1)
+
+```java
+VarBacktest.TrafficLight tl = VarBacktest.trafficLight(6, 250);   // 6 exceptions in 250 days
+VarBacktest.Zone zone = tl.zone();               // AMBER
+double multiplier = tl.multiplier();             // 1.76 (MAR32.9 Table 1)
+double cumulative = tl.cumulativeProbability();  // P(X <= 6), binomial(250, 0.01)
+
+VarBacktest.TrafficLight longer = VarBacktest.trafficLight(9, 500);       // AMBER, multiplier NaN
+VarBacktest.TrafficLight es = VarBacktest.trafficLight(9, 250, 0.975);    // other coverage: GREEN
+```
+
+The zone is read off the binomial probability of seeing this many exceptions
+or fewer if the model were right (Basel MAR99.17): amber from 95 %, red from
+99.99 %. For 250 days at 99 % that gives green for 0 to 4 exceptions, amber
+for 5 to 9 and red for 10 or more; the test checks the cumulative
+probabilities against MAR99 Table 2 to two decimals. The capital multiplier
+(1.50 in green, 1.70 to 1.92 in amber, 2.00 in red) is defined only for that
+case, so any other sample size or coverage returns NaN for it; the zone is
+still computed. The Kupiec and Christoffersen p-values in `VarBacktest.test`
+use `2 Phi(-sqrt x)` for the chi-squared(1) tail since 3.1. It stays accurate
+far out in the tail (P(chi2 > 100) = 1.52e-23), where the old form returned 0.

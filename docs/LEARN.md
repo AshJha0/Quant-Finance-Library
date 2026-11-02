@@ -1423,6 +1423,13 @@ at two years is about 1.67 and EPE about 1.30. A counterparty curve at
 wrong-way CVA is about 0.146. Under a zero-threshold CSA with a 10-day
 margin period, EPE falls to about 0.23 and CVA to about 0.015.
 
+The sum above charges each bucket at its end-point exposure, so its error
+shrinks only in proportion to the bucket width. Since 3.1
+`CvaApproximator.cvaBucketAverage` averages the discounted EE over each
+bucket (the trapezoid rule), and its error falls with the square of the
+width. On EE = 1mm (1 + t^2) with annual buckets the end-point sum is 27.6 %
+above a 200,000-step integral and the averaged one 1.8 %. Recipe 362.
+
 *In this library:* `credit/MultiCurrencyExposureSimulator.java` (`simulate` over
 `Swap`s and `FxForward`s with an optional `Csa`), `credit/ExposureProfile.java`
 (`expectedExposure`, `expectedNegativeExposure`, `pfe`, `epe`), and
@@ -2657,7 +2664,8 @@ the three registries. Since 3.0 the shipped GLEIF, FIRDS and ISO 10383 loaders
 also read dates, country, SI category and the commodity flag when the file has
 those columns, so every rule runs on the public files. CON-430 needs the ISO
 10962 table: `CfiCodeRegistry.fromSixXlsx` reads your copy of the SIX code list
-and checks the four attribute letters group by group. Recipe 353.
+and checks the four attribute letters group by group. Recipe 353. The size
+and entry caps every loader applies are listed in [INPUT_LIMITS.md](INPUT_LIMITS.md).
 
 ### 17h. Pending reports, field 2 history and the feedback file
 
@@ -2741,6 +2749,23 @@ Worth studying as a checklist for your own projects:
   desktop numbers, so they catch a dramatic slowdown without flaking on
   slow runners. They are tagged `load` or `timing` and skipped by the
   default build; `./mvnw -Pfull test` and the nightly workflow run them.
+- **Reference checks that cannot skip**: tests against files we may not
+  commit (the ISDA CDS Standard Model test grids, the ESMA XSDs) skip on a
+  laptop without them. The nightly `reference-files` job downloads them with
+  `scripts/fetch-reference-files.sh`, checks each against the SHA-256 pinned
+  in `scripts/reference-files.sha256`, sets `QFL_REQUIRE_REFERENCE_FILES=true`
+  so a missing file fails instead of skipping, and fails if any reference
+  test skipped. Pull requests run two committed stand-ins: `IsdaGoldenSubsetTest`
+  pins our upfront and cash settlement for 48 invented contracts, and
+  `EsmaXsdGoldenTest` pins the SHA-256 of the three documents validated
+  nightly.
+- **Mutation floors**: the nightly PIT jobs (`mutation` for core,
+  `mutation-lowlatency` for regreporting and the FIX codecs) fail when a
+  package's score falls below its floor in `scripts/pit-thresholds.txt`
+  (for example rates 83, risk 78, fix 81).
+- **Bounded inputs**: every file loader caps what it reads (an XLSX is at
+  most 10,000 zip entries and 256 MiB inflated); the list is in
+  [INPUT_LIMITS.md](INPUT_LIMITS.md).
 - **Platform limits as tests**: the load test *budgets* dropped messages
   under OS preemption instead of pretending an unpinned desktop can
   promise zero drops. Tests encode what the platform can actually

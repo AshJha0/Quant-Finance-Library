@@ -262,12 +262,37 @@ The `IOException` header and format checks in `marketdata.tick.TickFileReader`,
 failures in `fix.FileSessionStore` (a failed write or force, not a bad format) are
 unchanged.
 
+## CI and release gates
+
+Every push and pull request runs `ci.yml` (tests on JDK 25 and the japicmp API
+check). Tests that need files we do not commit skip locally; PR CI runs the
+committed stand-ins `IsdaGoldenSubsetTest` (48 invented CDS contracts) and
+`EsmaXsdGoldenTest` (SHA-256 of the validated documents).
+
+`nightly.yml` runs five jobs: `full-tests` (load and timing tags), `analysis`
+(SpotBugs, Error Prone), `reference-files` (downloads the ISDA grids and ESMA
+XSDs, checks the SHA-256 pins in `scripts/reference-files.sha256`, and fails on
+any skipped reference test), `mutation` (PIT on core) and `mutation-lowlatency`
+(PIT on regreporting and the FIX codecs). The two PIT jobs fail when a package
+falls below its floor in `scripts/pit-thresholds.txt`.
+
+`release.yml` runs on a `v*` tag: `tag-guard` (refuses a forced push, an
+existing release, or a tag name already released from another commit), then
+`ci` (the reusable `ci.yml`) and `docs` (javadoc build), then `release`, which
+attaches the jars and dispatches `docs.yml` on `main`. The checklist is in
+[PUBLISHING.md](PUBLISHING.md); diagram 22 in [DIAGRAMS.md](DIAGRAMS.md).
+
+Loaders bound what they read (zip entries, inflated bytes, line lengths); the
+per-loader limits are in [INPUT_LIMITS.md](INPUT_LIMITS.md).
+
 ## Further reading
 
 - [GETTING_STARTED.md](GETTING_STARTED.md): build and first runs.
 - [LEARN.md](LEARN.md): tutorial from first principles.
 - [COOKBOOK.md](COOKBOOK.md): runnable recipes.
 - [MARKET_RISK.md](MARKET_RISK.md): the market-risk workflow mapped to classes.
+- [INPUT_LIMITS.md](INPUT_LIMITS.md): the size limits of every file loader.
+- [PUBLISHING.md](PUBLISHING.md): the release checklist.
 - [CENTRAL_RISK_BOOK.md](CENTRAL_RISK_BOOK.md): netting, internalisation and hedging.
 - [ULTRA_LOW_LATENCY.md](ULTRA_LOW_LATENCY.md): the trading lane in detail.
 - [CHANGELOG.md](../CHANGELOG.md): release history.
