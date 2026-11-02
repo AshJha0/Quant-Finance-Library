@@ -10822,9 +10822,10 @@ List<String> emirProblems = emir.validate();
 
 The CAT builder covers new order, route, trade and fulfilment events (MENO, MEOR,
 MEOT, MEOF) and writes them as JSON lines with Eastern-time timestamps. The EMIR
-builder covers the Refit core fields, the UTI shape and the allowed pairs of
-action and event type. Both are indicative and not certified; EMIR has not been
-checked field by field against Regulation 2022/1860.
+builder covers the Refit core fields. From 3.0 EMIR is checked against the ESMA
+Refit validation rules (ESMA74-362-2683) and CAT against the IM Technical
+Specifications v4.1.0 r14, with EMIR field numbers and formats checked against
+Regulation 2022/1860; neither is certified.
 
 To see what a check rests on, list the rules (3.0):
 
@@ -10832,14 +10833,15 @@ To see what a check rests on, list the rules (3.0):
 for (RuleProvenance r : EmirRefitReport.rules()) {
     System.out.println(r.id() + " " + r.evidence() + " " + r.citation());
 }
-// EMIR-R09 UNCONFIRMED Implementing Regulation (EU) 2022/1860, Annex, Table 2 field 2.1 (number indicative)
-System.out.println(CatEvent.CHECKED_AGAINST);   // "not checked: ..."
+// EMIR-R17 PUBLISHED_REFERENCE ESMA74-362-2683, sheet Validations_Cpty_derivative, row 81, ...
+System.out.println(CatEvent.CHECKED_AGAINST);   // "checked against CAT ... v4.1.0 r14 ..."
 ```
 
-Each rule has an id, the citation it was written against and an evidence
-class. In 3.0.0 no EMIR or CAT rule is a published reference, because the
-regulation, the ESMA validation rules and the CAT specification are not in
-the library's source folder; treat `validate()` as a shape check.
+Each rule has an id, the sheet row or specification section it was checked
+against, and an evidence class. EMIR messages start with the ESMA error code,
+so `EMIR-VR-2152-05: eventType TRAD not accepted with actionType CORR` can be
+looked up in the workbook directly. Rules that need earlier reports for the
+same UTI or reference data are not run; the package javadoc lists them.
 
 ## 350. Busts and corrections in the paper gateway
 

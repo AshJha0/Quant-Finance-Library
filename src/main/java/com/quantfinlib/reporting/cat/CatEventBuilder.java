@@ -15,15 +15,14 @@ import java.util.Objects;
  *
  * <p>Populated fields. Common to all types: {@code actionType} (default {@code NEW}),
  * {@code errorROEID}, {@code firmROEID}, {@code type}, {@code CATReporterIMID},
- * {@code symbol}, {@code eventTimestamp}, {@code manualFlag} (default {@code false}),
- * {@code orderKeyDate}, {@code orderID}. Per type, the names in
- * {@link CatEventType#requiredFields()}, plus {@code firmDesignatedID} and
- * {@code accountHolderType} for MENO. Anything else in the specification (FDID customer
+ * {@code symbol}, {@code eventTimestamp}, {@code manualFlag} (default {@code false}).
+ * Per type, the names in {@link CatEventType#requiredFields()} (the 'R' fields of
+ * Tables 16, 18, 48 and 52 of the v4.1.0 r14 specification). Anything else in the specification (FDID customer
  * records, representative orders, aggregated orders, options legs, quote events, CAIS)
  * is not populated; use {@link #field(String, String)} to add it by name.</p>
  *
  * <p>Timestamps are written in US Eastern time as {@code yyyyMMdd HHmmss.SSSSSSSSS}, the
- * text form in the CAT technical specification; the event must carry its time in
+ * STRING form of Table 3 (Timestamp) in the v4.1.0 r14 specification; the event must carry its time in
  * {@link Instant} and the zone is applied here. Worked example: an order accepted at
  * 2026-03-02T14:30:00.123456789Z (09:30 Eastern, EST) gives
  * {@code eventTimestamp = "20260302 093000.123456789"} (own test).</p>
@@ -123,9 +122,31 @@ public final class CatEventBuilder {
     }
 
     /**
-     * Sets the event time.
+     * Sets the trade ID and its key date (MEOT, Table 48 seq 6 and 7).
      *
-     * @param t event time
+     * @param tradeId firm-assigned trade ID
+     * @param tradeKeyTime when the ID was assigned
+     * @return this
+     */
+    public CatEventBuilder tradeKey(String tradeId, Instant tradeKeyTime) {
+        return field("tradeID", tradeId).field("tradeKeyDate", TS.format(tradeKeyTime));
+    }
+
+    /**
+     * Sets the fulfillment ID and its key date (MEOF, Table 52 seq 6 and 7).
+     *
+     * @param fulfillmentId firm-assigned fulfillment ID
+     * @param fillKeyTime when the ID was assigned
+     * @return this
+     */
+    public CatEventBuilder fillKey(String fulfillmentId, Instant fillKeyTime) {
+        return field("fulfillmentID", fulfillmentId).field("fillKeyDate", TS.format(fillKeyTime));
+    }
+
+    /**
+     * Sets the event timestamp (Eastern time, nanoseconds).
+     *
+     * @param t time
      * @return this
      */
     public CatEventBuilder eventTimestamp(Instant t) {

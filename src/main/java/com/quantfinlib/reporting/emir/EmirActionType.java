@@ -4,22 +4,25 @@ import java.util.EnumSet;
 import java.util.Set;
 
 /**
- * EMIR Refit action types (Refit field "action type"; number indicative, not re-checked). Each carries the event types this library accepts
- * with it. The pairing is a conservative reading of the ESMA Refit guidelines and is not
- * the full ESMA validation table: NEWT and MODI take business events, CORR takes any event,
- * VALU and POSC take none, and TERM, EROR and REVI take none except TERM with ETRM.
+ * EMIR Refit action types (field 2.151). Each carries the event types (field 2.152) it
+ * accepts, as published in ESMA74-362-2683, sheet Validations_Cpty_derivative, row 185,
+ * EMIR-VR-2152-02 to -05: NEWT needs one of its set; MODI may carry one of its set or none;
+ * TERM needs one of its set (column P is 'M'); CORR, EROR, REVI, VALU and POSC carry none.
+ * Evidence: published reference.
  */
 public enum EmirActionType {
     /** New. */
     NEWT(EnumSet.of(EmirEventType.TRAD, EmirEventType.NOVA, EmirEventType.COMP, EmirEventType.CLRG,
-            EmirEventType.EXER, EmirEventType.ALOC, EmirEventType.CREV, EmirEventType.PTNG, EmirEventType.INCP)),
+            EmirEventType.EXER, EmirEventType.ALOC, EmirEventType.CORP, EmirEventType.INCP)),
     /** Modify. */
-    MODI(EnumSet.of(EmirEventType.TRAD, EmirEventType.NOVA, EmirEventType.COMP, EmirEventType.EXER,
-            EmirEventType.ALOC, EmirEventType.CREV, EmirEventType.PTNG, EmirEventType.INCP, EmirEventType.UPDT)),
+    MODI(EnumSet.of(EmirEventType.TRAD, EmirEventType.NOVA, EmirEventType.COMP, EmirEventType.ETRM,
+            EmirEventType.EXER, EmirEventType.ALOC, EmirEventType.CREV, EmirEventType.CORP, EmirEventType.INCP,
+            EmirEventType.UPDT)),
     /** Correct. */
-    CORR(EnumSet.allOf(EmirEventType.class)),
+    CORR(EnumSet.noneOf(EmirEventType.class)),
     /** Terminate. */
-    TERM(EnumSet.of(EmirEventType.ETRM)),
+    TERM(EnumSet.of(EmirEventType.NOVA, EmirEventType.COMP, EmirEventType.ETRM, EmirEventType.CLRG,
+            EmirEventType.EXER, EmirEventType.ALOC, EmirEventType.CREV, EmirEventType.CORP, EmirEventType.INCP)),
     /** Error (report should never have been sent). */
     EROR(EnumSet.noneOf(EmirEventType.class)),
     /** Revive a terminated or errored trade. */
@@ -43,7 +46,7 @@ public enum EmirActionType {
      */
     public boolean accepts(EmirEventType e) {
         if (e == null) {
-            return allowed.isEmpty() || this == CORR;
+            return allowed.isEmpty() || this == MODI;
         }
         return allowed.contains(e);
     }

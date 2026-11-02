@@ -10,20 +10,49 @@ Entries for 1.x releases are archived in [docs/history/CHANGELOG-1.x.md](docs/hi
 
 - `reporting.RuleProvenance` (record: rule id, rule text, citation, evidence class
   `PUBLISHED_REFERENCE`, `LIBRARY_READING` or `UNCONFIRMED`).
-- `EmirRefitReport.rules()` and `CatEvent.rules()` list every check that
-  `validate()` makes (EMIR-R01 to R16, CAT-R01 to R08) with its citation, and
-  `CHECKED_AGAINST` on each class states the comparison in one line. Messages
-  from `validate()` are unchanged.
+- `EmirRefitReport.rules()` (EMIR-R01 to R22) and `CatEvent.rules()` (CAT-R01 to
+  R12) list every check `validate()` makes, with its source row or section;
+  `CHECKED_AGAINST` on each class names the document and version.
+- EMIR Refit: validation rewritten against the ESMA EMIR Refit validation rules
+  (ESMA74-362-2683, sheet Validations_Cpty_derivative). New checks: mandatory
+  1.2, 1.8 and 2.153; event type per action (EMIR-VR-2152-02 to -05); direction
+  1.17 or legs 1.18/1.19; 2.45 required with TERM and blank elsewhere; client
+  codes; UTI special characters outside NEWT/POSC; CCPV against 2.31; special
+  currency codes; 25-digit amounts; timestamp and date formats; the date bounds
+  and orderings of 1.1, 2.42-2.45 and 2.153. Messages start with the ESMA error
+  code. Builder: `submittingEntity`, `eventDate`, `legDirections`; `terms` fills
+  the event date from the execution date when blank.
+- CAT: validation rewritten against CAT IM Technical Specifications v4.1.0 r14
+  (2026-02-13). Required fields per Tables 16, 18, 48, 52; DEL records per
+  section 7.6.3; errorROEID per Table 16 and section 7.6; Price, Real Quantity,
+  IMID, Timestamp and Boolean per Table 3; capacity, sideDetailsInd and
+  fulfillmentLinkType per Appendix G; one-sided trade details. Builder:
+  `tradeKey`, `fillKey`.
+
+### Changed (3.0.0, behaviour)
+
+- EMIR: field numbers confirmed against Regulation 2022/1860 and the workbook. Corrections: `direction`
+  (1.17) takes BYER or SLLR only (MAKE/TAKE belong to 1.18/1.19); notional is up
+  to 25 digits, not 18; CORR takes no event type and TERM requires one; PTNG is
+  not an ESMA event type and is now rejected; TERM no longer accepts an
+  expiration date in place of 2.45; `entityResponsibleForReporting` is
+  conditional, not mandatory.
+- CAT: COR no longer needs errorROEID (only RPR does); CATReporterIMID is
+  optional and may be lower case; MEOT and MEOF no longer need orderID or
+  orderKeyDate (they key on tradeKeyDate and fillKeyDate); MEOF no longer needs
+  side; quantity zero is accepted (Real Quantity is "not negative");
+  `CatEvent.COMMON_FIELDS` lost orderKeyDate and orderID.
 
 ### Not done, and known gaps (3.0.0)
 
-- EMIR Refit and CAT checks are **not checked** against the published texts.
-  Implementing Regulation (EU) 2022/1860, the ESMA EMIR Refit validation rules
-  and the CAT Reporting Technical Specifications for Industry Members are not in
-  the source folder, so every EMIR and CAT rule is `UNCONFIRMED`, apart from the
-  action/event pairing (EMIR-R04), TERM accepting an expiration date (EMIR-R07)
-  and the DEL exemption from errorROEID (CAT-R04), which are `LIBRARY_READING`.
-  No new EMIR or CAT rule was added for the same reason.
+- EMIR field numbers and formats were checked against the Annex of Implementing
+  Regulation (EU) 2022/1860 (Tables 1 and 2) as well as the workbook; both agree
+  on notional 2.55 (25 digits, 5 decimals). EMIR rules that need earlier
+  reports, receipt time or GLEIF status are not checked (listed in the
+  `reporting.emir` package javadoc). LEI and ISIN check digits are the library's
+  necessary condition (ISO 17442 and ISO 6166 are not on disk).
+- CAT linkage, reference data and option or quote events are not checked;
+  requiring both trade sides when sideDetailsInd is NA is a library reading.
 
 ## [2.4.0] - 2026-11-02
 

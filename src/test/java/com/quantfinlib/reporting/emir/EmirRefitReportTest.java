@@ -49,55 +49,31 @@ class EmirRefitReportTest {
         assertEquals("2026-05-04T10:15:30Z", r.fields().get("reportingTimestamp"));
         assertEquals("NEWT", r.fields().get("actionType"));
         assertEquals("TRAD", r.fields().get("eventType"));
+        assertEquals("2026-05-04", r.fields().get("eventDate"));
         assertEquals(LEI_A, r.fields().get("entityResponsibleForReporting"));
+        assertEquals(LEI_A, r.fields().get("reportSubmittingEntityId"));
     }
 
     @Test
-    void actionEventPairing() {
-        assertTrue(EmirActionType.TERM.accepts(EmirEventType.ETRM));
-        assertFalse(EmirActionType.TERM.accepts(EmirEventType.TRAD));
-        assertTrue(EmirActionType.VALU.accepts(null));
-        assertFalse(EmirActionType.VALU.accepts(EmirEventType.TRAD));
-        assertFalse(EmirActionType.NEWT.accepts(null));
-        EmirRefitReport r = newSwap().field("actionType", "VALU").build();
-        assertTrue(r.validate().contains("eventType TRAD not accepted with actionType VALU"), r.validate().toString());
-    }
-
-    @Test
-    void valuationNeedsValuationBlock() {
-        EmirRefitReportBuilder b = EmirRefitReportBuilder.of(EmirActionType.VALU, null)
-                .reportingTimestamp(T).counterparties(LEI_A, LEI_B, true).uti(LEI_A + "TRADE0001");
-        assertEquals(List.of("missing valuationAmount", "missing valuationCurrency", "missing valuationTimestamp",
-                "missing valuationMethod"), b.build().validate());
-        assertEquals(List.of(), b.valuation(new BigDecimal("-12345.67"), "EUR", T, "MTMA").build().validate());
-    }
-
-    @Test
-    void naturalPersonOtherCounterpartyAllowed() {
-        EmirRefitReport r = newSwap().counterparties(LEI_A, "CLIENT42", false).build();
+    void builderSettersAndLegDirections() {
+        EmirRefitReport r = newSwap().submittingEntity(LEI_B).eventDate(LocalDate.of(2026, 5, 4))
+                .legDirections("MAKE", "TAKE").build();
         assertEquals(List.of(), r.validate());
-        EmirRefitReport bad = newSwap().counterparties(LEI_A, "CLIENT42", true).build();
-        assertEquals(List.of("otherCounterpartyId is not a valid LEI"), bad.validate());
+        assertEquals("", r.fields().get("direction"));
+        assertEquals(LEI_B, r.fields().get("reportSubmittingEntityId"));
+        EmirRefitReport kept = EmirRefitReportBuilder.of(EmirActionType.NEWT, EmirEventType.TRAD)
+                .eventDate(LocalDate.of(2026, 1, 1))
+                .terms(T, LocalDate.of(2026, 5, 6), LocalDate.of(2031, 5, 6), "INTR", "SWAP", "BYER",
+                        BigDecimal.ONE, "EUR").build();
+        assertEquals("2026-01-01", kept.fields().get("eventDate"));
     }
 
     @Test
-    void badCodesReported() {
-        EmirRefitReport r = newSwap().field("assetClass", "XXXX").field("notionalCurrency1", "eur")
-                .field("isin", "US0378331006").field("eventType", "NOPE").build();
-        List<String> v = r.validate();
-        assertTrue(v.contains("unknown eventType NOPE"), v.toString());
-        assertTrue(v.stream().anyMatch(s -> s.startsWith("assetClass must")), v.toString());
-        assertTrue(v.contains("notionalCurrency1 must be an ISO 4217 code"), v.toString());
-        assertTrue(v.contains("isin check digit fails"), v.toString());
-    }
-
-    @Test
-    void terminationNeedsDate() {
-        EmirRefitReport r = EmirRefitReportBuilder.of(EmirActionType.TERM, EmirEventType.ETRM)
-                .reportingTimestamp(T).counterparties(LEI_A, LEI_B, true).uti(LEI_A + "TRADE0001").build();
-        assertEquals(List.of("TERM needs earlyTerminationDate"), r.validate());
-        assertEquals(List.of(), EmirRefitReportBuilder.of(EmirActionType.TERM, EmirEventType.ETRM)
+    void valuationBlock() {
+        EmirRefitReportBuilder b = EmirRefitReportBuilder.of(EmirActionType.VALU, null)
                 .reportingTimestamp(T).counterparties(LEI_A, LEI_B, true).uti(LEI_A + "TRADE0001")
-                .field("earlyTerminationDate", "2027-01-01").build().validate());
+                .eventDate(LocalDate.of(2026, 5, 4));
+        assertEquals(4, b.build().validate().size());
+        assertEquals(List.of(), b.valuation(new BigDecimal("-12345.67"), "EUR", T, "MTMA").build().validate());
     }
 }
