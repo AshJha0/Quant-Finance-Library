@@ -1366,9 +1366,10 @@ the money, and `EAD = 1.4 x (60 + 346.8) = 569`.
 `commodity`, `asBasis`, `asVolatility`), with
 `oneMarginAgreementManyNettingSets` and `subNettingSets` for margin
 agreements that do not line up with netting sets, and
-`risk/SaCcrHaircuts.java` for the Basel II paragraph 151 haircuts. The
-tests reproduce Annex 4a Examples 1 to 5. Not implemented: the CRE22
-(2017) haircut table. Recipes 307, 308 and 335.
+`risk/SaCcrHaircuts.java` for the supervisory haircuts: the Basel II
+table (BCBS 128 para 151, 8% currency add-on para 152, square-root-of-time
+scaling paras 168-169) or the current CRE22.49 table. The tests reproduce
+Annex 4a Examples 1 to 5. Recipes 307, 308 and 335.
 
 ### 10h. Smiles without arbitrage: SVI and SSVI
 
@@ -27508,13 +27509,17 @@ to 5; `SaCcr.optionDelta` gives the swaption delta.
 ### 1013. "What does the library's SA-CCR leave out?"
 
 Less than it did in 2.1. Basis and volatility hedging sets (paras
-162-163), netting sets covered by several margin agreements and several
-agreements inside one netting set (paras 185-187), and supervisory
-collateral haircuts are in since 2.2. What is still left out is the CRE22
-(2017) haircut table: the haircuts follow Basel II paragraph 151 with an
-8% currency-mismatch add-on. The calculator also takes year fractions the
-caller computes rather than dates. Two interpretive choices in the new
-code are marked in the javadoc. None of this changes the mechanics a
+162-163, multipliers in para 184), netting sets covered by several margin
+agreements (paras 186-187) and several agreements inside one netting set
+(para 185), and supervisory collateral haircuts are in since 2.2; the
+CRE22.49 haircut table is in since 2.3, beside the BCBS 128 para 151 one.
+Left out: securitisation collateral and the CRE22.50 table for
+jurisdictions without external ratings. The calculator also takes year
+fractions the caller computes rather than dates. One interpretive choice
+is marked in the javadoc (the multiplier for each netting set under a
+shared agreement uses that set's own value with no collateral); since 2.3
+the sub-netting-set RC is summed per part, as para 185 requires. None of
+this changes the mechanics a
 reader needs to follow the standard.
 
 *In this library:* `risk/SaCcr.java` class javadoc, `risk/SaCcrHaircuts.java`.
@@ -28802,8 +28807,9 @@ the code returns the deterministic limits rather than NaN.
   of offsetting trades. `risk/CounterpartyExposureTracker.java`
   (currentExposure, potentialFutureExposure, addOnFactor); Basel
   Committee, current exposure method, BCBS 128 (June 2006), Annex 4
-  (current exposure method), with the 0.4 + 0.6 NGR netting rule
-  from the April 1995 amendment on potential exposure (BCBS 18).
+  section VII: add-on table para 92(i), 0.4 + 0.6 NGR netting rule
+  para 96(iv). The NGR rule first appeared in the April 1995 amendment
+  on potential exposure (BCBS 18), which BCBS 128 compiles.
 
 - On a segment with constant hazard `lambda` and forward `f`,
   `k = lambda + f`: protection `= (1 - R) lambda Q0 P0 (1 - e^{-k dt}) / k`
