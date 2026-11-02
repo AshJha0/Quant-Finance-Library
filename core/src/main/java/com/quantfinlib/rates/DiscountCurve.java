@@ -197,6 +197,62 @@ public final class DiscountCurve {
         return y[i - 1] + fd[i] * dt + h * shape(fn[i - 1] - fd[i], fn[i] - fd[i], dt / h, true);
     }
 
+    /**
+     * {@code d y(time) / d y_j} for every pillar j (0-based), with
+     * {@code y_j = -ln P(t_j)}. Log-linear: the exact interpolation and
+     * extrapolation weights. Monotone-convex: central differences of the
+     * interpolant in each node value (step 1e-6; the node forwards are linear
+     * in y but the zone shapes only piecewise smooth, so no closed form is used).
+     */
+    double[] minusLogDfWeights(double time) {
+        requireTime(time);
+        int n = t.length - 1;
+        double[] w = new double[n];
+        if (time == 0) {
+            return w;
+        }
+        if (interpolation == CurveInterpolation.MONOTONE_CONVEX) {
+            double h = 1e-6;
+            double[] times = pillarTimes();
+            for (int j = 0; j < n; j++) {
+                double[] up = pillarMinusLogDf();
+                double[] dn = up.clone();
+                up[j] += h;
+                dn[j] -= h;
+                w[j] = (new DiscountCurve(valuationDate, interpolation, times, up).minusLogDf(time)
+                        - new DiscountCurve(valuationDate, interpolation, times, dn).minusLogDf(time))
+                        / (2 * h);
+            }
+            return w;
+        }
+        if (time >= t[n]) {
+            // y_n + fd_n (time - t_n), fd_n = (y_n - y_{n-1}) / (t_n - t_{n-1})
+            double s = (time - t[n]) / (t[n] - t[n - 1]);
+            w[n - 1] += 1 + s;
+            if (n >= 2) {
+                w[n - 2] -= s;
+            }
+            return w;
+        }
+        int i = interval(time);
+        double x = (time - t[i - 1]) / (t[i] - t[i - 1]);
+        w[i - 1] = x;
+        if (i >= 2) {
+            w[i - 2] = 1 - x;
+        }
+        return w;
+    }
+
+    /** Pillar times (no leading 0), a copy. */
+    double[] pillarTimes() {
+        return java.util.Arrays.copyOfRange(t, 1, t.length);
+    }
+
+    /** Pillar {@code -ln P} values (no leading 0), a copy. */
+    double[] pillarMinusLogDf() {
+        return java.util.Arrays.copyOfRange(y, 1, y.length);
+    }
+
     /** Smallest i >= 1 with t[i] >= time, for 0 < time < t[n]. */
     private int interval(double time) {
         int lo = 1;
