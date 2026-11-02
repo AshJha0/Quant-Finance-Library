@@ -151,10 +151,12 @@ before removal in the next major.
 ## Release cadence from 3.1.0
 
 The 2.x to 3.0 releases came too fast for anyone to depend on: six releases in about
-a day, and one deprecation that lived 45 minutes. From 3.1.0 the project keeps these
-rules.
+a day, and one deprecation that lived 45 minutes. What made that hard to depend on
+was the breaks and the short deprecation, not the number of releases, so from 3.1.0
+the project keeps these rules. Minor and patch releases ship when they are ready;
+there is no cap on how often. (3.1.0 briefly also capped minors at one a month; that
+rule was dropped on 2026-11-02.)
 
-- At most one minor release a month. Patch releases are not limited.
 - A deprecation lives for at least one minor release **and** three months before the
   major that removes it. The changelog gives the earliest removal date.
 - 3.x has no breaking changes. New behaviour arrives as new classes, methods or

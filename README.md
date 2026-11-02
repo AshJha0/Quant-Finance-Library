@@ -33,8 +33,7 @@ connectivity stack; see [docs/STABILITY.md](docs/STABILITY.md).
   file on request. CONTRIBUTING.md lists the environment variables that turn them
   on; the nightly workflow fetches the ISDA grids and ESMA XSDs and fails if those
   tests skip.
-- Release cadence from 3.1.0: at most one minor release a month, no breaking
-  changes in 3.x, and a deprecation lives at least one minor release and three
+- Release rules from 3.1.0: no breaking changes in 3.x, and a deprecation lives at least one minor release and three
   months before a major removes it ([docs/STABILITY.md](docs/STABILITY.md)). The
   planned 4.0 module split is in [docs/DESIGN_4.0.md](docs/DESIGN_4.0.md).
 - Build integrity: each release attaches a CycloneDX SBOM per jar, and CI checks
