@@ -41,9 +41,10 @@ package com.quantfinlib.rates;
  * {@link TermRateLeg} and a {@link LegConvention} per leg; the multi-curve
  * overloads here delegate to {@link InterestRateSwap}, which can be called
  * directly. The class stays through 3.x (release policy: no removals in 3.x)
- * and its results are unchanged.
+ * and its results are unchanged. Marked for removal in 3.2.0; 4.0 removes
+ * it (docs/MIGRATION_4.0.md).
  */
-@Deprecated(since = "3.1.0")
+@Deprecated(since = "3.1.0", forRemoval = true)
 public final class SwapPricer {
 
     private SwapPricer() {

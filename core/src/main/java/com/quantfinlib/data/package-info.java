@@ -20,6 +20,13 @@
  * {@code com.quantfinlib.marketdata.tick}, and the live-bus recorders
  * ({@code TickCapture}, {@code AsyncTickCapture}) in {@code marketdata} in the
  * artifact {@code quant-finance-library-lowlatency}. See docs/MIGRATION_3.0.md.</p>
+ *
+ * <p><b>Moves in 4.0.</b> The package stays in the stable jar, but its three
+ * I/O classes leave it: {@code CsvBarLoader}, {@code HttpBarFetcher} and
+ * {@code UniverseCsvLoader} are deprecated for removal in 3.2.0 and delegate
+ * to the same-named classes in {@code com.quantfinlib.io}, which moves to
+ * {@code quant-finance-library-io} in 4.0. Change the import from {@code
+ * data} to {@code io}. See docs/DESIGN_4.0.md and docs/MIGRATION_4.0.md.</p>
  */
 @NullMarked
 package com.quantfinlib.data;

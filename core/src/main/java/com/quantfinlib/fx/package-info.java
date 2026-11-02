@@ -22,6 +22,12 @@
  * {@link com.quantfinlib.fx.LpRouter} (expected-all-in routing that prices
  * rejects into the decision) and {@link com.quantfinlib.fx.SyntheticCross}
  * (direct-vs-legs execution arithmetic with spread composition).
+ *
+ * <p><b>Moves in 4.0.</b> {@code AggregatedBook} is hot-lane code and leaves
+ * the stable jar: it is deprecated for removal in 3.2.0, and its replacement
+ * {@code com.quantfinlib.marketdata.AggregatedBook} in {@code quant-finance-
+ * library-lowlatency} has the same API. Change one import. The rest of the
+ * package stays. See docs/DESIGN_4.0.md and docs/MIGRATION_4.0.md.</p>
  */
 @NullMarked
 package com.quantfinlib.fx;

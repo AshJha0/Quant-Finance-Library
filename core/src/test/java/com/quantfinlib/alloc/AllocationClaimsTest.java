@@ -239,6 +239,7 @@ class AllocationClaimsTest {
     }
 
     @Test
+    @SuppressWarnings("removal")
     void aggregatedBookIsAllocationFree() throws Exception {
         AggregatedBook book = new AggregatedBook(4);
         assertAllocationFree("AggregatedBook (zero-alloc multi-venue BBO)", i -> {

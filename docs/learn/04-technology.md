@@ -1014,23 +1014,29 @@ type is an interface, `core.QuantFinException`, and
 from the caller, such as a negative size, stays a plain `IllegalArgumentException`.
 See [ARCHITECTURE.md](../ARCHITECTURE.md#exception-policy).
 
-### 20b. Where the library is going: the 4.0 design (3.1)
+### 20b. Where the library is going: the 4.0 design (3.1, revised 3.2)
 
 `docs/DESIGN_4.0.md` is the plan for the next major release. The plain idea: the
 stable jar should promise only what one maintainer can check, and a pricing user
-should not get an HTTP client. Formally, 4.0 narrows the stable module to the pricing,
-rates, credit, risk, stats, volatility and hedging hierarchy and its shared types. It
-moves I/O (`data`, `persist`, `report`) to an incubating `-io` module and research
-tools (`screener`, `dsl`, `ml`) to `-research`. Hot-lane code (`HftSor`,
-`AggregatedBook`, the microstructure simulators, `rfq`, `marketdata.tick`) goes to the
-low-latency module, and `cli` and the toy strategies go to examples. Package names
-stay the same, so most users change a dependency, not an import.
+should not get an HTTP client. Formally, 4.0 moves the file and HTTP loaders (the new
+`io` package) and `report` to an incubating `-io` module, `dsl` to `-research`,
+hot-lane code (`AggregatedBook`, `rfq`, `marketdata.tick`, `backtest.tick`) to the
+low-latency module, and `cli` and the toy strategies to an examples jar. Most package
+names stay the same, so most users change a dependency, not an import.
 
-None of this can be `@Deprecated` in 3.x. Java modules forbid one package in two
-jars, so there is no new home to point at until 4.0 exists, and "deprecated" would
-wrongly say the API is going away. The move is announced in the design page, in
-`package-info` javadoc from 3.2, and in a MIGRATION_4.0.md. By the release policy
-4.0 ships no earlier than three months after 3.2.0.
+The 3.1 draft wanted to move more (`execution`, `microstructure`, `persist`,
+`screener`, `ml`, all of `data`). A scan of imports showed stable code uses each of
+them, for example `backtest` uses `microstructure.Execution` in nine files. Moving such
+a package would make core require a module that requires core, and Java modules reject
+a cycle. Worked example: `alpha.Factors` reads `screener.Fundamentals`, so `screener`
+stays wherever `alpha` is, which is the stable jar.
+
+A jar move cannot be `@Deprecated`: Java modules forbid one package in two jars, so
+there is no new home to point at until 4.0 exists. Where 3.2 could add a replacement
+type, it did and deprecated the old one for removal: `io.CsvBarLoader` and two others
+replace their `data` namesakes, and `marketdata.AggregatedBook` replaces
+`fx.AggregatedBook`. Every move is announced in `package-info` javadoc and in
+MIGRATION_4.0.md, and 4.0 follows 3.2.0 directly.
 
 Meanwhile 3.1 split the three largest classes internally. `Indicators`,
 `MultiCurrencyExposureSimulator` and `FixSession` are now facades over package-private

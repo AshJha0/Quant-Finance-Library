@@ -25,7 +25,13 @@ package com.quantfinlib.fx;
  * holds NaN and never wins the scan. Crossed composites (bid ≥ ask across
  * venues) are real in e-FX because of latency between feeds, and are
  * reported via {@link #isCrossed()} rather than "fixed" silently.</p>
+ *
+ * @deprecated since 3.2.0: use {@code com.quantfinlib.marketdata.AggregatedBook}
+ *     in the {@code quant-finance-library-lowlatency} artifact, which has the
+ *     same API and behaviour. This class is removed in 4.0 (hot-lane code
+ *     leaves the stable tier). See docs/MIGRATION_4.0.md.
  */
+@Deprecated(since = "3.2.0", forRemoval = true)
 public final class AggregatedBook {
 
     private final int venueCount;

@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Hull-White convexity adjustment, and exact bucket structure of the DV01
  * of a par input swap.
  */
-@SuppressWarnings("deprecation") // SwapPricer kept through 3.x; pinned here unchanged
+@SuppressWarnings("removal") // SwapPricer kept through 3.x; pinned here unchanged
 class MultiCurveTest {
 
     private static final LocalDate VAL = LocalDate.of(2026, 11, 2);

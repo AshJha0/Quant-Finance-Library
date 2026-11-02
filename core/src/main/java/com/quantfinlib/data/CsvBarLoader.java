@@ -1,239 +1,56 @@
 package com.quantfinlib.data;
 
-import com.quantfinlib.core.MalformedDataException;
-import com.quantfinlib.core.Bar;
 import com.quantfinlib.core.BarSeries;
 
 import java.io.IOException;
-import java.io.Writer;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 
 /**
- * CSV market data I/O: loads real historical OHLCV bars into a
- * {@link BarSeries} and saves series back out — the interchange format for
- * the whole library.
+ * CSV market data I/O for OHLCV bars.
  *
- * <p>The loader is tolerant of real-world files: header names are matched
- * case-insensitively ({@code date}/{@code time}/{@code timestamp}/{@code datetime},
- * {@code open}, {@code high}, {@code low}, {@code close}, optional
- * {@code volume}), timestamps may be epoch millis, epoch seconds,
- * {@code yyyy-MM-dd}, ISO local or offset date-times, rows may be unordered
- * (they are sorted by time), and blank lines are skipped.</p>
+ * @deprecated since 3.2.0: use {@link com.quantfinlib.io.CsvBarLoader},
+ *     which has the same methods and behaviour. This class delegates to it
+ *     and is removed in 4.0, where {@code com.quantfinlib.io} ships in the
+ *     {@code quant-finance-library-io} artifact. See docs/MIGRATION_4.0.md.
  */
+@Deprecated(since = "3.2.0", forRemoval = true)
 public final class CsvBarLoader {
 
     private CsvBarLoader() {
     }
 
+    /**
+     * Loads a CSV bar file.
+     *
+     * @param path   the file
+     * @param symbol symbol of the returned series
+     * @return the parsed series
+     * @throws IOException if the file cannot be read
+     */
     public static BarSeries load(Path path, String symbol) throws IOException {
-        return parse(Files.readAllLines(path), symbol);
+        return com.quantfinlib.io.CsvBarLoader.load(path, symbol);
     }
 
+    /**
+     * Parses CSV bar lines, header first.
+     *
+     * @param lines  the lines
+     * @param symbol symbol of the returned series
+     * @return the parsed series
+     */
     public static BarSeries parse(List<String> lines, String symbol) {
-        if (lines.isEmpty()) {
-            throw new MalformedDataException("empty CSV");
-        }
-        String headerLine = lines.getFirst().replace("﻿", "");   // strip BOM
-        // Delimiter is a file-level fact: a semicolon-delimited file is the
-        // European convention, where the comma is the decimal separator —
-        // exactly the character the US-convention number parser strips.
-        // Detect once from the header, counting only semicolons outside
-        // quotes: a quoted extra-column name containing ';' in a comma file
-        // must not flip the whole file to European decimals.
-        boolean semicolon = containsUnquoted(headerLine, ';');
-        char delimiter = semicolon ? ';' : ',';
-        String[] headers = splitCsv(headerLine, delimiter);
-        int tsCol = -1, oCol = -1, hCol = -1, lCol = -1, cCol = -1, vCol = -1;
-        for (int i = 0; i < headers.length; i++) {
-            String h = headers[i].trim().toLowerCase(Locale.ROOT);
-            switch (h) {
-                case "timestamp", "time", "date", "datetime" -> tsCol = tsCol < 0 ? i : tsCol;
-                case "open" -> oCol = i;
-                case "high" -> hCol = i;
-                case "low" -> lCol = i;
-                case "close", "adj close", "adj_close" -> cCol = cCol < 0 ? i : cCol;
-                case "volume", "vol" -> vCol = i;
-                default -> { /* ignore extra columns */ }
-            }
-        }
-        if (tsCol < 0 || oCol < 0 || hCol < 0 || lCol < 0 || cCol < 0) {
-            throw new MalformedDataException(
-                    "CSV must have timestamp/date, open, high, low, close columns; got: " + headerLine);
-        }
-
-        List<Bar> bars = new ArrayList<>(lines.size() - 1);
-        boolean allNumeric = true;
-        long minTs = Long.MAX_VALUE, maxTs = Long.MIN_VALUE;
-        for (int r = 1; r < lines.size(); r++) {
-            String line = lines.get(r).trim();
-            if (line.isEmpty()) {
-                continue;
-            }
-            String[] cells = splitCsv(line, delimiter);
-            String rawTs = cells[tsCol].trim();
-            allNumeric &= rawTs.chars().allMatch(Character::isDigit);
-            long ts = parseTimestamp(rawTs);
-            minTs = Math.min(minTs, ts);
-            maxTs = Math.max(maxTs, ts);
-            bars.add(new Bar(ts,
-                    parseNumber(cells[oCol], semicolon),
-                    parseNumber(cells[hCol], semicolon),
-                    parseNumber(cells[lCol], semicolon),
-                    parseNumber(cells[cCol], semicolon),
-                    vCol >= 0 && vCol < cells.length ? parseNumber(cells[vCol], semicolon) : 0));
-        }
-        if (bars.isEmpty()) {
-            throw new MalformedDataException("CSV has a header but no data rows");
-        }
-        // Whole-file epoch-seconds detection: if every numeric timestamp sits in the
-        // plausible seconds range (years 1973..5138), the file is in seconds.
-        if (isEpochSecondsFile(allNumeric, minTs, maxTs)) {
-            List<Bar> scaled = new ArrayList<>(bars.size());
-            for (Bar b : bars) {
-                scaled.add(new Bar(b.timestamp() * 1000, b.open(), b.high(), b.low(), b.close(), b.volume()));
-            }
-            bars = scaled;
-        }
-        bars.sort(Comparator.comparingLong(Bar::timestamp));
-        return BarSeries.fromBars(symbol, bars);
+        return com.quantfinlib.io.CsvBarLoader.parse(lines, symbol);
     }
 
-    /** Writes the series as {@code timestamp,open,high,low,close,volume} with epoch-millis timestamps. */
+    /**
+     * Saves a series as CSV bars.
+     *
+     * @param series the series
+     * @param path   the target file
+     * @throws IOException if the file cannot be written
+     */
     public static void save(BarSeries series, Path path) throws IOException {
-        Path parent = path.getParent();
-        if (parent != null) {
-            Files.createDirectories(parent);
-        }
-        try (Writer w = Files.newBufferedWriter(path)) {
-            w.write("timestamp,open,high,low,close,volume\n");
-            for (int i = 0; i < series.size(); i++) {
-                w.write(String.format(Locale.ROOT, "%d,%s,%s,%s,%s,%s%n",
-                        series.timestamp(i), series.open(i), series.high(i),
-                        series.low(i), series.close(i), series.volume(i)));
-            }
-        }
-    }
-
-    /**
-     * RFC-4180-style field split on the comma delimiter; double quotes
-     * protect embedded delimiters, {@code ""} escapes a quote inside a
-     * quoted field.
-     */
-    static String[] splitCsv(String line) {
-        return splitCsv(line, ',');
-    }
-
-    /**
-     * RFC-4180-style field split on one delimiter. Splitting a semicolon
-     * file on commas too would shred its decimal commas ("100,25" is one
-     * number, not two cells) — the delimiter is a file-level fact decided
-     * once from the header, never per line.
-     */
-    static String[] splitCsv(String line, char delimiter) {
-        List<String> out = new ArrayList<>();
-        StringBuilder current = new StringBuilder();
-        boolean quoted = false;
-        for (int i = 0; i < line.length(); i++) {
-            char c = line.charAt(i);
-            if (quoted) {
-                if (c == '"') {
-                    if (i + 1 < line.length() && line.charAt(i + 1) == '"') {
-                        current.append('"');
-                        i++;
-                    } else {
-                        quoted = false;
-                    }
-                } else {
-                    current.append(c);
-                }
-            } else if (c == '"') {
-                quoted = true;
-            } else if (c == delimiter) {
-                out.add(current.toString());
-                current.setLength(0);
-            } else {
-                current.append(c);
-            }
-        }
-        out.add(current.toString());
-        return out.toArray(new String[0]);
-    }
-
-    /** Whether {@code c} occurs outside RFC-4180 double-quoted regions. */
-    static boolean containsUnquoted(String line, char c) {
-        boolean quoted = false;
-        for (int i = 0; i < line.length(); i++) {
-            char ch = line.charAt(i);
-            if (ch == '"') {
-                quoted = !quoted;   // "" inside quotes toggles twice: net unchanged
-            } else if (ch == c && !quoted) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /** Numeric parse tolerant of vendor thousands separators ("1,234.5"). */
-    static double parseNumber(String value) {
-        return parseNumber(value, false);
-    }
-
-    /**
-     * Locale-aware numeric parse. US convention (comma files): the comma is
-     * a thousands separator and is stripped ("1,234.5"). European
-     * convention (semicolon files): the DOT is the thousands separator and
-     * the comma is the decimal point ("1.234,56") — stripping commas there
-     * would silently read 1,6 as 16, corrupting every value by 10x.
-     */
-    static double parseNumber(String value, boolean europeanDecimals) {
-        String v = value.trim();
-        if (europeanDecimals) {
-            return Double.parseDouble(v.replace(".", "").replace(',', '.'));
-        }
-        return Double.parseDouble(v.replace(",", ""));
-    }
-
-    /**
-     * The whole-file epoch-seconds heuristic, shared with
-     * {@code UniverseCsvLoader} so bar files and universe files can never
-     * disagree on the scale: all-numeric timestamps sitting entirely in the
-     * plausible seconds range (years 1973..5138) are seconds, ×1000.
-     */
-    static boolean isEpochSecondsFile(boolean allNumeric, long minTs, long maxTs) {
-        return allNumeric && minTs >= 100_000_000L && maxTs < 100_000_000_000L;
-    }
-
-    /**
-     * Epoch millis from a numeric timestamp (seconds-vs-millis is resolved at
-     * file level in {@link #parse}), {@code yyyy-MM-dd}, or ISO date-times
-     * (UTC assumed when unzoned).
-     */
-    static long parseTimestamp(String value) {
-        if (value.chars().allMatch(Character::isDigit)) {
-            return Long.parseLong(value);
-        }
-        try {
-            return LocalDate.parse(value, DateTimeFormatter.ISO_LOCAL_DATE)
-                    .atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli();
-        } catch (java.time.format.DateTimeParseException ignored) {
-            // fall through
-        }
-        try {
-            return LocalDateTime.parse(value.replace(' ', 'T'))
-                    .toInstant(ZoneOffset.UTC).toEpochMilli();
-        } catch (java.time.format.DateTimeParseException ignored) {
-            // fall through
-        }
-        return OffsetDateTime.parse(value).toInstant().toEpochMilli();
+        com.quantfinlib.io.CsvBarLoader.save(series, path);
     }
 }

@@ -1644,7 +1644,7 @@ trade.wrap(buf, QuoteFlyweight.ENCODED_LENGTH)
 ```
 
 A one-sided quote carries NaN on the pulled side (the convention
-`fx.AggregatedBook` consumes). A double that is not on the chosen grid
+`marketdata.AggregatedBook` consumes). A double that is not on the chosen grid
 throws rather than being rounded silently. A receive loop reads
 `MessageHeader.templateId`, wraps the matching flyweight, advances by the
 header plus the `blockLength` on the wire, and never allocates.
@@ -4341,7 +4341,7 @@ trade.wrap(buf, next)
         .encode(symbolId, 1.0850, priceExp, 250_000, sizeExp, System.nanoTime());
 ```
 
-A one-sided quote carries NaN on the pulled side (the convention `fx.AggregatedBook` consumes). Advancing by the `blockLength` read from the wire, not by the decoder's own constant, is the SBE evolution rule: a newer sender may append fields and an older reader still finds the next message. Readers skip unknown templates by block length, stop on a foreign schema id, and still decode version-1 frames (`MessageHeader.isV1Frame`). `BinaryOrderPublisher`/`BinaryOrderReceiver` run the same idea over a real transport.
+A one-sided quote carries NaN on the pulled side (the convention `marketdata.AggregatedBook` consumes). Advancing by the `blockLength` read from the wire, not by the decoder's own constant, is the SBE evolution rule: a newer sender may append fields and an older reader still finds the next message. Readers skip unknown templates by block length, stop on a foreign schema id, and still decode version-1 frames (`MessageHeader.isV1Frame`). `BinaryOrderPublisher`/`BinaryOrderReceiver` run the same idea over a real transport.
 
 ## 125. Parse FIX 35=W snapshots and 35=X increments
 

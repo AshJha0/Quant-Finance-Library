@@ -20,7 +20,7 @@ flowchart LR
         WS["WebSocket live<br/>(feed)"]
         SBE_IN["Binary SBE stream<br/>(sbe)"]
         QFLT["QFLT tick files<br/>(data)"]
-        UNIV["Universe CSV<br/>(data.UniverseCsvLoader)"]
+        UNIV["Universe CSV<br/>(io.UniverseCsvLoader)"]
     end
 
     subgraph HOT["Hot lane: zero allocation"]

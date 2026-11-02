@@ -39,7 +39,11 @@ def library_imports():
             if d != root and any(f.endswith(".class") for f in files):
                 pkgs.add(os.path.relpath(d, root).replace(os.sep, "."))
     nested = ["com.quantfinlib.pricing.BlackScholes.OptionType",
-              "com.quantfinlib.execution.BenchmarkExecutor.Benchmark"]
+              "com.quantfinlib.execution.BenchmarkExecutor.Benchmark",
+              # 3.2 replacements of deprecated same-named types: a single-type
+              # import wins over the wildcard, so recipes see the new type.
+              "com.quantfinlib.io.CsvBarLoader", "com.quantfinlib.io.HttpBarFetcher",
+              "com.quantfinlib.io.UniverseCsvLoader", "com.quantfinlib.marketdata.AggregatedBook"]
     return "".join(f"import {n};\n" for n in nested) + "".join(
         f"import {p}.*;\n" for p in sorted(pkgs) + JDK_PACKAGES)
 

@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * (times the annuity) in the fixed rate. Complements the par-identity and
  * DV01 pins in markets.AssetClassRoundTest.
  */
-@SuppressWarnings("deprecation") // SwapPricer kept through 3.x; pinned here unchanged
+@SuppressWarnings("removal") // SwapPricer kept through 3.x; pinned here unchanged
 class SwapPricerTest {
 
     private static YieldCurve flat5() {
