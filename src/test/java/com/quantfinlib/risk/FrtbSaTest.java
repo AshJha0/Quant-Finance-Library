@@ -150,8 +150,9 @@ class FrtbSaTest {
 
     @Test
     void nmrf() {
-        // MAR33.17: sqrt(9 + 16 + 25) + sqrt(0.36 * 400 + 0.64 * 200)
-        assertEquals(Math.sqrt(50) + Math.sqrt(272),
+        // MAR33.17 (library reading, separate roots): sqrt(9 + 16) + sqrt(25)
+        // + sqrt(0.36 * 400 + 0.64 * 200)
+        assertEquals(5.0 + 5.0 + Math.sqrt(272),
                 FrtbNmrf.ses(new double[] {3, 4}, new double[] {5}, new double[] {10, 10}), TOL);
         assertThrows(IllegalArgumentException.class,
                 () -> FrtbNmrf.ses(new double[] {-1}, new double[0], new double[0]));
