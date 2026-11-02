@@ -15,15 +15,27 @@ connectivity stack; see [docs/STABILITY.md](docs/STABILITY.md).
 
 ## Status
 
-- Version 3.0.0.
-  Requires Java 25 (LTS). 3.0 changes no number; it reduces the public API. The
-  library splits into two artifacts (stable tier and low-latency lane), `reporting`
-  becomes `regreporting`, and everything 2.4.0 deprecated for removal is gone.
+- Version 3.1.0. Requires Java 25 (LTS). 3.1 is additive over 3.0: a
+  convention-driven swap leg model (payment lag, lookback, observation shift,
+  lockout, stubs) checked against QuantLib, an analytic bootstrap Jacobian, exact
+  bond accrual between coupon dates, the Basel VaR traffic light, stateful EMIR
+  Refit rules, CAT option and quote events with a linkage check, and nightly
+  reference, fuzz and mutation checks. `SwapPricer` is deprecated, not removed.
+  [docs/MIGRATION_3.1.md](docs/MIGRATION_3.1.md) and [CHANGELOG.md](CHANGELOG.md)
+  list every change.
+- At 3.1.0 the full suite (`./mvnw verify -Pfull`) runs 2,087 tests (core 1,436,
+  lowlatency 651). 8 are skipped: 7 need optional external files or the network
+  (ISDA grids, ESMA XSDs, the SIX CFI list, GLEIF), and one regenerates a golden
+  file on request. CONTRIBUTING.md lists the environment variables that turn them
+  on; the nightly workflow fetches the ISDA grids and ESMA XSDs and fails if those
+  tests skip.
+- Release cadence from 3.1.0: at most one minor release a month, no breaking
+  changes in 3.x, and a deprecation lives at least one minor release and three
+  months before a major removes it ([docs/STABILITY.md](docs/STABILITY.md)).
+- Version 3.0.0 changes no number; it reduces the public API. The library splits
+  into two artifacts (stable tier and low-latency lane), `reporting` becomes
+  `regreporting`, and everything 2.4.0 deprecated for removal is gone.
   [docs/MIGRATION_3.0.md](docs/MIGRATION_3.0.md) lists every change.
-- At 3.0.0 the full suite (`./mvnw verify -Pfull`) runs 2,007 tests (core 1,382,
-  lowlatency 625); 7 are skipped without optional external files or network
-  (ISDA grids, ESMA XSDs, the SIX CFI list, GLEIF). CONTRIBUTING.md lists the
-  environment variables that turn them on.
 - Version 2.4 is additive over 2.3 and changes no result by default. It deprecated
   for removal everything 3.0 takes out and added busts and corrections in
   `PaperTradingGateway`, the FRTB default risk charge for securitisations, the
@@ -82,18 +94,18 @@ the first; users of the trading lane depend on the second, which pulls in the fi
 <dependency>
   <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
   <artifactId>quant-finance-library</artifactId>
-  <version>v3.0.0</version>
+  <version>v3.1.0</version>
 </dependency>
 
 <!-- or the trading lane, which brings the stable tier with it -->
 <dependency>
   <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
   <artifactId>quant-finance-library-lowlatency</artifactId>
-  <version>v3.0.0</version>
+  <version>v3.1.0</version>
 </dependency>
 ```
 
-Gradle: `implementation("com.github.AshJha0.Quant-Finance-Library:quant-finance-library:v3.0.0")`
+Gradle: `implementation("com.github.AshJha0.Quant-Finance-Library:quant-finance-library:v3.1.0")`
 (or `quant-finance-library-lowlatency`) with `maven("https://jitpack.io")` in
 `repositories`. JitPack names the group `com.github.<user>.<repo>` for a multi-module
 build; 2.x was a single module and used `com.github.AshJha0:Quant-Finance-Library`.
@@ -170,7 +182,7 @@ public class QuickStart {
 The same backtest runs without writing Java through the bundled command line:
 
 ```bash
-java -jar core/target/quant-finance-library-3.0.0.jar backtest \
+java -jar core/target/quant-finance-library-3.1.0.jar backtest \
     --csv bars.csv --symbol SPY --strategy sma --fast 10 --slow 30 --out report.html
 ```
 
@@ -317,6 +329,7 @@ Benchmark method, environment and results are in [docs/BENCHMARKS.md](docs/BENCH
 | [GETTING_STARTED.md](docs/GETTING_STARTED.md) | Build, first backtest, paper trading, benchmarks, troubleshooting |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Package map, data flow, design rules |
 | [STABILITY.md](docs/STABILITY.md) | Stable APIs, reference implementations, versioning policy |
+| [MIGRATION_3.1.md](docs/MIGRATION_3.1.md) | The 3.1 deprecations (`SwapPricer`, non-integral `BondPricer` use) and their replacements |
 | [MIGRATION_3.0.md](docs/MIGRATION_3.0.md) | What 3.0 removes or moves, and the 2.4 replacement for each |
 | [MIGRATION_2.4.md](docs/MIGRATION_2.4.md) | 2.4 deprecations, new opt-in behaviour, unconfirmed readings |
 | [MIGRATION_2.3.md](docs/MIGRATION_2.3.md) | The removed SIMM package and the 2.3 result changes |
@@ -331,6 +344,7 @@ Benchmark method, environment and results are in [docs/BENCHMARKS.md](docs/BENCH
 | [ULTRA_LOW_LATENCY.md](docs/ULTRA_LOW_LATENCY.md) | The trading lane, its order lifecycle and tuning |
 | [BENCHMARKS.md](docs/BENCHMARKS.md) | How performance is measured, and results |
 | [PUBLISHING.md](docs/PUBLISHING.md) | Release process |
+| [INPUT_LIMITS.md](docs/INPUT_LIMITS.md) | Size and entry limits of every file loader |
 | [CHANGELOG.md](CHANGELOG.md) | Release history |
 | [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md) | Contributing and reporting vulnerabilities |
 

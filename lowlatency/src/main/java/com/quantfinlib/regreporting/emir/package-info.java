@@ -21,7 +21,18 @@
  * of EMIR-VR-1002/1003/1004/1009, EMIR-VR-1003-01 (needs the venue MIC of 2.41),
  * EMIR-VR-1008-02 and -1009-08/09 (unchanged since first report), EMIR-VR-2001-03/04,
  * EMIR-VR-2042-03, EMIR-VR-2045-03/06/07/08, EMIR-VR-2151-02 to -06 (action history),
- * EMIR-VR-2153-06, and membership of the official ISO 4217 list. Fields outside the
+ * EMIR-VR-2153-06, and membership of the official ISO 4217 list. Since 3.1.0 the opt-in
+ * {@link com.quantfinlib.regreporting.emir.EmirStatefulValidator} applies EMIR-VR-1001-02/03,
+ * the GLEIF status parts of 1002/1003/1004/1009, 1004-05, 1009-09, 2151-02 to -06, 2056-01 and
+ * 2022-01, given a {@link com.quantfinlib.regreporting.emir.UtiHistory}, a receipt time, an
+ * LEI registry and a {@link com.quantfinlib.regreporting.emir.CurrencyRegistry}.</p>
+ *
+ * <p><b>Still not checked in 3.1.0</b>, by either validator: the GLEIF branch tests
+ * (EMIR-VR-1002-04 and the like; {@link com.quantfinlib.regreporting.registry.LeiRecord}
+ * carries no entity category), EMIR-VR-1003-01 (needs the venue MIC of 2.41),
+ * EMIR-VR-1008-02 and -1009-08, EMIR-VR-2001-03/04 (the UTI is the history key, so a
+ * changed UTI cannot be seen), EMIR-VR-2042-03, EMIR-VR-2045-03/06/07/08,
+ * EMIR-VR-2153-06/08 and the other "reported for that UTI" date rules. Fields outside the
  * populated subset (margins, collateral, leg 2, schedules, packages) are not checked.</p>
  *
  * <p><b>3.0 notice.</b> Renamed to {@code com.quantfinlib.regreporting.emir} in 3.0

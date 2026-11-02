@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # The Release workflow calls this whole workflow on the tagged commit and
+  # publishes only if it passes.
+  workflow_call:
 
 permissions:
   contents: read
@@ -58,9 +61,9 @@ jobs:
           if-no-files-found: ignore
 
   api-compat:
-    # Binary compatibility against the released 2.4.0 jar (japicmp). Fails on
+    # Binary compatibility against the released 3.0.0 core jar (japicmp). Fails on
     # an incompatible change in the stable module (docs/STABILITY.md) that is
-    # not on the 3.0 allow-list in core/pom.xml; the low-latency module is
+    # has no allow-list (3.x makes no breaking changes); the low-latency module is
     # reported in api-lowlatency.html only.
     name: API compatibility
     runs-on: ubuntu-latest
@@ -72,15 +75,15 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
-      - name: Fetch the 2.4.0 baseline jar
-        run: bash scripts/fetch-api-baseline.sh 2.4.0
-      - name: Compare against 2.4.0
+      - name: Fetch the 3.0.0 baseline jars
+        run: bash scripts/fetch-api-baseline.sh 3.0.0
+      - name: Compare against 3.0.0
         run: ./mvnw -B --no-transfer-progress -Papi-compat -DskipTests -Dmaven.javadoc.skip verify
       - name: Summary
         if: always() && hashFiles('core/target/japicmp/api-stable.md') != ''
         run: |
           {
-            echo '## API changes in the stable module since 2.4.0'
+            echo '## API changes in the stable module since 3.0.0'
             cat core/target/japicmp/api-stable.md
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload reports

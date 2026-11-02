@@ -73,10 +73,47 @@ jobs:
             lowlatency/target/spotbugsXml.xml
           if-no-files-found: ignore
 
+  reference-files:
+    # External reference checks. Fetches the ISDA CDS Standard Model RFR test
+    # grids (cdsmodel.com) and the ESMA65-8-2598 XSDs (esma.europa.eu) from their
+    # public URLs, checks the SHA-256 pinned in scripts/reference-files.sha256,
+    # and runs the tests that need them with QFL_REQUIRE_REFERENCE_FILES=true, so
+    # a missing file or a failed download fails the job instead of skipping.
+    # The files are not stored anywhere. The SIX CFI list is not redistributable
+    # and is not fetched; CfiCodeRegistryTest's real-file test stays local.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Install openpyxl (reads the ISDA workbooks)
+        run: python3 -m pip install --disable-pip-version-check openpyxl==3.1.5
+      - name: Fetch and verify reference files
+        run: bash scripts/fetch-reference-files.sh "$RUNNER_TEMP/qfl-ref" >> "$GITHUB_ENV"
+      - name: Reference tests (required, not skippable)
+        run: >-
+          ./mvnw -B --no-transfer-progress -pl core,lowlatency test -Djacoco.skip=true
+          -Dsurefire.failIfNoSpecifiedTests=false
+          -Dtest=IsdaGridVerificationTest,IsdaGoldenSubsetTest,Auth016XmlTest,Auth016EnvelopeTest,StatusAdviceTest,EsmaXsdGoldenTest
+      - name: Check nothing was skipped
+        run: |
+          set -euo pipefail
+          # writeGolden is the generator and is meant to skip; nothing else may.
+          skipped=$(grep -l '<skipped' core/target/surefire-reports/TEST-*.xml lowlatency/target/surefire-reports/TEST-*.xml                     | xargs -r grep -h -B1 '<skipped' | grep -o '<testcase name="[^"]*"' | grep -v '"writeGolden"' || true)
+          if [ -n "$skipped" ]; then echo "::error::skipped reference tests: $skipped"; exit 1; fi
+
   mutation:
-    # PIT mutation testing on pricing, risk, rates and volatility. Reported,
-    # not gated: the kill rate per package goes to the step summary and the
-    # HTML report is uploaded.
+    # PIT mutation testing on core's pricing, risk, rates and volatility. Fails
+    # when a package falls below its floor in scripts/pit-thresholds.txt (or the
+    # whole run below pit.mutationThreshold); the table goes to the step summary
+    # and the HTML report is uploaded.
     runs-on: ubuntu-latest
     timeout-minutes: 150
     steps:
@@ -87,14 +124,81 @@ jobs:
           java-version: '25'
           cache: maven
       - name: Mutation testing
-        run: ./mvnw -B --no-transfer-progress -Pmutation -Dpit.threads=4 -pl core test-compile org.pitest:pitest-maven:mutationCoverage
-      - name: Summary
+        run: ./mvnw -B --no-transfer-progress -Pmutation -Dpit.threads=4 -Dpit.mutationThreshold=79 -pl core test-compile org.pitest:pitest-maven:mutationCoverage
+      - name: Summary and per-package floors
         if: always() && hashFiles('core/target/pit-reports/mutations.xml') != ''
-        run: python3 scripts/pit-summary.py core/target/pit-reports/mutations.xml >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          set -o pipefail
+          python3 scripts/pit-summary.py core/target/pit-reports/mutations.xml             --thresholds scripts/pit-thresholds.txt --run core | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Upload report
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: mutation-report
           path: core/target/pit-reports
+          if-no-files-found: ignore
+
+  fuzz:
+    # Seeded mutation fuzzing of the FIX, FIRDS XML, CFI XLSX and GLEIF/MIC
+    # CSV parsers (-Pfuzz runs only *FuzzTest, qfl.cases = fuzz.tries,
+    # default 200000), then the core pricing property tests at a deeper case
+    # count than the per-PR 1000. A failure message names the seed and case
+    # index that reproduce it.
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Fuzz the parsers
+        run: ./mvnw -B --no-transfer-progress -Pfuzz -Djacoco.skip=true -pl lowlatency -am test
+      - name: Pricing property tests, 20000 cases
+        run: >-
+          ./mvnw -B --no-transfer-progress -Djacoco.skip=true -Dqfl.cases=20000
+          -Dtest=PricingInvariantPropertiesTest -Dsurefire.failIfNoSpecifiedTests=false -pl core test
+      - name: Upload reports
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-reports
+          path: |
+            lowlatency/target/surefire-reports
+            core/target/surefire-reports
+          if-no-files-found: ignore
+
+  mutation-lowlatency:
+    # PIT on the low-latency module: regreporting and the FIX codecs (decoder,
+    # encoder, parser, message, groups, views, dictionary; not the session state
+    # machine or the stores). Core runs in the same reactor with no targets so
+    # the module resolves without an install. Same floors file, run "lowlatency".
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Mutation testing
+        run: >-
+          ./mvnw -B --no-transfer-progress -Pmutation -Dpit.threads=4 -Dpit.failWhenNoMutations=false
+          -Dpit.mutationThreshold=83
+          "-Dpit.targets=com.quantfinlib.regreporting.*,com.quantfinlib.fix.FixDecoder*,com.quantfinlib.fix.FixOrderEncoder*,com.quantfinlib.fix.FixParse*,com.quantfinlib.fix.FixMessage*,com.quantfinlib.fix.FixGroup*,com.quantfinlib.fix.FixExecReportView*,com.quantfinlib.fix.FixMarketDataView*,com.quantfinlib.fix.FixDictionary*"
+          "-Dpit.targetTests=com.quantfinlib.regreporting.*,com.quantfinlib.fix.*"
+          -pl core,lowlatency test-compile org.pitest:pitest-maven:mutationCoverage
+      - name: Summary and per-package floors
+        if: always() && hashFiles('lowlatency/target/pit-reports/mutations.xml') != ''
+        run: |
+          set -o pipefail
+          python3 scripts/pit-summary.py lowlatency/target/pit-reports/mutations.xml             --thresholds scripts/pit-thresholds.txt --run lowlatency | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mutation-report-lowlatency
+          path: lowlatency/target/pit-reports
           if-no-files-found: ignore

@@ -6,6 +6,51 @@ Entries for 1.x releases are archived in [docs/history/CHANGELOG-1.x.md](docs/hi
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-11-02
+
+Minor release, additive over 3.0.0: no public member is removed, no signature changes, and no existing result changes unless noted under Fixed. It is the first release under the cadence in [docs/STABILITY.md](docs/STABILITY.md) (at most one minor a month, no breaking changes in 3.x). japicmp against the released 3.0.0 jars: semver MINOR for both modules, no binary-incompatible change, no allow-list. Migration notes: [docs/MIGRATION_3.1.md](docs/MIGRATION_3.1.md).
+
+#### Added
+
+- Rates leg model: `rates.LegConvention` (frequency, day count, calendar, roll, `StubType`, end of month), `FixedLeg`, sealed `FloatLeg` with `TermRateLeg` and `OvernightLeg`, `OvernightConvention` (lookback, observation shift, lockout, payment lag; compounded in arrears in the shape of the 2021 ISDA Definitions s6.9), `FixingHistory` (a past fixing that is missing throws; today's is optional) and `VanillaSwap`. Three seasoned SOFR swaps (lookback 2, shift 2, lockout 2, each with a 2-day payment lag, 111 published fixings) and a front-stub swap match QuantLib-Python 1.44 NPVs and leg NPVs to 2-3e-12 and fair rates to 1e-11 (externally anchored). In the special cases `VanillaSwap` equals `OisSwap` and `InterestRateSwap` to 1e-14 (independent recomputation). Recipe 360, LEARN 10d.1.
+- `rates.BootstrapJacobian`: analytic quote-to-curve Jacobian by the implicit-function theorem, and per-quote DV01 without rebuilding the curve. Log-linear buckets equal `MultiCurveRisk` finite-difference buckets to 1e-6 relative (self-consistency). Recipe 359.
+- `scripts/quantlib-golden-sofr.py` and `core/src/test/resources/golden/quantlib-sofr.csv` (QuantLib-Python 1.44 recorded in the header; illustrative inputs, not market data), checked by `QuantLibGoldenTest`.
+- `pricing.BondPricer`: `isWholePeriods`, `priceFromYieldExact`, `accruedInterestExact`, `macaulayDurationExact`, `modifiedDurationExact`, `convexityExact`, `yieldToMaturityExact` (exact accrual for a maturity between coupon dates) and `convexityAnalytic`. They equal the existing functions on whole periods to 1e-12 and match QuantLib on an ACT/ACT ICMA bond to 1e-10 (externally anchored). Recipe 361.
+- `credit.CvaApproximator.cvaBucketAverage`: averages the discounted EE over each bucket (trapezoid). On EE = 1mm (1 + t^2) with annual buckets the end-point `cva` is 27.6 % above a 200,000-step integral and the averaged form 1.8 % (independent recomputation). `cva` is unchanged. Recipe 362.
+- `risk.VarBacktest.trafficLight(exceptions, n)` and `trafficLight(exceptions, n, coverage)` with `Zone` and `TrafficLight`: the Basel zone from the binomial cumulative probability (MAR99.17) and the MAR32.9 Table 1 multiplier for 250 days at 99 % (NaN otherwise). Checked against MAR99 Table 2 to two decimals (externally anchored). Recipe 363.
+- `regreporting.emir.EmirStatefulValidator` (opt-in), `UtiHistory`, `InMemoryUtiHistory`, `CurrencyRegistry`: 15 EMIR Refit rules that need state, from ESMA74-362-2683 sheet Validations_Cpty_derivative: TR receipt time (EMIR-VR-1001-02/03), GLEIF membership and status on the date of field 1.1 (1002, 1003, 1004, 1009), fields unchanged since the first report (1004-05, 1009-09), the action-type history (2151-02 to -06) and the official ISO 4217 list (2056-01, 2022-01). A source that is not configured skips its rules. `EmirRefitReport.validate()` is unchanged. Recipe 364, LEARN 17i.
+- CAT: event types MENQ (Table 39), MONO (Table 62), MOOR (Table 64) and MONQ (Table 85), with `CatEventType.isOption()` and `isQuote()`; `CatEventBuilder.newQuote()`, `newOptionOrder()`, `optionRoute()`, `newOptionQuote()`, `optionId(String)` and `quoteKey(String, Instant)`; rules CAT-R13 to CAT-R16. `CatLinkageChecker` checks Order, Trade, Fulfillment and Quote Keys across a batch (CAT-LK01 duplicate key, LK02 route without its order, LK03 missing key field; IM Tech Specs v4.1.0 r14 section 2.6.1, Table 5). Recipe 365, LEARN 17i.
+- Tests: `FrtbSaTableTest` compares the FRTB SA parameters with hand-transcribed MAR21/MAR22 tables, each row citing paragraph, table and page (the 10x10 GIRR tenor correlations of MAR21.46 Table 2, 89 risk weights, the 55 CSR sector correlations of MAR21.57 Table 5). `PricingInvariantPropertiesTest` (7 properties: put-call parity, Merton bounds, monotonicity, convexity in strike, American >= European >= intrinsic, implied-vol round trip). `FixParserFuzzTest` and `ReferenceParsersFuzzTest` (mutation fuzzing of the FIX, FIRDS XML, CFI XLSX, GLEIF and ISO 10383 parsers). Randomised tests are seeded JUnit loops (`qfl.cases`, default 1000); no new test dependency. Recipe 366.
+- `-Pfuzz` Maven profile: runs only `*FuzzTest`, at `fuzz.tries` cases (default 200,000).
+- `docs/INPUT_LIMITS.md`: the size and entry limits of every file loader. `docs/MIGRATION_3.1.md`.
+
+#### Changed
+
+- `CatEvent.rules()` lists 16 rules instead of 12 and the text of `CatEvent.CHECKED_AGAINST` names the new tables. CAT-R13 to R16 apply only to the four new event types; `validate()` on MENO, MEOR, MEOT and MEOF gives the same result as in 3.0.
+- The `FrtbSa` class example K = 0.98182 is now labelled an independent recomputation: MAR21 prints no worked capital calculation. The value is unchanged.
+- japicmp compares each module with its own released 3.0.0 jar (`scripts/fetch-api-baseline.sh` fetches both); the 3.0 allow-list is gone, so any break in core fails the build.
+
+#### Deprecated
+
+- `rates.SwapPricer`, `@Deprecated(since = "3.1.0")`, not for removal in 3.x; results unchanged. Use `VanillaSwap` (MIGRATION_3.1 section 1). Earliest removal: 4.0, which by the STABILITY rules cannot ship before three months after 3.2.0, and 3.2.0 cannot ship before 2026-12-02, so not before 2027-03-02.
+- `BondPricer.priceFromYield`, `macaulayDuration`, `modifiedDuration`, `convexity`, `dv01` and `yieldToMaturity` with a non-integral maturity (deprecated in the javadoc only; the methods are correct for whole periods and keep their results). Use the `...Exact` functions (MIGRATION_3.1 section 2).
+
+#### Fixed
+
+- `VarBacktest` Kupiec and Christoffersen p-values: the chi-squared(1) tail is now `2 Phi(-sqrt x)` (= erfc(sqrt(x/2))). The old form returned exactly 0 beyond x of about 67; the new one gives P(chi2 > 100) = 1.5239706048321054e-23 (2Q(10), standard tables). The two agree to within 5e-16 for x < 40 (tested), so no decision at a usual significance level changes.
+
+#### Security
+
+- `CfiCodeRegistry.fromSixXlsx` caps the workbook at 10,000 zip entries and 256 MiB inflated in total, as well as the existing 64 MiB per part, so a zip bomb fails with `IOException` instead of exhausting memory (`CfiXlsxLimitsTest`; the real SIX file has 319 entries and 1.5 MB). Every loader's limits are in `docs/INPUT_LIMITS.md`.
+
+#### CI
+
+- Nightly `reference-files` job: downloads the ISDA CDS test grids and ESMA XSDs from their public URLs, checks the SHA-256 pins in `scripts/reference-files.sha256`, sets `QFL_REQUIRE_REFERENCE_FILES=true` so a missing file fails, and fails if any reference test skipped. PRs run committed stand-ins (`IsdaGoldenSubsetTest`, 48 invented contracts; `EsmaXsdGoldenTest`). No ISDA or ESMA file is committed.
+- Nightly `mutation-lowlatency` job (PIT on regreporting and the FIX codecs) and per-package mutation floors for both PIT jobs in `scripts/pit-thresholds.txt`, enforced by `scripts/pit-summary.py --thresholds`. On r31 the low-latency run scores 85.7 % over 2643 mutants, every package at or above its floor.
+- Nightly `fuzz` job: `-Pfuzz` on the low-latency parser fuzz tests, then `PricingInvariantPropertiesTest` at 20,000 cases.
+- `release.yml`: `tag-guard` (refuses a forced push, an existing release or a re-used tag name), then the reusable `ci.yml` and a javadoc build, before the release job attaches the jars and dispatches `docs.yml`. Release checklist in `docs/PUBLISHING.md`.
+- The API check job fetches and compares against the 3.0.0 jars.
+
 ## [3.0.0] - 2026-11-02
 
 Major release: the public API gets smaller and the jar says what docs/STABILITY.md says. No number changes, apart from the rounding-level note on the exposure simulator below. Every change has a row in [docs/MIGRATION_3.0.md](docs/MIGRATION_3.0.md); the japicmp gate lists each intended break by name (owner decisions D1 to D9, 2026-11-02).
@@ -642,7 +687,10 @@ Major release. It corrects several pricing, risk and backtesting results, makes 
 - `sbe.MessageHeader`, `sbe.Decimal64`.
 - `TickFileReader.info` (version, clock domain, anchor) and `FileInfo.toEpochNanos`.
 
-[Unreleased]: https://github.com/AshJha0/Quant-Finance-Library/compare/v2.3.0...HEAD
+[Unreleased]: https://github.com/AshJha0/Quant-Finance-Library/compare/v3.1.0...HEAD
+[3.1.0]: https://github.com/AshJha0/Quant-Finance-Library/compare/v3.0.0...v3.1.0
+[3.0.0]: https://github.com/AshJha0/Quant-Finance-Library/compare/v2.4.0...v3.0.0
+[2.4.0]: https://github.com/AshJha0/Quant-Finance-Library/compare/v2.3.0...v2.4.0
 [2.3.0]: https://github.com/AshJha0/Quant-Finance-Library/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/AshJha0/Quant-Finance-Library/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/AshJha0/Quant-Finance-Library/compare/v2.0.0...v2.1.0

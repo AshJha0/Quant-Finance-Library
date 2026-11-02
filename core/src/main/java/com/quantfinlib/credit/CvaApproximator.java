@@ -27,7 +27,8 @@ import java.util.Objects;
  *
  * <p>Approximations: exposure is evaluated at the bucket end and
  * assumed constant across the bucket (O(dt) bias; shrink the grid to
- * shrink it). Default and exposure are independent, so there is no
+ * shrink it, or use {@link #cvaBucketAverage}, which averages the bucket
+ * and is O(dt^2)). Default and exposure are independent, so there is no
  * wrong-way risk, which understates CVA when exposure grows exactly when
  * the counterparty weakens (the FX-forward-with-an-EM-sovereign classic).
  * Unilateral: your own default (DVA) is not netted. LGD is a constant you
@@ -90,6 +91,94 @@ public final class CvaApproximator {
             prevQ = q;
         }
         return lgd * sum;
+    }
+
+    /**
+     * Discrete unilateral CVA with the discounted exposure averaged over each
+     * bucket (trapezoid rule), added in 3.1.
+     *
+     * <p><b>Plain idea.</b> {@link #cva(double[], double[], CreditCurve, YieldCurve, double)}
+     * charges each bucket's default probability at the exposure of the bucket
+     * end. When exposure rises across the bucket that overstates CVA, when it
+     * falls it understates it, and the error shrinks only linearly with the
+     * bucket width. Averaging the two ends of the bucket removes the
+     * first-order term, which is the usual choice on a coarse grid (Gregory,
+     * The xVA Challenge, 3rd ed., 2015, section 14.2: the expected exposure in
+     * the CVA sum is the average over the interval).</p>
+     *
+     * <p><b>Formal statement.</b> CVA is the integral
+     * {@code LGD * int_0^T DF(t) EE(t) dPD(t)}. With {@code DEE(t) = DF(t) EE(t)}
+     * this method computes</p>
+     *
+     * <pre>
+     *   CVA = LGD * sum_i [ DEE(t_{i-1}) + DEE(t_i) ] / 2 * [ Q(t_{i-1}) - Q(t_i) ]
+     * </pre>
+     *
+     * <p>with {@code DEE(0) = eeAtZero}. For smooth EE and hazard the error
+     * against the integral is O(dt^2) instead of O(dt) (tested against a
+     * 200 000-step integral, independent recomputation).</p>
+     *
+     * <p><b>Worked example.</b> EE(t) = 100 t on (0, 1], one bucket, flat
+     * hazard 2 %, zero rates, LGD 1: the integral is 100 * int_0^1 t * 0.02
+     * e^{-0.02 t} dt = 0.9868; the end-point sum gives 100 * (1 - e^{-0.02})
+     * = 1.980 and this method 50 * (1 - e^{-0.02}) = 0.990 (own arithmetic).</p>
+     *
+     * <p>The end-point method is unchanged and stays the default: its numbers
+     * are what existing users reconcile against, and its bias was documented.
+     * Choose this method for new work on coarse grids.</p>
+     *
+     * @param eeAtZero         EE(0), &ge; 0 and finite (0 for a trade at par
+     *                         with no collateral imbalance)
+     * @param expectedExposure EE(t_i) per bucket end, &ge; 0
+     * @param bucketEndYears   bucket end times, strictly ascending, all &gt; 0
+     * @param counterparty     the counterparty's bootstrapped credit curve
+     * @param discount         risk-free discounting curve
+     * @param lgd              loss given default in (0, 1]
+     * @return the CVA charge (positive)
+     */
+    public static double cvaBucketAverage(double eeAtZero, double[] expectedExposure, double[] bucketEndYears,
+                                          CreditCurve counterparty, YieldCurve discount, double lgd) {
+        if (!(eeAtZero >= 0) || eeAtZero == Double.POSITIVE_INFINITY) {
+            throw new IllegalArgumentException("eeAtZero must be >= 0 and finite, got " + eeAtZero);
+        }
+        checkGrid(expectedExposure, bucketEndYears, lgd);
+        Objects.requireNonNull(counterparty, "counterparty");
+        Objects.requireNonNull(discount, "discount");
+        double sum = 0;
+        double prevQ = 1;
+        double prevDee = eeAtZero;
+        for (int i = 0; i < expectedExposure.length; i++) {
+            double t = bucketEndYears[i];
+            double q = counterparty.survivalProbability(t);
+            double dee = expectedExposure[i] * discount.discountFactor(t);
+            sum += 0.5 * (prevDee + dee) * (prevQ - q);
+            prevQ = q;
+            prevDee = dee;
+        }
+        return lgd * sum;
+    }
+
+    private static void checkGrid(double[] expectedExposure, double[] bucketEndYears, double lgd) {
+        int n = expectedExposure.length;
+        if (n == 0 || bucketEndYears.length != n) {
+            throw new IllegalArgumentException("need aligned, non-empty exposure/time arrays, got "
+                    + n + "/" + bucketEndYears.length);
+        }
+        checkLgd(lgd);
+        double prevT = 0;
+        for (int i = 0; i < n; i++) {
+            if (!(bucketEndYears[i] > prevT) || bucketEndYears[i] == Double.POSITIVE_INFINITY) {
+                throw new IllegalArgumentException(
+                        "bucket times must be strictly ascending, positive and finite: t["
+                                + i + "]=" + bucketEndYears[i]);
+            }
+            prevT = bucketEndYears[i];
+            if (!(expectedExposure[i] >= 0) || expectedExposure[i] == Double.POSITIVE_INFINITY) {
+                throw new IllegalArgumentException(
+                        "expected exposure must be >= 0 and finite: EE[" + i + "]="
+                                + expectedExposure[i]);
+            }
+        }
     }
 
     /**

@@ -19,9 +19,12 @@ import java.util.regex.Pattern;
  *
  * <p>Every check made by {@link #validate()} is listed by {@link #rules()} with its citation
  * and evidence class, checked against the CAT Reporting Technical Specifications for
- * Industry Members v4.1.0 r14 (2026-02-13); see {@link #CHECKED_AGAINST}. Only the four
- * equity event types and only single-record rules are checked: linkage, reference data
- * (symbol master, IMID list, FDID), late-reporting and option or quote events are not.</p>
+ * Industry Members v4.1.0 r14 (2026-02-13); see {@link #CHECKED_AGAINST}. Up to 3.0 only the four
+ * equity event types and only single-record rules were checked; linkage, reference data
+ * (symbol master, IMID list, FDID), late-reporting and option or quote events were not.
+ * Since 3.1.0 the new-quote (MENQ), new option order (MONO), option route (MOOR) and new
+ * option quote (MONQ) types are also checked (rules CAT-R13 to CAT-R16), and
+ * {@link CatLinkageChecker} checks linkage keys across a batch of events.</p>
  *
  * <p>Worked examples from the specification, pinned in tests: the section 7.6.1.1 repair
  * record (RPR with errorROEID 12345678) and the section 7.6.2.1 firm correction (COR, no
@@ -42,6 +45,10 @@ public final class CatEvent implements TransactionReport {
     private static final List<String> COMMON_REQUIRED = List.of("actionType", "firmROEID", "type", "symbol",
             "eventTimestamp");
     private static final Set<String> SIDES = Set.of("B", "SL", "SS", "SX");
+    private static final Set<String> OPTION_SIDES = Set.of("B", "S");
+    private static final Pattern WHOLE_QTY = Pattern.compile("\\d{1,12}");
+    /** OSI symbol: root (6, space padded), yymmdd, C or P, strike x1000 (8 digits); FLEX % prefix. */
+    private static final Pattern OSI = Pattern.compile("%?[A-Z0-9 .]{6}\\d{6}[CP]\\d{8}");
     private static final Set<String> ACTIONS = Set.of("NEW", "COR", "DEL", "RPR");
     private static final Set<String> CAPACITIES = Set.of("A", "P", "R");
     private static final Set<String> SIDE_DETAILS = Set.of("BUY", "SELL", "NA");
@@ -60,7 +67,7 @@ public final class CatEvent implements TransactionReport {
     /** What the checks in {@link #validate()} have been compared with. */
     public static final String CHECKED_AGAINST = "checked against CAT Reporting Technical Specifications for "
             + "Industry Members v4.1.0 r14 (2026-02-13), sections 2.5, 4.1, 4.3, 4.11.1, 4.12.1, 7.6 and "
-            + "Appendix G; equity events only; not certified";
+            + "Appendix G, plus Tables 39, 62, 64 and 85 (MENQ, MONO, MOOR, MONQ) since 3.1.0; not certified";
 
     private static final String SPEC = "CAT IM Technical Specifications v4.1.0 r14, ";
 
@@ -96,6 +103,19 @@ public final class CatEvent implements TransactionReport {
             new RuleProvenance("CAT-R12", "timestamps are 'YYYYMMDD HHMMSS[.fraction]' (space or T) or Unsigned "
                     + "nanoseconds; Boolean fields are true or false in any case", SPEC + "Table 3, Timestamp "
                     + "and Boolean; a fraction of 1 to 9 digits is the library's reading of the examples",
+                    Evidence.PUBLISHED_REFERENCE),
+            new RuleProvenance("CAT-R13", "on option events (MONO, MOOR, MONQ) optionID replaces symbol and side "
+                    + "is B or S", SPEC + "Tables 62, 64, 85 seq 8 (optionID 'R'); Appendix G, side (Option "
+                    + "column)", Evidence.PUBLISHED_REFERENCE),
+            new RuleProvenance("CAT-R14", "optionID is a 21-character OSI symbol, optionally prefixed by % for "
+                    + "FLEX Percent options", SPEC + "Table 62 seq 8 ('21-character OSI Symbol', '%' prefix); the "
+                    + "OSI layout (6+6+1+8) is the library's reading, the OSI standard is not on disk",
+                    Evidence.LIBRARY_READING),
+            new RuleProvenance("CAT-R15", "on MONO and MOOR, price is not negative, required when orderType is "
+                    + "LMT and blank when MKT", SPEC + "Table 62 seq 17, Table 64 seq 20", Evidence.PUBLISHED_REFERENCE),
+            new RuleProvenance("CAT-R16", "on quote events bidPrice and askPrice are Price and not negative; bidQty "
+                    + "and askQty are Whole Quantity (Numeric (12,0)); quoteKeyDate is a Timestamp",
+                    SPEC + "Table 39 seq 17-20, Table 85 seq 11-14, Table 3 Whole Quantity",
                     Evidence.PUBLISHED_REFERENCE));
 
     private final Map<String, String> fields;
@@ -150,6 +170,9 @@ public final class CatEvent implements TransactionReport {
         }
         CatEventType t = type();
         for (String k : COMMON_REQUIRED) {
+            if (t.isOption() && "symbol".equals(k)) {
+                continue;
+            }
             if (blank(k)) {
                 out.add("missing " + k);
             }
@@ -169,7 +192,16 @@ public final class CatEvent implements TransactionReport {
             out.add("errorROEID must be blank for actionType NEW");
         }
         errorRoeidShape(out);
-        oneOf("side", SIDES, out);
+        oneOf("side", t.isOption() ? OPTION_SIDES : SIDES, out);
+        if (t.isOption()) {
+            String osi = v("optionID");
+            if (!osi.isEmpty() && !OSI.matcher(osi).matches()) {
+                out.add("optionID must be a 21-character OSI symbol");
+            }
+        }
+        if (t.isQuote()) {
+            checkQuote(out);
+        }
         oneOf("capacity", CAPACITIES, out);
         oneOf("sideDetailsInd", SIDE_DETAILS, out);
         oneOf("fulfillmentLinkType", LINK_TYPES, out);
@@ -205,7 +237,8 @@ public final class CatEvent implements TransactionReport {
         if (!px.isEmpty() && !PRICE.matcher(px).matches()) {
             out.add("price must be Price: Numeric (10,8)");
         }
-        if (t == CatEventType.MENO || t == CatEventType.MEOR) {
+        if (t == CatEventType.MENO || t == CatEventType.MEOR || t == CatEventType.MONO
+                || t == CatEventType.MOOR) {
             if (px.startsWith("-")) {
                 out.add("price must be greater than or equal to zero");
             }
@@ -216,6 +249,25 @@ public final class CatEvent implements TransactionReport {
             if ("MKT".equals(ot) && !px.isEmpty()) {
                 out.add("price must be blank when orderType is MKT");
             }
+        }
+    }
+
+    private void checkQuote(List<String> out) {
+        for (String k : List.of("bidPrice", "askPrice")) {
+            String px = v(k);
+            if (!px.isEmpty() && (!PRICE.matcher(px).matches() || px.startsWith("-"))) {
+                out.add(k + " must be Price: Numeric (10,8), greater than or equal to zero");
+            }
+        }
+        for (String k : List.of("bidQty", "askQty")) {
+            String q = v(k);
+            if (!q.isEmpty() && !WHOLE_QTY.matcher(q).matches()) {
+                out.add(k + " must be Whole Quantity: Numeric (12,0)");
+            }
+        }
+        String ts = v("quoteKeyDate");
+        if (!ts.isEmpty() && !TIMESTAMP.matcher(ts).matches()) {
+            out.add("quoteKeyDate must be 'YYYYMMDD HHMMSS.CCCNNNNNN' or Unsigned nanoseconds");
         }
     }
 

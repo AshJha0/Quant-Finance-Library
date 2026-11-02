@@ -174,7 +174,7 @@ Numbers from a laptop or a shared CI runner say little about tails. See
 | `./mvnw test` | The default set. Test classes run in parallel; each test has a 120-second timeout. |
 | `./mvnw -Pfull test` | Also the tests tagged `load` (soak and load tests) and `timing` (wall-clock assertions). They run serially. The nightly workflow uses this profile. |
 | `./mvnw -Panalysis verify` | Adds Error Prone and SpotBugs. Findings are reported as warnings. |
-| `scripts/fetch-api-baseline.sh && ./mvnw -Papi-compat -DskipTests verify` | The API compatibility check: japicmp compares the build with the released 2.3.0 jar and fails on a binary-incompatible change in a stable package. The script caches the baseline jar in `~/.m2/api-baseline/`. The report is `target/japicmp/api-all.html`. |
+| `scripts/fetch-api-baseline.sh && ./mvnw -Papi-compat -DskipTests verify` | The API compatibility check: japicmp compares each module with its released 3.0.0 jar and fails on a binary-incompatible change in a stable package. The script caches the baseline jars in `~/.m2/api-baseline/`. The reports are `core/target/japicmp/api-stable.html` and `lowlatency/target/japicmp/api-lowlatency.html`. |
 | `./mvnw -Pmutation test-compile org.pitest:pitest-maven:mutationCoverage` | PIT mutation testing on `pricing`, `risk`, `rates` and `volatility`; the report is `target/pit-reports/index.html`. Narrow it with `-Dpit.targets=com.quantfinlib.volatility.*`; `python3 scripts/pit-summary.py target/pit-reports/mutations.xml` prints the per-package scores. The nightly workflow runs it. |
 | `./mvnw test -Dtest=VarEngineTest` | One test class (standard Surefire filter). |
 

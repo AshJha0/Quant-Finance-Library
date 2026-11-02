@@ -127,11 +127,11 @@ stable module.
 | `entitlements` (LL) | Who may trade what, where and when | `EntitlementService`, `Grant`, `Permission`, `Decision`, `EntitlementPreTradeCheck` |
 | `regreporting` (LL; `reporting` up to 2.4) | Regulatory transaction reports | `TransactionReport`, `TransactionReportSink`, `Rts22ReportBuilder`, `Rts22TransactionReport`, `ReportingIdentifiers` (`Rts22TransactionReport.toAuth016Xml`, `validateEsmaRules` from 2.3; `validateWithReferenceData`, `toSubmissionXml` from 2.4) |
 | `regreporting.registry` (LL) | Reference data for reports (2.3) | `LeiRegistry`, `GleifGoldenCopyLeiRegistry`, `GleifApiLeiRegistry`, `InstrumentRegistry`, `FirdsInstrumentRegistry`, `MicRegistry`, `Iso10383MicRegistry`, `ReferenceDataChecker`; `ReferenceData`, `LeiValidity`, `CodeRegistry` (2.4) |
-| `regreporting.cat` (LL) | US CAT order events, indicative (2.3) | `CatEventBuilder`, `CatEvent`, `CatEventType`, `CatJsonLinesSink` |
-| `regreporting.emir` (LL) | EMIR Refit derivative reports, indicative (2.3) | `EmirRefitReportBuilder`, `EmirRefitReport`, `EmirActionType`, `EmirEventType` |
+| `regreporting.cat` (LL) | US CAT order events, indicative (2.3); option and quote events, linkage check (3.1) | `CatEventBuilder`, `CatEvent`, `CatEventType` (MENQ, MONO, MOOR, MONQ from 3.1), `CatJsonLinesSink`, `CatLinkageChecker` (3.1) |
+| `regreporting.emir` (LL) | EMIR Refit derivative reports, indicative (2.3); opt-in stateful rules (3.1) | `EmirRefitReportBuilder`, `EmirRefitReport`, `EmirActionType`, `EmirEventType`; `EmirStatefulValidator`, `UtiHistory`, `InMemoryUtiHistory`, `CurrencyRegistry` (3.1) |
 | `indicators` | Technical indicators | `Indicators` (batch), `StreamingIndicators` (one update per tick) |
 | `pricing` | Option pricing and volatility surfaces | `BlackScholes`, `Black76`, `Bachelier`, `ImpliedVolatility`, `BinomialTree`, `Heston`, `SabrModel`, `VolSurface`, `BarrierOption`, `DigitalOption`, `TouchOption`, `AsianOption`, `QuantoOption`, `ExchangeOption`, `VarianceSwap`, `VannaVolga`, `HestonCos`, `HestonCalibrator`, `SviSlice`, `SsviSurface`, `SviSurface`, `TotalVarianceSurface`, `DupireLocalVol`, `LocalVolMonteCarlo`, `LocalVolPde`, `DividendTree`, `Autocallable`, `StructuredNotes`, `IncrementalGreeks`, `HigherOrderGreeks` |
-| `rates` | Fixed income | `YieldCurve` (single curve), `DiscountCurve`, `MultiCurveBootstrap`, `MultiCurveRisk`, curve instruments (`Deposit`, `Fra`, `RateFuture`, `OisSwap`, `InterestRateSwap`), `BondPricer`, `DayCount`, `BusinessCalendar`, `HolidayCalendars`, `SwapPricer`, `RatesOptions`, `NelsonSiegel`, `Svensson`, `ShortRateModels`, `KeyRateDurations` |
+| `rates` | Fixed income | `YieldCurve` (single curve), `DiscountCurve`, `MultiCurveBootstrap`, `MultiCurveRisk`, curve instruments (`Deposit`, `Fra`, `RateFuture`, `OisSwap`, `InterestRateSwap`), `BondPricer` (with the 3.1 `...Exact` non-integral-period functions and `convexityAnalytic`), `BootstrapJacobian` (analytic per-quote DV01, 3.1), the 3.1 leg model (`LegConvention`, `FixedLeg`, `FloatLeg` = `OvernightLeg` / `TermRateLeg`, `OvernightConvention`, `FixingHistory`, `VanillaSwap`), `DayCount`, `BusinessCalendar`, `HolidayCalendars`, `SwapPricer` (deprecated since 3.1, see `MIGRATION_3.1.md`), `RatesOptions`, `NelsonSiegel`, `Svensson`, `ShortRateModels`, `KeyRateDurations` |
 | `credit` | Credit curves, CDS and counterparty exposure | `CreditCurve`, `CdsPricer`, `IsdaCdsModel`, `IsdaCurve`, `IsdaRateCurve`, `CreditSpreads`, `MultiCurrencyExposureSimulator` (single- and multi-currency; absorbed `ExposureSimulator` in 3.0), `ExposureProfile`, `CvaApproximator` |
 | `fx` | FX conventions, instruments and e-FX structure | `CurrencyPair`, `SwapPointsCurve`, `FxSwap`, `Ndf`, `FxVolSurface`, `FixingRisk`, `VannaVolgaTouch`, `AggregatedBook`, `CrossOp`, `FxTierBook`, `LpScorecard`, `LpRouter`, `SyntheticCross` |
 | `commodities`, `markets` | Futures curves; index and private-market analytics | `CommodityCurve`, `IndexConstruction`, `PrivateMarketAnalytics` |
@@ -262,12 +262,42 @@ The `IOException` header and format checks in `marketdata.tick.TickFileReader`,
 failures in `fix.FileSessionStore` (a failed write or force, not a bad format) are
 unchanged.
 
+## CI and release gates
+
+Every push and pull request runs `ci.yml` (tests on JDK 25 and the japicmp API
+check). Tests that need files we do not commit skip locally; PR CI runs the
+committed stand-ins `IsdaGoldenSubsetTest` (48 invented CDS contracts) and
+`EsmaXsdGoldenTest` (SHA-256 of the validated documents).
+
+`nightly.yml` runs six jobs: `full-tests` (load and timing tags), `analysis`
+(SpotBugs, Error Prone), `reference-files` (downloads the ISDA grids and ESMA
+XSDs, checks the SHA-256 pins in `scripts/reference-files.sha256`, and fails on
+any skipped reference test), `fuzz` (`-Pfuzz` on the parser fuzz tests at
+200,000 cases each, then `PricingInvariantPropertiesTest` at 20,000),
+`mutation` (PIT on core) and `mutation-lowlatency` (PIT on regreporting and the
+FIX codecs). The two PIT jobs fail when a package falls below its floor in
+`scripts/pit-thresholds.txt`.
+
+The API check compares each module with its own released 3.0.0 jar. Core has
+no allow-list: 3.x makes no breaking changes ([STABILITY.md](STABILITY.md)).
+
+`release.yml` runs on a `v*` tag: `tag-guard` (refuses a forced push, an
+existing release, or a tag name already released from another commit), then
+`ci` (the reusable `ci.yml`) and `docs` (javadoc build), then `release`, which
+attaches the jars and dispatches `docs.yml` on `main`. The checklist is in
+[PUBLISHING.md](PUBLISHING.md); diagram 22 in [DIAGRAMS.md](DIAGRAMS.md).
+
+Loaders bound what they read (zip entries, inflated bytes, line lengths); the
+per-loader limits are in [INPUT_LIMITS.md](INPUT_LIMITS.md).
+
 ## Further reading
 
 - [GETTING_STARTED.md](GETTING_STARTED.md): build and first runs.
 - [LEARN.md](LEARN.md): tutorial from first principles.
 - [COOKBOOK.md](COOKBOOK.md): runnable recipes.
 - [MARKET_RISK.md](MARKET_RISK.md): the market-risk workflow mapped to classes.
+- [INPUT_LIMITS.md](INPUT_LIMITS.md): the size limits of every file loader.
+- [PUBLISHING.md](PUBLISHING.md): the release checklist.
 - [CENTRAL_RISK_BOOK.md](CENTRAL_RISK_BOOK.md): netting, internalisation and hedging.
 - [ULTRA_LOW_LATENCY.md](ULTRA_LOW_LATENCY.md): the trading lane in detail.
 - [CHANGELOG.md](../CHANGELOG.md): release history.

@@ -1,0 +1,6 @@
+# SHA-256 of the three documents that the nightly job validates against the
+# ESMA XSDs (EsmaXsdGoldenTest). Regenerate only after the nightly validation
+# (or a local run with the QFL_ESMA_* variables) passes on the new bytes.
+80121d332fefb3cef2404161b2abede3d0a91ec08372e0e43e775a8ffd44a922  auth016-samples
+c6eb383f862ad913ab9339a382fd2188650aef792b65328f001771a210da3000  auth016-envelope
+ba27e46e4a7723455f55ac4d0cc226618aafed4a0830561e2335c90193c0c7f6  auth031-worked-example

@@ -2205,7 +2205,7 @@ flowchart LR
     subgraph INSTR52["stages 1-2: discovery + signals (per asset class)"]
         EQ52["Equities<br/>alpha.Factors<br/>markets.IndexConstruction<br/>pricing.DividendSchedule"]
         FX52["FX<br/>fx.SwapPointsCurve<br/>fx.FxVolSurface<br/>fx.CrossOp"]
-        RT52["Rates<br/>rates.YieldCurve<br/>rates.SwapPricer<br/>rates.NelsonSiegel"]
+        RT52["Rates<br/>rates.YieldCurve<br/>rates.VanillaSwap<br/>rates.NelsonSiegel"]
         CR52["Credit<br/>credit.CreditCurve<br/>credit.CdsPricer<br/>credit.CreditSpreads (z, basis)"]
         CM52["Commodities<br/>commodities.CommodityCurve<br/>(roll yield + implied carry)"]
     end
@@ -4277,7 +4277,7 @@ flowchart TD
     end
     INTERP_101["CurveInterpolation<br/>LOG_LINEAR_DISCOUNT or MONOTONE_CONVEX"]
     PAIR_101["CurvePair<br/>(discount, projection)"]
-    PRICE_101["SwapPricer / RatesOptions<br/>two-curve overloads"]
+    PRICE_101["VanillaSwap (FixedLeg + OvernightLeg / TermRateLeg)<br/>RatesOptions two-curve overloads"]
     RISK_101["MultiCurveRisk<br/>bucketedDv01 / keyRateDv01 / parallelDv01<br/>bump one quote, rebuild both"]
 
     DEP_101 --> B1_101
@@ -4294,10 +4294,13 @@ flowchart TD
     PAIR_101 --> PRICE_101
     PRICE_101 --> RISK_101
     RISK_101 -. "rebuild per bump" .-> B1_101
+    JAC_101["BootstrapJacobian (3.1)<br/>bucketedDv01 from one build<br/>implicit-function theorem"]
+    PAIR_101 --> JAC_101
 ```
 
 The dotted edge is the cost of two-curve risk: every bucket is two full
-bootstraps (up and down bump). An OIS quote moves both curves, because the
+bootstraps (up and down bump). `BootstrapJacobian` (3.1) avoids it: one
+build, then one linear solve (LEARN 10d.2). An OIS quote moves both curves, because the
 projection curve is solved against the discount curve; a 3M quote moves
 only the projection curve. See LEARN section 10d and COOKBOOK recipes 301
 and 302.
@@ -4591,15 +4594,17 @@ flowchart LR
     FILL_110["execution"]
     RTS_110["Rts22ReportBuilder<br/>validate, validateEsmaRules,<br/>validateWithReferenceData (2.4)"]
     SUB_110["toSubmissionXml (2.4)<br/>head.003 envelope, head.001 header,<br/>auth.016 payload"]
-    CAT_110["regreporting.cat<br/>CatEventBuilder (MENO/MEOR/MEOT/MEOF)"]
+    CAT_110["regreporting.cat<br/>CatEventBuilder (MENO/MEOR/MEOT/MEOF;<br/>MENQ/MONO/MOOR/MONQ from 3.1)"]
+    LINK_110["CatLinkageChecker (3.1)<br/>Order/Trade/Fulfillment/Quote Keys<br/>across a batch"]
     EMIR_110["regreporting.emir<br/>EmirRefitReportBuilder"]
+    STATE_110["EmirStatefulValidator (3.1, opt-in)<br/>UTI history, receipt time,<br/>GLEIF status, ISO 4217"]
     CHK_110["regreporting.registry<br/>ReferenceDataChecker"]
     REG_110["GLEIF golden copy or API,<br/>FIRDS FULINS, ISO 10383 MIC"]
     SINK_110["TransactionReportSink<br/>(e.g. CatJsonLinesSink)"]
 
     FILL_110 --> RTS_110 --> CHK_110
-    FILL_110 --> CAT_110 --> CHK_110
-    FILL_110 --> EMIR_110 --> CHK_110
+    FILL_110 --> CAT_110 --> LINK_110 --> CHK_110
+    FILL_110 --> EMIR_110 --> STATE_110 --> CHK_110
     REG_110 --> CHK_110 -->|clean| SINK_110
     REG_110 -.->|ReferenceData| RTS_110
     RTS_110 --> SUB_110
@@ -4609,8 +4614,45 @@ Every report type shares the `TransactionReport` view, so one checker serves
 them all. CAT and EMIR are indicative and not certified. Since 2.4 the RTS 22
 report also runs the ESMA rules that need reference data and writes the
 submission file; the shipped loaders read status only, so the dated rules need
-richer reference data. See LEARN sections 17e and 17g and recipes 347 to 349
-and 353.
+richer reference data. Since 3.1 a batch of CAT events can be checked for
+linkage keys, and EMIR reports can be checked against the repository's state
+(history per UTI, receipt time, GLEIF status, ISO 4217) by the opt-in
+`EmirStatefulValidator`. See LEARN sections 17e, 17g and 17i and recipes 347 to
+349, 353, 364 and 365.
+
+## 22. CI, nightly and release gates
+
+Three workflows, each answering a different question: is this change safe to
+merge (CI), does the library still match its outside references (nightly), and
+can this tag be published (release).
+
+```mermaid
+flowchart TD
+    subgraph PR22["every push and PR (ci.yml)"]
+        T22["tests, JDK 25<br/>+ committed stand-ins:<br/>IsdaGoldenSubsetTest, EsmaXsdGoldenTest"]
+        API22["api-compat (japicmp)<br/>vs the 3.0.0 jars, no allow-list"]
+    end
+    subgraph NIGHT22["nightly.yml"]
+        FULL22["full-tests<br/>(load, timing)"]
+        AN22["analysis<br/>(SpotBugs, Error Prone)"]
+        REF22["reference-files<br/>fetch ISDA grids + ESMA XSDs,<br/>check SHA-256 pins,<br/>QFL_REQUIRE_REFERENCE_FILES=true,<br/>fail on any skip"]
+        FUZ22["fuzz<br/>-Pfuzz parser fuzz tests (200,000 cases),<br/>pricing properties (20,000 cases)"]
+        MUT22["mutation (core)<br/>mutation-lowlatency<br/>(regreporting, FIX codecs)<br/>floors: pit-thresholds.txt"]
+    end
+    subgraph REL22["v* tag (release.yml)"]
+        TG22["tag-guard<br/>no forced push, no existing release,<br/>no re-used tag name"]
+        CI22["ci (reusable ci.yml)"]
+        DOC22["docs (javadoc build)"]
+        R22["release<br/>attach jars"]
+        DD22["dispatch docs.yml on main"]
+    end
+    TG22 --> CI22 --> R22
+    TG22 --> DOC22 --> R22
+    R22 --> DD22
+```
+
+The release checklist (tag the PR head first, then merge with `--merge`;
+tags are never moved) is in [PUBLISHING.md](PUBLISHING.md).
 
 ---
 

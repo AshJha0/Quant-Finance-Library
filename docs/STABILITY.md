@@ -88,15 +88,15 @@ keeps reading the previous version, and is listed under "Changed" in the changel
 
 ## How compatibility is checked
 
-Compatibility is checked by japicmp against the released 2.4.0 jar
-(`./mvnw -Papi-compat -DskipTests verify` after `scripts/fetch-api-baseline.sh`; the
-CI job is `API compatibility`). Every package of the stable module fails the build on
-a binary-incompatible change (`core/pom.xml`, profile `api-compat`; report
-`core/target/japicmp/api-stable.html`). For 3.0 only, the intended breaks are listed
-one by one as `<exclude>` entries, each commented with its row in
-[MIGRATION_3.0.md](MIGRATION_3.0.md); any break not on that list fails the build.
-After 3.0.0 is tagged the baseline moves to 3.0.0 and the list is emptied. The
-reference module is compared and reported in
+Compatibility is checked by japicmp against the released 3.0.0 jars, one per
+module (`./mvnw -Papi-compat -DskipTests verify` after
+`scripts/fetch-api-baseline.sh`; the CI job is `API compatibility`). Every package of
+the stable module fails the build on a binary-incompatible change (`core/pom.xml`,
+profile `api-compat`; report `core/target/japicmp/api-stable.html`). There is no
+allow-list: 3.x makes no breaking changes, so a break is fixed in code. (3.0 listed
+its intended breaks against 2.4.0 one by one, each with its row in
+[MIGRATION_3.0.md](MIGRATION_3.0.md); that list was emptied in 3.1.0.) The reference
+module is compared with the 3.0.0 low-latency jar and reported in
 `lowlatency/target/japicmp/api-lowlatency.html` but does not fail the build.
 
 Stable packages are `@NullMarked` (JSpecify 1.0): unannotated parameters and return
@@ -147,3 +147,18 @@ deleted. [MIGRATION_3.0.md](MIGRATION_3.0.md) lists each item and its replacemen
 
 Deprecated API is marked with `@Deprecated` and stays for at least one minor release
 before removal in the next major.
+
+## Release cadence from 3.1.0
+
+The 2.x to 3.0 releases came too fast for anyone to depend on: six releases in about
+a day, and one deprecation that lived 45 minutes. From 3.1.0 the project keeps these
+rules.
+
+- At most one minor release a month. Patch releases are not limited.
+- A deprecation lives for at least one minor release **and** three months before the
+  major that removes it. The changelog gives the earliest removal date.
+- 3.x has no breaking changes. New behaviour arrives as new classes, methods or
+  options; the old path stays and is deprecated.
+- The next major (4.0) ships no earlier than three months after 3.2.0.
+- Tags are never moved. A release that fails after tagging is fixed by a new patch
+  release.

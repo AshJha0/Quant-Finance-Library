@@ -123,6 +123,208 @@ public final class BondPricer {
         return modifiedDuration(face, couponRate, frequency, yearsToMaturity, yield) * price * 1e-4;
     }
 
+    /**
+     * Analytic convexity on the same whole-period schedule as
+     * {@link #convexity}: {@code (1/P) d^2P/dy^2} with
+     *
+     * <pre>  d^2P/dy^2 = sum_i CF_i i (i + 1) / (f^2 (1 + y/f)^(i+2))</pre>
+     *
+     * <p>The existing {@link #convexity} is a central difference with step
+     * 1e-4 and keeps its results; this is the closed form it approximates
+     * (they agree to about 1e-7 relative, pinned in the tests).</p>
+     *
+     * @param face            face value
+     * @param couponRate      annual coupon rate
+     * @param frequency       coupons per year
+     * @param yearsToMaturity years to maturity (rounded to whole periods, as in {@link #priceFromYield})
+     * @param yield           yield, compounded {@code frequency} times a year
+     * @return convexity in years squared
+     */
+    public static double convexityAnalytic(double face, double couponRate, int frequency,
+                                           double yearsToMaturity, double yield) {
+        return exactCashFlowMoments(face, couponRate, frequency,
+                periods(frequency, yearsToMaturity), 1.0, yield)[2];
+    }
+
+    /**
+     * Whether {@code yearsToMaturity * frequency} is a whole number of coupon
+     * periods (to 1e-9). When it is not, the whole-period functions
+     * ({@link #priceFromYield}, {@link #macaulayDuration}, {@link #convexity},
+     * {@link #dv01}, {@link #yieldToMaturity}, {@link #priceFromCurve}) round
+     * to the nearest period: a 2.3-year semi-annual bond is priced as 2.5
+     * years. That rounding is kept for compatibility (release policy: no
+     * behaviour changes in 3.x) but its use with non-integral maturities is
+     * deprecated since 3.1.0; use the {@code ...Exact} functions instead.
+     *
+     * @param frequency       coupons per year
+     * @param yearsToMaturity years to maturity
+     * @return true when the maturity is a whole number of periods
+     */
+    public static boolean isWholePeriods(int frequency, double yearsToMaturity) {
+        requirePositive(frequency, yearsToMaturity);
+        double x = yearsToMaturity * frequency;
+        return Math.abs(x - Math.rint(x)) <= 1e-9;
+    }
+
+    /**
+     * Dirty price from a yield for any (also non-integral) time to maturity,
+     * by the street convention: coupons sit on the regular quasi-coupon grid
+     * counted back from maturity, the first one {@code w} periods away, and a
+     * full coupon is paid on it.
+     *
+     * <p>With {@code x = yearsToMaturity * f}, {@code n = ceil(x)} coupons
+     * remain and {@code w = x - (n - 1)} in (0, 1]:</p>
+     * <pre>  P = sum_{k=1..n} C / (1 + y/f)^(k - 1 + w) + face / (1 + y/f)^(n - 1 + w),   C = face c / f</pre>
+     * <p>When {@code x} is whole, {@code w = 1} and this is exactly
+     * {@link #priceFromYield}. Worked example: 2.3 years semi-annual gives
+     * {@code x = 4.6}, five coupons, the first 0.6 periods (0.3 years) away;
+     * the clean price is this minus {@link #accruedInterestExact}.</p>
+     *
+     * @param face            face value
+     * @param couponRate      annual coupon rate
+     * @param frequency       coupons per year
+     * @param yearsToMaturity years to maturity, any positive value
+     * @param yield           yield, compounded {@code frequency} times a year
+     * @return dirty price
+     */
+    public static double priceFromYieldExact(double face, double couponRate, int frequency,
+                                             double yearsToMaturity, double yield) {
+        double[] g = grid(frequency, yearsToMaturity);
+        return exactCashFlowMoments(face, couponRate, frequency, (int) g[0], g[1], yield)[0];
+    }
+
+    /**
+     * Accrued interest on the quasi-coupon grid of {@link #priceFromYieldExact}:
+     * {@code C (1 - w)}; zero when the maturity is a whole number of periods.
+     *
+     * @param face            face value
+     * @param couponRate      annual coupon rate
+     * @param frequency       coupons per year
+     * @param yearsToMaturity years to maturity
+     * @return accrued interest
+     */
+    public static double accruedInterestExact(double face, double couponRate, int frequency,
+                                              double yearsToMaturity) {
+        double w = grid(frequency, yearsToMaturity)[1];
+        return face * couponRate / frequency * (1 - w);
+    }
+
+    /**
+     * Macaulay duration in years on the exact grid of {@link #priceFromYieldExact}.
+     *
+     * @param face            face value
+     * @param couponRate      annual coupon rate
+     * @param frequency       coupons per year
+     * @param yearsToMaturity years to maturity
+     * @param yield           yield, compounded {@code frequency} times a year
+     * @return Macaulay duration
+     */
+    public static double macaulayDurationExact(double face, double couponRate, int frequency,
+                                               double yearsToMaturity, double yield) {
+        double[] g = grid(frequency, yearsToMaturity);
+        return exactCashFlowMoments(face, couponRate, frequency, (int) g[0], g[1], yield)[1];
+    }
+
+    /**
+     * Modified duration on the exact grid: Macaulay / (1 + y/f).
+     *
+     * @param face            face value
+     * @param couponRate      annual coupon rate
+     * @param frequency       coupons per year
+     * @param yearsToMaturity years to maturity
+     * @param yield           yield, compounded {@code frequency} times a year
+     * @return modified duration
+     */
+    public static double modifiedDurationExact(double face, double couponRate, int frequency,
+                                               double yearsToMaturity, double yield) {
+        return macaulayDurationExact(face, couponRate, frequency, yearsToMaturity, yield)
+                / (1 + yield / frequency);
+    }
+
+    /**
+     * Analytic convexity on the exact grid,
+     * {@code (1/P) sum_k CF_k e_k (e_k + 1) / (f^2 (1 + y/f)^(e_k + 2))},
+     * {@code e_k = k - 1 + w}.
+     *
+     * @param face            face value
+     * @param couponRate      annual coupon rate
+     * @param frequency       coupons per year
+     * @param yearsToMaturity years to maturity
+     * @param yield           yield, compounded {@code frequency} times a year
+     * @return convexity in years squared
+     */
+    public static double convexityExact(double face, double couponRate, int frequency,
+                                        double yearsToMaturity, double yield) {
+        double[] g = grid(frequency, yearsToMaturity);
+        return exactCashFlowMoments(face, couponRate, frequency, (int) g[0], g[1], yield)[2];
+    }
+
+    /**
+     * Yield from a dirty price on the exact grid, by bisection on [-90%, 1000%].
+     *
+     * @param dirtyPrice      dirty price
+     * @param face            face value
+     * @param couponRate      annual coupon rate
+     * @param frequency       coupons per year
+     * @param yearsToMaturity years to maturity
+     * @return the yield
+     */
+    public static double yieldToMaturityExact(double dirtyPrice, double face, double couponRate,
+                                              int frequency, double yearsToMaturity) {
+        double lo = -0.9;
+        double hi = 10;
+        double maxPrice = priceFromYieldExact(face, couponRate, frequency, yearsToMaturity, lo);
+        double minPrice = priceFromYieldExact(face, couponRate, frequency, yearsToMaturity, hi);
+        if (!(dirtyPrice >= minPrice) || !(dirtyPrice <= maxPrice)) {
+            throw new IllegalArgumentException("price " + dirtyPrice + " has no yield in [-90%, 1000%]");
+        }
+        for (int i = 0; i < 200 && hi - lo > 1e-16; i++) {
+            double mid = 0.5 * (lo + hi);
+            if (priceFromYieldExact(face, couponRate, frequency, yearsToMaturity, mid) > dirtyPrice) {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        }
+        return 0.5 * (lo + hi);
+    }
+
+    /** {n, w} of the quasi-coupon grid. */
+    private static double[] grid(int frequency, double yearsToMaturity) {
+        requirePositive(frequency, yearsToMaturity);
+        double x = yearsToMaturity * frequency;
+        if (Math.abs(x - Math.rint(x)) <= 1e-9) {
+            return new double[] {Math.rint(x), 1.0};
+        }
+        double n = Math.ceil(x);
+        return new double[] {n, x - (n - 1)};
+    }
+
+    /** {price, Macaulay duration, convexity} for n flows at period exponents k - 1 + w. */
+    private static double[] exactCashFlowMoments(double face, double couponRate, int frequency, int n,
+                                                 double w, double yield) {
+        double coupon = face * couponRate / frequency;
+        double v = 1 / (1 + yield / frequency);
+        double price = 0;
+        double weighted = 0;
+        double second = 0;
+        for (int k = 1; k <= n; k++) {
+            double e = k - 1 + w;
+            double cf = coupon + (k == n ? face : 0);
+            double pv = cf * Math.pow(v, e);
+            price += pv;
+            weighted += e / frequency * pv;
+            second += pv * e * (e + 1) * v * v / ((double) frequency * frequency);
+        }
+        return new double[] {price, weighted / price, second / price};
+    }
+
+    private static void requirePositive(int frequency, double yearsToMaturity) {
+        if (frequency < 1 || !(yearsToMaturity > 0) || !Double.isFinite(yearsToMaturity)) {
+            throw new IllegalArgumentException("need positive frequency and maturity");
+        }
+    }
+
     private static int periods(int frequency, double yearsToMaturity) {
         if (frequency < 1 || yearsToMaturity <= 0) {
             throw new IllegalArgumentException("need positive frequency and maturity");

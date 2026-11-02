@@ -20,7 +20,6 @@ import org.xml.sax.SAXException;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * head.003 envelope and head.001 header around auth.016 (ESMA65-8-2356 sections 6.4
@@ -36,7 +35,7 @@ class Auth016EnvelopeTest {
                 Rts22Fixtures.build(Rts22Fixtures.equityDeal().cancellation(true), Side.SELL, 10, "S1"));
     }
 
-    private static String file() {
+    static String file() {
         return Rts22TransactionReport.toSubmissionXml(reports(), Rts22Fixtures.FIRM, "FR", "FILE0001", CREATED);
     }
 
@@ -109,7 +108,7 @@ class Auth016EnvelopeTest {
         File auth = env("QFL_ESMA_XSD");
         File h1 = env("QFL_ESMA_HEAD001_XSD");
         File h3 = env("QFL_ESMA_HEAD003_XSD");
-        assumeTrue(auth != null && auth.isFile() && h1 != null && h1.isFile() && h3 != null && h3.isFile(),
+        ReferenceFiles.require(auth != null && auth.isFile() && h1 != null && h1.isFile() && h3 != null && h3.isFile(),
                 "QFL_ESMA_XSD, QFL_ESMA_HEAD001_XSD, QFL_ESMA_HEAD003_XSD not set: ESMA XSDs are not in the repo");
         SchemaFactory sf = SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI);
         sf.setProperty(XMLConstants.ACCESS_EXTERNAL_DTD, "");

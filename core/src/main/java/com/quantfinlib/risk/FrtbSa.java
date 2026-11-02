@@ -33,7 +33,9 @@ import java.util.Set;
  * Correlation scenarios (MAR21.6): high = min(1.25ρ, 1), low =
  * max(2ρ − 1, 0.75ρ), applied to ρ and γ alike.
  *
- * <p><b>Worked example</b> (own test {@code FrtbSaTest}): two GIRR
+ * <p><b>Worked example</b> (independent recomputation, not a BCBS worked
+ * number: MAR21 prints no capital example; own tests {@code FrtbSaTest} and
+ * {@code FrtbSaTableTest}, the latter from the printed Table 1 and Table 2): two GIRR
  * sensitivities of 100 and −50 at tenors 1y and 2y in one currency,
  * RW 1.6% and 1.3%: WS = 1.6, −0.65; ρ = exp(−0.03·1/1) = 0.97045;
  * K = √(2.56 + 0.4225 − 2·0.97045·1.04) = 0.98182.</p>

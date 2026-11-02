@@ -6,7 +6,6 @@ import com.quantfinlib.credit.IsdaRateCurve.Swap;
 import com.quantfinlib.rates.BusinessCalendar;
 import com.quantfinlib.rates.HolidayCalendars;
 import com.quantfinlib.rates.HolidayCalendars.Market;
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -26,7 +25,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * grids are copyright and are not in this repository: convert them with
  * {@code scripts/isda-grid-to-csv.py} into a folder outside the repo and
  * set {@code QFL_ISDA_GRID_DIR} to it. Without the variable the test is
- * skipped.
+ * skipped, unless {@code QFL_REQUIRE_REFERENCE_FILES=true} (set by the nightly
+ * job, which fetches the grids from cdsmodel.com), when it fails. Pull requests
+ * run {@link IsdaGoldenSubsetTest} instead.
  *
  * <p>The discount curve is bootstrapped by {@link IsdaRateCurve} from the
  * grid's swap rates with the ISDA RFR curve conventions (spot T+2 business days, annual
@@ -103,6 +104,14 @@ class IsdaGridVerificationTest {
     record Result(int rows, Err csa, Err upfront, Err price, Err accrued, Err days) {
     }
 
+    /** The standard contract the grids use: step-in T+1, cash settle T+3 business days. */
+    static Contract contract(LocalDate trade, LocalDate maturity, double coupon, double recovery,
+                             BusinessCalendar cal) {
+        LocalDate stepIn = trade.plusDays(1);
+        return new Contract(trade, stepIn, cal.addBusinessDays(trade, 3),
+                IsdaCdsModel.accrualStartDate(stepIn, cal), maturity, coupon, recovery);
+    }
+
     static Result run(String stem, Path dir, BusinessCalendar cal, boolean halfDay) throws IOException {
         List<Row> rows = readGrid(dir.resolve(stem + "_grid.csv"));
         List<Swap> swaps = readCurve(dir.resolve(stem + "_curve.csv"));
@@ -115,8 +124,7 @@ class IsdaGridVerificationTest {
         Err days = new Err("daysAccrued");
         for (Row row : rows) {
             LocalDate stepIn = row.trade().plusDays(1);
-            Contract c = new Contract(row.trade(), stepIn, cal.addBusinessDays(row.trade(), 3),
-                    IsdaCdsModel.accrualStartDate(stepIn, cal), row.maturity(), row.coupon(), row.recovery());
+            Contract c = contract(row.trade(), row.maturity(), row.coupon(), row.recovery(), cal);
             String where = row.maturity() + " c=" + row.coupon() + " q=" + row.quote() + " R=" + row.recovery();
             double u = IsdaCdsModel.quotedSpreadToUpfront(c, row.quote(), disc, conv);
             double accrued = IsdaCdsModel.accruedYearFraction(c) * row.coupon();
@@ -134,7 +142,7 @@ class IsdaGridVerificationTest {
 
     static Path gridDir() {
         String env = System.getenv("QFL_ISDA_GRID_DIR");
-        Assumptions.assumeTrue(env != null && !env.isBlank(),
+        ReferenceFiles.require(env != null && !env.isBlank(),
                 "QFL_ISDA_GRID_DIR not set: ISDA test grids are copyright and not in the repo; "
                         + "convert them with scripts/isda-grid-to-csv.py and point the variable at the CSVs");
         return Path.of(env);

@@ -3,7 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.quantfinlib</groupId>
     <artifactId>quant-finance-library-parent</artifactId>
-    <version>3.0.0</version>
+    <version>3.1.0</version>
     <packaging>pom</packaging>
     <name>Quant-Finance-Library (parent)</name>
     <description>Pure-JDK quantitative finance library: pricing, market risk, alpha research and backtesting, plus a reference low-latency trading lane.</description>
@@ -48,11 +48,12 @@
         <japicmp.version>0.26.5</japicmp.version>
         <pitest.version>1.30.1</pitest.version>
         <pitest.junit5.version>1.2.3</pitest.junit5.version>
-        <!-- API compatibility baseline: the released 2.4.0 library jar
-             (scripts/fetch-api-baseline.sh). 2.4.0 is one jar holding both
-             tiers; each module compares its own jar against it. -->
-        <api.baseline.version>2.4.0</api.baseline.version>
+        <!-- API compatibility baseline: the released 3.0.0 jars
+             (scripts/fetch-api-baseline.sh). From 3.0 the release is two
+             artifacts; each module compares its own jar with its own 3.0.0 jar. -->
+        <api.baseline.version>3.0.0</api.baseline.version>
         <api.baseline.jar>${user.home}/.m2/api-baseline/quant-finance-library-${api.baseline.version}.jar</api.baseline.jar>
+        <api.baseline.lowlatency.jar>${user.home}/.m2/api-baseline/quant-finance-library-lowlatency-${api.baseline.version}.jar</api.baseline.lowlatency.jar>
         <!-- Test tags: load (throughput/soak floors), timing (wall-clock or
              sleep-based assertions), socket (real loopback sockets). The
              default run skips load and timing because they are sensitive to
@@ -277,6 +278,37 @@
         </plugins>
     </build>
     <profiles>
+        <!-- Deep structured fuzzing of the FIX, FIRDS XML, CFI XLSX and GLEIF/MIC CSV
+             parsers (classes named *FuzzTest, seeded mutation of the committed seed
+             corpus). The default build runs the same tests at 1000 cases
+             each (system property qfl.cases); this profile runs only them, at fuzz.tries cases each, with a
+             longer per-test timeout. Nightly use:
+               ./mvnw -Pfuzz -Djacoco.skip=true -pl lowlatency -am test
+             Override the depth with -Dfuzz.tries=N. -->
+        <profile>
+            <id>fuzz</id>
+            <properties>
+                <fuzz.tries>200000</fuzz.tries>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <includes>
+                                <include>**/*FuzzTest.java</include>
+                            </includes>
+                            <failIfNoTests>false</failIfNoTests>
+                            <systemPropertyVariables>
+                                <qfl.cases>${fuzz.tries}</qfl.cases>
+                                <junit.jupiter.execution.timeout.default>60 m</junit.jupiter.execution.timeout.default>
+                            </systemPropertyVariables>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
         <!-- Everything, including the load and timing tags (nightly CI). -->
         <profile>
             <id>full</id>
@@ -371,7 +403,9 @@
              Narrow it with -Dpit.targets=com.quantfinlib.pricing.*; when the
              tests live in other classes than the mutated ones, also set
              -Dpit.targetTests (defaults to pit.targets). Run from the root with
-             -pl core (or -pl lowlatency).
+             -pl core (or -pl lowlatency). For lowlatency run from the root with
+             -pl core,lowlatency -Dpit.failWhenNoMutations=false and lowlatency
+             targets, so core resolves from the reactor and its run is empty.
              Report: target/pit-reports/index.html -->
         <profile>
             <id>mutation</id>
@@ -379,6 +413,11 @@
                 <pit.targets>com.quantfinlib.pricing.*,com.quantfinlib.risk.*,com.quantfinlib.rates.*,com.quantfinlib.volatility.*</pit.targets>
                 <pit.targetTests>${pit.targets}</pit.targetTests>
                 <pit.threads>4</pit.threads>
+                <!-- Overall kill-rate floor for one run (PIT fails the build below it). The
+                     nightly job sets one per target; per-package floors are checked by
+                     scripts/pit-summary.py against scripts/pit-thresholds.txt. -->
+                <pit.mutationThreshold>0</pit.mutationThreshold>
+                <pit.failWhenNoMutations>true</pit.failWhenNoMutations>
             </properties>
             <build>
                 <plugins>
@@ -401,6 +440,8 @@
                                 <excludedGroup>timing</excludedGroup>
                             </excludedGroups>
                             <threads>${pit.threads}</threads>
+                            <mutationThreshold>${pit.mutationThreshold}</mutationThreshold>
+                            <failWhenNoMutations>${pit.failWhenNoMutations}</failWhenNoMutations>
                             <timeoutFactor>2.0</timeoutFactor>
                             <timeoutConstant>4000</timeoutConstant>
                             <outputFormats>

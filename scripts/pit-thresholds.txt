@@ -1,0 +1,23 @@
+# Per-package mutation-score floors: run (core or lowlatency), package, floor in
+# percent (killed over all mutants). The
+# nightly PIT jobs enforce them through scripts/pit-summary.py --thresholds. Each floor
+# is the score of the nightly run named below, rounded down, minus one point of
+# slack for mutants that change with ordinary edits. Raise a floor when a score
+# rises; lowering one needs a reason in the commit message.
+#
+# core, nightly run 41434773364 (2026-11-02, main a737d54):
+core  com.quantfinlib.pricing  78
+core  com.quantfinlib.rates  83
+core  com.quantfinlib.risk  78
+core  com.quantfinlib.risk.simm  84
+core  com.quantfinlib.volatility  81
+#
+# lowlatency (regreporting and the FIX codecs), local run on r31/a 2026-11-02
+# (main a737d54 plus the 3.1 lane A tests; 2495 mutants, 85.1 % overall). The
+# three small packages get more slack (3-4 points): one surviving mutant moves
+# their score by about 1 point, and the 3.1 round adds EMIR and CAT rules there.
+lowlatency  com.quantfinlib.fix                    81
+lowlatency  com.quantfinlib.regreporting           81
+lowlatency  com.quantfinlib.regreporting.cat       92
+lowlatency  com.quantfinlib.regreporting.emir      93
+lowlatency  com.quantfinlib.regreporting.registry  89

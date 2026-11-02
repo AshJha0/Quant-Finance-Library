@@ -1224,6 +1224,113 @@ and `InterestRateSwap`, all implementing `CurveInstrument`;
 `bucketedDv01`, `keyRateDv01` with Ho 1992 hat weights, `parallelDv01`);
 two-curve overloads in `SwapPricer` and `RatesOptions.swaption` and
 `capFloor`. The single-curve methods are unchanged. Recipes 301 and 302.
+Since 3.1 a traded swap is better priced with the leg model below
+(`SwapPricer` is deprecated, `docs/MIGRATION_3.1.md`).
+
+#### 10d.1 Lookback, observation shift, lockout and payment lag
+
+The plain idea. An overnight-indexed coupon (SOFR, SONIA, ESTR) is the
+daily rate compounded over the period, so you only know it at the end of
+the period. That is awkward: the payer needs a few days to compute and pay.
+Four conventions buy that time, and they differ in which day's rate goes
+into the product and how many days it is weighted by.
+
+- **Payment lag** of P days: keep the coupon as is, pay it P business days
+  after the accrual end. Only the discount factor changes.
+- **Lookback** of L days: for each accrual day, use the rate published L
+  business days earlier, but weight it by the accrual day's own length
+  (a Friday still counts 3 days).
+- **Observation shift** of L days: move the whole observation window L
+  business days back and take both the rates and the day weights from the
+  shifted window. The compounded rate is annualised over the shifted
+  window's days, then applied to the accrual period's year fraction.
+- **Lockout** of k days: the rates for the last k business days are frozen
+  at the rate of the day before them.
+
+Formal statement (`rates/OvernightConvention.java`), with `r_i` the rate
+used for day i, `n_i` its weight in calendar days, `d` the day-count
+denominator (360 for ACT/360) and `N = sum_i n_i`:
+
+```
+R      = ( prod_i (1 + r_i n_i / d) - 1 ) * d / N
+coupon = (R + spread) * tau(accrualStart, accrualEnd)
+```
+
+Lookback and shift both use `r_i` = the rate L business days before day i;
+they differ in `n_i`: the accrual day's length (lookback) or the observed
+day's length (shift). With no convention and a single curve `P` for both
+forecasting and discounting, the product telescopes and the coupon times
+tau is `P(s)/P(e) - 1`, so an unlagged leg is worth `P(start) - P(end)`.
+
+Worked example. One accrual week Mon 2 Nov to Mon 9 Nov 2026 (weekends-only
+calendar, L = 2, k = 2). Accrual days Mon to Fri, weights 1, 1, 1, 1, 3.
+
+| accrual day | lookback: rate of, weight | shift: rate of, weight | lockout: rate of, weight |
+|---|---|---|---|
+| Mon 2 | Thu 29 Oct, 1 | Thu 29 Oct, 1 | Mon 2, 1 |
+| Tue 3 | Fri 30 Oct, 1 | Fri 30 Oct, 3 | Tue 3, 1 |
+| Wed 4 | Mon 2, 1 | Mon 2, 1 | Wed 4, 1 |
+| Thu 5 | Tue 3, 1 | Tue 3, 1 | Wed 4, 1 |
+| Fri 6 | Wed 4, 3 | Wed 4, 1 | Wed 4, 3 |
+
+The shifted window is Thu 29 Oct to Thu 5 Nov, 7 days, the same total as
+the accrual week here; the weekend has moved from Friday's weight onto Fri
+30 Oct's. Under lookback the rate is known two business days before the
+week ends; under lockout two days of the period have a known rate early.
+With a payment lag of 2 the coupon is paid Wed 11 Nov. Past fixings come
+from `FixingHistory`: every date before the valuation date must be there
+(a missing one throws), today's is optional.
+
+*Evidence.* Externally anchored: three seasoned SOFR swaps (lookback 2,
+shift 2, lockout 2, each with a 2-day payment lag, 111 published fixings)
+and a forward-starting front-stub swap match QuantLib 1.44 to 3e-12 in NPV
+and 1e-11 in fair rate (`QuantLibGoldenTest`, generator
+`scripts/quantlib-golden-sofr.py`; inputs are illustrative, not market
+data). Independent recomputation: `VanillaSwap` equals `OisSwap` and
+`InterestRateSwap` in their special cases to 1e-14 (`VanillaSwapTest`).
+
+*In this library:* `rates/LegConvention.java`, `FixedLeg`, `OvernightLeg`,
+`TermRateLeg`, `OvernightConvention`, `FixingHistory`, `VanillaSwap`.
+Recipes 104, 177 and 360.
+
+#### 10d.2 The analytic bootstrap Jacobian
+
+The plain idea. Bump-and-rebuild risk asks the bootstrap the same question
+n times. But the bootstrap already says how quotes and curve are tied: each
+instrument reprices to its quote. Differentiate that tie once and you get
+the curve's sensitivity to every quote from one linear solve.
+
+Formal statement. Let `Y` be the curve pillar values (minus log discount
+factors) and `I_k(Y)` the implied quote of instrument k. The bootstrap
+solves `I(Y) = q`. The implicit-function theorem gives
+`dY/dq = J^-1` with `J_kj = dI_k/dY_j`, so for a trade with value `V(Y)`
+
+```
+dV/dq = (dV/dY) J^-1,   equivalently solve  J^T z = (dV/dY)^T
+```
+
+and the per-quote DV01 is `z * 1bp`. `BootstrapJacobian.quoteJacobian`
+writes `J` in closed form per instrument type (deposits, FRAs, futures,
+OIS and IRS) through the interpolation weights `dY(t)/dY_j`; with two
+curves the matrix is block lower-triangular (OIS quotes move both curves,
+projection quotes only their own).
+
+Worked example. On log-linear discount interpolation, `-log P(t)` is linear
+between pillars, so the weight of `t = 3` between pillars at 2 and 4 is 0.5
+on each, and extrapolating to `t = 6` gives weights 2 and -1
+(`BootstrapJacobianTest.logLinearWeightsAreExact`).
+
+*Evidence.* Self-consistency: on log-linear curves the buckets equal
+`MultiCurveRisk`'s 1bp rebuild to 1e-6 of the largest bucket, and `J`
+equals a finite difference of the implied quotes to 1e-6. For
+`MONOTONE_CONVEX` the interpolation weights are numerical (stated in the
+javadoc; the piecewise zones have no clean closed form), and the buckets
+match a 1e-7 rebuild to 1e-4, while the 1bp rebuild is off by up to about
+10% in single buckets because it crosses zone kinks.
+
+*In this library:* `rates/BootstrapJacobian.java` (`quoteJacobian`,
+`bucketedDv01`, same contract and ordering as `MultiCurveRisk.bucketedDv01`).
+Recipe 359.
 
 ### 10e. The ISDA standard CDS model
 
@@ -1315,6 +1422,13 @@ at two years is about 1.67 and EPE about 1.30. A counterparty curve at
 100 to 150bp with LGD 60% gives CVA of about 0.083; with `rho` = 0.5 the
 wrong-way CVA is about 0.146. Under a zero-threshold CSA with a 10-day
 margin period, EPE falls to about 0.23 and CVA to about 0.015.
+
+The sum above charges each bucket at its end-point exposure, so its error
+shrinks only in proportion to the bucket width. Since 3.1
+`CvaApproximator.cvaBucketAverage` averages the discounted EE over each
+bucket (the trapezoid rule), and its error falls with the square of the
+width. On EE = 1mm (1 + t^2) with annual buckets the end-point sum is 27.6 %
+above a 200,000-step integral and the averaged one 1.8 %. Recipe 362.
 
 *In this library:* `credit/MultiCurrencyExposureSimulator.java` (`simulate` over
 `Swap`s and `FxForward`s with an optional `Csa`), `credit/ExposureProfile.java`
@@ -1657,7 +1771,21 @@ buckets and inter-bucket correlations, GIRR inflation and cross-currency
 correlations, equity repo, CTP and securitisation non-CTP. NMRF uses
 separate roots for the credit and equity idiosyncratic groups, verified
 against the printed formula in MAR33.17. The default risk charge for
-securitisations is not implemented. Recipe 336.
+securitisations is in `risk/FrtbDrcSecuritisation.java` (3.0, recipe 351).
+Recipe 336.
+
+Since 3.1 the parameters are also checked table by table. `FrtbSaTableTest`
+reads three CSVs transcribed by hand from the consolidated Basel Framework,
+each row citing its paragraph, table and page: the full 10x10 GIRR tenor
+correlation matrix (MAR21.46 Table 2), 89 risk weights (MAR21.42 Table 1,
+MAR21.53 Table 4, MAR21.77 Table 10, MAR21.82 and MAR21.83 Tables 11 and 12,
+MAR22.24 Table 2 and the MAR22.12 LGDs) and the 55 off-diagonal CSR sector
+correlations of MAR21.57 Table 5. Each library value must match the printed
+one to within half its rounding (0.05 percentage points for Table 2).
+MAR21 prints no worked capital calculation, so the class example K = 0.98182
+is an independent recomputation from the printed Table 1 and Table 2 values,
+not a BCBS number; the only printed worked numbers are two correlations
+(footnotes 284 and 292), pinned in `FrtbSaParametersTest`.
 
 ### 10p. Removed in 2.3.0
 
@@ -2501,7 +2629,8 @@ Specifications v4.1.0 r14, single-record rules only; `EmirRefitReport.rules()`
 and `CatEvent.rules()` list each check with its source and evidence class
 (`RuleProvenance`). EMIR field numbers and formats are checked against the
 Annex of Regulation 2022/1860. Section 17g covers the ESMA rules that
-need reference data and the submission envelope (2.4). Swap legs are not
+need reference data and the submission envelope (2.4); section 17i the EMIR
+rules that need state and the CAT linkage keys (3.1). Swap legs are not
 implemented. Recipes 347 to 349.
 
 ### 17f. One order encoder, three FIX versions
@@ -2550,7 +2679,8 @@ the three registries. Since 3.0 the shipped GLEIF, FIRDS and ISO 10383 loaders
 also read dates, country, SI category and the commodity flag when the file has
 those columns, so every rule runs on the public files. CON-430 needs the ISO
 10962 table: `CfiCodeRegistry.fromSixXlsx` reads your copy of the SIX code list
-and checks the four attribute letters group by group. Recipe 353.
+and checks the four attribute letters group by group. Recipe 353. The size
+and entry caps every loader applies are listed in [INPUT_LIMITS.md](INPUT_LIMITS.md).
 
 ### 17h. Pending reports, field 2 history and the feedback file
 
@@ -2581,7 +2711,59 @@ would reject it with CON-411.
 *In this library:* `Rts22StatusTracker` (`submit`, `revalidate`, `restore`),
 `StatusAdvice` (`of`, `toXml`, `toFeedbackXml`, `parse`), `BusinessHeader`,
 `RecordOutcome`, `RecordStatus`. That a pending report blocks reuse of its
-reference under CON-023 is the library's reading of para 71. Recipe 355.
+reference under CON-023 is the library's reading of para 71. Recipe 358.
+
+### 17i. EMIR rules that need state, and CAT linkage keys (3.1)
+
+A trade repository and the CAT processor both remember. A repository refuses a
+second "new" report for a trade it already holds and a report stamped after it
+arrived; CAT refuses a route whose order it cannot find. None of this is visible
+in one report: the repository needs its own history and clock, CAT needs the
+other events in the batch.
+
+Formally, for EMIR (ESMA74-362-2683, sheet Validations_Cpty_derivative, columns
+AC and AD; published reference) the action types of one (field 1.4, UTI) pair
+follow a small state machine (row 184). The first report must be NEWT or POSC
+(EMIR-VR-2151-02); there is one NEWT per pair (-03); after EROR only REVI is
+accepted (-04); a trade that is no longer outstanding takes only CORR, EROR or
+REVI (-05), and REVI is refused while it is outstanding (-06). The library reads
+"outstanding" as: the last of TERM or REVI was not TERM, and the expiration or
+early-termination date (2.44, 2.45) is not before the date of field 1.1. That
+reading is the library's, not the workbook's. Row 5 compares the reporting
+timestamp with the repository's receipt time (-1001-02: stamped after receipt;
+-1001-03: the date is earlier than the day before receipt), rows 6 to 13 check
+GLEIF status on the date of field 1.1, and rows 47 and 82 the official ISO 4217
+list.
+
+For CAT (IM Technical Specifications v4.1.0 r14, section 2.6.1, Table 5;
+published reference) events link by keys, not by time or file order: the Order
+Key of MENO, MEOR, MONO and MOOR is (orderKeyDate, CATReporterIMID, symbol or
+optionID, orderID). Two NEW events may not share a key (CAT-LK01, and every
+event with the key is reported), a route needs a new-order event with its key
+(CAT-LK02), and a keyed event must carry its key fields (CAT-LK03). COR and RPR
+records reuse the key of the record they replace and are not keyed again.
+
+Worked example (own tests). A NEWT for one UTI is accepted and recorded with
+`InMemoryUtiHistory.accept`; a second NEWT from the same counterparty fails
+EMIR-VR-2151-03, while the other counterparty's own NEWT passes. After an EROR, a
+VALU fails -2151-04 and a REVI passes. A reporting timestamp of
+2026-03-02T10:00:00Z received at 09:59:59Z fails -1001-02; received at
+2026-03-04T00:00:00Z it fails -1001-03. On the CAT side, a MENO and a MEOR with
+orderID O-1 link; a MOOR with O-1 next to that MENO does not (an option route
+never links to an equity order) and fails CAT-LK02; two MENOs with O-1 both fail
+CAT-LK01.
+
+*In this library:* `regreporting/emir/EmirStatefulValidator` (opt-in; it runs
+`EmirRefitReport.validate()` first and then the 15 stateful rules for whichever
+sources it was given, so a missing source skips its rules), `UtiHistory`,
+`InMemoryUtiHistory`, `CurrencyRegistry`; `regreporting/cat/CatLinkageChecker`
+and the event types MENQ, MONO, MOOR and MONQ (rules CAT-R13 to CAT-R16). Still
+not checked: the GLEIF branch tests (`LeiRecord` has no entity category),
+EMIR-VR-1003-01 (venue MIC), 1008-02, 1009-08, 2001-03/04, 2042-03,
+2045-03/06/07/08 and 2153-06/08; for CAT the other option lifecycle events,
+multi-leg and supplement events, linkage across files, reference data and the
+JSON schema. The checker is batch-local, so pass a whole day's events for a
+firm. Recipes 364 and 365.
 
 ### 18. Scaling out and staying safe
 
@@ -2627,13 +2809,49 @@ Worth studying as a checklist for your own projects:
   the spec.
 - **Property tests**: for example "a FOK either fills entirely or changes
   nothing," asserted over thousands of randomized books; "symmetric last
-  look rejects both directions 50/50" asserted over randomized moves.
+  look rejects both directions 50/50" asserted over randomized moves. Since
+  3.1 `PricingInvariantPropertiesTest` checks put-call parity (Black-Scholes,
+  Black-76), Merton's no-arbitrage bounds, monotonicity in strike, spot and
+  volatility, convexity in strike, American >= European and >= intrinsic, and
+  implied-volatility round trips. These are plain JUnit tests driven by a
+  `SplittableRandom` with a fixed seed per test; the number of cases is the
+  system property `qfl.cases` (default 1000), and a failure names the seed and
+  case index, so it reproduces exactly. No property-testing library is used.
+- **Mutation fuzzing of parsers**: `FixParserFuzzTest` and
+  `ReferenceParsersFuzzTest` feed `FixMessage.parse`, `FixDecoder` and the
+  FIRDS XML, CFI XLSX, GLEIF CSV and ISO 10383 CSV loaders with seed inputs
+  edited 1 to 8 times (bit flips, interesting bytes, inserts, deletes,
+  duplicates, truncation) and with random bytes. The only exceptions allowed
+  out are the parser's own (`FixParseException`, `WireProtocolException`,
+  `IOException`). The default build runs 1000 cases per test; `-Pfuzz` runs
+  only the fuzz tests, at 200,000 cases each (`-Dfuzz.tries=N`), and the
+  nightly `fuzz` job runs that. There is no coverage feedback, so this is
+  mutation fuzzing, not Jazzer or AFL.
+- **Tables as data**: `FrtbSaTableTest` compares the FRTB parameters with
+  hand-transcribed MAR21/MAR22 tables, one cited row per value (section 10o).
 - **Differential tests**: the optimized NBBO fast path vs brute-force
   recomputation, 20,000 random updates.
 - **Load and timing tests**: throughput tripwires set far below measured
   desktop numbers, so they catch a dramatic slowdown without flaking on
   slow runners. They are tagged `load` or `timing` and skipped by the
   default build; `./mvnw -Pfull test` and the nightly workflow run them.
+- **Reference checks that cannot skip**: tests against files we may not
+  commit (the ISDA CDS Standard Model test grids, the ESMA XSDs) skip on a
+  laptop without them. The nightly `reference-files` job downloads them with
+  `scripts/fetch-reference-files.sh`, checks each against the SHA-256 pinned
+  in `scripts/reference-files.sha256`, sets `QFL_REQUIRE_REFERENCE_FILES=true`
+  so a missing file fails instead of skipping, and fails if any reference
+  test skipped. Pull requests run two committed stand-ins: `IsdaGoldenSubsetTest`
+  pins our upfront and cash settlement for 48 invented contracts, and
+  `EsmaXsdGoldenTest` pins the SHA-256 of the three documents validated
+  nightly.
+- **Mutation floors**: the nightly PIT jobs (`mutation` for core,
+  `mutation-lowlatency` for regreporting and the FIX codecs) fail when a
+  package's score falls below its floor in `scripts/pit-thresholds.txt`
+  (for example rates 83, risk 78, fix 81).
+- **Bounded inputs**: every file loader caps what it reads (an XLSX is at
+  most 10,000 zip entries and 256 MiB inflated); the list is in
+  [INPUT_LIMITS.md](INPUT_LIMITS.md).
 - **Platform limits as tests**: the load test *budgets* dropped messages
   under OS preemption instead of pretending an unpinned desktop can
   promise zero drops. Tests encode what the platform can actually
