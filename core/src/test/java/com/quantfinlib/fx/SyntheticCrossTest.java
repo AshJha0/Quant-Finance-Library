@@ -1,7 +1,5 @@
-package com.quantfinlib.marketdata;
+package com.quantfinlib.fx;
 
-import com.quantfinlib.fx.SyntheticCross;
-import com.quantfinlib.fx.CrossOp;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
