@@ -262,7 +262,7 @@ public final class LpScorecard {
     public void readState(DataInput in) throws IOException {
         int v = in.readByte();
         if (v != 1 && v != 2) {
-            throw new IOException("LpScorecard state version " + v
+            throw new com.quantfinlib.core.MalformedFileException("LpScorecard state version " + v
                     + " not supported (this build reads versions 1-2)");
         }
         Checkpoint.readLongsInto(in, attempts);

@@ -78,25 +78,25 @@ public final class TickFileReader {
         try (DataInputStream in = new DataInputStream(Files.newInputStream(path))) {
             return readHeader(in, path);
         } catch (EOFException e) {
-            throw new IOException("not a QFLT tick file (too short): " + path, e);
+            throw new com.quantfinlib.core.MalformedFileException("not a QFLT tick file (too short): " + path, e);
         }
     }
 
     private static FileInfo readHeader(DataInputStream in, Path path) throws IOException {
         if (in.readInt() != TickFileWriter.MAGIC) {
-            throw new IOException("not a QFLT tick file: " + path);
+            throw new com.quantfinlib.core.MalformedFileException("not a QFLT tick file: " + path);
         }
         byte version = in.readByte();
         if (version == TickFileWriter.VERSION_1) {
             return new FileInfo(1, TickFileWriter.ClockDomain.UNKNOWN, 0, 0);
         }
         if (version != TickFileWriter.VERSION) {
-            throw new IOException("unsupported QFLT version " + version);
+            throw new com.quantfinlib.core.MalformedFileException("unsupported QFLT version " + version);
         }
         int domain = in.readByte();
         TickFileWriter.ClockDomain[] domains = TickFileWriter.ClockDomain.values();
         if (domain < 0 || domain >= domains.length) {
-            throw new IOException("unknown QFLT clock domain " + domain);
+            throw new com.quantfinlib.core.MalformedFileException("unknown QFLT clock domain " + domain);
         }
         return new FileInfo(2, domains[domain], in.readLong(), in.readLong());
     }
