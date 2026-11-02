@@ -65,28 +65,9 @@ public final class Dependence {
         return Math.sin(Math.PI * tau / 2);
     }
 
-    /** Midranks (average rank for ties), 1-based. */
+    /** Midranks (average rank for ties), 1-based; delegates to {@link com.quantfinlib.stats.Stats#ranks}. */
     public static double[] ranks(double[] values) {
-        int n = values.length;
-        Integer[] order = new Integer[n];
-        for (int i = 0; i < n; i++) {
-            order[i] = i;
-        }
-        java.util.Arrays.sort(order, (x, y) -> Double.compare(values[x], values[y]));
-        double[] rank = new double[n];
-        int i = 0;
-        while (i < n) {
-            int j = i;
-            while (j + 1 < n && values[order[j + 1]] == values[order[i]]) {
-                j++;
-            }
-            double mid = (i + j) / 2.0 + 1;                // 1-based midrank
-            for (int k = i; k <= j; k++) {
-                rank[order[k]] = mid;
-            }
-            i = j + 1;
-        }
-        return rank;
+        return com.quantfinlib.stats.Stats.ranks(values);
     }
 
     private static void requireSameLength(double[] a, double[] b) {

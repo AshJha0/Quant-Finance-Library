@@ -75,6 +75,8 @@ public final class FixMessage {
     public static final int ORIG_SENDING_TIME = 122;
     public static final int GAP_FILL_FLAG = 123;
     public static final int RESET_SEQ_NUM_FLAG = 141;
+    /** NextExpectedMsgSeqNum(789), on Logon: the next MsgSeqNum the sender expects to receive. */
+    public static final int NEXT_EXPECTED_MSG_SEQ_NUM = 789;
     public static final int EXEC_TYPE = 150;
     public static final int LEAVES_QTY = 151;
     public static final int ENCODED_TEXT_LEN = 354;

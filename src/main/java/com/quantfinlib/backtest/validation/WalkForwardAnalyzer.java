@@ -182,6 +182,8 @@ public final class WalkForwardAnalyzer {
     }
 
     /**
+     * Runs a walk-forward optimisation over the parameter grid.
+     *
      * @param trainBars bars in each optimisation window
      * @param testBars  bars in each out-of-sample window; the window rolls
      *                  forward by this amount per fold

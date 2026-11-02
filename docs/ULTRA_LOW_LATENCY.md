@@ -254,9 +254,14 @@ symbol-routing facade. A symbol can be registered on several shards;
 
 - Kernel-bypass networking, thread affinity and NIC hardware timestamps (need native
   code).
-- FIX session schedules (trading hours, daily logon and logout windows), FIX versions
-  other than 4.4, and data dictionaries for repeating groups.
-- Drop copies, order audit trails for regulators, and entitlement checks.
+- FIX versions other than 4.4 and data dictionaries for repeating groups. Session
+  schedules (`fix.FixSessionSchedule`) and NextExpectedMsgSeqNum are implemented.
+- Order audit trails for regulators and entitlement checks. Drop-copy reconciliation
+  (`trading.DropCopyReconciler`) compares fills the caller supplies; nothing connects
+  a drop-copy session.
+- `trading.PositionLedger` is not fed from gateway fills automatically.
+- `orderbook.AuctionBook` leaves out the market-pressure step some venues apply
+  before the reference-price tie-break.
 - Venue certification; the adapters have only run against in-process venues and
   loopback sockets in tests.
 - Off-heap order books (`MemorySegment`) and memory-mapped persistent queues.

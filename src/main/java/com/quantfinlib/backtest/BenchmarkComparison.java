@@ -38,6 +38,8 @@ import com.quantfinlib.util.MathUtils;
 public final class BenchmarkComparison {
 
     /**
+     * Strategy statistics relative to a benchmark.
+     *
      * @param alpha            annualized Jensen alpha (risk-free = 0)
      * @param beta             regression beta vs the benchmark
      * @param trackingError    annualized stdev of active returns
@@ -58,6 +60,8 @@ public final class BenchmarkComparison {
     }
 
     /**
+     * Compares strategy returns with benchmark returns.
+     *
      * @param strategy       per-period strategy returns, aligned with
      *                       {@code benchmark}, &ge; 3 periods, finite
      * @param benchmark      per-period benchmark returns, must vary

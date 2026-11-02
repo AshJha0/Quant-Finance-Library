@@ -21,6 +21,10 @@ import java.nio.ByteBuffer;
  * Wrap at an offset that is a multiple of 8 for aligned access.
  */
 public final class TradeFlyweight {
+    /** Creates an instance; the explicit form of the default constructor. */
+    public TradeFlyweight() {
+    }
+
 
     /** SBE templateId. */
     public static final int TEMPLATE_ID = 1;

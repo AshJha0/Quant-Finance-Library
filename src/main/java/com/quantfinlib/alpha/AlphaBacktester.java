@@ -6,6 +6,8 @@ import com.quantfinlib.backtest.PerformanceMetrics;
 import com.quantfinlib.core.BarSeries;
 import com.quantfinlib.microstructure.MarketImpactModel;
 
+import com.quantfinlib.risk.FactorRiskModel;
+
 import java.util.List;
 
 /**
@@ -70,6 +72,8 @@ public final class AlphaBacktester {
     }
 
     /**
+     * Backtest settings: decision schedule, costs and capital.
+     *
      * @param startIndex         first decision bar (covers factor warm-up and,
      *                           when capital &gt; 0, more than {@code impactWindow} bars)
      * @param rebalanceEveryBars bars between decisions
@@ -340,7 +344,261 @@ public final class AlphaBacktester {
     /** Runs with a caller-supplied construction pipeline. */
     public static Result run(AlphaContext ctx, AlphaFactor factor, Config config,
                              WeightBuilder builder) {
-        return new Sim(ctx, factor, config, builder).run();
+        return new Sim(ctx, factor, config, wrap(builder), false).run();
+    }
+
+    /**
+     * Risk-model-driven construction for {@link #run(AlphaContext, AlphaFactor, Config,
+     * RiskOptions)}: at each rebalance a {@link FactorRiskModel} is rebuilt
+     * from the panel up to the decision bar ({@link AlphaRiskModels}) and the
+     * book comes from {@link TurnoverAwareOptimizer} started at the drifted
+     * book actually held.
+     *
+     * <p>Over the holding horizon {@code H = rebalanceEveryBars} the
+     * optimiser maximises {@code αᵀw − λ wᵀ(H·V)w − κ‖w − w₀‖₁} with
+     * {@code α_i = IC · σ_i · √H · z_i} (Grinold 1994, "Alpha is Volatility
+     * Times IC Times Score", J. Portfolio Management 20(4)), {@code z} the
+     * cross-sectional z-score of the factor, {@code σ_i² = V_ii} the model's
+     * per-bar variance and {@code κ} the one-way flat cost
+     * {@code (commission + halfSpread + slippage)/10⁴} of the config.
+     * Names without a score or a forecast get a zero cap.</p>
+     *
+     * <p><b>Automatic %ADV trade limit.</b> With {@code advTradeFraction > 0}
+     * and {@code capital > 0} each name may trade at most
+     * {@code advTradeFraction × ADV_i × price_i / (capital × equity)} of
+     * equity per rebalance (ADV from the {@code impactWindow} bars before
+     * the decision bar). A name held beyond its cap may always trade back to
+     * the cap.</p>
+     *
+     * @param spec                   risk model window and settings
+     * @param sectors                sector label per symbol in context order (null = one sector)
+     * @param riskAversion           λ &gt; 0
+     * @param informationCoefficient IC used to scale scores into alphas (&gt; 0)
+     * @param maxWeight              per-name |w| cap (&gt; 0)
+     * @param advTradeFraction       per-rebalance trade limit as a fraction of ADV (0 = none)
+     * @param dollarNeutral          add the constraint {@code Σw = 0}
+     */
+    public record RiskOptions(AlphaRiskModels.Spec spec, List<String> sectors,
+                              double riskAversion, double informationCoefficient,
+                              double maxWeight, double advTradeFraction, boolean dollarNeutral) {
+
+        public RiskOptions {
+            if (spec == null || !(riskAversion > 0) || !(informationCoefficient > 0)
+                    || !(maxWeight > 0) || !(advTradeFraction >= 0)
+                    || Double.isInfinite(riskAversion) || Double.isInfinite(advTradeFraction)) {
+                throw new IllegalArgumentException("invalid risk options");
+            }
+            sectors = sectors == null ? null : List.copyOf(sectors);
+        }
+
+        /** Default spec, one sector, λ = 5, IC = 0.05, 10% cap, 10% of ADV, dollar neutral. */
+        public static RiskOptions defaults() {
+            return new RiskOptions(AlphaRiskModels.Spec.defaults(), null, 5, 0.05, 0.10, 0.10,
+                    true);
+        }
+
+        public RiskOptions withSectors(List<String> labels) {
+            return new RiskOptions(spec, labels, riskAversion, informationCoefficient, maxWeight,
+                    advTradeFraction, dollarNeutral);
+        }
+
+        public RiskOptions withSpec(AlphaRiskModels.Spec s) {
+            return new RiskOptions(s, sectors, riskAversion, informationCoefficient, maxWeight,
+                    advTradeFraction, dollarNeutral);
+        }
+
+        public RiskOptions withRiskAversion(double lambda) {
+            return new RiskOptions(spec, sectors, lambda, informationCoefficient, maxWeight,
+                    advTradeFraction, dollarNeutral);
+        }
+
+        public RiskOptions withAdvTradeFraction(double fraction) {
+            return new RiskOptions(spec, sectors, riskAversion, informationCoefficient, maxWeight,
+                    fraction, dollarNeutral);
+        }
+    }
+
+    /**
+     * A run with its per-bar trace: the book held over each close-to-close
+     * bar, each name's P&amp;L, the cost and the financing, all as fractions
+     * of equity at the start of the bar. Per bar,
+     * {@code Σ_i namePnl + cost + financing} equals the net return exactly
+     * (cost and financing are signed P&amp;L, so normally negative).
+     */
+    public static final class Traced {
+        private final Result result;
+        private final int startIndex;
+        private final double[][] held;
+        private final double[][] pnl;
+        private final double[] cost;
+        private final double[] financing;
+
+        Traced(Result result, int startIndex, double[][] held, double[][] pnl, double[] cost,
+               double[] financing) {
+            this.result = result;
+            this.startIndex = startIndex;
+            this.held = held;
+            this.pnl = pnl;
+            this.cost = cost;
+            this.financing = financing;
+        }
+
+        public Result result() {
+            return result;
+        }
+
+        /**
+         * Context bar index of trace step 0; step {@code s} covers
+         * {@code close(start + s) → close(start + s + 1)}.
+         */
+        public int startIndex() {
+            return startIndex;
+        }
+
+        /** Number of traced bars. */
+        public int steps() {
+            return cost.length;
+        }
+
+        /** Weight of name {@code i} held over step {@code s}, after any fill at the step's opening close. */
+        public double held(int s, int i) {
+            return held[s][i];
+        }
+
+        public double[] heldCopy(int s) {
+            return held[s].clone();
+        }
+
+        /** P&amp;L of name {@code i} over step {@code s}, fraction of equity at the step start. */
+        public double namePnl(int s, int i) {
+            return pnl[s][i];
+        }
+
+        public double[] namePnlCopy(int s) {
+            return pnl[s].clone();
+        }
+
+        /** Trading cost P&amp;L of step {@code s} (&le; 0). */
+        public double cost(int s) {
+            return cost[s];
+        }
+
+        /** Financing P&amp;L of step {@code s}. */
+        public double financing(int s) {
+            return financing[s];
+        }
+
+        /** Net return of step {@code s} from the equity curve. */
+        public double netReturn(int s) {
+            return result.netEquity(s + 1) / result.netEquity(s) - 1;
+        }
+    }
+
+    /**
+     * Runs with the risk-model-driven turnover-aware optimiser as the
+     * construction (see {@link RiskOptions}). {@code config.startIndex()}
+     * must be at least {@code options.spec().firstIndex()}. The
+     * three-argument {@link #run(AlphaContext, AlphaFactor, Config)} keeps
+     * the z-score construction.
+     */
+    public static Result run(AlphaContext ctx, AlphaFactor factor, Config config,
+                             RiskOptions options) {
+        return new Sim(ctx, factor, config, riskBuilder(ctx, config, options), false).run();
+    }
+
+    /** {@link #run(AlphaContext, AlphaFactor, Config, WeightBuilder)} with the per-bar trace. */
+    public static Traced runTraced(AlphaContext ctx, AlphaFactor factor, Config config,
+                                   WeightBuilder builder) {
+        Sim sim = new Sim(ctx, factor, config, wrap(builder), true);
+        Result r = sim.run();
+        return new Traced(r, config.startIndex(), sim.trHeld, sim.trPnl, sim.trCost, sim.trFin);
+    }
+
+    /** {@link #run(AlphaContext, AlphaFactor, Config, RiskOptions)} with the per-bar trace. */
+    public static Traced runTraced(AlphaContext ctx, AlphaFactor factor, Config config,
+                                   RiskOptions options) {
+        Sim sim = new Sim(ctx, factor, config, riskBuilder(ctx, config, options), true);
+        Result r = sim.run();
+        return new Traced(r, config.startIndex(), sim.trHeld, sim.trPnl, sim.trCost, sim.trFin);
+    }
+
+    /** Construction hook that also sees the drifted book and current equity. */
+    @FunctionalInterface
+    interface BookBuilder {
+        double[] weights(AlphaContext ctx, double[] scores, int index, double[] current,
+                         double equity);
+    }
+
+    private static BookBuilder wrap(WeightBuilder b) {
+        return (c, scores, index, current, equity) -> b.weights(c, scores, index);
+    }
+
+    static BookBuilder riskBuilder(AlphaContext ctx, Config cfg, RiskOptions o) {
+        if (cfg.startIndex() < o.spec().firstIndex()) {
+            throw new IllegalArgumentException("startIndex " + cfg.startIndex()
+                    + " must be at least " + o.spec().firstIndex() + " for the risk model");
+        }
+        String[] sectors = o.sectors() == null ? null : o.sectors().toArray(new String[0]);
+        AlphaRiskModels.Builder models = new AlphaRiskModels.Builder(ctx, sectors, o.spec());
+        double kappa = (cfg.commissionBps() + cfg.halfSpreadBps() + cfg.slippageBps()) / 1e4;
+        int h = cfg.rebalanceEveryBars();
+        return (c, scores, index, current, equity) -> {
+            FactorRiskModel model = models.estimate(index);
+            int m = c.symbolCount();
+            double[] z = Factors.zScore(scores);
+            double[][] v = model.covariance();
+            double[] alpha = new double[m];
+            double[] caps = new double[m];
+            double[] limits = new double[m];
+            java.util.Arrays.fill(limits, Double.POSITIVE_INFINITY);
+            double diag = 0;
+            int live = 0;
+            for (int i = 0; i < m; i++) {
+                int e = c.terminalIndex(i);
+                boolean ok = model.covers(i) && Double.isFinite(z[i]) && c.isActive(i, index)
+                        && !(e >= 0 && index + 1 >= e);
+                if (!ok) {
+                    continue; // zero cap, unlimited trade: the name can only be exited
+                }
+                double sigma = Math.sqrt(v[i][i]);
+                alpha[i] = o.informationCoefficient() * sigma * Math.sqrt(h) * z[i];
+                caps[i] = o.maxWeight();
+                diag += v[i][i];
+                live++;
+                if (o.advTradeFraction() > 0 && cfg.capital() > 0) {
+                    MarketImpactModel im = MarketImpactModel.estimate(c.series(i), index,
+                            cfg.impactWindow());
+                    // no volume data: no liquidity to size against, so no new trading
+                    double lim = im == null ? 0 : o.advTradeFraction() * im.adv()
+                            * c.series(i).close(index) / (cfg.capital() * equity);
+                    limits[i] = Math.max(lim, Math.abs(current[i]) - caps[i]);
+                }
+            }
+            if (live == 0 || !(diag > 0)) {
+                return new double[m];
+            }
+            // Dividing the objective by 2λH·mean(V_ii) leaves the minimiser unchanged and
+            // makes ρ = 1 well conditioned.
+            double scale = 2 * o.riskAversion() * h * diag / live;
+            double[][] cov = new double[m][m];
+            for (int i = 0; i < m; i++) {
+                for (int j = 0; j < m; j++) {
+                    cov[i][j] = h * v[i][j] / scale;
+                }
+                alpha[i] /= scale;
+            }
+            double[][] eq = o.dollarNeutral() ? new double[][]{ones(m)} : new double[0][];
+            TurnoverAwareOptimizer.Settings st = new TurnoverAwareOptimizer.Settings(
+                    o.riskAversion(), kappa / scale, 1.0, 20_000, 1e-10);
+            return TurnoverAwareOptimizer.optimize(alpha, cov, current, eq, caps, limits, st)
+                    .weightsCopy();
+        };
+    }
+
+    static double[] ones(int m) {
+        double[] o = new double[m];
+        java.util.Arrays.fill(o, 1);
+        return o;
     }
 
     /** One simulation's mutable state. */
@@ -348,8 +606,16 @@ public final class AlphaBacktester {
         final AlphaContext ctx;
         final AlphaFactor factor;
         final Config cfg;
-        final WeightBuilder builder;
+        final BookBuilder builder;
         final int m;
+        final boolean trace;
+        double[][] trHeld;
+        double[][] trPnl;
+        double[] trCost;
+        double[] trFin;
+        double[] barPnl;
+        double barCost;
+        double barFin;
         final double[] w;          // current weights, fractions of net equity
         double[] target;           // pending target, null when none
         double net = 1;
@@ -364,13 +630,15 @@ public final class AlphaBacktester {
         double gapSum;
         int gapBars;
 
-        Sim(AlphaContext ctx, AlphaFactor factor, Config cfg, WeightBuilder builder) {
+        Sim(AlphaContext ctx, AlphaFactor factor, Config cfg, BookBuilder builder,
+            boolean trace) {
             this.ctx = ctx;
             this.factor = factor;
             this.cfg = cfg;
             this.builder = builder;
             this.m = ctx.symbolCount();
             this.w = new double[m];
+            this.trace = trace;
         }
 
         Result run() {
@@ -388,11 +656,18 @@ public final class AlphaBacktester {
             double[] grossEq = new double[netEq.length];
             netEq[0] = 1;
             grossEq[0] = 1;
+            if (trace) {
+                int steps = netEq.length - 1;
+                trHeld = new double[steps][];
+                trPnl = new double[steps][];
+                trCost = new double[steps];
+                trFin = new double[steps];
+            }
             FillPolicy fp = cfg.fillPolicy();
             for (int t = cfg.startIndex(); t < n - 1; t++) {
                 int outIdx = t - cfg.startIndex();
                 if (outIdx % cfg.rebalanceEveryBars() == 0) {
-                    double[] tgt = builder.weights(ctx, factor.scores(ctx, t), t);
+                    double[] tgt = builder.weights(ctx, factor.scores(ctx, t), t, w.clone(), net);
                     if (tgt.length != m) {
                         throw new IllegalArgumentException("weight builder returned misaligned array");
                     }
@@ -403,6 +678,12 @@ public final class AlphaBacktester {
                     }
                     target = tgt.clone();
                     decisions++;
+                }
+                double barStart = net;
+                if (trace) {
+                    barPnl = new double[m];
+                    barCost = 0;
+                    barFin = 0;
                 }
                 if (fp == FillPolicy.CLOSE) {
                     execute(t, false);
@@ -424,6 +705,15 @@ public final class AlphaBacktester {
                     }
                     gapSum += gap / 2;
                     gapBars++;
+                }
+                if (trace) {
+                    for (int i = 0; i < m; i++) {
+                        barPnl[i] /= barStart;
+                    }
+                    trHeld[outIdx] = held;
+                    trPnl[outIdx] = barPnl;
+                    trCost[outIdx] = barCost / barStart;
+                    trFin[outIdx] = barFin / barStart;
                 }
                 netEq[outIdx + 1] = net;
                 grossEq[outIdx + 1] = gross;
@@ -452,6 +742,13 @@ public final class AlphaBacktester {
             }
             if (rp <= -1) {
                 throw new IllegalStateException("book lost all equity at bar " + toBar);
+            }
+            if (trace) {
+                for (int i = 0; i < m; i++) {
+                    if (w[i] != 0) {
+                        barPnl[i] += net * w[i] * r[i];
+                    }
+                }
             }
             for (int i = 0; i < m; i++) {
                 if (w[i] != 0) {
@@ -538,6 +835,9 @@ public final class AlphaBacktester {
                                 + "too large for this universe's liquidity; reduce capital, add a "
                                 + "participation cap, or trade less", cost * 100, bar, imp * 100));
             }
+            if (trace) {
+                barCost -= net * cost;
+            }
             net *= 1 - cost;
             commission += com;
             spread += spr;
@@ -567,6 +867,9 @@ public final class AlphaBacktester {
             }
             double cash = 1 - sum;
             double pnl = -shorts * borrow + (cash >= 0 ? cash * cashRate : cash * marginRate);
+            if (trace) {
+                barFin += net * pnl;
+            }
             net *= 1 + pnl;
             financing -= pnl;
         }

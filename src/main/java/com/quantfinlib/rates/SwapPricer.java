@@ -28,6 +28,12 @@ package com.quantfinlib.rates;
  *
  * <p>Stated simplifications: single curve (no OIS/projection split),
  * annual fixed leg, spot start. Research lane, deterministic.</p>
+ *
+ * <p>Multi-curve overloads take a discount curve and a projection curve
+ * ({@link DiscountCurve}, usually from {@link MultiCurveBootstrap}) and an
+ * {@link InterestRateSwap} with real dates, day counts and schedules: the
+ * floating leg is projected off the projection curve and both legs are
+ * discounted on the discount (OIS) curve.</p>
  */
 public final class SwapPricer {
 
@@ -69,6 +75,36 @@ public final class SwapPricer {
         double base = payerPv(curve, tenorYears, fixedRate);
         double bumped = payerPv(parallelBump(curve, 1e-4), tenorYears, fixedRate);
         return bumped - base;
+    }
+
+    /** Fixed-leg annuity of {@code swap} on {@code discount}, per unit notional. */
+    public static double annuity(DiscountCurve discount, InterestRateSwap swap) {
+        return swap.annuity(discount);
+    }
+
+    /** Par fixed rate of {@code swap}: projected float leg PV over the OIS annuity. */
+    public static double parRate(DiscountCurve discount, DiscountCurve projection,
+                                 InterestRateSwap swap) {
+        return swap.parRate(discount, projection);
+    }
+
+    /** PV per unit notional of paying the swap's fixed rate and receiving floating. */
+    public static double payerPv(DiscountCurve discount, DiscountCurve projection,
+                                 InterestRateSwap swap) {
+        return swap.payerPv(discount, projection);
+    }
+
+    /**
+     * Payer PV change for a +1bp parallel shift of the pillar zero rates of
+     * both curves together. For per-instrument risk use
+     * {@link MultiCurveRisk#bucketedDv01}.
+     */
+    public static double dv01(DiscountCurve discount, DiscountCurve projection,
+                              InterestRateSwap swap) {
+        double base = swap.payerPv(discount, projection);
+        DiscountCurve d = discount.parallelShift(1e-4);
+        DiscountCurve p = projection == discount ? d : projection.parallelShift(1e-4);
+        return swap.payerPv(d, p) - base;
     }
 
     /** A copy of the curve with every pillar zero rate shifted by {@code bump}. */

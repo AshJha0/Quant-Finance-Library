@@ -23,6 +23,10 @@ package com.quantfinlib.microstructure;
  * allocation, single writer.</p>
  */
 public final class TradeClassifier {
+    /** Creates an instance; the explicit form of the default constructor. */
+    public TradeClassifier() {
+    }
+
 
     /** Classification results. */
     public static final int BUY = 1;

@@ -22,4 +22,7 @@
  * rejects into the decision) and {@link com.quantfinlib.fx.SyntheticCross}
  * (direct-vs-legs execution arithmetic with spread composition).
  */
+@NullMarked
 package com.quantfinlib.fx;
+
+import org.jspecify.annotations.NullMarked;

@@ -52,6 +52,8 @@ import com.quantfinlib.util.MathUtils;
 public final class PortfolioExecutor {
 
     /**
+     * Execution limits for the portfolio.
+     *
      * @param maxNetNotional      leg-balance band: |filled buys − filled
      *                            sells| (projected through this interval)
      *                            stays within this; +∞ disables

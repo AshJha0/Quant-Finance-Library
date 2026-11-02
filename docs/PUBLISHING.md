@@ -3,15 +3,15 @@
 ## Releases on GitHub
 
 A release is cut by pushing a tag `v<version>` whose version matches `project.version`
-in `pom.xml` (tag `v2.0.0` for version `2.0.0`).
+in `pom.xml` (tag `v2.1.0` for version `2.1.0`).
 
 1. Set the version in `pom.xml` (no `-SNAPSHOT`), update `CHANGELOG.md`, and merge to
    `main` with CI green.
 2. Tag the merge commit and push the tag:
 
    ```bash
-   git tag -a v2.0.0 -m "quantfinlib 2.0.0"
-   git push origin v2.0.0
+   git tag -a v2.1.0 -m "quantfinlib 2.1.0"
+   git push origin v2.1.0
    ```
 
 The `Release` workflow (`.github/workflows/release.yml`) then runs on JDK 25:
@@ -22,6 +22,11 @@ The `Release` workflow (`.github/workflows/release.yml`) then runs on JDK 25:
 - It runs `./mvnw verify` (tests and coverage check).
 - It creates a GitHub release with generated notes and attaches the jars from
   `target/`: the library, `-examples`, `-sources` and `-javadoc`.
+
+After a release, move the API compatibility baseline to it: set
+`api.baseline.version` in `pom.xml` and the version passed to
+`scripts/fetch-api-baseline.sh` in the `api-compat` job of `.github/workflows/ci.yml`
+to the version just released. Until then the gate compares against 2.0.0.
 
 ## JitPack
 
@@ -38,7 +43,7 @@ JitPack builds from a tag on request, so a release is usable without further set
 <dependency>
   <groupId>com.github.AshJha0</groupId>
   <artifactId>Quant-Finance-Library</artifactId>
-  <version>v2.0.0</version>
+  <version>v2.1.0</version>
 </dependency>
 ```
 
@@ -98,7 +103,7 @@ Central Portal and, with `autoPublish=true`, releases it. Consumers then use:
 <dependency>
   <groupId>com.quantfinlib</groupId>
   <artifactId>quant-finance-library</artifactId>
-  <version>2.0.0</version>
+  <version>2.1.0</version>
 </dependency>
 ```
 

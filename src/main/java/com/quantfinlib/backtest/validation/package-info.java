@@ -32,4 +32,7 @@
  * rank below the out-of-sample median across every symmetric
  * train/test split.)</p>
  */
+@NullMarked
 package com.quantfinlib.backtest.validation;
+
+import org.jspecify.annotations.NullMarked;

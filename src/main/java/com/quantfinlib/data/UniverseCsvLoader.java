@@ -1,5 +1,6 @@
 package com.quantfinlib.data;
 
+import com.quantfinlib.core.MalformedDataException;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -86,7 +87,7 @@ public final class UniverseCsvLoader {
             }
             if (!headerSeen) {
                 if (!normalize(line).equals(EXPECTED_HEADER)) {
-                    throw new IllegalArgumentException(
+                    throw new MalformedDataException(
                             "expected header '" + EXPECTED_HEADER + "' but found: " + line);
                 }
                 headerSeen = true;
@@ -95,7 +96,7 @@ public final class UniverseCsvLoader {
             // -1 keeps trailing empty fields, so short rows are still 7 columns.
             String[] f = line.split(",", -1);
             if (f.length != 7) {
-                throw new IllegalArgumentException(
+                throw new MalformedDataException(
                         "line " + (lineNo + 1) + ": expected 7 columns, found " + f.length);
             }
             for (String raw : new String[]{f[2].trim(), f[3].trim()}) {
@@ -110,7 +111,7 @@ public final class UniverseCsvLoader {
                     } catch (NumberFormatException e) {
                         // >19-digit corruption: line-tag it here too — pass 1
                         // fires before pass 2's wrapping would.
-                        throw new IllegalArgumentException(
+                        throw new MalformedDataException(
                                 "line " + (lineNo + 1) + ": unparseable timestamp '" + raw + "'", e);
                     }
                 } else {
@@ -121,7 +122,7 @@ public final class UniverseCsvLoader {
             lineNumbers.add(lineNo + 1);
         }
         if (!headerSeen) {
-            throw new IllegalArgumentException("empty universe file (no header)");
+            throw new MalformedDataException("empty universe file (no header)");
         }
         // the seconds-vs-millis heuristic, owned by CsvBarLoader so bar and
         // universe files can never diverge on timestamp scale.
@@ -134,7 +135,7 @@ public final class UniverseCsvLoader {
             String symbol = f[0].trim();
             String event = f[1].trim().toUpperCase(Locale.ROOT);
             if (symbol.isEmpty()) {
-                throw new IllegalArgumentException("line " + lineNo + ": empty symbol");
+                throw new MalformedDataException("line " + lineNo + ": empty symbol");
             }
             try {
                 switch (event) {
@@ -159,14 +160,14 @@ public final class UniverseCsvLoader {
                         universe.recordMerger(symbol, timestamp(f[2].trim(), scale),
                                 cash, shares, acquirer);
                     }
-                    default -> throw new IllegalArgumentException("unknown event '" + f[1] + "'");
+                    default -> throw new MalformedDataException("unknown event '" + f[1] + "'");
                 }
             } catch (RuntimeException e) {
                 // Re-wrap with the line number: universe files are hand-curated,
                 // and "which row is wrong" is the whole error message battle.
                 // RuntimeException (not just IAE) so malformed dates
                 // (DateTimeParseException) and numbers carry the row too.
-                throw new IllegalArgumentException(
+                throw new MalformedDataException(
                         "line " + lineNo + " (" + symbol + "): " + e.getMessage(), e);
             }
         }

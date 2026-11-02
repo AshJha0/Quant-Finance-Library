@@ -15,6 +15,10 @@ import java.util.zip.ZipOutputStream;
  * cells are typed so Excel treats them as numbers.
  */
 public final class XlsxReportExporter implements ReportExporter {
+    /** Creates an instance; the explicit form of the default constructor. */
+    public XlsxReportExporter() {
+    }
+
 
     @Override
     public void export(Report report, Path path) throws IOException {

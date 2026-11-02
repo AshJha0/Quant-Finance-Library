@@ -10,6 +10,10 @@ import java.util.Map;
  * enumerates the cartesian product in deterministic order.
  */
 public final class ParameterGrid {
+    /** Creates an instance; the explicit form of the default constructor. */
+    public ParameterGrid() {
+    }
+
 
     private final LinkedHashMap<String, double[]> params = new LinkedHashMap<>();
 

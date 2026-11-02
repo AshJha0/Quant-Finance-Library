@@ -29,6 +29,10 @@ package com.quantfinlib.fix;
  * wrap, read, repeat.</p>
  */
 public final class FixExecReportView {
+    /** Creates an instance; the explicit form of the default constructor. */
+    public FixExecReportView() {
+    }
+
 
     private static final byte SOH = 1;
 

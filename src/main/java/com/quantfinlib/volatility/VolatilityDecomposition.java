@@ -31,6 +31,8 @@ import com.quantfinlib.util.MathUtils;
 public final class VolatilityDecomposition {
 
     /**
+     * Systematic and idiosyncratic split of an asset's variance.
+     *
      * @param beta                   Cov(a,m)/Var(m)
      * @param totalVariance          per-period Var(asset)
      * @param systematicVariance     β²·Var(market)

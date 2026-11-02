@@ -331,6 +331,51 @@ public final class PortfolioBacktester {
                              Map<String, BarSeries> signalData, Config config,
                              PointInTimeUniverse universe,
                              Map<String, List<CorporateActions.CorporateAction>> cashDividends) {
+        return run(strategy, data, signalData, config, universe, cashDividends, null);
+    }
+
+    /**
+     * Participation cap: each symbol trades at most
+     * {@code maxFractionOfAdv × ADV} shares per bar, with ADV the mean
+     * volume of the {@code advWindow} bars before the fill bar (fewer at the
+     * start of the data; none on bar 0, so nothing trades there). A target
+     * that the cap leaves unfinished is worked again at the next bar's fill
+     * point, re-sized against the portfolio value then, until it is reached
+     * or replaced by the next decision. Forced index-drop sales and
+     * terminal events are not capped.
+     *
+     * @param maxFractionOfAdv fraction of ADV per bar (&gt; 0)
+     * @param advWindow        bars in the ADV average (&ge; 1)
+     */
+    public record Participation(double maxFractionOfAdv, int advWindow) {
+
+        public Participation {
+            if (!(maxFractionOfAdv > 0) || Double.isInfinite(maxFractionOfAdv) || advWindow < 1) {
+                throw new IllegalArgumentException("invalid participation cap");
+            }
+        }
+
+        double maxShares(BarSeries s, int i) {
+            int from = Math.max(0, i - advWindow);
+            if (from >= i) {
+                return 0;
+            }
+            double sum = 0;
+            for (int j = from; j < i; j++) {
+                sum += s.volume(j);
+            }
+            return maxFractionOfAdv * sum / (i - from);
+        }
+    }
+
+    /**
+     * The price-pair run with a participation cap ({@code null} = none).
+     */
+    public static Result run(PortfolioStrategy strategy, Map<String, BarSeries> data,
+                             Map<String, BarSeries> signalData, Config config,
+                             PointInTimeUniverse universe,
+                             Map<String, List<CorporateActions.CorporateAction>> cashDividends,
+                             Participation participation) {
         if (data.isEmpty()) {
             throw new IllegalArgumentException("no series supplied");
         }
@@ -358,6 +403,7 @@ public final class PortfolioBacktester {
         strategy.init(signalData, data);
         FillPolicy fillPolicy = config.fillPolicy();
         Map<String, Double> pendingWeights = null;
+        boolean carrying = false;
         double financingCost = 0;
 
         double cash = config.initialCapital();
@@ -469,15 +515,21 @@ public final class PortfolioBacktester {
                 }
             }
 
-            // 4) Fill orders decided on the previous bar.
-            if (pendingWeights != null && fillPolicy != FillPolicy.CLOSE) {
+            // 4) Fill orders decided on the previous bar, or the unfinished
+            //    remainder of a participation-capped target.
+            if (pendingWeights != null && (fillPolicy != FillPolicy.CLOSE || carrying)) {
                 boolean atOpen = fillPolicy == FillPolicy.NEXT_OPEN;
                 double[] tc = rebalance(pendingWeights, symbols, data, positions, dead, universe,
-                        now, i, atOpen, cash, config);
+                        now, i, atOpen, cash, config, participation);
                 cash = tc[0];
                 totalCosts += tc[1];
                 totalTurnover += tc[2];
-                pendingWeights = null;
+                if (tc[3] == 0) {
+                    pendingWeights = null;
+                    carrying = false;
+                } else {
+                    carrying = true;
+                }
             }
 
             // 5) Decide at this bar's close.
@@ -485,12 +537,15 @@ public final class PortfolioBacktester {
                 Map<String, Double> weights = strategy.targetWeights(i);
                 if (fillPolicy == FillPolicy.CLOSE) {
                     double[] tc = rebalance(weights, symbols, data, positions, dead, universe,
-                            now, i, false, cash, config);
+                            now, i, false, cash, config, participation);
                     cash = tc[0];
                     totalCosts += tc[1];
                     totalTurnover += tc[2];
+                    carrying = tc[3] != 0;
+                    pendingWeights = carrying ? Map.copyOf(weights) : null;
                 } else {
                     pendingWeights = Map.copyOf(weights);
+                    carrying = false;
                 }
             }
             equity[i] = cash + marketValue(positions, data, i);
@@ -511,12 +566,14 @@ public final class PortfolioBacktester {
 
     /**
      * Trades every live, tradeable symbol to its target weight of the
-     * portfolio value marked at the fill point. Returns {cash, costs, turnover}.
+     * portfolio value marked at the fill point, within the participation cap
+     * when one is set. Returns {cash, costs, turnover, 1 if a cap bound else 0}.
      */
     private static double[] rebalance(Map<String, Double> weights, List<String> symbols,
                                       Map<String, BarSeries> data, Map<String, Double> positions,
                                       Set<String> dead, PointInTimeUniverse universe, long now,
-                                      int i, boolean atOpen, double cash, Config config) {
+                                      int i, boolean atOpen, double cash, Config config,
+                                      Participation participation) {
         double portfolioValue = cash;
         for (Map.Entry<String, Double> p : positions.entrySet()) {
             BarSeries s = data.get(p.getKey());
@@ -524,6 +581,7 @@ public final class PortfolioBacktester {
         }
         double costs = 0;
         double turnover = 0;
+        boolean incomplete = false;
         for (String symbol : symbols) {
             if (dead.contains(symbol)) {
                 continue; // ghost bars of a dead security are untradeable
@@ -540,6 +598,17 @@ public final class PortfolioBacktester {
             if (delta == 0) {
                 continue;
             }
+            if (participation != null) {
+                double cap = participation.maxShares(s, i);
+                if (Math.abs(delta) > cap) {
+                    delta = Math.copySign(cap, delta);
+                    targetQty = currentQty + delta;
+                    incomplete = true;
+                    if (delta == 0) {
+                        continue;
+                    }
+                }
+            }
             double notional = Math.abs(delta) * price;
             double fee = config.fee(s, i, notional);
             cash -= delta * price + fee;
@@ -547,7 +616,7 @@ public final class PortfolioBacktester {
             turnover += notional;
             positions.put(symbol, targetQty);
         }
-        return new double[]{cash, costs, turnover};
+        return new double[]{cash, costs, turnover, incomplete ? 1 : 0};
     }
 
     /** One bar of financing on the book held at close {@code i}. */

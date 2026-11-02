@@ -98,6 +98,8 @@ public final class QuadraticProgram {
     }
 
     /**
+     * Solves the quadratic program.
+     *
      * @param q   n×n symmetric PSD
      * @param c   length n
      * @param a   m×n equality rows (m may be 0), linearly independent

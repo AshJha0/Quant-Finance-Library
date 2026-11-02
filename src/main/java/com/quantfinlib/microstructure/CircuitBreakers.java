@@ -193,6 +193,10 @@ public final class CircuitBreakers {
      * and not-after-15:25 rules for Levels 1 and 2. Reset it each session.
      */
     public static final class MarketWide {
+        /** Creates an instance; the explicit form of the default constructor. */
+        public MarketWide() {
+        }
+
 
         public static final double LEVEL_1 = 0.07;
         public static final double LEVEL_2 = 0.13;
@@ -204,6 +208,8 @@ public final class CircuitBreakers {
         private boolean level3Used;
 
         /**
+         * The market-wide halt an index decline triggers, if any.
+         *
          * @param declineFromPriorClose e.g. 0.08 = the index is down 8%
          * @param minutesSinceMidnight  local exchange time in minutes,
          *                              e.g. 14:30 = 870 (validated to 0..1440

@@ -26,4 +26,7 @@
  * probability, deflated Sharpe), {@code portfolio} (multi-asset), and
  * {@code tick} (event-driven tick-level engine).
  */
+@NullMarked
 package com.quantfinlib.backtest;
+
+import org.jspecify.annotations.NullMarked;

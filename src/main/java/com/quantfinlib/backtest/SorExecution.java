@@ -22,6 +22,8 @@ import java.util.Map;
 public final class SorExecution implements ExecutionModel {
 
     /**
+     * One venue's fee, liquidity share and lit or dark status.
+     *
      * @param liquidityShare fraction of the bar's volume dealable at this
      *                       venue's touch on each bar (e.g. 0.05)
      */

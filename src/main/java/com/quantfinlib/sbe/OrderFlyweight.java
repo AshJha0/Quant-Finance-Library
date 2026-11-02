@@ -23,6 +23,10 @@ import java.nio.ByteBuffer;
  * </pre>
  */
 public final class OrderFlyweight {
+    /** Creates an instance; the explicit form of the default constructor. */
+    public OrderFlyweight() {
+    }
+
 
     /** SBE templateId. */
     public static final int TEMPLATE_ID = 2;

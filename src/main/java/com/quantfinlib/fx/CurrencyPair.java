@@ -218,14 +218,18 @@ public final class CurrencyPair {
         String t = tenor.toUpperCase(Locale.ROOT).trim();
         LocalDate spot = spotDate(tradeDate);
         switch (t) {
-            case "ON":
+            case "ON" -> {
                 return addJointBusinessDays(tradeDate, 1);
-            case "TN":
+            }
+            case "TN" -> {
                 return addJointBusinessDays(tradeDate, 2);
-            case "SN":
+            }
+            case "SN" -> {
                 return addJointBusinessDays(spot, 1);
-            default:
-                // fall through to <n><unit> parsing below
+            }
+            default -> {
+                // continue to <n><unit> parsing below
+            }
         }
         int n = Integer.parseInt(t.substring(0, t.length() - 1));
         char unit = t.charAt(t.length() - 1);

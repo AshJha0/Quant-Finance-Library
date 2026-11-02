@@ -99,6 +99,21 @@ Price-time `HftOrderBook`, single thread. Per-operation latency is the mean of 1
 | Per-op p99 | 230 ns | 317 ns | 583 ns |
 | Per-op p99.9 | 839 ns | 1.27 µs | 1.54 µs |
 
+## 2.1.0 regression check
+
+The tables above were measured on 2026-11-01 at the 2.0.0 release candidate. They were not re-measured for 2.1.0, because on 2026-11-02 the same laptop ran two to three times slower for both versions (long-running load and Windows timer stalls of 15 to 20 ms in the hiccup monitor). Numbers from that state would compare the machine, not the code.
+
+Instead, 2.1.0 was checked against the released 2.0.0 jar, back to back on the same machine in the same state, with the flags above. The order-book code path is unchanged between the two versions.
+
+| `HftBookBenchmark`, run | Matching, million ops/s | Per-op p50 | Per-op p99 |
+|---|---|---|---|
+| 2.0.0 release jar, run 1 | 3.0 | 317 ns | 1.28 µs |
+| 2.1.0 build, run 1 | 3.8 | 271 ns | 1.02 µs |
+| 2.0.0 release jar, run 2 | 3.6 | 317 ns | 879 ns |
+| 2.1.0 build, run 2 | 3.9 | 323 ns | 859 ns |
+
+Result: no regression; 2.1.0 is within run-to-run noise of 2.0.0, slightly faster in three of four comparisons.
+
 ## How to reproduce
 
 ```bash
@@ -117,6 +132,8 @@ The JMH microbenchmarks (`src/test/java/com/quantfinlib/bench/CoreBenchmarks.jav
 ```
 
 They were not run for this release; their numbers are not quoted.
+
+`scripts/run-benchmarks.sh` runs the four programs three times with these flags and prints the min / median / max table (`RUNS=N` changes the run count; a benchmark name runs one program).
 
 The `Benchmarks (Linux)` workflow runs the same four programs on a GitHub-hosted runner. Shared runners have noisy neighbours, so treat those numbers as a smoke test.
 

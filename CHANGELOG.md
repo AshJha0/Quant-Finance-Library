@@ -6,6 +6,141 @@ Entries for 1.x releases are archived in [docs/history/CHANGELOG-1.x.md](docs/hi
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-11-02
+
+Minor release. Everything is additive: code written for 2.0 compiles and behaves the same, apart from the notes in [docs/MIGRATION_2.1.md](docs/MIGRATION_2.1.md). An API-compatibility check against 2.0.0 now runs in CI.
+
+### Rates
+
+#### Added
+
+- `rates.DiscountCurve`: dated discount curve on ACT/365F time with log-linear discount or Hagan-West (2006) monotone-convex interpolation.
+- `rates.MultiCurveBootstrap`: OIS discount curve and projection curves (discounted on OIS), pillar-by-pillar Newton then a global Newton solve; every input reprices to 1e-12.
+- Curve instruments `Deposit`, `Fra`, `RateFuture` (Hull-White convexity adjustment), `OisSwap` and `InterestRateSwap` behind the sealed `CurveInstrument` interface, using `DayCount` and `BusinessCalendar` schedules.
+- `rates.MultiCurveRisk`: bucketed, Ho (1992) key-rate and parallel DV01 by bumping quotes and rebuilding the curve pair; `CurvePair` record.
+- `SwapPricer` overloads (annuity, par rate, payer PV, DV01) and `RatesOptions` overloads (swaption, cap/floor) taking a discount curve and a projection curve.
+
+### Credit and counterparty risk
+
+#### Added
+
+- `credit.IsdaCdsModel` and `credit.IsdaCurve`: ISDA CDS Standard Model with IMM dates, semi-annual maturity roll, T+1 step-in and T+3 cash settlement, ACT/360 accrual, accrual on default, closed-form segment integrals, clean and dirty upfront, par spread, quoted spread to upfront conversion (40% recovery, 100bp/500bp coupons) and a hazard bootstrap.
+- `credit.ExposureSimulator` and `credit.ExposureProfile`: Monte Carlo netting-set exposure for interest-rate swaps (Hull-White one-factor, exact simulation, closed-form bonds) and FX forwards (GBM correlated with rates), with EE, ENE, PFE and EPE, and a two-way CSA with threshold, minimum transfer amount and margin period of risk.
+- `CvaApproximator.cva(ExposureProfile, ...)`, `dva(...)` and `cvaWrongWay(...)`: CVA and DVA from a simulated profile, and wrong-way CVA through a Gaussian copula between default and a market factor.
+- `risk.SaCcr` and `risk.SaCcrTrade`: SA-CCR (BCBS 279) replacement cost (margined and unmargined), add-ons for interest rates, FX, credit, equity and commodities, the multiplier and EAD; reproduces the Annex 4a examples.
+
+#### Fixed
+
+- `CvaApproximator.cvaWrongWay` now ties each bucket's default driver to the factor move that drives that bucket's exposure (level at the bucket date, or the increment over the margin period of risk under a CSA; Hull-White 2012), so wrong-way CVA on a collateralised payer swap with positive rho is no longer below the independent CVA.
+
+### Volatility surfaces
+
+#### Added
+
+- `pricing.SviSlice`: raw SVI (Gatheral 2004) with the Gatheral-Jacquier density factor g(k) and Levenberg-Marquardt calibration with parameter bounds, caller weights and a butterfly penalty.
+- `pricing.SsviSurface`: SSVI with power-law phi; constructor enforces the Gatheral-Jacquier theorem 4.1/4.2 bounds, calibration of rho, eta, gamma to vol quotes.
+- `pricing.SviSurface`: per-expiry SVI slices interpolated linearly in total variance at fixed log-moneyness.
+- `pricing.TotalVarianceSurface`: common surface interface with implied vol, price, calendar and butterfly grid checks.
+- `pricing.DupireLocalVol`: Dupire local vol in Gatheral's total-variance form from any total-variance surface.
+- `pricing.LocalVolMonteCarlo` (log-Euler, seeded, antithetic) and `pricing.LocalVolPde` (Crank-Nicolson with Rannacher start) European pricers under local vol.
+- `pricing.VannaVolga`: exact 3x3 vega/vanna/volga weights (`exactWeights`, `weightsFor`, `priceExact`), `pillarSmileCost` and pillar accessors.
+- `fx.VannaVolgaTouch`: vanna-volga adjusted one-touch with survival-probability weighting.
+
+### Exotics
+
+#### Added
+
+- `TouchOption.oneTouchPayAtHit`: one-touch paying at the hitting time (Reiner-Rubinstein 1991 rebate formula), up or down, domestic and foreign rates.
+- `TouchOption.doubleNoTouch`, `doubleOneTouch` and `doubleNoTouchProbability`: double-barrier touches by the Ikeda-Kunitomo (1992) image series, truncated at |n| <= 50.
+- `HestonCos`: Heston European pricer by the Fang-Oosterlee (2008) COS method with analytic delta, gamma, dV/dv0 and full parameter gradient.
+- `HestonCalibrator`: Levenberg-Marquardt calibration of Heston to an implied-vol grid using the analytic COS gradient.
+- `AsianOption.turnbullWakemanSeasoned`, `curranPrice` and `levyPrice`: arithmetic Asians with arbitrary and partly fixed schedules (Turnbull-Wakeman 1991, Curran 1994, Levy 1992).
+- `DividendTree`: European and American options with discrete cash dividends on a recombining CRR tree (Vellekoop-Nieuwenhuis 2006).
+- `DividendSchedule.exTime(i)` and `amount(i)` accessors.
+
+### Alpha, portfolio and research
+
+#### Added
+
+- `risk.FactorRiskModel`: market, sector and style factor risk model; constrained WLS factor returns (sqrt-cap weights, cap-weighted sector constraint), EWMA factor covariance with Newey-West and volatility regime adjustment, EWMA specific risk with Bayesian size-bucket shrinkage, and `Decomposition` (exposures, factor/specific/total risk, marginal and percent contributions).
+- `alpha.AlphaRiskModels`: builds a `FactorRiskModel` from an `AlphaContext` (SIZE, MOMENTUM, LOW_VOL and, with fundamentals, VALUE styles) without look-ahead.
+- `AlphaBacktester.run(ctx, factor, config, RiskOptions)`: the turnover-aware ADMM optimiser on the rebuilt risk model as the construction, with an automatic %ADV trade limit; the existing overloads keep the z-score construction.
+- `AlphaBacktester.runTraced` and `AlphaBacktester.Traced`: per-bar book, name P&L, cost and financing that sum to the net return exactly.
+- `PortfolioBacktester.Participation` and a `run` overload with a per-bar participation cap that works unfinished targets over later bars.
+- `alpha.AlphaCombiner`: horizon-matched, decay-aware IC weights with per-date Gram-Schmidt orthogonalisation and shrinkage toward equal weights.
+- `alpha.BacktestAttribution`: per-bar factor, specific, trading, cost and financing P&L with long/short leg and sector splits.
+- `alpha.CapacityCurve`: net Sharpe against capital with square-root impact and the participation cap, and capacity at a Sharpe floor.
+- `backtest.StrategyRunner`: one driver for a bar strategy on `Backtester`, `TickBacktester` and `PaperTradingGateway`, with a replay-equality test.
+- `AlphaReport.icTable`, `formatIcTable`, `costBreakdown` and `exposureSummary`.
+
+### Trading lane
+
+#### Added
+
+- `fix.FixSessionSchedule`: daily, overnight and weekly FIX session windows in a time zone, DST-aware.
+- `fix.FixSessionOptions` and new `FixSession.overStream`/`initiate`/`accept` overloads: Logon refused outside the session window, Logout at the end of the window, and an end-of-period sequence reset (store roll) that also survives a restart.
+- `FixSessionStore.sessionStartMillis`/`saveSessionStartMillis` (default no-op); `FileSessionStore` persists the period in `session.period`.
+- NextExpectedMsgSeqNum(789) on Logon: sent when enabled, answered when the peer sends it, gaps recovered by replay instead of a ResendRequest exchange; `FixMessage.NEXT_EXPECTED_MSG_SEQ_NUM`.
+- `trading.PositionLedger`: allocation-free fill ingestion over dense account/strategy/symbol ids, average-cost and FIFO realised P&L, mark-to-market unrealised P&L, contract multipliers, fees and aggregates.
+- `trading.DropCopyReconciler`: compares booked fills with a drop copy and reports missing, extra, mismatched and duplicate executions plus the per-symbol position difference.
+- `trading.LimitsConfig` (validated immutable limits with a plain-text format) and `trading.LimitsManager` (versioned changes to running `HftRiskGate`s with an audit trail and rollback).
+- `HftRiskGate.limits(LimitsConfig)` and getters for every limit.
+- `orderbook.AuctionBook`: opening and closing call auctions with indicative price, volume and imbalance, uncross by maximum volume, then minimum imbalance, then nearest reference price, price-time allocation and transfer of the residual into `HftOrderBook`.
+- `AdaptiveSor.maxLatencyPenaltyBps`: optional cap on the latency term.
+
+#### Changed
+
+- `HftRiskGate` keeps its limits in one immutable object read once per check, so a check never sees a half-applied change; the existing setters keep their behaviour.
+- `OrderBook.cancel` unlinks in O(1) instead of scanning the price level.
+
+#### Fixed
+
+- `AdaptiveSor`: every cost term is now in price units (the adverse-selection markout was converted to a fraction and scaled by the fee-adjusted price), and dark probes across all dark venues share one `maxDarkFraction` budget instead of each taking it.
+- `AntiGamingJitter.jitterTimes`: bounds come from the original schedule only, so two neighbours can no longer end up 1 ns apart; schedules for a given seed differ from 2.0.0.
+
+### Library structure
+
+#### Added
+
+- `stats.Stats`: one home for mean, sample and population variance and standard deviation, sample covariance, Pearson correlation, Hyndman-Fan type 7 and type 1 quantiles, median and average-tie midranks, each with its convention and edge cases stated.
+- `module-info.java`: the library jar is now the named module `com.quantfinlib`, exporting every package that was public in 2.0 (`requires java.net.http`, `jdk.httpserver`, `static org.jspecify`); `examples` is not exported and stays out of the library jar.
+- Library exception types in `core`: `QuantFinException` (marker interface), `WireProtocolException` (an `IllegalStateException`), `MalformedDataException` and `ConfigurationException` (both `IllegalArgumentException`s). `fix.FixParseException` and `data.TickFileReader.TruncatedTickFileException` implement the marker.
+
+#### Changed
+
+- `MathUtils.mean`, `variance`, `stdDev`, `stdDevP`, `stdDevSample`, `percentile`, `percentileSorted` and `covariance`, and `risk.Dependence.ranks`, delegate to `Stats`; results are unchanged bit for bit on valid input.
+- `MathUtils.percentile` and `percentileSorted` now reject a probability outside [0, 1] or NaN with `IllegalArgumentException`; before, such a value threw `ArrayIndexOutOfBoundsException` or returned the minimum.
+- `MathUtils.mean(v, from, to)` and the range standard deviations now throw `IndexOutOfBoundsException` for a range outside the array or with `from > to`.
+- FIX BodyLength and SBE header framing faults throw `WireProtocolException`; CSV bar and universe file format faults throw `MalformedDataException`; `trading.LimitsConfig` faults throw `ConfigurationException`. Each is a subtype of the type thrown before, so existing catch blocks still work.
+- Classes in exported packages that relied on the implicit default constructor now declare it explicitly (same signature).
+
+#### Fixed
+
+- `crb.InternalizationEngine`: the constructor Javadoc sat on a field and did not appear in the API docs.
+
+### Build and tooling
+
+#### Added
+
+- API compatibility gate: the `api-compat` Maven profile (japicmp) compares the build against the released 2.0.0 jar and fails on binary-incompatible changes in the stable packages; reference packages are reported only. Runs in CI on Ubuntu.
+- `scripts/fetch-api-baseline.sh` downloads the released jar used as the compatibility baseline.
+- JSpecify `@NullMarked` on the stable packages: parameters and return values there are non-null unless marked `@Nullable`. JSpecify is a compile-time (provided, optional) dependency; the library still has no runtime dependencies.
+- Mutation testing: the `mutation` Maven profile runs PIT on `pricing`, `risk`, `rates` and `volatility`; the nightly workflow publishes the per-package score and the HTML report.
+- `scripts/run-benchmarks.sh` runs the four latency benchmarks three times with the documented JVM flags and prints the min / median / max table used in docs/BENCHMARKS.md.
+
+### Documentation
+
+#### Changed
+
+- Docs: 43 passages in LEARN.md Part IV reworded where an earlier dash removal had left stacked colons.
+
+#### Fixed
+
+- Docs: FRTB citations now point at the exact paragraphs (MAR33.4 for the liquidity-horizon cascade, MAR33.5 and MAR33.6 for stressed calibration, the 75% test and the floor at 1).
+- Docs: current exposure method cited to BCBS 128 Annex 4 and the April 1995 amendment; barrier citations consistently Haug (2007) section 4.17.1 with values from table 4-13.
+- Docs: the corporate-actions sequence diagram in DIAGRAMS.md failed to render because of semicolons in message text; all 100 Mermaid diagrams now render with Mermaid 11.4.1.
+
+
 ## [2.0.0] - 2026-11-01
 
 Major release. It corrects several pricing, risk and backtesting results, makes the trading lane fail safe, and moves the build to Java 25. Many results change value; see [docs/MIGRATION_2.0.md](docs/MIGRATION_2.0.md) before upgrading.
@@ -280,5 +415,6 @@ Major release. It corrects several pricing, risk and backtesting results, makes 
 - `sbe.MessageHeader`, `sbe.Decimal64`.
 - `TickFileReader.info` (version, clock domain, anchor) and `FileInfo.toEpochNanos`.
 
-[Unreleased]: https://github.com/AshJha0/Quant-Finance-Library/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/AshJha0/Quant-Finance-Library/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/AshJha0/Quant-Finance-Library/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/AshJha0/Quant-Finance-Library/compare/v1.17.0...v2.0.0

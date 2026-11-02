@@ -491,7 +491,7 @@ var plat = PnlAttribution.test(hypotheticalPnl, riskTheoreticalPnl);
 
 The formulas here are pinned by hand-computed tests in
 `MarketRiskTest`/`MarketRiskPricingTest`. `FrtbEs.liquidityHorizonEs`
-cascades ES across liquidity horizons per MAR33; for the stressed
+cascades ES across liquidity horizons per MAR33.4; for the stressed
 calibration see recipe 97.
 
 ## 17. Defend a quote against toxic flow (VPIN, skew, post-or-cross)
@@ -3055,7 +3055,7 @@ double oneTouch = TouchOption.oneTouch(s, 1.12, r, q, vol, t, 1_000_000);
 double noTouch = TouchOption.noTouch(s, 1.12, r, q, vol, t, 1_000_000);
 // oneTouch + noTouch = discounted payout, always.
 
-// Barriers (Reiner-Rubinstein 1991 formulas; Haug 2007, section 4.17):
+// Barriers (Reiner-Rubinstein 1991 formulas; Haug 2007, section 4.17.1):
 double ki = BarrierOption.downAndInCall(s, 1.10, 1.05, r, q, vol, t);
 double ko = BarrierOption.downAndOutCall(s, 1.10, 1.05, r, q, vol, t);
 
@@ -3444,9 +3444,9 @@ decides whether the model keeps its internal-model approval.
 // then only the factors needing >= 20 days to exit, then >= 60.
 double[] esByHorizon = {2_400_000, 1_100_000, 600_000};
 int[] horizons = {10, 20, 60};
-double es = FrtbEs.liquidityHorizonEs(esByHorizon, horizons);   // MAR33.5
+double es = FrtbEs.liquidityHorizonEs(esByHorizon, horizons);   // MAR33.4
 
-// Stressed calibration (MAR33): ES = ES_R,S * max(1, ES_F,C / ES_R,C).
+// Stressed calibration (MAR33.5-33.6): ES = ES_R,S * max(1, ES_F,C / ES_R,C).
 // es is ES_F,C (full set, current); the reduced set must explain >= 75% of
 // it (ES_R,C >= 0.75 * ES_F,C), otherwise the call throws.
 double imcc = FrtbEs.stressCalibratedEs(es, esStressedReduced, esCurrentReduced);
@@ -6702,9 +6702,9 @@ approval.
 ```java
 double[] esByHorizon = {2_400_000, 1_100_000, 600_000};   // 10d ES per LH subset
 int[] horizons = {10, 20, 60};
-double es = FrtbEs.liquidityHorizonEs(esByHorizon, horizons);       // MAR33.5 cascade
+double es = FrtbEs.liquidityHorizonEs(esByHorizon, horizons);       // MAR33.4 cascade
 
-// Stressed calibration (MAR33): ES_R,S * max(1, ES_F,C / ES_R,C), with es as
+// Stressed calibration (MAR33.5-33.6): ES_R,S * max(1, ES_F,C / ES_R,C), with es as
 // ES_F,C (2.9M here), stressed reduced-set ES 3.0M, current reduced-set ES
 // 2.5M (>= 75% of 2.9M, so accepted): 3.0M * 1.16 = 3.48M.
 double imcc = FrtbEs.stressCalibratedEs(es, 3_000_000, 2_500_000);
@@ -9865,3 +9865,616 @@ dimensionless and says nothing about how much money is at risk. Swap
 `PaperTradingGateway` for a broker adapter (recipe 273) and the same steps
 run live.
 
+
+## 301. Build an OIS discount curve and a 3M projection curve
+
+Since 2008 a collateralised swap is discounted at the overnight rate while its
+floating leg still fixes on a term index. Two curves are built in order: the OIS
+curve from overnight instruments, then the projection curve with every cash flow
+discounted on the OIS curve.
+
+```java
+LocalDate val = LocalDate.of(2026, 11, 2);
+BusinessCalendar cal = BusinessCalendar.weekendsOnly();
+LocalDate spot = cal.addBusinessDays(val, 2);
+List<CurveInstrument> ois = List.of(
+    new Deposit(val, cal.addBusinessDays(val, 1), 0.038, DayCount.ACT_360),
+    new OisSwap(spot, spot.plusYears(1), 0.036, 1, DayCount.ACT_360, cal,
+        BusinessCalendar.Roll.MODIFIED_FOLLOWING),
+    new OisSwap(spot, spot.plusYears(5), 0.035, 1, DayCount.ACT_360, cal,
+        BusinessCalendar.Roll.MODIFIED_FOLLOWING));
+List<CurveInstrument> threeM = List.of(
+    new Deposit(spot, spot.plusMonths(3), 0.0395, DayCount.ACT_360),
+    RateFuture.ofPrice(spot.plusMonths(9), spot.plusMonths(12), 96.25, DayCount.ACT_360, 0.03, 0.01),
+    new InterestRateSwap(spot, spot.plusYears(5), 0.0369, 1, DayCount.THIRTY_360, 4,
+        DayCount.ACT_360, cal, BusinessCalendar.Roll.MODIFIED_FOLLOWING));
+CurvePair c = MultiCurveRisk.buildCurves(val, ois, threeM, CurveInterpolation.MONOTONE_CONVEX);
+InterestRateSwap swap = (InterestRateSwap) threeM.get(2);
+double pv = SwapPricer.payerPv(c.discount(), c.projection(), swap);   // 0 to 1e-12
+double par = SwapPricer.parRate(c.discount(), c.projection(), swap);  // 0.0369
+```
+
+The input swap reprices to zero because the bootstrap solved for exactly that.
+`RateFuture.ofPrice` takes the Hull-White mean reversion and volatility used for
+the futures convexity adjustment; `RateFuture.hullWhiteConvexity` exposes the
+adjustment on its own. Swap `MONOTONE_CONVEX` for `LOG_LINEAR_DISCOUNT` to get
+piecewise-flat forwards instead.
+
+## 302. Bucketed and key-rate DV01 on a two-curve book
+
+Risk on a two-curve book is the sensitivity to each market quote, with both
+curves rebuilt for each bump.
+
+```java
+// ois, threeM, val and swap as in recipe 301
+double[] buckets = MultiCurveRisk.bucketedDv01(val, ois, threeM,
+    CurveInterpolation.MONOTONE_CONVEX, swap::payerPv);   // OIS quotes first
+double parallel = MultiCurveRisk.parallelDv01(val, ois, threeM,
+    CurveInterpolation.MONOTONE_CONVEX, swap::payerPv);
+double sum = Arrays.stream(buckets).sum();
+System.out.printf("bucket sum %.4f vs parallel %.4f%n", sum, parallel);
+```
+
+Each bucket is a central difference of a 1bp quote bump with a full rebuild. With
+log-linear interpolation the buckets add to the parallel figure to about 1e-7;
+with monotone-convex they agree only to a few percent, because that interpolator
+is not differentiable in its inputs where an interval changes zone. A par input
+swap shows its whole DV01 (its OIS annuity times 1bp) in its own bucket and zero
+elsewhere. `keyRateDv01` gives Ho (1992) hat-weighted key rates instead.
+
+## 303. Upfront for a standard CDS quoted at 300bp
+
+Standard CDS trade on a fixed 100bp or 500bp coupon, so a quoted spread has to be
+turned into an upfront payment with the ISDA standard model.
+
+```java
+var c = IsdaCdsModel.standardContract(LocalDate.of(2026, 11, 2), 5,
+    IsdaCdsModel.COUPON_100BP, IsdaCdsModel.STANDARD_RECOVERY);
+IsdaCurve discount = IsdaCurve.flat(0.035);
+double upfront = IsdaCdsModel.quotedSpreadToUpfront(c, 0.03, discount);
+double back = IsdaCdsModel.upfrontToQuotedSpread(c, upfront, discount);   // 0.03
+System.out.println(c.maturityDate() + " upfront " + upfront);
+```
+
+The contract carries the IMM-roll maturity (20 June or 20 December), step-in at
+T+1 and cash settlement at T+3 business days. The quoted spread converts through
+a flat hazard rate (`flatHazardForParSpread`), so a 300bp quote on a 100bp coupon
+gives a positive upfront paid by the protection buyer. Holidays are not applied:
+the calendar is weekends only.
+
+## 304. Bootstrap an ISDA hazard curve and read par spreads
+
+```java
+LocalDate trade = LocalDate.of(2026, 11, 2);
+IsdaCurve discount = IsdaCurve.flat(0.035);
+IsdaCurve survival = IsdaCdsModel.bootstrap(trade, new int[]{1, 3, 5, 7, 10},
+    new double[]{0.008, 0.011, 0.014, 0.016, 0.018}, IsdaCdsModel.STANDARD_RECOVERY, discount);
+var c5 = IsdaCdsModel.standardContract(trade, 5, IsdaCdsModel.COUPON_100BP,
+    IsdaCdsModel.STANDARD_RECOVERY);
+double par = IsdaCdsModel.parSpread(c5, discount, survival);           // 0.014
+double prot = IsdaCdsModel.protectionLeg(c5, discount, survival);
+double rpv01 = IsdaCdsModel.riskyAnnuityClean(c5, discount, survival);
+```
+
+The bootstrap solves one piecewise-constant hazard per tenor so each standard
+contract reprices at its par spread. The legs use the ISDA closed-form segment
+integrals, which the tests check against numerical quadrature to 1e-10.
+
+## 305. Exposure profile and CVA of a payer swap
+
+```java
+YieldCurve curve = YieldCurve.ofZeroRates(new double[]{1, 2, 5, 10},
+    new double[]{0.030, 0.031, 0.032, 0.033});
+double[] dates = new double[20];                 // quarterly, strictly positive
+for (int i = 0; i < dates.length; i++) dates[i] = 0.25 * (i + 1);
+ExposureProfile profile = ExposureSimulator.simulate(
+    ExposureSimulator.Market.ratesOnly(curve, 0.05, 0.01),
+    List.of(new ExposureSimulator.Swap(100, 0.032, true, 0, 5, 1)), List.of(),
+    new ExposureSimulator.Csa(0, 0, 10 / 250.0), dates, 10_000, 42L);
+CreditCurve cpty = CreditCurve.bootstrap(new int[]{1, 3, 5},
+    new double[]{0.010, 0.012, 0.015}, 0.4, curve);
+double cva = CvaApproximator.cva(profile, cpty, 0.6);
+double epe = profile.epe();
+double pfe97 = profile.pfe(7, 0.975);   // two years out
+```
+
+The simulator drives a one-factor Hull-White short rate and prices the swap on
+each path at each date. With a zero-threshold CSA and a ten-day margin period of
+risk, what remains is the exposure that builds up while collateral is late.
+`cva` sums discounted expected exposure times the counterparty's default
+probability in each bucket times loss given default.
+
+## 306. Wrong-way CVA and unilateral DVA
+
+```java
+// dates, cpty and curve as in recipe 305; no CSA this time
+ExposureProfile bare = ExposureSimulator.simulate(
+    ExposureSimulator.Market.ratesOnly(curve, 0.05, 0.01),
+    List.of(new ExposureSimulator.Swap(100, 0.032, true, 0, 5, 1)), List.of(),
+    null, dates, 10_000, 42L);
+CreditCurve own = CreditCurve.bootstrap(new int[]{1, 3, 5},
+    new double[]{0.006, 0.007, 0.008}, 0.4, curve);
+double independent = CvaApproximator.cva(bare, cpty, 0.6);
+double wrongWay = CvaApproximator.cvaWrongWay(bare, cpty, 0.6, 0.5,
+    ExposureProfile.Factor.RATES);                  // about 2.25x independent
+double dva = CvaApproximator.dva(bare, own, 0.6);
+```
+
+Wrong-way risk links the counterparty's default to the driver that makes the
+trade valuable. `cvaWrongWay` uses a Gaussian copula per exposure bucket, with a
+driver taken from the same simulated path: the rate factor's level at the bucket
+date without a CSA, or its move over the margin period of risk with one (Hull
+and White 2012). For the uncollateralised payer swap, high rates mean both large
+exposure and likely default, so `wrongWay` comes out near 2.25 times
+`independent` with these inputs. On the collateralised profile of recipe 305 the
+ratio is about 1.9. A negative correlation gives right-way risk and lowers the
+charge, and zero reproduces the independent CVA. DVA is unilateral: it ignores
+who defaults first.
+
+## 307. SA-CCR exposure at default for BCBS 279 Example 1
+
+```java
+double swaptionDelta = SaCcr.optionDelta(false, true, 0.06, 0.05, 1,
+    SaCcr.OPTION_VOL_INTEREST_RATE);
+List<SaCcrTrade> trades = List.of(
+    SaCcrTrade.interestRate("USD", 10_000, 0, 10, 10, 1, 30),
+    SaCcrTrade.interestRate("USD", 10_000, 0, 4, 4, -1, -20),
+    SaCcrTrade.interestRate("EUR", 5_000, 1, 11, 11, swaptionDelta, 50));
+SaCcr.Result r = SaCcr.unmargined(trades, 0);
+System.out.printf("RC %.0f, EAD %.0f%n", r.replacementCost(), r.ead());   // EAD 569
+```
+
+The netting set has a USD payer, a USD receiver and a EUR swaption (bought put on
+the swap rate). Replacement cost is the positive net value, 60. The add-on uses
+supervisory duration and the 1.4/0.6 cross-bucket terms within each currency.
+The result matches the 569 published in BCBS 279 Annex 4a.
+
+## 308. SA-CCR with a margin agreement
+
+```java
+List<SaCcrTrade> book = List.of(
+    SaCcrTrade.interestRate("USD", 1_000, 0, 2, 2, 1, 50));
+SaCcr.Margin csa = new SaCcr.Margin(0, 5, 0, 10);   // threshold, MTA, NICA, MPOR days
+SaCcr.Result unm = SaCcr.unmargined(book, 60);
+SaCcr.Result mar = SaCcr.margined(book, 60, csa);
+double mf = SaCcr.maturityFactor(2, csa);   // 1.5 sqrt(10 / 250) = 0.3
+```
+
+A margined netting set caps replacement cost at threshold plus minimum transfer
+amount less net independent collateral, and scales the add-on by the margined
+maturity factor. Basis and volatility hedging sets, several margin agreements on
+one netting set and collateral haircuts are not implemented.
+
+## 309. Fit an SVI slice and check it for butterfly arbitrage
+
+```java
+double[] k = {-0.4, -0.2, -0.1, 0.0, 0.1, 0.2, 0.4};
+double[] w = {0.062, 0.049, 0.044, 0.040, 0.038, 0.037, 0.039};   // sigma^2 T
+double[] weights = {1, 1, 1, 1, 1, 1, 1};
+SviSlice fit = SviSlice.calibrate(k, w, weights);
+boolean butterflyFree = fit.minDensityFactor(-2, 2, 2001) >= 0;
+double vol = fit.impliedVol(0.05, 1.0);
+// Vogt's parameters: a valid SVI curve with negative density
+SviSlice vogt = new SviSlice(-0.0410, 0.1331, 0.3060, 0.3586, 0.4153);
+double gMin = vogt.minDensityFactor(-1.5, 1.5, 3001);              // about -0.033
+```
+
+`densityFactor` is the Gatheral-Jacquier g(k); a negative value anywhere means the
+implied density is negative there and a butterfly spread has negative price.
+`calibrate(k, w, weights, true)` adds a penalty that pushes the fit away from
+such regions.
+
+## 310. Calibrate an SSVI surface and read a smile
+
+```java
+double spot = 100, r = 0.02, q = 0.01;
+double[] expiries = {0.25, 0.5, 1.0};
+double[][] strikes = /* strikes per expiry */;
+double[][] vols = /* market implied vols per expiry and strike */;
+SsviSurface s = SsviSurface.calibrate(spot, r, q, expiries, strikes, vols, null);
+double v95 = s.impliedVol(1.0, 95);
+SviSlice oneYear = s.slice(1.0);   // the same slice in raw SVI form
+```
+
+SSVI uses three global parameters (rho, eta, gamma) plus the ATM total variance
+per expiry. With gamma in [0, 1/2], eta(1 + |rho|) <= 2 and non-decreasing ATM
+total variance the surface has no static arbitrage, so the calibrator keeps the
+parameters in that region. Passing `null` for weights gives equal weights.
+
+## 311. Dupire local vol priced by PDE and by Monte Carlo
+
+```java
+// s from recipe 310
+DupireLocalVol lv = new DupireLocalVol(s);
+double put90 = new LocalVolPde(lv).price(OptionType.PUT, 90, 1.0, 601, 400);
+LocalVolMonteCarlo.Result mc = new LocalVolMonteCarlo(lv)
+    .price(OptionType.CALL, 110, 1.0, 20_000, 100, 7L);
+double market110 = s.price(OptionType.CALL, 110, 1.0);
+System.out.printf("MC %.4f +- %.4f vs surface %.4f%n", mc.price(), mc.standardError(), market110);
+```
+
+Both pricers should give back the vanillas the surface was built from. The tests
+pin the PDE within 2e-3 in implied vol on a 601 by 400 grid, and the Monte Carlo
+(antithetic pairs, Euler steps in log spot) within four standard errors plus
+0.5% of price. The value of local vol is in path-dependent payoffs priced on the
+same model.
+
+## 312. Exact vanna-volga for a strike and a one-touch
+
+```java
+double[] pillars = {1.05, 1.10, 1.15};   // 25-delta put, ATM, 25-delta call strikes
+double[] pillarVols = {0.105, 0.095, 0.100};
+VannaVolga vv = new VannaVolga(pillars, pillarVols, 0.03, 0.02, 0.5);
+double exact = vv.priceExact(OptionType.CALL, 1.10, 1.12);
+double closed = vv.price(OptionType.CALL, 1.10, 1.12);   // same for a vanilla
+double[] x = vv.exactWeights(1.10, 1.12);
+double touch = VannaVolgaTouch.oneTouch(vv, 1.10, 1.20, 1_000_000);
+```
+
+The exact method solves a three by three system so the hedge portfolio of the
+three pillar options matches the target's vega, vanna and volga. For a vanilla
+it gives the same answer as the closed-form log-strike weights. For a one-touch,
+the smile cost of the hedge is scaled by the survival probability, following
+Wystup's convention.
+
+## 313. Heston by COS: price, Greeks and the paper's test case
+
+```java
+Heston.Params p = new Heston.Params(1.5768, 0.0398, 0.5751, -0.5711, 0.0175);
+double call = HestonCos.price(OptionType.CALL, 100, 100, 0, 0, 1, p);   // 5.7851554344
+double delta = HestonCos.delta(OptionType.CALL, 100, 100, 0, 0, 1, p);
+double gamma = HestonCos.gamma(100, 100, 0, 0, 1, p);
+double[] grad = HestonCos.parameterGradient(100, 100, 0, 0, 1, p);
+double tight = HestonCos.price(OptionType.CALL, 100, 100, 0, 0, 1, p, 2048, 40);
+```
+
+This is the Fang-Oosterlee (2008) test case. The default 1024 terms and
+truncation width L = 32 reproduce it to 1.6e-8 against the printed value; the
+paper's L = 12 leaves an error near 4.5e-5 on this parameter set. The Greeks are
+exact derivatives of the truncated series, not finite differences.
+
+## 314. Fit Heston to a surface, then price an exotic by simulation
+
+```java
+double[] strikes = /* quote strikes */;
+double[] maturities = /* quote maturities, same length */;
+double[] vols = /* quote implied vols, same length */;
+HestonCalibrator.Result fit = HestonCalibrator.calibrate(100, 0.02, 0.01,
+    strikes, maturities, vols, new Heston.Params(1, 0.04, 0.5, -0.5, 0.04));
+System.out.printf("vol RMSE %.5f after %d iterations (converged %b)%n",
+    fit.impliedVolRmse(), fit.iterations(), fit.converged());
+double mc = Heston.callMonteCarlo(100, 105, 0.02, 0.01, 1.0, fit.params(), 252, 50_000, 11L);
+```
+
+Levenberg-Marquardt minimises vega-weighted price residuals, which approximate
+implied-vol errors, with an analytic Jacobian from `HestonCos` and box bounds on
+each parameter. The Feller condition is not imposed; check
+`2 kappa theta / sigmaV^2` on the result if your scheme needs it.
+
+## 315. Pay-at-hit one-touch and a double no-touch
+
+```java
+double S = 1.10, rd = 0.03, rf = 0.045, vol = 0.12, T = 0.5;
+double atExpiry = TouchOption.oneTouch(S, 1.20, rd, rf, vol, T, 1_000_000);
+double atHit = TouchOption.oneTouchPayAtHit(S, 1.20, rd, rf, vol, T, 1_000_000);
+double dnt = TouchOption.doubleNoTouch(S, 1.05, 1.15, rd, rf, vol, T, 1_000_000);
+double dot = TouchOption.doubleOneTouch(S, 1.05, 1.15, rd, rf, vol, T, 1_000_000);
+// dnt + dot = payout * exp(-rd T)
+```
+
+For FX the rate argument is the domestic rate and carry the foreign rate. A
+pay-at-hit touch is worth more than a pay-at-expiry touch by the discounting
+from the hit time to expiry, and the two agree when rd = 0. The double barrier
+prices use the Ikeda-Kunitomo image series with terms n = -50..50.
+
+## 316. A seasoned Asian: Curran and Turnbull-Wakeman after half the fixings
+
+```java
+double[] remaining = {0.5, 0.75, 1.0};   // three fixings left, in years from today
+double observedSum = 102 + 99 + 101;     // three fixings already set
+double curran = AsianOption.curranPrice(OptionType.CALL, 100, 100, 0.03, 0.0, 0.3,
+    remaining, 1.0, observedSum, 3);
+double tw = AsianOption.turnbullWakemanSeasoned(OptionType.CALL, 100, 100, 0.03, 0.0, 0.3,
+    remaining, 1.0, observedSum, 3);
+double levy = AsianOption.levyPrice(OptionType.CALL, 100, 100, 0.03, 0.0, 0.3,
+    1.0, 2.0, 100.5);   // continuous average, one year left of two
+```
+
+With n fixings in all, m left and A_obs already observed, the option becomes
+(m/n) times an option on the remaining average struck at K* = (nK - A_obs)/m.
+When K* is zero or negative the call is certain to finish in the money and is
+worth its discounted forward; the put is worth zero.
+
+## 317. American call across a large dividend
+
+```java
+DividendSchedule divs = DividendSchedule.of(new double[]{0.25}, new double[]{6});
+double am = DividendTree.price(OptionType.CALL, BinomialTree.ExerciseStyle.AMERICAN,
+    100, 90, 0.05, 0, 0.25, 0.5, divs, 2000);
+double eu = DividendTree.price(OptionType.CALL, BinomialTree.ExerciseStyle.EUROPEAN,
+    100, 90, 0.05, 0, 0.25, 0.5, divs, 2000);
+System.out.printf("early-exercise premium %.4f%n", am - eu);
+```
+
+The tree carries stock levels, not a stock-less-PV-of-dividends proxy, so a cash
+dividend drops the stock by exactly its amount. At the ex-date the holder takes
+the better of exercising cum-dividend and holding into the drop, which is where
+the early-exercise premium of a deep in-the-money call comes from. Ex-dates snap
+to the nearest step, so the timing error is at most half a step.
+
+## 318. Estimate a factor risk model and decompose a portfolio
+
+```java
+double[][] returns = /* T x N daily returns */;
+double[][][] styles = /* T (or T+1) x K x N raw style scores */;
+int[] sectors = /* sector index per name */;
+double[][] caps = /* T (or T+1) x N market caps */;
+FactorRiskModel m = FactorRiskModel.estimate(returns, styles, List.of("SIZE", "MOM"),
+    sectors, List.of("TECH", "FIN"), caps, FactorRiskModel.Settings.defaults());
+double[] weights = /* portfolio weights per name */;
+FactorRiskModel.Decomposition d = m.decompose(weights);
+System.out.printf("risk %.4f, size share %.2f, specific share %.2f%n",
+    d.totalRisk(), d.factorContribution(m.factorNames().indexOf("SIZE")), d.specificContribution());
+```
+
+The model has a market factor, one dummy per sector and the style factors. Factor
+contributions plus the specific share sum to one, and the percent contributions
+per name also sum to one (Euler allocation). `Settings.plain()` turns off the
+Newey-West, volatility-regime and shrinkage steps when you want to see what each
+one adds.
+
+## 319. Risk-aware alpha backtest with a sector-neutral model
+
+```java
+AlphaContext ctx = AlphaContext.of(data);
+AlphaBacktester.Config cfg = AlphaBacktester.Config.defaults(300);
+AlphaBacktester.RiskOptions opts = AlphaBacktester.RiskOptions.defaults()
+    .withSectors(sectorLabels).withRiskAversion(5).withAdvTradeFraction(0.05);
+AlphaBacktester.Result r = AlphaBacktester.run(ctx, factor, cfg, opts);
+AlphaBacktester.Traced t = AlphaBacktester.runTraced(ctx, factor, cfg, opts);
+System.out.println(AlphaReport.costBreakdown(r));
+double[] ex = AlphaReport.exposureSummary(t);   // gross, net, long, short, names held
+```
+
+Scores become alphas by the Grinold rule, IC times volatility times z-score, and
+each rebalance solves a quadratic programme: alpha minus a risk penalty minus the
+one-way cost of turnover, with each trade held under a fraction of the name's
+average daily volume. The traced run returns per-bar holdings, P&L, cost and
+financing that add up to the net return.
+
+## 320. Combine three factors with horizon-matched ICs
+
+```java
+AlphaCombiner.Combination c = AlphaCombiner.fit(ctx, List.of(mom, value, lowVol), 60, 500,
+    AlphaCombiner.Settings.of(21).withShrinkToEqual(0.3));
+for (int k = 0; k < c.factorCount(); k++) {
+    System.out.printf("factor %d: IC %.3f weight %.3f%n", k, c.ic(k), c.weight(k));
+}
+AlphaBacktester.Result combined = AlphaBacktester.run(ctx, c, cfg);
+```
+
+The fit runs on dates 60 to 500 only, so later dates stay out of sample. Factors
+are orthogonalised in list order each date, so the second factor is credited
+only for what the first does not already explain. Weights are the ICs
+normalised by their absolute sum and then shrunk 30% toward equal weights. The
+combination is itself an `AlphaFactor`, so it backtests like any other.
+
+## 321. Attribute a backtest's P&L to factors, specific and trading
+
+```java
+AlphaBacktester.Traced traced = AlphaBacktester.runTraced(ctx, factor, cfg, builder);
+BacktestAttribution a = BacktestAttribution.attribute(ctx, traced, sectorArray,
+    AlphaRiskModels.Spec.defaults());
+System.out.println(a.format());
+double momShare = a.cumulativeFactor(a.factorNames().indexOf("MOM"));
+```
+
+Each bar's P&L splits into factor returns times the held exposures, specific
+returns times holdings, and a trading residual from intrabar position changes;
+with cost and financing these add to the net return exactly. A large `MOM` line
+on a value strategy is a sign the strategy is mostly a momentum bet.
+
+## 322. A capacity curve: Sharpe against capital
+
+```java
+CapacityCurve cc = CapacityCurve.compute(ctx, factor, cfg, builder,
+    new double[]{1e7, 3e7, 1e8, 3e8, 1e9}, 0.1);
+System.out.println(cc.format());
+double capacity = cc.capacityAt(1.0);   // capital where net Sharpe falls to 1
+```
+
+The same backtest runs at each capital level with square-root impact and
+participation capped at 10% of volume. Impact cost per dollar grows with the
+square root of capital, so net Sharpe falls. `capacityAt` interpolates in log
+capital. It returns NaN when even the smallest capital misses the floor, and the largest capital (a lower bound) when none does.
+
+## 323. Participation-capped portfolio backtest
+
+```java
+PortfolioBacktester.Result r = PortfolioBacktester.run(strategy, data, data, config, null,
+    Map.of(), new PortfolioBacktester.Participation(0.1, 20));
+```
+
+Each symbol trades at most 10% of its 20-bar average daily volume per bar. The
+unfilled part of a target carries forward to the next fill point, so a large
+rebalance takes several bars instead of filling at one price.
+
+## 324. One strategy on three engines
+
+```java
+Path work = Files.createTempDirectory("runner");
+StrategyRunner.Run bar = StrategyRunner.run(StrategyRunner.Engine.BAR_BACKTESTER,
+    strategy, series, 1e6, work);
+StrategyRunner.Run tick = StrategyRunner.run(StrategyRunner.Engine.TICK_BACKTESTER,
+    strategy, series, 1e6, work);
+StrategyRunner.Run paper = StrategyRunner.run(StrategyRunner.Engine.PAPER_GATEWAY,
+    strategy, series, 1e6, work);
+boolean same = tick.fills().equals(paper.fills());
+```
+
+The runner writes the bars as a tick tape and replays one `TradingStrategy`
+through the bar backtester, the tick backtester and the paper gateway under one
+contract: close fills, no costs, all-in long only. Tick and paper trade whole
+shares, so they always agree with each other, and they agree with the bar engine
+whenever cash divided by price is a whole number. A difference therefore points
+at an engine, not at the strategy.
+
+## 325. A FIX session that rolls at 17:00 New York
+
+```java
+FixSessionSchedule nyc = FixSessionSchedule.daily(LocalTime.of(17, 0), LocalTime.of(17, 0),
+    ZoneId.of("America/New_York"));
+long t = Instant.parse("2026-11-01T12:00:00Z").toEpochMilli();
+Duration len = Duration.ofMillis(nyc.sessionEndMillis(t) - nyc.sessionStartMillis(t));  // 25h
+FixSessionOptions opts = FixSessionOptions.none().withSchedule(nyc).withNextExpectedMsgSeqNum();
+FixSession s = FixSession.overStream(config, listener, false, store, out, clock, opts);
+```
+
+Equal start and end times mean the session is always open and only rolls. The
+roll is at 21:00 UTC in summer and 22:00 UTC in winter, so the period that
+opens at 17:00 New York on 2026-10-31 and contains the end of daylight saving
+runs from 21:00Z to 22:00Z the next day, 25 hours. When the session is
+created, logs on or ticks in a new period, the store resets both sequence
+numbers.
+
+## 326. A weekly session and tag 789 on Logon
+
+```java
+FixSessionSchedule week = FixSessionSchedule.weekly(DayOfWeek.SUNDAY, LocalTime.of(17, 0),
+    DayOfWeek.FRIDAY, LocalTime.of(17, 0), ZoneId.of("America/New_York"));
+boolean open = week.isInSession(Instant.parse("2026-11-04T15:00:00Z").toEpochMilli());
+boolean closed = !week.isInSession(Instant.parse("2026-11-07T15:00:00Z").toEpochMilli());
+FixSessionOptions opts = FixSessionOptions.none().withSchedule(week).withNextExpectedMsgSeqNum();
+```
+
+With `withNextExpectedMsgSeqNum` the Logon carries tag 789, the next sequence
+number this side expects. If the peer's 789 is above our next outgoing number,
+the peer claims messages we never sent and the session logs out. If it is below,
+we replay the gap after the Logon exchange instead of waiting for a resend
+request.
+
+## 327. Average cost against FIFO on one book
+
+```java
+PositionLedger l = new PositionLedger(1, 1, 1, 64, 1_000);
+l.onFill(1, 0, 0, 0, Side.BUY, 100, 10.0);
+l.onFill(2, 0, 0, 0, Side.BUY, 100, 12.0);
+l.onFill(3, 0, 0, 0, Side.SELL, 150, 11.0);
+double avg = l.realised(PositionLedger.CostMethod.AVERAGE_COST, 0, 0, 0);   // 0
+double fifo = l.realised(PositionLedger.CostMethod.FIFO, 0, 0, 0);          // 50
+PositionLedger.PriceSource marks = sym -> 13.0;
+double totA = l.totalPnl(PositionLedger.CostMethod.AVERAGE_COST, 0, 0, 0, marks);   // 100
+double totF = l.totalPnl(PositionLedger.CostMethod.FIFO, 0, 0, 0, marks);           // 100
+```
+
+The two methods split the same P&L differently between realised and unrealised.
+Average cost bought 200 at 11 and sold 150 at 11, so nothing is realised. FIFO
+closed the 100 at 10 and 50 of the lot at 12, realising 100 - 50 = 50. Marked at
+13, both totals are 100, because realised plus unrealised always equals the
+mark-to-market value less the net cash spent.
+
+## 328. Reconcile the ledger against a drop copy
+
+```java
+// l from recipe 327
+List<DropCopyReconciler.Fill> drop = List.of(
+    DropCopyReconciler.Fill.dropCopy(1, 0, Side.BUY, 100, 10.0),
+    DropCopyReconciler.Fill.dropCopy(2, 0, Side.BUY, 100, 12.01),
+    DropCopyReconciler.Fill.dropCopy(4, 0, Side.SELL, 10, 11.0));
+DropCopyReconciler.Report rep = DropCopyReconciler.reconcile(l, drop, 1e-6);
+System.out.println(rep.format());
+```
+
+Fills match on execution id. Fill 2 differs in price beyond the tolerance and is
+a MISMATCH. Fill 3 is booked in our ledger but absent from the drop copy, an
+EXTRA booking. Fill 4 is on the drop copy but was never booked, so it is
+MISSING from our side. A repeated id would be a DUPLICATE.
+`quantityDifference` gives the net quantity gap per symbol.
+
+## 329. Versioned limits: load, tighten, roll back, audit
+
+```java
+HftRiskGate gate = new HftRiskGate(16);
+String desk = """
+    maxOrderQuantity = 10000
+    maxOrderNotional = 1000000
+    maxPositionQuantity = 50000
+    priceCollarPct = 0.05
+    maxDailyNotional = 50000000
+    maxDailyOrders = unlimited
+    maxDailyLoss = 250000
+    duplicateWindowNanos = 0
+    requireReferencePrice = true
+    """;
+LimitsManager lm = new LimitsManager(List.of(gate), LimitsConfig.parse(desk),
+    "risk-desk", "start of day", Clock.systemUTC());
+int v2 = lm.apply(desk.replace("maxOrderQuantity = 10000", "maxOrderQuantity = 2000"),
+    "risk-desk", "volatility alert");
+lm.rollback(1, "risk-desk", "alert cleared");
+lm.auditTrail().forEach(e -> System.out.println(e.format()));
+```
+
+All nine keys are required, so a file that forgets one is rejected rather than
+silently left at an old value. Each apply swaps one immutable limits object into
+the gate, so an order check sees either the old set or the new set and never a
+mix. The audit trail records version, author, time, reason and the changed keys.
+
+## 330. A call auction and its uncross
+
+```java
+AuctionBook b = new AuctionBook(1, 100, 1_000);
+b.openCall();
+b.submitLimit(Side.BUY, 10, 100);
+b.submitLimit(Side.BUY, 9, 200);
+b.submitLimit(Side.SELL, 8, 150);
+b.submitLimit(Side.SELL, 9, 100);
+b.publishIndicative(1);
+System.out.printf("indicative %d, volume %d, imbalance %d%n",
+    b.indicativePrice(), b.indicativeVolume(), b.indicativeImbalance());   // 9, 250, 50
+long traded = b.uncross(2);                                                  // 250
+```
+
+Nothing trades during the call. At the uncross the book picks the price with the
+most executable volume, then the smallest imbalance, then the price nearest the
+reference. At 9 the buyers want 300 and the sellers offer 250, so 250 trades with
+50 left on the buy side. `transferResidual` moves what is left into an
+`HftOrderBook` for continuous trading.
+
+## 331. Quantiles and ranks with Stats
+
+```java
+double[] v = {1, 2, 3, 4};
+double q7 = Stats.quantile(v, 0.25);             // 1.75 (Hyndman-Fan type 7)
+double q1 = Stats.quantileType1Sorted(v, 0.25);  // 1 (type 1, input must be sorted)
+double med = Stats.median(v);                    // 2.5
+double s2 = Stats.sampleVariance(v);             // 5/3, divides by n - 1
+double[] r = Stats.ranks(new double[] {10, 20, 20, 5});   // 2, 3.5, 3.5, 1
+```
+
+Type 7 interpolates between order statistics; type 1 returns an observed value.
+`ranks` are 1-based and ties share the average rank. A probability outside [0, 1] or
+NaN throws `IllegalArgumentException`, and empty input gives NaN.
+
+## 332. Catching library input faults
+
+```java
+try {
+    LimitsConfig cfg = LimitsConfig.parse(text);
+} catch (ConfigurationException e) {
+    System.err.println("bad limits file: " + e.getMessage());
+}
+
+try {
+    BarSeries bars = CsvBarLoader.parse(lines, "SPY");
+} catch (RuntimeException e) {
+    if (e instanceof QuantFinException) {
+        System.err.println("input fault: " + e.getMessage());
+    } else {
+        throw e;
+    }
+}
+```
+
+`ConfigurationException` and `MalformedDataException` are `IllegalArgumentException`s
+and `WireProtocolException` is an `IllegalStateException`, so a 2.0 catch block still
+catches them. `QuantFinException` is the marker interface they share.

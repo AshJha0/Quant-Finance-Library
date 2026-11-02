@@ -10,4 +10,7 @@
  * weighted min-max {@link com.quantfinlib.screener.RankingEngine} and
  * exports to CSV.
  */
+@NullMarked
 package com.quantfinlib.screener;
+
+import org.jspecify.annotations.NullMarked;

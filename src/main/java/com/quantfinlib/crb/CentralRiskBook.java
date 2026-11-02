@@ -53,6 +53,10 @@ import java.util.TreeSet;
  * {@link CrbAutoHedger} for the hedging loop.</p>
  */
 public final class CentralRiskBook {
+    /** Creates an instance; the explicit form of the default constructor. */
+    public CentralRiskBook() {
+    }
+
 
     private final FactorRegistry registry = new FactorRegistry();
     private double[] net = new double[16];
@@ -662,6 +666,8 @@ public final class CentralRiskBook {
     }
 
     /**
+     * Snapshot of the book's exposures.
+     *
      * @param grossExposure    Σ over factors of gross booked notional
      * @param netExposure      Σ over factors of |netted| notional
      * @param nettingEfficiency 1 − net/gross

@@ -25,6 +25,8 @@ import com.quantfinlib.pricing.BlackScholes.OptionType;
 public final class DeltaHedger {
 
     /**
+     * Hedging settings.
+     *
      * @param deltaBand          rebalance only when |target - held| delta exceeds this (0 = every step)
      * @param transactionCostBps cost per rebalance trade, in bps of traded notional
      */

@@ -43,6 +43,8 @@ import com.quantfinlib.util.MathUtils;
 public final class LiquiditySeekingAlgo {
 
     /**
+     * Algorithm settings.
+     *
      * @param spreadTolerance   how far above forecast still counts as cheap,
      *                          as a fraction (0.1 = up to 10% over); 0 = strict
      * @param maxVolRegime      opportunistic bursts only below this normalized

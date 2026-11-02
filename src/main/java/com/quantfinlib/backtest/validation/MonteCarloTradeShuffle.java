@@ -40,6 +40,8 @@ import java.util.SplittableRandom;
 public final class MonteCarloTradeShuffle {
 
     /**
+     * Drawdown distribution across trade-order shuffles.
+     *
      * @param medianMaxDrawdown    50th-percentile max drawdown across shuffles
      *                             (fraction of the running peak)
      * @param p95MaxDrawdown       95th-percentile max drawdown, the plan-for number
@@ -62,6 +64,8 @@ public final class MonteCarloTradeShuffle {
     }
 
     /**
+     * Shuffles the trade order and records the drawdown distribution.
+     *
      * @param trades   the strategy's completed trades, at least 2
      * @param shuffles number of shuffles, at least 100
      * @param seed     random seed

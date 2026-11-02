@@ -54,4 +54,7 @@
  * thin: exploration decays exactly as evidence accumulates, no arm is
  * ever fully abandoned).</p>
  */
+@NullMarked
 package com.quantfinlib.execution;
+
+import org.jspecify.annotations.NullMarked;

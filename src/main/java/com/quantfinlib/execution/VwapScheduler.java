@@ -15,6 +15,8 @@ public final class VwapScheduler {
     }
 
     /**
+     * Splits a parent order across the volume profile.
+     *
      * @param totalQty       parent order quantity
      * @param volumeProfile  expected volume per bucket (any positive scale)
      * @param durationMillis total execution window; slice i starts at

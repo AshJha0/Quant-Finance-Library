@@ -207,6 +207,8 @@ public final class PortfolioRiskAnalyzer {
     }
 
     /**
+     * Computes the risk report.
+     *
      * @param riskFreeRate annual risk-free rate used in the Sharpe ratio
      */
     public RiskReport analyze(double confidence, int periodsPerYear, double riskFreeRate) {

@@ -26,6 +26,10 @@ import java.util.List;
  * single-threaded by nature (one uncross event).</p>
  */
 public final class Auction {
+    /** Creates an instance; the explicit form of the default constructor. */
+    public Auction() {
+    }
+
 
     /** Auction outcome: clearing price, matched volume, and leftover imbalance. */
     public record Result(double price, long volume, long imbalance) {

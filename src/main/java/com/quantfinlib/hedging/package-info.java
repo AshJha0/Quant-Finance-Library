@@ -16,4 +16,7 @@
  * band around delta; the width the band hedgers take as configuration
  * should come from here, with the hedge-to-nearest-edge policy).
  */
+@NullMarked
 package com.quantfinlib.hedging;
+
+import org.jspecify.annotations.NullMarked;

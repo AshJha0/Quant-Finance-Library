@@ -14,4 +14,7 @@
  * {@code fx.LpScorecard} (FX quote streams): three market structures,
  * one learned-counterparty-quality discipline.
  */
+@NullMarked
 package com.quantfinlib.rfq;
+
+import org.jspecify.annotations.NullMarked;

@@ -22,6 +22,10 @@ import java.util.Map;
  * regulatory EAD.</p>
  */
 public final class CounterpartyExposureTracker {
+    /** Creates an instance; the explicit form of the default constructor. */
+    public CounterpartyExposureTracker() {
+    }
+
 
     public record CounterpartyTrade(String counterparty, String product, double notional,
                                     double markToMarket, double tenorYears) {

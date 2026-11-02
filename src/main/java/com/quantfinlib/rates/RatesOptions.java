@@ -3,6 +3,7 @@ package com.quantfinlib.rates;
 import com.quantfinlib.pricing.Bachelier;
 import com.quantfinlib.pricing.Black76;
 import com.quantfinlib.pricing.BlackScholes.OptionType;
+import java.time.LocalDate;
 
 /**
  * Rates volatility products priced off the curve: the bridge between
@@ -43,6 +44,13 @@ import com.quantfinlib.pricing.BlackScholes.OptionType;
  * the overloads with {@code paymentsPerYear} use τ = 1/f on a curve in
  * year fractions, which is exact for the curve's own time axis. Day-count
  * accrual on real dates is not modelled here.</p>
+ *
+ * <p>Multi-curve overloads (taking a discount and a projection
+ * {@link DiscountCurve}) work on real dates: the forward swap rate is the
+ * {@link InterestRateSwap} par rate (float leg projected off the projection
+ * curve, OIS annuity as numeraire) and each caplet's forward comes from the
+ * projection curve while its payment is discounted on the OIS curve. Expiry
+ * is the ACT/365F curve time of the swap start or caplet period start.</p>
  */
 public final class RatesOptions {
 
@@ -240,6 +248,54 @@ public final class RatesOptions {
             double fwd = (curve.discountFactor((i - 1) * tau) / dfPay - 1) / tau;
             pv += tau * dfPay * model.forwardValue(cap ? OptionType.CALL : OptionType.PUT,
                     fwd, strike, vol, (i - 1) * tau);
+        }
+        return pv;
+    }
+
+    /**
+     * Swaption on {@code underlying} (its fixed rate is ignored; {@code strike}
+     * is used), expiring at the swap start: {@code A_d * model(F, K)} with
+     * {@code F} the multi-curve par rate and {@code A_d} the OIS annuity.
+     */
+    public static double swaption(DiscountCurve discount, DiscountCurve projection,
+                                  InterestRateSwap underlying, double strike, double vol,
+                                  boolean payer, VolModel model) {
+        if (!Double.isFinite(strike)) {
+            throw new IllegalArgumentException("strike must be finite, got " + strike);
+        }
+        double expiry = discount.time(underlying.start());
+        double a = underlying.annuity(discount);
+        double fsr = underlying.parRate(discount, projection);
+        return a * model.forwardValue(payer ? OptionType.CALL : OptionType.PUT, fsr, strike, vol,
+                expiry);
+    }
+
+    /**
+     * Cap (or floor) on the projection index over the adjusted schedule from
+     * {@code start} to {@code end}: caplet j pays
+     * {@code tau_j max(F_j - K, 0)} at {@code t_j}, {@code F_j} the
+     * projection forward on its accrual period, fixing at the period start,
+     * discounted on {@code discount}. A caplet fixing at or before the
+     * valuation date is intrinsic on the projected forward.
+     */
+    public static double capFloor(DiscountCurve discount, DiscountCurve projection, LocalDate start,
+                                  LocalDate end, int paymentsPerYear, DayCount dayCount,
+                                  BusinessCalendar calendar, BusinessCalendar.Roll roll,
+                                  double strike, double vol, boolean cap, VolModel model) {
+        if (!Double.isFinite(strike)) {
+            throw new IllegalArgumentException("strike must be finite, got " + strike);
+        }
+        java.util.Objects.requireNonNull(dayCount, "dayCount");
+        java.util.List<LocalDate> pay = calendar.schedule(start, end, paymentsPerYear, roll);
+        double pv = 0;
+        LocalDate prev = start;
+        for (LocalDate d : pay) {
+            double tau = dayCount.yearFraction(prev, d);
+            double fwd = projection.forwardRate(prev, d, dayCount);
+            double expiry = Math.max(0, discount.time(prev));
+            pv += tau * discount.discountFactor(d) * model.forwardValue(
+                    cap ? OptionType.CALL : OptionType.PUT, fwd, strike, vol, expiry);
+            prev = d;
         }
         return pv;
     }

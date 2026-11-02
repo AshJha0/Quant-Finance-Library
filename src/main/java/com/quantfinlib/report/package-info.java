@@ -7,4 +7,7 @@
  * CSV, PDF, or XLSX. Implement
  * {@link com.quantfinlib.report.ReportExporter} for custom formats.
  */
+@NullMarked
 package com.quantfinlib.report;
+
+import org.jspecify.annotations.NullMarked;

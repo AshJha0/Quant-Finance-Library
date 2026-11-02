@@ -135,9 +135,9 @@ sequenceDiagram
     participant Drop as 4. Index drops
     participant Reb as 5. Rebalance fill
 
-    Bar->>Div: ex-dates ≤ t: position × amount<br/>(holder of record at prior close; shorts pay)
+    Bar->>Div: ex-dates ≤ t: position × amount<br/>(holder of record at prior close, shorts pay)
     Bar->>Mrg: target to cash + acquirer shares<br/>(before delistings, so conversions land first)
-    Bar->>Del: position × lastClose × (1 + delistingReturn)<br/>(−100% = wiped out; Shumway −30% default)
+    Bar->>Del: position × lastClose × (1 + delistingReturn)<br/>(−100% = wiped out, Shumway −30% default)
     Bar->>Drop: still listed but out of the index:<br/>forced sale at this bar's close (fee charged)
     Bar->>Reb: weights decided at the previous close fill at this open<br/>(non-members capped at 0, dead names untradeable) via TradeCostModel
     Note over Div,Reb: symbols processed in sorted order:<br/>same inputs, same result, any JVM
@@ -1887,7 +1887,7 @@ infinite shock.
 
 The capital measure that replaced 10-day VaR: ES at 97.5%, scaled across
 liquidity horizons and calibrated to a stressed period, with the Basel
-traffic light watching the model's exceptions from the side (BCBS MAR33
+traffic light watching the model's exceptions from the side (BCBS MAR33.4-33.6
 for the ES, MAR32 for backtesting and P&L attribution).
 
 ```mermaid
@@ -1895,8 +1895,8 @@ flowchart TD
     LOSSES46["desk loss samples,<br/>10-day base horizon"]
     ES46["FrtbEs.es975 per factor subset:<br/>ES at 97.5%, Acerbi-Tasche estimator<br/>(250 days: worst six losses plus<br/>a quarter of the seventh, / 6.25)"]
     LH46["liquidity horizons LH_10 ... LH_120:<br/>how long each factor class takes<br/>to exit under stress: 10d major<br/>FX/rates, up to 120d exotic credit;<br/>esByHorizon[j] = ES with only<br/>factors of LH >= horizons[j] shocked"]
-    CASC46["FrtbEs.liquidityHorizonEs (MAR33.5):<br/>ES = sqrt( sum_j [ ES_j x<br/>sqrt((LH_j - LH_j-1)/10) ]^2 )"]
-    STRESS46["FrtbEs.stressCalibratedEs (MAR33):<br/>ES = ES_R,S x max(1, ES_F,C / ES_R,C)<br/>reduced set over the stressed period,<br/>scaled by full/reduced measured today;<br/>rejected if ES_R,C below 75% of ES_F,C"]
+    CASC46["FrtbEs.liquidityHorizonEs (MAR33.4):<br/>ES = sqrt( sum_j [ ES_j x<br/>sqrt((LH_j - LH_j-1)/10) ]^2 )"]
+    STRESS46["FrtbEs.stressCalibratedEs (MAR33.5-33.6):<br/>ES = ES_R,S x max(1, ES_F,C / ES_R,C)<br/>reduced set over the stressed period,<br/>scaled by full/reduced measured today;<br/>rejected if ES_R,C below 75% of ES_F,C"]
     CAP46(["the capital number<br/>(not implemented: desk approvals,<br/>NMRF capital, the SA floor)"])
 
     BT46["VarBacktest: Kupiec POF +<br/>Christoffersen independence +<br/>conditional coverage, with p-values;<br/>acerbiSzekelyZ2 for ES"]
@@ -1913,7 +1913,7 @@ flowchart TD
 ```
 
 The cascade is the subtle part and `liquidityHorizonEs` implements it
-exactly as MAR33.5 writes it: `esByHorizon[0]` is the full factor set at
+exactly as MAR33.4 writes it: `esByHorizon[0]` is the full factor set at
 LH 10, each later entry re-computes ES with only the slower factors still
 shocked, and the square-root-of-time weights apply to the differences
 between consecutive horizons. The stressed calibration takes as its base
@@ -3894,7 +3894,7 @@ this drills into.
 
 Diagram 46 walked the whole FRTB capital measure; this zooms into its one
 subtle box: how an ES computed at a 10-day base horizon is stretched across
-liquidity horizons. `FrtbEs.liquidityHorizonEs` implements MAR33.5 exactly,
+liquidity horizons. `FrtbEs.liquidityHorizonEs` implements MAR33.4 exactly,
 and the arithmetic rewards being read slowly.
 
 ```mermaid
@@ -4249,6 +4249,245 @@ validation, sizing and risk, execution, then persistence and reporting is
 diagram 19's line drawn as a map. The few cross-cluster arrows are the main
 flow of value; the fine structure of each box is a diagram of its own. Start
 anywhere: every cluster here has a zoom-in earlier in this file.
+
+---
+
+## 101. The two-curve bootstrap
+
+The OIS curve is built first and then frozen; the projection curve is
+solved with every cash flow discounted on it. Risk bumps one quote and
+rebuilds both curves.
+
+```mermaid
+flowchart TD
+    subgraph OISIN["OIS quotes"]
+        DEP_101["Deposit (overnight)"]
+        OIS_101["OisSwap strip"]
+    end
+    subgraph IDXIN["3M index quotes"]
+        D3_101["Deposit (3M)"]
+        FRA_101["Fra"]
+        FUT_101["RateFuture<br/>(less Hull-White convexity)"]
+        IRS_101["InterestRateSwap"]
+    end
+    subgraph BUILD101["MultiCurveBootstrap"]
+        B1_101["bootstrap<br/>solve P_ois pillar by pillar"]
+        B2_101["bootstrapProjection<br/>solve P_3m, discount on P_ois"]
+    end
+    INTERP_101["CurveInterpolation<br/>LOG_LINEAR_DISCOUNT or MONOTONE_CONVEX"]
+    PAIR_101["CurvePair<br/>(discount, projection)"]
+    PRICE_101["SwapPricer / RatesOptions<br/>two-curve overloads"]
+    RISK_101["MultiCurveRisk<br/>bucketedDv01 / keyRateDv01 / parallelDv01<br/>bump one quote, rebuild both"]
+
+    DEP_101 --> B1_101
+    OIS_101 --> B1_101
+    INTERP_101 --> B1_101
+    INTERP_101 --> B2_101
+    B1_101 --> B2_101
+    D3_101 --> B2_101
+    FRA_101 --> B2_101
+    FUT_101 --> B2_101
+    IRS_101 --> B2_101
+    B1_101 --> PAIR_101
+    B2_101 --> PAIR_101
+    PAIR_101 --> PRICE_101
+    PRICE_101 --> RISK_101
+    RISK_101 -. "rebuild per bump" .-> B1_101
+```
+
+The dotted edge is the cost of two-curve risk: every bucket is two full
+bootstraps (up and down bump). An OIS quote moves both curves, because the
+projection curve is solved against the discount curve; a 3M quote moves
+only the projection curve. See LEARN section 10d and COOKBOOK recipes 301
+and 302.
+
+---
+
+## 102. Exposure, CVA and wrong-way risk
+
+From a market model to a CVA charge. The exposure profile is computed
+once; independent CVA, DVA and the wrong-way overlay all read it.
+
+```mermaid
+flowchart LR
+    subgraph MKT102["ExposureSimulator.Market"]
+        HW_102["Hull-White short rate<br/>(mean reversion, vol)"]
+        FX_102["FX lognormal<br/>(optional, one pair)"]
+    end
+    TRADES_102["Swaps and FxForwards"]
+    CSA_102["Csa<br/>threshold, MTA, margin period"]
+    SIM_102["simulate<br/>revalue each trade on each path and date"]
+    PROF_102["ExposureProfile<br/>EE, ENE, PFE, EPE,<br/>bucket drivers per path"]
+    CPTY_102["counterparty CreditCurve"]
+    OWN_102["own CreditCurve"]
+    CVA_102["CvaApproximator.cva"]
+    DVA_102["CvaApproximator.dva"]
+    WWR_102["cvaWrongWay<br/>Gaussian copula on driver X"]
+
+    HW_102 --> SIM_102
+    FX_102 --> SIM_102
+    TRADES_102 --> SIM_102
+    CSA_102 --> SIM_102
+    SIM_102 --> PROF_102
+    PROF_102 --> CVA_102
+    PROF_102 --> DVA_102
+    PROF_102 --> WWR_102
+    CPTY_102 --> CVA_102
+    CPTY_102 --> WWR_102
+    OWN_102 --> DVA_102
+```
+
+The CSA enters inside the simulation, because collateral depends on the
+path; the credit curves enter only afterwards. Wrong-way risk reweights
+each path's default buckets by a driver taken from the same path (the factor
+level at each bucket date, or its move over the margin period under a CSA), so
+it needs no second simulation. See LEARN section 10f and recipes 305 and 306.
+
+---
+
+## 103. FIX session schedule and tag 789
+
+The life of a session under a `FixSessionSchedule`. A roll resets both
+sequence numbers; inside a period a reconnect resumes.
+
+```mermaid
+stateDiagram-v2
+    [*] --> OutOfWindow
+    OutOfWindow --> CheckPeriod: window opens
+    CheckPeriod --> Rolled: store period older than current
+    CheckPeriod --> Resume: same period
+    Rolled --> LoggingOn: counters set to 1, history discarded
+    Resume --> LoggingOn: keep counters
+    LoggingOn --> Established: Logon exchanged, peer 789 not above our next
+    LoggingOn --> Disconnected: peer 789 above our next outgoing number
+    Established --> Replaying: peer 789 below our next outgoing number
+    Replaying --> Established: gap resent
+    Established --> Disconnected: connection lost
+    Disconnected --> CheckPeriod: reconnect
+    Established --> OutOfWindow: window closes, Logout sent
+```
+
+The period check happens when the session is created, on Logon and on
+each timer tick, so a process restarted the next morning finds the saved
+period stale and rolls instead of resuming yesterday's numbers. A Logon
+outside the window is refused. See LEARN section 17b and recipes 325 and
+326.
+
+---
+
+## 104. Call auction: from call to continuous trading
+
+The phases of an `AuctionBook`. Nothing trades until the uncross; the
+residual moves to the continuous book.
+
+```mermaid
+flowchart LR
+    OPEN_104["openCall"]
+    COLLECT_104["submitLimit / submitMarket / cancel<br/>orders rest, nothing matches"]
+    IND_104["publishIndicative<br/>price, volume, imbalance"]
+    UNCROSS_104["uncross<br/>one price for all fills"]
+    RULE_104["price rule<br/>1 max V(p) = min(D(p), S(p))<br/>2 min abs(D - S)<br/>3 nearest reference price"]
+    RESID_104["transferResidual<br/>resting limits move in time order"]
+    CONT_104["HftOrderBook<br/>continuous trading"]
+
+    OPEN_104 --> COLLECT_104
+    COLLECT_104 --> IND_104
+    IND_104 --> COLLECT_104
+    IND_104 --> UNCROSS_104
+    RULE_104 --> UNCROSS_104
+    UNCROSS_104 --> RESID_104
+    RESID_104 --> CONT_104
+```
+
+The loop between collecting orders and publishing the indicative price is
+the price discovery: participants see the imbalance and add liquidity on
+the short side. In the LEARN example, buys of 100 at 10 and 200 at 9
+against sells of 150 at 8 and 100 at 9 uncross at 9 for 250 shares. See
+LEARN section 2b and recipe 330.
+
+---
+
+## 105. Factor risk model and the alpha pipeline around it
+
+How the factor model feeds construction, combination, attribution and
+capacity.
+
+```mermaid
+flowchart TD
+    subgraph IN105["Panel inputs"]
+        RET_105["returns T x N"]
+        STY_105["raw styles<br/>size, momentum, ..."]
+        SEC_105["sectors and caps"]
+    end
+    STD_105["standardise<br/>cap-weighted mean 0, sd 1, clip 3"]
+    WLS_105["daily WLS, sqrt(cap) weights<br/>sector constraint sum c_s f_s = 0"]
+    FCOV_105["factor covariance F<br/>EWMA, Newey-West, regime scaling"]
+    SPEC_105["specific variance D<br/>EWMA, size-bucket shrinkage"]
+    MODEL_105["FactorRiskModel<br/>V = X F X' + D"]
+    COMB_105["AlphaCombiner<br/>orthogonalise, horizon IC weights"]
+    BT_105["AlphaBacktester.run with RiskOptions<br/>Grinold alpha, QP with cost and ADV caps"]
+    ATTR_105["BacktestAttribution<br/>factor, specific, trading, cost"]
+    CAP_105["CapacityCurve<br/>net Sharpe against capital"]
+    DEC_105["decompose<br/>marginal, percent, factor shares"]
+
+    RET_105 --> WLS_105
+    STY_105 --> STD_105
+    SEC_105 --> STD_105
+    SEC_105 --> WLS_105
+    STD_105 --> WLS_105
+    WLS_105 --> FCOV_105
+    WLS_105 --> SPEC_105
+    FCOV_105 --> MODEL_105
+    SPEC_105 --> MODEL_105
+    MODEL_105 --> DEC_105
+    MODEL_105 --> BT_105
+    COMB_105 --> BT_105
+    BT_105 --> ATTR_105
+    MODEL_105 --> ATTR_105
+    BT_105 --> CAP_105
+```
+
+`AlphaRiskModels.estimate` builds the panel inputs from prices, so a
+backtest needs no fundamentals file. The model appears twice downstream:
+in the optimiser's risk penalty and again in attribution, where the same
+exposures split the P&L. See LEARN sections 8d to 8h and recipes 318 to
+322.
+
+---
+
+## 106. StrategyRunner: one strategy, three engines
+
+The same `TradingStrategy` on the same tape through three engines, under
+one parity contract.
+
+```mermaid
+flowchart LR
+    STRAT_106["TradingStrategy"]
+    TAPE_106["BarSeries tape"]
+    WRITE_106["writeTape<br/>one print per bar at the close"]
+    BAR_106["BAR_BACKTESTER<br/>Backtester, close fills,<br/>fractional shares"]
+    TICK_106["TICK_BACKTESTER<br/>TickBacktester,<br/>whole shares"]
+    PAPER_106["PAPER_GATEWAY<br/>PaperTradingGateway,<br/>bid = ask = close"]
+    FILLS_106["Run.fills<br/>(index, side, price, quantity)"]
+    CMP_106["compare<br/>tick = paper always,<br/>bar = tick when cash/price is whole"]
+
+    STRAT_106 --> BAR_106
+    STRAT_106 --> TICK_106
+    STRAT_106 --> PAPER_106
+    TAPE_106 --> BAR_106
+    TAPE_106 --> WRITE_106
+    WRITE_106 --> TICK_106
+    WRITE_106 --> PAPER_106
+    BAR_106 --> FILLS_106
+    TICK_106 --> FILLS_106
+    PAPER_106 --> FILLS_106
+    FILLS_106 --> CMP_106
+```
+
+The contract is close fills, no costs and all-in long only, the one
+setting in which the three fill models coincide. A difference in fills
+under it points at an engine, not at the strategy. See LEARN section 11b
+and recipe 324.
 
 ---
 

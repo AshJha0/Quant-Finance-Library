@@ -29,6 +29,8 @@ import com.quantfinlib.util.MathUtils;
 public final class VarianceRatio {
 
     /**
+     * Variance ratio and its z statistic.
+     *
      * @param ratio VR(q): 1 = random walk, &gt; 1 trending, &lt; 1 reverting
      * @param zStat homoskedastic z; |z| &gt; ~2 rejects the random walk
      */
@@ -44,6 +46,8 @@ public final class VarianceRatio {
     }
 
     /**
+     * Runs the Lo-MacKinlay (1988) variance ratio test.
+     *
      * @param returns 1-period returns, ≥ 10·q finite observations
      * @param q       aggregation horizon, ≥ 2 (VR(1) ≡ 1 needs no test)
      */

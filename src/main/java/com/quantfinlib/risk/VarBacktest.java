@@ -63,6 +63,8 @@ public final class VarBacktest {
     }
 
     /**
+     * Backtests a VaR forecast series.
+     *
      * @param returns      realized periodic returns
      * @param varForecasts VaR forecast for each period as a positive loss
      *                     fraction, aligned with {@code returns}

@@ -26,6 +26,8 @@ public final class TransactionCostAnalyzer {
     }
 
     /**
+     * Transaction cost analysis of one parent order's fills.
+     *
      * @param fills     the child fills of one parent order (all same side)
      * @param arrivalMid market mid when the parent order was created
      * @param marketVwap market VWAP over the execution interval (or a

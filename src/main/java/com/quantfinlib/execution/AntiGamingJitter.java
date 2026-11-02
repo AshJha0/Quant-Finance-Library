@@ -79,10 +79,16 @@ public final class AntiGamingJitter {
     }
 
     /**
-     * Jitters firing times within their intervals: each time moves
-     * ±{@code timeFraction} of the gap to its neighbors, strict
-     * monotonicity preserved, first/last never escape
-     * [{@code startNanos}, original end].
+     * Jitters firing times within their intervals. Each time moves back by at
+     * most {@code timeFraction} of the gap to its original predecessor (or to
+     * {@code startNanos}) and forward by at most {@code timeFraction} of the
+     * gap to its original successor; the last time never moves forward. Both
+     * bounds come from the original schedule only, and each is also held
+     * below half its gap, so two neighbours can never meet: consecutive
+     * outputs stay at least {@code g (1 - 2 timeFraction) - 1} nanoseconds
+     * apart, where {@code g} is their original gap. Strictly increasing,
+     * first time not before {@code startNanos}, last not after the original
+     * end.
      */
     public long[] jitterTimes(long[] timesNanos, long startNanos) {
         long[] out = timesNanos.clone();
@@ -95,14 +101,18 @@ public final class AntiGamingJitter {
             throw new IllegalArgumentException("first time is before start");
         }
         for (int i = 0; i < out.length; i++) {
-            long lo = i == 0 ? startNanos : out[i - 1] + 1;
-            long hi = i == out.length - 1 ? timesNanos[out.length - 1]
-                    : out[i + 1] - 1;      // next entry not yet jittered: safe bound
             long gapBefore = timesNanos[i] - (i == 0 ? startNanos : timesNanos[i - 1]);
-            long maxShift = (long) Math.floor(gapBefore * timeFraction);
-            long shifted = timesNanos[i]
-                    + Math.round((2 * rnd.nextDouble() - 1) * maxShift);
-            out[i] = Math.max(lo, Math.min(hi, shifted));
+            long back = (long) Math.floor(gapBefore * timeFraction);
+            if (i > 0) {
+                back = Math.min(back, (gapBefore - 1) / 2);
+            }
+            long forward = 0;
+            if (i + 1 < out.length) {
+                long gapAfter = timesNanos[i + 1] - timesNanos[i];
+                forward = Math.min((long) Math.floor(gapAfter * timeFraction), (gapAfter - 1) / 2);
+            }
+            double u = 2 * rnd.nextDouble() - 1;
+            out[i] = timesNanos[i] + Math.round(u * (u >= 0 ? forward : back));
         }
         return out;
     }

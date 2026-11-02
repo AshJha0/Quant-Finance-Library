@@ -35,6 +35,8 @@ import com.quantfinlib.orderbook.Side;
 public final class ExecutionAlgoBacktester {
 
     /**
+     * Execution simulation settings.
+     *
      * @param spreadBps        assumed quoted spread in bps of the close
      *                         (bars carry no quotes) — the spread input
      *                         the executor damps on

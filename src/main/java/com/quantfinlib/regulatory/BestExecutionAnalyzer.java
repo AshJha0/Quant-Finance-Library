@@ -3,7 +3,6 @@ package com.quantfinlib.regulatory;
 import com.quantfinlib.orderbook.Side;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,6 +20,10 @@ import java.util.Map;
  * execution was worse than the benchmark for the order's side.</p>
  */
 public final class BestExecutionAnalyzer {
+    /** Creates an instance; the explicit form of the default constructor. */
+    public BestExecutionAnalyzer() {
+    }
+
 
     /** One parent order outcome. Unfilled orders: {@code filled=false}, price/latency ignored. */
     public record OrderOutcome(String orderId, String venue, Side side, long quantity,
@@ -29,6 +32,8 @@ public final class BestExecutionAnalyzer {
     }
 
     /**
+     * Best-execution summary.
+     *
      * @param avgSlippageBps          simple mean over filled orders (NaN when none filled)
      * @param quantityWeightedSlippageBps notional-weighted mean over filled orders
      *                                    (NaN when none filled)
@@ -112,6 +117,8 @@ public final class BestExecutionAnalyzer {
     }
 
     /**
+     * Decomposes implementation shortfall into its components.
+     *
      * @param fillQty    executed quantities (positive)
      * @param fillPrice  matching execution prices
      * @param unfilledQty quantity of the order never executed, &ge; 0
@@ -149,9 +156,6 @@ public final class BestExecutionAnalyzer {
         if (values.isEmpty()) {
             return Double.NaN;
         }
-        double[] a = values.stream().mapToDouble(Double::doubleValue).toArray();
-        Arrays.sort(a);
-        int n = a.length;
-        return n % 2 == 1 ? a[n / 2] : (a[n / 2 - 1] + a[n / 2]) / 2;
+        return com.quantfinlib.stats.Stats.median(values.stream().mapToDouble(Double::doubleValue).toArray());
     }
 }

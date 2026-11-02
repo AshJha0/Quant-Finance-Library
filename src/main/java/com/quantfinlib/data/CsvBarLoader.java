@@ -1,5 +1,6 @@
 package com.quantfinlib.data;
 
+import com.quantfinlib.core.MalformedDataException;
 import com.quantfinlib.core.Bar;
 import com.quantfinlib.core.BarSeries;
 
@@ -40,7 +41,7 @@ public final class CsvBarLoader {
 
     public static BarSeries parse(List<String> lines, String symbol) {
         if (lines.isEmpty()) {
-            throw new IllegalArgumentException("empty CSV");
+            throw new MalformedDataException("empty CSV");
         }
         String headerLine = lines.getFirst().replace("﻿", "");   // strip BOM
         // Delimiter is a file-level fact: a semicolon-delimited file is the
@@ -66,7 +67,7 @@ public final class CsvBarLoader {
             }
         }
         if (tsCol < 0 || oCol < 0 || hCol < 0 || lCol < 0 || cCol < 0) {
-            throw new IllegalArgumentException(
+            throw new MalformedDataException(
                     "CSV must have timestamp/date, open, high, low, close columns; got: " + headerLine);
         }
 
@@ -92,7 +93,7 @@ public final class CsvBarLoader {
                     vCol >= 0 && vCol < cells.length ? parseNumber(cells[vCol], semicolon) : 0));
         }
         if (bars.isEmpty()) {
-            throw new IllegalArgumentException("CSV has a header but no data rows");
+            throw new MalformedDataException("CSV has a header but no data rows");
         }
         // Whole-file epoch-seconds detection: if every numeric timestamp sits in the
         // plausible seconds range (years 1973..5138), the file is in seconds.

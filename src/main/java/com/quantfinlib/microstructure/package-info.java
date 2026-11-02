@@ -86,4 +86,7 @@
  * {@link com.quantfinlib.microstructure.KalmanBeta} (time-varying hedge
  * ratio by Kalman filter, with its own uncertainty estimate).</p>
  */
+@NullMarked
 package com.quantfinlib.microstructure;
+
+import org.jspecify.annotations.NullMarked;

@@ -15,4 +15,7 @@
  * bond's DV01 lives — per-node bumps whose slices sum back to the
  * parallel move, tested).
  */
+@NullMarked
 package com.quantfinlib.rates;
+
+import org.jspecify.annotations.NullMarked;

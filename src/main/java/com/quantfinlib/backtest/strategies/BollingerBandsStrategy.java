@@ -49,7 +49,8 @@ public final class BollingerBandsStrategy implements TradingStrategy {
         if (close[i] < lower[i]) {
             return Signal.BUY;
         }
-        if (close[i] >= middle[i] && close[i] > upper[i] || close[i] >= middle[i] && i > 0 && close[i - 1] < middle[i - 1]) {
+        if ((close[i] >= middle[i] && close[i] > upper[i])
+                || (close[i] >= middle[i] && i > 0 && close[i - 1] < middle[i - 1])) {
             return Signal.SELL;
         }
         return Signal.HOLD;

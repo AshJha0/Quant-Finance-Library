@@ -53,7 +53,8 @@ public final class TickFileReader {
     }
 
     /** Thrown when a file is cut short or corrupt; ticks before the damage were delivered. */
-    public static final class TruncatedTickFileException extends IOException {
+    public static final class TruncatedTickFileException extends IOException
+            implements com.quantfinlib.core.QuantFinException {
 
         private static final long serialVersionUID = 1L;
 

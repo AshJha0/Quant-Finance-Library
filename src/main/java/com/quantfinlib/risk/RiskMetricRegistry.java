@@ -9,6 +9,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * metrics, evaluated together over a return series.
  */
 public final class RiskMetricRegistry {
+    /** Creates an instance; the explicit form of the default constructor. */
+    public RiskMetricRegistry() {
+    }
+
 
     private final Map<String, RiskMetric> metrics = new ConcurrentHashMap<>();
 

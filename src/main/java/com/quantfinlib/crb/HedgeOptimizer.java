@@ -40,6 +40,8 @@ public final class HedgeOptimizer {
     }
 
     /**
+     * Computes hedge notionals for the given factor exposures.
+     *
      * @param exposures  factor exposures e (length n)
      * @param covariance n×n factor covariance Σ
      * @param loadings   loadings[f][i] — factor f exposure created by one

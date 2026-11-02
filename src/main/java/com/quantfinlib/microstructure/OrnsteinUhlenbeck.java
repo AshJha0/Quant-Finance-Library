@@ -35,6 +35,8 @@ package com.quantfinlib.microstructure;
 public final class OrnsteinUhlenbeck {
 
     /**
+     * Fitted process parameters.
+     *
      * @param kappa    mean-reversion speed, per unit of {@code dt}'s time
      * @param theta    long-run mean
      * @param sigma    diffusion volatility (same time units as κ)

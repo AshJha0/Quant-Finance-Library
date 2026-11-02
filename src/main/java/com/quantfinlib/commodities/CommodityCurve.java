@@ -47,6 +47,8 @@ public final class CommodityCurve {
     }
 
     /**
+     * Builds a curve from the spot and futures prices.
+     *
      * @param spot        spot price, &gt; 0
      * @param tenorYears  ascending futures tenors, all &gt; 0
      * @param prices      futures prices per tenor, all &gt; 0

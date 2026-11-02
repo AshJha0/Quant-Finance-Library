@@ -16,6 +16,10 @@ import java.util.Set;
  * headroom. Designed to be evaluated synchronously on the order path.
  */
 public final class PreTradeLimitChecker {
+    /** Creates an instance; the explicit form of the default constructor. */
+    public PreTradeLimitChecker() {
+    }
+
 
     public record OrderRequest(String symbol, Side side, long quantity, double price,
                                String counterparty) {
@@ -67,6 +71,8 @@ public final class PreTradeLimitChecker {
     }
 
     /**
+     * Checks an order against the pre-trade limits.
+     *
      * @param referenceMid          current market mid for the collar check (NaN skips it)
      * @param currentPositionQty    signed current position in the symbol
      * @param counterpartyExposure  current total exposure to the order's counterparty

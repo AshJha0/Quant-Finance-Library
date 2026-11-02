@@ -56,4 +56,7 @@
  * Shared statistics: {@link com.quantfinlib.alpha.NeweyWest},
  * {@link com.quantfinlib.alpha.Ols}.</p>
  */
+@NullMarked
 package com.quantfinlib.alpha;
+
+import org.jspecify.annotations.NullMarked;

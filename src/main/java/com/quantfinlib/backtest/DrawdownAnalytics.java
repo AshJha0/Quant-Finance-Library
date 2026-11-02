@@ -51,6 +51,8 @@ public final class DrawdownAnalytics {
     }
 
     /**
+     * Drawdown statistics of an equity curve.
+     *
      * @param maxDepth       deepest episode's depth (0 if equity never dips)
      * @param maxDuration    longest episode duration in periods
      * @param timeUnderWater fraction of periods below the running peak
@@ -66,7 +68,11 @@ public final class DrawdownAnalytics {
     private DrawdownAnalytics() {
     }
 
-    /** @param equity equity curve, &ge; 2 points, all finite and &gt; 0 */
+    /**
+     * Analyses the drawdowns of an equity curve.
+     *
+     * @param equity equity curve, &ge; 2 points, all finite and &gt; 0
+     */
     public static Result analyze(double[] equity) {
         int n = equity.length;
         if (n < 2) {

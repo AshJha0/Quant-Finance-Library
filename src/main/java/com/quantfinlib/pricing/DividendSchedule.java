@@ -31,7 +31,7 @@ import com.quantfinlib.pricing.BlackScholes.OptionType;
  * dividends", Risk) and is markedly closer to the exact jump model for
  * European options. Neither adjustment is right for American exercise just
  * before an ex-date; that needs a tree or grid with the cash drop applied at
- * the ex-date, which this library does not provide.</p>
+ * the ex-date: {@link DividendTree}.</p>
  *
  * <p>A dividend with ex-time equal to the horizon is included (the holder at
  * expiry does not receive it in the convention used here).</p>
@@ -52,6 +52,8 @@ public final class DividendSchedule {
     }
 
     /**
+     * Builds a schedule of discrete cash dividends.
+     *
      * @param exTimesYears ex-dividend times in years from valuation, ascending
      * @param amounts      cash amounts per share, aligned with the times
      */
@@ -135,5 +137,15 @@ public final class DividendSchedule {
 
     public int count() {
         return exTimes.length;
+    }
+
+    /** Ex-dividend time of dividend {@code i}, in years from valuation. */
+    public double exTime(int i) {
+        return exTimes[i];
+    }
+
+    /** Cash amount per share of dividend {@code i}. */
+    public double amount(int i) {
+        return amounts[i];
     }
 }

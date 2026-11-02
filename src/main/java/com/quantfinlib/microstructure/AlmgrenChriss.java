@@ -19,6 +19,8 @@ import java.util.List;
 public final class AlmgrenChriss {
 
     /**
+     * Model inputs.
+     *
      * @param totalShares     X, the parent order size
      * @param horizon         T, execution horizon (in the chosen time unit)
      * @param intervals       N trading intervals
