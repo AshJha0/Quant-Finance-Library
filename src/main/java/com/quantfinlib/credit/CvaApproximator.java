@@ -467,7 +467,7 @@ public final class CvaApproximator {
                     next = 0.5 * (lo + hi);
                 }
             }
-            if (next == a) {
+            if (Math.abs(next - a) <= 1e-15 * Math.max(1, Math.abs(a))) {
                 return a;
             }
             a = next;
