@@ -6,6 +6,46 @@ Entries for 1.x releases are archived in [docs/history/CHANGELOG-1.x.md](docs/hi
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-11-02
+
+Major release: the module split announced in 3.2.0, with CAT moved to IM Technical Specifications v4.2.0 r4 (CAT-LK06 to LK09) and EMIR-VR-1003-01 for third-country venues. No number changes. Every move and removal below was announced, and every removed type deprecated with its replacement, in 3.2.0. [docs/MIGRATION_4.0.md](docs/MIGRATION_4.0.md) has one row per break with the import and dependency to change; japicmp against the 3.2.0 jars reports semver MAJOR, and its gate excludes exactly those rows and fails on anything else.
+
+Owner decision, 2026-11-02: the revised design in [docs/DESIGN_4.0.md](docs/DESIGN_4.0.md) is accepted. The packages that stable code depends on (`execution`, `microstructure`, `persist`, `screener`, `ml` and most of `data`) stay in the stable jar, because moving them would create module cycles; `-research` holds only `dsl`.
+
+#### Added
+
+- CAT: `CatLinkageChecker` checks the 47 Table 59/60 option and multi-leg types that 3.2 record-checked only, each with the keys of its own table's linkage list: internal routes and child orders assign an Order Key and must name an order in scope by their Parent Order Key (CAT-LK06); modifications that carry a prior key link through it and assign a new one; route, internal-route, child-order, request, adjustment and effective events need their Order Key in scope (CAT-LK07), quote events their Quote Key (CAT-LK08), MOFA and MOAA their Fulfillment or Allocation Key (CAT-LK09). `rules()` 5 -> 9. Batches of the 3.1 types alone give the same issues. MIGRATION_4.0 row 9; COOKBOOK 491-494; LEARN 17m.
+- EMIR: `EmirStatefulValidator.withThirdCountryMarkets(ThirdCountryMarkets)`, with `ThirdCountryMarkets` and `InMemoryThirdCountryMarkets`. EMIR-VR-1003-01 now decides a venue outside the EEA when the caller supplies the list of third-country markets considered equivalent to a regulated market (EMIR Article 2a; ESMA74-362-2683, sheet Validations_Cpty_derivative, row 7, column AC, condition 1): listed on the date of 2.42 means 1.3 must be blank, otherwise populated. No list is bundled (ESMA publishes it; it is not on disk). Opt-in: without the list a non-EEA venue skips the rule, as in 3.x. Recipe 490, LEARN 17i.
+
+#### Deprecated
+
+- CAT: `CatEventType.MONQ`, `MORQ`, `MOQR`, `MOQC`, `MOQM`, `MLNQ`, `MLRQ`, `MLQS`, `MLQR`, `MLQC`, `MLQM` and `CatEventBuilder.newOptionQuote()`, for removal in 5.0.0: CAT IM Technical Specifications v4.2.0 no longer defines the option and multi-leg quote events. They keep their v4.1.0 r14 rules until then.
+
+#### Removed
+
+- `rates.SwapPricer` (deprecated since 3.1.0; use the convention-driven leg model, MIGRATION_3.1 section 1).
+- `fx.AggregatedBook` (use `marketdata.AggregatedBook` in the low-latency jar, added in 3.2.0).
+- `data.CsvBarLoader`, `data.HttpBarFetcher`, `data.UniverseCsvLoader` (use the `io` classes, added in 3.2.0).
+
+#### Moved
+
+- `io` and `report` to the new artifact `quant-finance-library-io` (module `com.quantfinlib.io`).
+- `dsl` to the new artifact `quant-finance-library-research` (module `com.quantfinlib.research`).
+- `rfq`, `marketdata.tick` and `backtest.tick` to `quant-finance-library-lowlatency`, so that each package hierarchy lives in one module.
+- `cli` and `backtest.strategies` to the low-latency `examples` classifier jar, with the demos. It is not a module and is not under any stability promise.
+
+#### Changed
+
+- The stable module `com.quantfinlib` requires only `java.base` (and JSpecify, compile time only). It no longer requires `java.net.http`; `com.quantfinlib.io` requires it, and the low-latency module requires it transitively.
+- New artifacts `quant-finance-library-io` and `quant-finance-library-research`, both incubating ([docs/STABILITY.md](docs/STABILITY.md)), both requiring the stable module transitively. Release builds attach a jar, sources, javadoc and CycloneDX SBOM for each.
+- New tests: `ModuleGraphTest` fails on a module cycle or a package in two modules; the stable descriptor test fails if `jdeps` finds `java.net.http` or `jdk.httpserver` in core; descriptor tests for the two new modules.
+- CAT: the transcription follows CAT IM Technical Specifications v4.2.0 r4 (10/21/2026) instead of v4.1.0 r14. The bundled resource is `cat-im-schema-subset-4.2.0r4.json` (55 events; the 4.1.0r14 file is gone); the five MENQ RFQ fields v4.2.0 retires are dropped; rule citations, `CHECKED_AGAINST*` and the table in CAT-R22/R23 messages use v4.2.0 r4 numbers. Field content of the 55 events is unchanged from v4.1.0 r14. `scripts/cat-transcription/gen2.py` takes the version (and still re-derives the 3.2 file byte for byte with `4.1.0r14`); it now removes a page header that split the MOAA price sentence. The 16 lines of `cat-official-schema-deltas.txt` are resolved: the comparison with the official 4.2.0 schema finds no difference.
+- The japicmp baseline moves from 3.0.0 to 3.2.0 (`scripts/fetch-api-baseline.sh`).
+
+#### Fixed
+
+- `trading.HftOrderGateway`: on a venue cancel or reject (and an order rejected after a kill) the reservation is now released before the CANCELED or REJECTED state is published, as fills already did. Before, a thread that saw the terminal status could still read the old open quantity in the risk gate for a moment (exposure overstated, the conservative side); `OrderLifecycleTest.restingOrdersCountAgainstThePositionLimit` failed once on Windows CI from this. A repeated cancel or reject still releases nothing.
+
 ## [3.2.0] - 2026-11-02
 
 Minor release, additive over 3.1.0: no public member is removed, no signature changes, and no existing result changes unless noted under Fixed. japicmp against the released 3.0.0 jars: semver MINOR for both modules, no allow-list. It is the last 3.x release before 4.0.0, which follows it directly and removes everything deprecated for removal here; [docs/MIGRATION_4.0.md](docs/MIGRATION_4.0.md) lists each move with its new dependency.

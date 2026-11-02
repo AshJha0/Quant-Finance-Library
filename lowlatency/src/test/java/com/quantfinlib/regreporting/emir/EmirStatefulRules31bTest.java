@@ -113,6 +113,51 @@ class EmirStatefulRules31bTest {
         }
     }
 
+    @Test
+    void venueRuleRow7ThirdCountry() {
+        Map<String, MicRecord> m = Map.of(
+                "XPAR", new MicRecord("XPAR", "XPAR", "Euronext Paris", MicStatus.ACTIVE, "FR", "RMKT", null, null),
+                "XNYS", new MicRecord("XNYS", "XNYS", "NYSE", MicStatus.ACTIVE, "US", "RMKT", null, null),
+                "XNOC", new MicRecord("XNOC", "XNOC", "No country", MicStatus.ACTIVE, "", "RMKT", null, null));
+        MicRegistry mics = mic -> Optional.ofNullable(m.get(mic));
+        InMemoryThirdCountryMarkets list = new InMemoryThirdCountryMarkets().add("XNYS", LocalDate.of(2020, 1, 1));
+        EmirStatefulValidator v = EmirStatefulValidator.create().withMicRegistry(mics).withThirdCountryMarkets(list);
+        // listed on the trade date: 1.3 must be blank
+        assertTrue(with(v.validate(venue("XNYS", "")), "EMIR-VR-1003-01").isEmpty());
+        assertEquals(1, with(v.validate(venue("XNYS", LEI_A)), "EMIR-VR-1003-01").size());
+        // not listed: 1.3 must be populated
+        EmirStatefulValidator empty = EmirStatefulValidator.create().withMicRegistry(mics)
+                .withThirdCountryMarkets(new InMemoryThirdCountryMarkets());
+        assertEquals(1, with(empty.validate(venue("XNYS", "")), "EMIR-VR-1003-01").size());
+        assertTrue(with(empty.validate(venue("XNYS", LEI_A)), "EMIR-VR-1003-01").isEmpty());
+        // listing expired before the trade
+        EmirStatefulValidator expired = EmirStatefulValidator.create().withMicRegistry(mics).withThirdCountryMarkets(
+                new InMemoryThirdCountryMarkets().add("XNYS", LocalDate.of(2020, 1, 1), LocalDate.of(2026, 3, 1)));
+        assertEquals(1, with(expired.validate(venue("XNYS", "")), "EMIR-VR-1003-01").size());
+        // EEA venues unchanged; unknown country still skips; default (no list) still skips XNYS
+        assertTrue(with(v.validate(venue("XPAR", "")), "EMIR-VR-1003-01").isEmpty());
+        assertTrue(with(v.validate(venue("XNOC", "")), "EMIR-VR-1003-01").isEmpty());
+        EmirStatefulValidator plain = EmirStatefulValidator.create().withMicRegistry(mics);
+        assertTrue(with(plain.validate(venue("XNYS", "")), "EMIR-VR-1003-01").isEmpty());
+        // the list survives later with... calls
+        assertEquals(1, with(empty.withColumnAdCodes().validate(venue("XNYS", "")), "EMIR-VR-1003-01").size());
+    }
+
+    @Test
+    void inMemoryThirdCountryMarkets() {
+        InMemoryThirdCountryMarkets l = new InMemoryThirdCountryMarkets()
+                .add("XNYS", LocalDate.of(2020, 1, 1), LocalDate.of(2021, 1, 1))
+                .add("XNYS", LocalDate.of(2023, 1, 1));
+        assertTrue(l.isEquivalent("XNYS", LocalDate.of(2020, 1, 1)));
+        assertTrue(l.isEquivalent("XNYS", LocalDate.of(2021, 1, 1)));
+        assertTrue(!l.isEquivalent("XNYS", LocalDate.of(2022, 6, 1)));
+        assertTrue(l.isEquivalent("XNYS", LocalDate.of(2026, 3, 2)));
+        assertTrue(!l.isEquivalent("XNYS", LocalDate.of(2019, 12, 31)));
+        assertTrue(!l.isEquivalent("XNAS", LocalDate.of(2026, 3, 2)));
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> l.add("X", LocalDate.of(2026, 1, 2), LocalDate.of(2026, 1, 1)));
+    }
+
     private static EmirRefitReport venue(String mic, String responsible) {
         return trade(EmirActionType.NEWT, UTI).field("venueOfExecution", mic).entityResponsible(responsible).build();
     }

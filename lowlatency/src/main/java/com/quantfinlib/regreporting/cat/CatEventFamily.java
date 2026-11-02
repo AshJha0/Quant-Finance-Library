@@ -2,8 +2,8 @@ package com.quantfinlib.regreporting.cat;
 
 /**
  * The family of a CAT event type: the grouping used by the event summaries of CAT Reporting
- * Technical Specifications for Industry Members v4.1.0 r14, Table 15 (equity), Table 60
- * (simple option) and Table 61 (multi-leg option). See {@link CatEventType#family()}.
+ * Technical Specifications for Industry Members v4.2.0 r4, Table 14 (equity), Table 59
+ * (simple option) and Table 60 (multi-leg option). See {@link CatEventType#family()}.
  *
  * @since 3.2.0
  */

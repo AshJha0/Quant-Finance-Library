@@ -291,7 +291,7 @@ Euler (never sources volatility from a negative rate).
 ### 10c. Credit, commodities, indexes and private markets
 
 One instrument was still missing from 10b: the swap itself. The curve
-was bootstrapped from par swaps, and `rates/SwapPricer.java` closes the
+was bootstrapped from par swaps, and the swap pricer (in 4.0 `rates/VanillaSwap.java`; up to 3.x also a single-curve helper class) closes the
 loop by pricing an actual swap position off it: the fixed-leg annuity is
 `sum DF(t_i)`, the par rate is `(1 - DF(T)) / annuity` (the float leg is
 worth par in a single-curve world, so it needs no forecasting), and a
@@ -486,10 +486,10 @@ and `InterestRateSwap`, all implementing `CurveInstrument`;
 `rates/CurveInterpolation.java` (`LOG_LINEAR_DISCOUNT`,
 `MONOTONE_CONVEX`); `rates/MultiCurveRisk.java` (`buildCurves`,
 `bucketedDv01`, `keyRateDv01` with Ho 1992 hat weights, `parallelDv01`);
-two-curve overloads in `SwapPricer` and `RatesOptions.swaption` and
-`capFloor`. The single-curve methods are unchanged. Recipes 301 and 302.
-Since 3.1 a traded swap is better priced with the leg model below
-(`SwapPricer` is deprecated, `docs/MIGRATION_3.1.md`).
+two-curve methods on `InterestRateSwap` and `RatesOptions.swaption` and
+`capFloor`. Recipes 301 and 302. A traded swap is priced with the leg model
+below; the old single-curve swap pricer, deprecated in 3.1, was removed in 4.0
+(`docs/MIGRATION_4.0.md`).
 
 #### 10d.1 Lookback, observation shift, lockout and payment lag
 

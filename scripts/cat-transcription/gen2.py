@@ -1,6 +1,7 @@
-# Regenerates the bundled CAT schema transcription (cat-im-schema-subset-4.1.0r14.json).
+# Regenerates the bundled CAT schema transcription (cat-im-schema-subset-4.2.0r4.json).
 # Input: cat-raw.txt in this directory = `pdftotext -raw` of the CAT IM Technical
-# Specifications v4.1.0 r14 (not committed). Run from this directory: python gen2.py
+# Specifications (not committed). Run from this directory: python gen2.py [4.2.0r4|4.1.0r14]
+# (default 4.2.0r4, the 10/21/2026 CLEAN file; 4.1.0r14 re-derives the 3.2 transcription).
 # Output: schema.json (copy over the bundled resource) and meta.json (per-type rules,
 # read by genjava.py). See docs/learn/04-technology.md section 17n.
 import json,re,sys
@@ -8,9 +9,21 @@ exec(open('parse.py').read().split('for n in sys.argv')[0])
 exec(open('parse2.py').read())
 g=open('gen_schema.py').read()
 exec(g[g.index('FULL='):g.index('events=[]')])
-OLD=[16,17,18,39,48,52,62,63,64,70,79,83,85,90,92,100,102,126,139]
-SIMPLE=[65,66,67,68,69,71,72,73,74,75,76,77,78,80,81,82,84,86,87,88,89,94,96,97,98,99]
-MULTI=[104,106,107,109,111,113,114,116,117,119,121,122,124,127,128,130,132,134,136,137,141]
+VER=sys.argv[1] if len(sys.argv)>1 else "4.2.0r4"
+if VER=="4.1.0r14":
+    OLD=[16,17,18,39,48,52,62,63,64,70,79,83,85,90,92,100,102,126,139]
+    SIMPLE=[65,66,67,68,69,71,72,73,74,75,76,77,78,80,81,82,84,86,87,88,89,94,96,97,98,99]
+    MULTI=[104,106,107,109,111,113,114,116,117,119,121,122,124,127,128,130,132,134,136,137,141]
+    SPEC="v4.1.0 r14 (2026-02-13)"; LAYOUT="6.1.5.2"; NOTE=""
+else:
+    # 4.2.0 renumbers the tables (one fewer before Table 38) and drops the option and
+    # multi-leg quote events (4.1.0 r14 Tables 85-89 and 128-137): MONQ, MORQ, MOQR, MOQC,
+    # MOQM, MLNQ, MLRQ, MLQS, MLQR, MLQC, MLQM.
+    OLD=[15,16,17,38,47,51,61,62,63,69,78,82,84,86,94,96,120,122]
+    SIMPLE=[64,65,66,67,68,70,71,72,73,74,75,76,77,79,80,81,83,88,90,91,92,93]
+    MULTI=[98,100,101,103,105,107,108,110,111,113,115,116,118,121,124]
+    SPEC="v4.2.0 r4 (2026-10-21)"; LAYOUT="6.1.4.2"
+    NOTE=" Since 4.0.0 (v4.2.0 r4): the option and multi-leg quote events of v4.1.0 r14 are not in v4.2.0 and are left out; the MENQ RFQ fields v4.2.0 retires are left out as retired."
 COMMON={"actionType","firmROEID","type","symbol","eventTimestamp"}
 def block(n,field):
     start=[i for i,l in enumerate(L) if l.startswith(f"Table {n}:")][-1]
@@ -47,6 +60,8 @@ for n in OLD+SIMPLE+MULTI:
     events.append({"eventName":name,"source":f"Table {n}","fields":fields})
     if n in OLD: continue
     pb,ps=block(n,'price')
+    # a page break inside the cell inserts the running header (4.2.0 r4 Table 92 seq 13)
+    pb=re.sub(r" R \x0cVersion \d\.\d\.\d r\d+ \d+ .*?Include Key "," ",pb)
     names=[f['name'] for f in fields]
     m={"n":n,"name":name,"title":title,"req":req,"bools":bools,"multi":n in MULTI,
        "nonneg":ps if 'greater than or equal to zero' in pb else None,
@@ -66,8 +81,8 @@ for c in choices:
     if c['name']=='side' and c.get('eventNames')==["MONO","MOOR","MOOA","MOOM"]: c['eventNames']+=side_new
     if c['name']=='senderType': c['eventNames']+=[m['name'] for m in meta if m['senderType'] and m['name'] not in('MOQR','MLQR')]
     if c['name']=='fulfillmentLinkType' and c['eventNames']==["MOOF"]: c['eventNames'].append("MOFA")
-choices.append({"name":"senderType","eventNames":["MOQR","MLQR"],"values":["F","N","S"],"source":"Appendix G, senderType (quote events)"})
+if VER=="4.1.0r14": choices.append({"name":"senderType","eventNames":["MOQR","MLQR"],"values":["F","N","S"],"source":"Appendix G, senderType (quote events)"})
 TABLES=OLD+SIMPLE+MULTI
-doc={"_provenance":"Library transcription, NOT the official CAT Industry Member Schema file. Field names, data types, Include Key and CSV positions of CAT Reporting Technical Specifications for Industry Members v4.1.0 r14 (2026-02-13) Tables "+", ".join(map(str,TABLES))+"; choice values from Appendix G; layout per section 6.1.5.2. Retired and reserved positions left out. Generated with pdftotext -raw and a transcription script kept in the QFL review notes (v3.1b_handback_cat.md, v32_handback_cat.md). Since 3.2.0: destination and senderIMID read as 'Industry Member ID / Exchange ID' where the table prints both (a JSON array of alternatives), found by comparison with the official 4.2.0 file.",
- "schemaVersion":"4.1.0","eventDefinitions":events,"choices":choices}
+doc={"_provenance":"Library transcription, NOT the official CAT Industry Member Schema file. Field names, data types, Include Key and CSV positions of CAT Reporting Technical Specifications for Industry Members "+SPEC+" Tables "+", ".join(map(str,TABLES))+"; choice values from Appendix G; layout per section "+LAYOUT+". Retired and reserved positions left out. Generated with pdftotext -raw and the transcription scripts in scripts/cat-transcription of the library repository (gen2.py). Since 3.2.0: destination and senderIMID read as 'Industry Member ID / Exchange ID' where the table prints both (a JSON array of alternatives), found by comparison with the official 4.2.0 file."+NOTE,
+ "schemaVersion":VER[:5],"eventDefinitions":events,"choices":choices}
 open('schema.json','w',newline='\n').write(json.dumps(doc,indent=1)+"\n")

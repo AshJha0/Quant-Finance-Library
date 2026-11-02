@@ -75,40 +75,48 @@ carries on. Without a listener nothing changes from 2.1.
 
 ## Modules
 
-Since 3.0 the build has two Maven modules, one per stability tier
-([STABILITY.md](STABILITY.md)). The arrow is the only allowed dependency
-direction: the low-latency module reads the stable one, never the reverse.
+Since 4.0 the build has four Maven modules ([STABILITY.md](STABILITY.md) tiers,
+[DESIGN_4.0.md](DESIGN_4.0.md) for the reasons, [MIGRATION_4.0.md](MIGRATION_4.0.md)
+for the moves). Every arrow points at the stable module; the stable module requires no
+other library module, so the graph is acyclic (`ModuleGraphTest` checks it, and that
+each package is in exactly one module).
 
 ```
- artifact quant-finance-library-lowlatency         artifact quant-finance-library
- module com.quantfinlib.lowlatency                 module com.quantfinlib
- (lowlatency/, reference tier)                     (core/, stable tier)
-+-------------------------------------+           +----------------------------------------+
-| trading     marketdata  orderbook   |  requires | core  stats  data  marketdata.tick     |
-| fix         sbe         feed        | transitive| pricing rates credit fx commodities    |
-| entitlements regreporting(.cat,     |---------->| markets risk crb volatility hedging    |
-|   .emir, .registry)     util        |           | optimization alpha backtest(.*)        |
-|                                     |           | indicators simulation ml screener dsl  |
-| examples (not exported; jar         |  reads    | microstructure execution regulatory    |
-|   classifier "examples")            |<----------| rfq report cli persist                 |
-| requires java.xml, jdk.httpserver   |  internal | internal (exported to lowlatency only) |
-+-------------------------------------+           | requires java.net.http                 |
-                                                  +----------------------------------------+
+  io (incubating)                research (incubating)          lowlatency (reference)
+  com.quantfinlib.io             com.quantfinlib.research       com.quantfinlib.lowlatency
+ +----------------------+       +----------------------+       +--------------------------------+
+ | io  report           |       | dsl                  |       | trading marketdata(.tick)       |
+ | requires             |       |                      |       | orderbook fix sbe feed rfq      |
+ |   java.net.http      |       |                      |       | entitlements regreporting(.*)   |
+ +----------+-----------+       +----------+-----------+       | backtest.tick util              |
+            |                              |                   | examples jar: cli,              |
+            |       requires transitive    |                   |   backtest.strategies, examples |
+            +--------------+---------------+-------------------+ requires static io, research   |
+                           v                                   +--------------------------------+
+            +--------------------------------------------------+
+            | stable: com.quantfinlib (core/)                   |
+            | core stats pricing rates credit fx commodities    |
+            | markets risk crb volatility hedging optimization  |
+            | indicators alpha backtest(.portfolio,.validation) |
+            | data execution microstructure persist screener ml |
+            | simulation regulatory; internal (to lowlatency)   |
+            | requires java.base only (+ static JSpecify)       |
+            +--------------------------------------------------+
 ```
 
-The lower arrow is the qualified export `exports com.quantfinlib.internal to
-com.quantfinlib.lowlatency`: the lane uses the `Immutable` marker and
-`ValueArrays` without making them API. A type that both tiers need lives in the
-stable module (`core.Side`, `fx.CrossOp`, the tick-file format in
-`marketdata.tick`); a type that needs the lane lives in the lane module even when
-its 2.x home was a stable package (`trading.StrategyRunner`,
-`marketdata.CrossRateEngine`, `marketdata.TickCapture`). MIGRATION_3.0.md section
-8 lists each move.
+The qualified export `exports com.quantfinlib.internal to com.quantfinlib.lowlatency`
+lets the lane use the `Immutable` marker and `ValueArrays` without making them API. A
+type that several modules need lives in the stable module (`core.Side`, `fx.CrossOp`);
+a type that needs the lane lives in the lane module even when its earlier home was a
+stable package (`trading.StrategyRunner`, `marketdata.CrossRateEngine`,
+`marketdata.AggregatedBook`, the `marketdata.tick` files). MIGRATION_3.0.md section 8
+and MIGRATION_4.0.md list each move.
 
 ## Package map
 
-Packages of the low-latency module are marked (LL); everything else is in the
-stable module.
+Packages of the low-latency module are marked (LL), of the io module (IO), of the
+research module (RS) and of the examples jar (EX); everything else is in the stable
+module.
 
 | Package | Purpose | Main classes |
 |---|---|---|
@@ -116,25 +124,25 @@ stable module.
 | `stats` | Descriptive statistics and numerical routines, one definition each | `Stats` (mean, sample and population variance, covariance, Pearson, skewness, kurtosis, Hyndman-Fan type 7 and type 1 quantiles, median, midranks), `SpecialFunctions` (normal CDF by Cody's erfc algorithm, inverse normal, log-gamma, incomplete beta, Student-t CDF), `LinearAlgebra` (Cholesky, linear solve, inverse), `Numerics` (clamp, NaN arrays, decay factor, pair sort) |
 | `util` (LL) | Measurement and threading | `LatencyRecorder`, `HiccupMonitor`, `IdleStrategy`, `NanoClock`, `ThreadPlacement` |
 | `internal` | Shared helpers, not API (exported to the LL module only) | `ValueArrays`, `Immutable` |
-| `data` | Data in and out | `SeriesAligner`, `CorporateActions`, `CorporateEvents`, `CorporateEventPositions`, `PointInTimeUniverse`; `CsvBarLoader`, `HttpBarFetcher`, `UniverseCsvLoader` (deprecated for removal in 3.2; delegate to `io`) |
-| `io` | File and HTTP loaders (3.2; the 4.0 home, moving to `-io`) | `CsvBarLoader`, `HttpBarFetcher`, `UniverseCsvLoader` |
-| `marketdata.tick` | QFLT tick files (3.0; were in `data`) | `TickFileWriter`, `TickFileReader` (QFLT v2) |
+| `data` | Corporate actions, universes, alignment | `SeriesAligner`, `CorporateActions`, `CorporateEvents`, `CorporateEventPositions`, `PointInTimeUniverse` |
+| `io` (IO) | File and HTTP loaders (3.2; were in `data`) | `CsvBarLoader`, `HttpBarFetcher`, `UniverseCsvLoader` |
+| `marketdata.tick` (LL since 4.0) | QFLT tick files (3.0; were in `data`) | `TickFileWriter`, `TickFileReader` (QFLT v2) |
 | `feed` (LL) | Live and multicast feeds | `WebSocketFeed`, `BinanceTradeParser`, `MoldUdp64Receiver` |
 | `sbe` (LL) | SBE-style binary codecs (schema 2) | `MessageHeader`, `Decimal64`, `TradeFlyweight`, `OrderFlyweight`, `QuoteFlyweight`, `BinaryMarketDataClient`, `BinaryOrderPublisher`, `BinaryOrderReceiver` |
 | `fix` (LL) | FIX session (4.4 default, 4.2, 5.0 SP2) and garbage-free codecs | `FixSession`, `FixSessionSchedule`, `FixSessionOptions`, `FixVersion`, `FixDictionary`, `FixGroupDef`, `FixGroup`, `FileSessionStore` (CRC-32C journal), `FixMessage`, `FixOrderEncoder`, `FixExecReportView`, `FixExecReportView.ExecIdDeduplicator`, `FixMarketDataView` |
-| `marketdata` (LL) | Trading-lane transport and equities L3 | `HftMarketDataBus`, `TickRingBuffer`, `SymbolRegistry`, `ItchCodec`, `L3BookBuilder`, `Nbbo`; simpler `MarketDataProcessor`, `RingBuffer`; bus recorders `TickCapture`, `AsyncTickCapture` and the streaming `CrossRateEngine` (3.0; were in `data` and `fx`), `AggregatedBook` (3.2; was `fx.AggregatedBook`) |
+| `marketdata` (LL) | Trading-lane transport and equities L3 | `HftMarketDataBus`, `TickRingBuffer`, `SymbolRegistry`, `ItchCodec`, `L3BookBuilder`, `Nbbo`, `AggregatedBook` (3.2; was `fx.AggregatedBook`); simpler `MarketDataProcessor`, `RingBuffer`; bus recorders `TickCapture`, `AsyncTickCapture` and the streaming `CrossRateEngine` (3.0; were in `data` and `fx`) |
 | `orderbook` (LL) | Matching engines and book analytics | `OrderBook` (readable reference), `HftOrderBook` (price ladder, pooled nodes, self-trade prevention), `AuctionBook` (opening and closing call auctions), `BookAnalytics` |
 | `trading` (LL) | Order entry and pre-trade risk | `StrategyRunner` (3.0; was in `backtest`), `HftRiskGate`, `HftOrderGateway`, `OrderStateMachine`, `OrderRingBuffer`, `OrderListener`, `HftQuoter`, `AutoHedger`, `OrderThrottle`, `LastLookGate`, `LoopbackVenue`, `PaperTradingGateway`, `TradingDashboard`, `ShardedTradingEngine`, `GlobalRiskAggregator`, `PositionLedger`, `FillListener`, `LedgerFillListener`, `DropCopyReconciler`, `LimitsConfig`, `LimitsManager`; `PaperTradingGateway.TradeListener` (busts and corrections, 2.4) |
 | `entitlements` (LL) | Who may trade what, where and when | `EntitlementService`, `Grant`, `Permission`, `Decision`, `EntitlementPreTradeCheck` |
 | `regreporting` (LL; `reporting` up to 2.4) | Regulatory transaction reports | `TransactionReport`, `TransactionReportSink`, `Rts22ReportBuilder`, `Rts22TransactionReport`, `ReportingIdentifiers` (`Rts22TransactionReport.toAuth016Xml`, `validateEsmaRules` from 2.3; `validateWithReferenceData`, `toSubmissionXml` from 2.4) |
 | `regreporting.registry` (LL) | Reference data for reports (2.3) | `LeiRegistry`, `GleifGoldenCopyLeiRegistry`, `GleifApiLeiRegistry`, `InstrumentRegistry`, `FirdsInstrumentRegistry`, `MicRegistry`, `Iso10383MicRegistry`, `ReferenceDataChecker`; `ReferenceData`, `LeiValidity`, `CodeRegistry` (2.4); `LeiRecord.entityCategory` (GLEIF category, for the EMIR branch rules) and a FIRDS parse that reports bad bytes only through `IOException` (3.1) |
-| `regreporting.cat` (LL) | US CAT order events, indicative (2.3); option and quote events, option lifecycle, supplement and multi-leg events, linkage within a batch and across files, JSON schema check (3.1); the other 47 option and multi-leg events of Tables 60 and 61, record checks only, and a nightly comparison with the official schema (3.2) | `CatEventBuilder` (`start` from 3.2), `CatEvent`, `CatEventType` (MENQ, MONO, MOOR, MONQ, MENOS, MONOS, MOOA, MOOM, MOOC, MOOT, MOOF, MLNO, MLOR, MLOC, MLOS from 3.1; 47 more and `family()` from 3.2), `CatEventFamily` (3.2), `CatJsonLinesSink`, `CatLinkageChecker` (3.1; `checkFiles`, `Batch`, `FileIssue`), `CatSchema` (3.1) |
+| `regreporting.cat` (LL) | US CAT order events, indicative (2.3); option and quote events, option lifecycle, supplement and multi-leg events, linkage within a batch and across files, JSON schema check (3.1); the other 47 option and multi-leg events of Tables 60 and 61, record checks only, and a nightly comparison with the official schema (3.2); transcription moved to v4.2.0 r4, linkage for the 47 types (CAT-LK06 to LK09), the eleven v4.1.0 r14 quote types deprecated (4.0) | `CatEventBuilder` (`start` from 3.2), `CatEvent`, `CatEventType` (MENQ, MONO, MOOR, MONQ, MENOS, MONOS, MOOA, MOOM, MOOC, MOOT, MOOF, MLNO, MLOR, MLOC, MLOS from 3.1; 47 more and `family()` from 3.2), `CatEventFamily` (3.2), `CatJsonLinesSink`, `CatLinkageChecker` (3.1; `checkFiles`, `Batch`, `FileIssue`), `CatSchema` (3.1) |
 | `regreporting.emir` (LL) | EMIR Refit derivative reports, indicative (2.3); opt-in stateful rules (3.1): history, receipt time, GLEIF status and category, venue MIC (1003-01), caller trade key (2001-03), "reported for that UTI" dates; fields 2.2-2.4 and 2001-04, column AD codes (3.2) | `EmirRefitReportBuilder`, `EmirRefitReport`, `EmirActionType`, `EmirEventType`; `EmirStatefulValidator`, `UtiHistory`, `InMemoryUtiHistory`, `CurrencyRegistry` (3.1) |
 | `indicators` | Technical indicators | `Indicators` (batch), `StreamingIndicators` (one update per tick) |
 | `pricing` | Option pricing and volatility surfaces | `BlackScholes`, `Black76`, `Bachelier`, `ImpliedVolatility`, `BinomialTree`, `Heston`, `SabrModel`, `VolSurface`, `BarrierOption`, `DigitalOption`, `TouchOption`, `AsianOption`, `QuantoOption`, `ExchangeOption`, `VarianceSwap`, `VannaVolga`, `HestonCos`, `HestonCalibrator`, `SviSlice`, `SsviSurface`, `SviSurface`, `TotalVarianceSurface`, `DupireLocalVol`, `LocalVolMonteCarlo`, `LocalVolPde`, `DividendTree`, `Autocallable`, `StructuredNotes`, `IncrementalGreeks`, `HigherOrderGreeks` |
-| `rates` | Fixed income | `YieldCurve` (single curve), `DiscountCurve`, `MultiCurveBootstrap`, `MultiCurveRisk`, curve instruments (`Deposit`, `Fra`, `RateFuture`, `OisSwap`, `InterestRateSwap`), `BondPricer` (with the 3.1 `...Exact` non-integral-period functions and `convexityAnalytic`), `BootstrapJacobian` (analytic per-quote DV01, 3.1), the 3.1 leg model (`LegConvention`, `FixedLeg`, `FloatLeg` = `OvernightLeg` / `TermRateLeg`, `OvernightConvention`, `FixingHistory`, `VanillaSwap`), `DayCount`, `BusinessCalendar`, `HolidayCalendars`, `SwapPricer` (deprecated since 3.1, for removal in 4.0 since 3.2; see `MIGRATION_3.1.md`), `RatesOptions`, `NelsonSiegel`, `Svensson`, `ShortRateModels`, `KeyRateDurations` |
+| `rates` | Fixed income | `YieldCurve` (single curve), `DiscountCurve`, `MultiCurveBootstrap`, `MultiCurveRisk`, curve instruments (`Deposit`, `Fra`, `RateFuture`, `OisSwap`, `InterestRateSwap`), `BondPricer` (with the 3.1 `...Exact` non-integral-period functions and `convexityAnalytic`), `BootstrapJacobian` (analytic per-quote DV01, 3.1), the 3.1 leg model (`LegConvention`, `FixedLeg`, `FloatLeg` = `OvernightLeg` / `TermRateLeg`, `OvernightConvention`, `FixingHistory`, `VanillaSwap`), `DayCount`, `BusinessCalendar`, `HolidayCalendars`, `RatesOptions`, `NelsonSiegel`, `Svensson`, `ShortRateModels`, `KeyRateDurations` |
 | `credit` | Credit curves, CDS and counterparty exposure | `CreditCurve`, `CdsPricer`, `IsdaCdsModel`, `IsdaCurve`, `IsdaRateCurve`, `CreditSpreads`, `MultiCurrencyExposureSimulator` (single- and multi-currency; absorbed `ExposureSimulator` in 3.0), `ExposureProfile`, `CvaApproximator` |
-| `fx` | FX conventions, instruments and e-FX structure | `CurrencyPair`, `SwapPointsCurve`, `FxSwap`, `Ndf`, `FxVolSurface`, `FixingRisk`, `VannaVolgaTouch`, `AggregatedBook` (deprecated for removal in 3.2; use lowlatency `marketdata.AggregatedBook`), `CrossOp`, `FxTierBook`, `LpScorecard`, `LpRouter`, `SyntheticCross` |
+| `fx` | FX conventions, instruments and e-FX structure | `CurrencyPair`, `SwapPointsCurve`, `FxSwap`, `Ndf`, `FxVolSurface`, `FixingRisk`, `VannaVolgaTouch`, `CrossOp`, `FxTierBook`, `LpScorecard`, `LpRouter`, `SyntheticCross` |
 | `commodities`, `markets` | Futures curves; index and private-market analytics | `CommodityCurve`, `IndexConstruction`, `PrivateMarketAnalytics` |
 | `volatility` | Volatility models | `EwmaVolatility`, `Garch11`, `GjrGarch11`, `Egarch11` (maximum likelihood), `HarRv`, `RangeVolatility`, `VolatilityIndex`, `VolatilityDecomposition`, `InformationCriteria` |
 | `risk` | Market, credit and limit risk | `TailRisk`, `VarEngine`, `RiskMetrics`, `FrtbEs`, `PnlAttribution`, `VarBacktest`, `ExtremeValueTheory`, `StressTester`, `ComponentVar`, `CovarianceShrinkage`, `PsdMatrices`, `GaussianCopula`, `Dependence`, `Pca`, `PreTradeLimitChecker`, `CounterpartyExposureTracker`, `SaCcr`, `SaCcrHaircuts`, `FrtbSa`, `FrtbDrc`, `FrtbDrcSecuritisation`, `FrtbRrao`, `FrtbNmrf`, `FactorRiskModel` |
@@ -144,13 +152,16 @@ stable module.
 | `alpha` | Factor research | `AlphaContext`, `Factors`, `SignalEvaluator`, `AlphaValidation`, `FamaMacBeth`, `NeweyWest`, `Ols`, `FundamentalsHistory`, `PortfolioConstruction`, `TurnoverAwareOptimizer`, `AlphaBacktester`, `AlphaRiskModels`, `AlphaCombiner`, `BacktestAttribution`, `CapacityCurve`, `AlphaReport` |
 | `microstructure` | Impact, queues, signals, execution models | `AlmgrenChriss`, `MarketImpactModel`, `QueueModel`, `TransactionCostAnalyzer`, `SignalEngine`, `FlowSignals`, `VolumeCurve`, `VolatilityCurve`, `KylesLambda`, `HawkesIntensity`, `Vpin`, `OnlineAlphaLearner`, `AlphaEnsemble`, `EwmaCovariance`, `CircuitBreakers` |
 | `execution` | Execution algorithms and routing | `BenchmarkExecutor`, `PovTracker`, `TwapScheduler`, `VwapScheduler`, `ImplementationShortfallScheduler`, `PortfolioExecutor`, `LiquiditySeekingAlgo`, `SmartOrderRouter`, `HftSor`, `AdaptiveSor`, `VenueScorecard` |
-| `backtest` | Backtesting | `Backtester`, `BacktestConfig`, `FillPolicy`, `TradeCostModel`, `ExecutionAwareBacktester`, `ExecutionAlgoBacktester`, `TradeAnalytics`; `strategies.SmaCrossStrategy`; `portfolio.PortfolioBacktester`; `tick.TickBacktester`; `validation.WalkForwardAnalyzer`, `GridSearchOptimizer`, `SharpeValidation`, `PurgedKFold`, `BlockBootstrap`, `OverfitProbability` |
+| `backtest` | Backtesting | `Backtester`, `BacktestConfig`, `FillPolicy`, `TradeCostModel`, `ExecutionAwareBacktester`, `ExecutionAlgoBacktester`, `TradeAnalytics`; `portfolio.PortfolioBacktester`; `tick.TickBacktester` (LL since 4.0); `strategies.SmaCrossStrategy` (EX since 4.0); `validation.WalkForwardAnalyzer`, `GridSearchOptimizer`, `SharpeValidation`, `PurgedKFold`, `BlockBootstrap`, `OverfitProbability` |
 | `ml` | Statistical learning | `GradientBoostedRegressor`, `RegimeDetector`, `VolatilityForecaster`, `MarketImpactPredictor`, `IntradayLiquidityForecaster`, `AnomalyDetector` |
 | `simulation` | Monte Carlo | `MonteCarloSimulator`, `SimulationResult` |
-| `screener`, `dsl` | Screening and rule-based strategies | `StockScreener`, `RankingEngine`, `StrategyBuilder`, `Rules` |
-| `regulatory`, `rfq` | Best execution, fixings, RFQ | `BestExecutionAnalyzer`, `FixAnalyzer`, `MarketQualityMetrics`, `RfqAuction`, `RfqDealerScorecard` |
+| `screener` | Screening | `StockScreener`, `RankingEngine` |
+| `dsl` (RS) | Rule-based strategies | `StrategyBuilder`, `Rules` |
+| `regulatory` | Best execution, fixings | `BestExecutionAnalyzer`, `FixAnalyzer`, `MarketQualityMetrics` |
+| `rfq` (LL since 4.0) | RFQ | `RfqAuction`, `RfqDealerScorecard` |
 | `persist` | State across sessions | `Checkpoint` |
-| `report`, `cli` | Output | `ReportGenerator`, HTML/PDF/XLSX/CSV exporters, `SvgCharts`, `cli.Main` |
+| `report` (IO) | Output | `ReportGenerator`, HTML/PDF/XLSX/CSV exporters, `SvgCharts` |
+| `cli` (EX) | Command line | `cli.Main` |
 | `examples` (LL, not exported) | Demos, benchmarks and sample strategies (separate jar) | `strategies.EmaCrossStrategy`, `RsiStrategy`, `MacdStrategy`, `BollingerBandsStrategy`, `QuickStartDemo`, `LiveTradingDemo`, `HftLatencyBenchmark`, `HftOrderBenchmark`, `HftQuoterBenchmark`, `HftBookBenchmark`, `ScaleBenchmark`, `ShardScaleBenchmark` |
 
 ## Design rules
@@ -196,32 +207,29 @@ stable module.
 
 ## Module descriptors
 
-The stable jar is the named module `com.quantfinlib`
-(`core/src/main/java/module-info.java`) and exports every package of the stable
-tier; `internal` is exported only to `com.quantfinlib.lowlatency`. The lane jar is
-`com.quantfinlib.lowlatency` (`lowlatency/src/main/java/module-info.java`), which
-`requires transitive com.quantfinlib` and exports `trading`, `marketdata`,
-`orderbook`, `fix`, `sbe`, `feed`, `entitlements`, `regreporting` (with `cat`,
-`emir`, `registry`) and `util`. Up to 2.4 one module exported everything and the
-tiers lived only in STABILITY.md.
-
 | Module | Directive | Why |
 |---|---|---|
-| `com.quantfinlib` | `requires transitive java.net.http` | `io.HttpBarFetcher` (3.2; moves to `-io` in 4.0) |
-| `com.quantfinlib` | `requires static org.jspecify` | `@NullMarked` and `@Nullable`; compile time only |
+| `com.quantfinlib` | `requires static org.jspecify` | `@NullMarked` and `@Nullable`; compile time only. Nothing else: since 4.0 the stable module requires only `java.base` |
+| `com.quantfinlib.io` | `requires transitive com.quantfinlib` | signatures use `core.BarSeries`, `data.PointInTimeUniverse`, `backtest.BacktestResult` |
+| `com.quantfinlib.io` | `requires java.net.http` | `io.HttpBarFetcher` |
+| `com.quantfinlib.research` | `requires transitive com.quantfinlib` | `dsl` builds `backtest.TradingStrategy` objects |
 | `com.quantfinlib.lowlatency` | `requires transitive com.quantfinlib` | lane signatures use stable types (`core.Side`, `core.BarSeries`, `backtest.TradingStrategy`) |
+| `com.quantfinlib.lowlatency` | `requires transitive java.net.http` | `feed.WebSocketFeed`; `regreporting.registry.GleifApiLeiRegistry` takes an `HttpClient` |
 | `com.quantfinlib.lowlatency` | `requires java.xml` | the FIRDS parser in `regreporting.registry` |
 | `com.quantfinlib.lowlatency` | `requires jdk.httpserver` | `trading.TradingDashboard` |
+| `com.quantfinlib.lowlatency` | `requires static com.quantfinlib.io`, `com.quantfinlib.research` | only the examples jar uses them |
 
-`feed.WebSocketFeed` and `regreporting.registry.GleifApiLeiRegistry` use
-`java.net.http` through the stable module's transitive requirement.
-`ModuleDescriptorTest` (stable) and `LowLatencyModuleDescriptorTest` fail if a
-package is added without an `exports` line; the stable one also runs `jdeps` on
-`core/target/classes` and fails if `jdk.httpserver` appears.
+`ModuleDescriptorTest` (stable), `IoModuleDescriptorTest`,
+`ResearchModuleDescriptorTest` and `LowLatencyModuleDescriptorTest` fail if a package
+is added without an `exports` line or a requirement changes. The stable one runs
+`jdeps` on `core/target/classes` and fails if `java.net.http` or `jdk.httpserver`
+appears; `ModuleGraphTest` (lowlatency, built last) reads all four descriptors and
+fails on a cycle or a package in two modules.
 
-`com.quantfinlib.examples` is compiled with the low-latency module but is not in
-its jar and is not exported. It ships as that artifact's `examples` classifier
-jar, which has no descriptor, so the demos run on the class path.
+`com.quantfinlib.examples`, `com.quantfinlib.cli` and `com.quantfinlib.backtest.strategies`
+are compiled with the low-latency module but are not in its jar and are not exported.
+They ship as that artifact's `examples` classifier jar (main class `cli.Main`), which
+has no descriptor, so the demos and the command line run on the class path.
 
 ## Statistics in one place
 
@@ -294,8 +302,11 @@ any skipped reference test), `fuzz` (`-Pfuzz` on the parser fuzz tests at
 FIX codecs). The two PIT jobs fail when a package falls below its floor in
 `scripts/pit-thresholds.txt`.
 
-The API check compares each module with its own released 3.0.0 jar. Core has
-no allow-list: 3.x makes no breaking changes ([STABILITY.md](STABILITY.md)).
+The API check compares each module with its own released 3.0.0 jar. For core it
+runs twice in 4.0: `api-stable` reports the full comparison (semver MAJOR) and
+`api-stable-gate` excludes exactly the break list of MIGRATION_4.0.md and fails on
+any other binary-incompatible change. io and research are new in 4.0 and have no
+baseline yet.
 
 `release.yml` runs on a `v*` tag: `tag-guard` (refuses a forced push, an
 existing release, or a tag name already released from another commit), then

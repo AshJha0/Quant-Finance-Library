@@ -1,25 +1,10 @@
-# Accepted differences between the library's CAT schema transcription (v4.1.0 r14 tables,
-# cat-im-schema-subset-4.1.0r14.json) and the official CAT IM schema file the nightly job
+# Accepted differences between the library's CAT schema transcription (v4.2.0 r4 tables,
+# cat-im-schema-subset-4.2.0r4.json) and the official CAT IM schema file the nightly job
 # fetches (CatOfficialSchemaTest). One key per line, as the test prints it (for example
-# MENO.fieldName.required), then a reason. Empty until the first nightly comparison has been
-# reviewed: an unreviewed difference fails the job.
+# MENO.fieldName.required), then a reason. An unreviewed difference fails the job.
 #
-# Reviewed 2026-11-02 against the official file version 4.2.0 (sha256 21c6e732...). All are
-# 4.1.0 r14 -> 4.2.0 spec changes, not transcription errors (the 17 destination/senderIMID
-# dataType errors this comparison found were fixed in the transcription instead).
-MENQ.RFQID  4.2.0 retires this MENQ RFQ field (retiredFieldPosition); 4.1.0 r14 Table 39 lists it
-MENQ.RFQFlag  4.2.0 retires this MENQ RFQ field (retiredFieldPosition); 4.1.0 r14 Table 39 lists it
-MENQ.bidRelativePrice  4.2.0 retires this MENQ RFQ field (retiredFieldPosition); 4.1.0 r14 Table 39 lists it
-MENQ.askRelativePrice  4.2.0 retires this MENQ RFQ field (retiredFieldPosition); 4.1.0 r14 Table 39 lists it
-MENQ.validUntilDuration  4.2.0 retires this MENQ RFQ field (retiredFieldPosition); 4.1.0 r14 Table 39 lists it
-MONQ  4.2.0 no longer defines this option or multi-leg quote event; 4.1.0 r14 does (Tables 85-89, 128-137)
-MORQ  4.2.0 no longer defines this option or multi-leg quote event; 4.1.0 r14 does (Tables 85-89, 128-137)
-MOQR  4.2.0 no longer defines this option or multi-leg quote event; 4.1.0 r14 does (Tables 85-89, 128-137)
-MOQC  4.2.0 no longer defines this option or multi-leg quote event; 4.1.0 r14 does (Tables 85-89, 128-137)
-MOQM  4.2.0 no longer defines this option or multi-leg quote event; 4.1.0 r14 does (Tables 85-89, 128-137)
-MLNQ  4.2.0 no longer defines this option or multi-leg quote event; 4.1.0 r14 does (Tables 85-89, 128-137)
-MLRQ  4.2.0 no longer defines this option or multi-leg quote event; 4.1.0 r14 does (Tables 85-89, 128-137)
-MLQS  4.2.0 no longer defines this option or multi-leg quote event; 4.1.0 r14 does (Tables 85-89, 128-137)
-MLQR  4.2.0 no longer defines this option or multi-leg quote event; 4.1.0 r14 does (Tables 85-89, 128-137)
-MLQC  4.2.0 no longer defines this option or multi-leg quote event; 4.1.0 r14 does (Tables 85-89, 128-137)
-MLQM  4.2.0 no longer defines this option or multi-leg quote event; 4.1.0 r14 does (Tables 85-89, 128-137)
+# Since 4.0.0 the transcription follows v4.2.0 r4 (cat-im-schema-subset-4.2.0r4.json). The 16
+# deltas listed against the 4.1.0 r14 transcription in 3.2 are resolved: the 11 option and
+# multi-leg quote events and the 5 retired MENQ RFQ fields are no longer in the bundled file
+# (see docs/MIGRATION_4.0.md). Compared again 2026-11-02 with the official file version 4.2.0
+# (sha256 21c6e732...cad9): no differences.

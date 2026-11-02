@@ -38,10 +38,12 @@ The `Release` workflow (`.github/workflows/release.yml`) then runs on JDK 25:
   its leading `v` differs from it. Nothing is published in that case; cut a new
   patch version with the right number (do not move the tag).
 - It runs `./mvnw verify` (tests and coverage check).
-- It creates a GitHub release with generated notes and attaches the jars of both
-  modules: `core/target/quant-finance-library-*.jar` (library, `-sources`,
+- It creates a GitHub release with generated notes and attaches the jars of all four
+  modules (since 4.0): `core/target/quant-finance-library-*.jar`,
+  `io/target/quant-finance-library-io-*.jar` and
+  `research/target/quant-finance-library-research-*.jar` (library, `-sources`,
   `-javadoc`) and `lowlatency/target/quant-finance-library-lowlatency-*.jar` (library,
-  `-examples`, `-sources`, `-javadoc`).
+  `-examples`, `-sources`, `-javadoc`), each with its SBOM.
 - It dispatches the Docs workflow on `main`.
 
 After a release, move the API compatibility baseline to it: set
@@ -95,8 +97,8 @@ JitPack builds from a tag on request, so a release is usable without further set
 
 <dependency>
   <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
-  <artifactId>quant-finance-library</artifactId>   <!-- or quant-finance-library-lowlatency -->
-  <version>v3.2.0</version>
+  <artifactId>quant-finance-library</artifactId>   <!-- or -io, -research, -lowlatency -->
+  <version>v4.0.0</version>
 </dependency>
 ```
 
@@ -106,7 +108,7 @@ artifactId (2.x was `com.github.AshJha0:Quant-Finance-Library`). Check a JitPack
 build of a test tag before the release tag.
 
 JitPack must build with JDK 25; `jitpack.yml` at the repository root selects
-`openjdk25` and runs `./mvnw install` on the reactor, which installs both modules.
+`openjdk25` and runs `./mvnw install` on the reactor, which installs all four modules (and the examples jar).
 
 ## Maven Central (not yet set up)
 

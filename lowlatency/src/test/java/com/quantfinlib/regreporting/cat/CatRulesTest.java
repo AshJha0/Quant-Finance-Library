@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Pins each rule in {@link CatEvent#rules()} against CAT Reporting Technical Specifications
- * for Industry Members v4.1.0 r14 (2026-02-13). Section, table and Appendix G entries are in
+ * for Industry Members v4.2.0 r4 (2026-10-21). Section, table and Appendix G entries are in
  * the test names and comments.
  */
 class CatRulesTest {
@@ -48,7 +48,7 @@ class CatRulesTest {
         }
         assertEquals(Evidence.LIBRARY_READING, rules.get(10).evidence());
         assertTrue(CatEvent.CHECKED_AGAINST.startsWith("checked against CAT Reporting Technical Specifications"));
-        assertTrue(CatEvent.CHECKED_AGAINST.contains("v4.1.0 r14"));
+        assertTrue(CatEvent.CHECKED_AGAINST.contains("v4.2.0 r4"));
         assertTrue(CatEvent.CHECKED_AGAINST.endsWith("not certified"));
     }
 
@@ -61,7 +61,7 @@ class CatRulesTest {
         assertEquals(List.of("errorROEID must be Unsigned"), errs(del("E1", "")));
     }
 
-    /** Table 16 Include Key 'R': representativeInd, firmROEID, symbol; CATReporterIMID is 'O'. */
+    /** Table 15 Include Key 'R': representativeInd, firmROEID, symbol; CATReporterIMID is 'O'. */
     @Test
     void r02RequiredFieldsTable16() {
         assertEquals(List.of(), errs(menoB()));
@@ -77,7 +77,7 @@ class CatRulesTest {
         assertEquals(List.of("actionType must be one of [COR, DEL, NEW, RPR]"), errs(menoB().field("actionType", "UPD")));
     }
 
-    /** Table 16 seq 2; section 7.6.1.1 (RPR, errorROEID 12345678) and 7.6.2.1 (COR) worked examples. */
+    /** Table 15 seq 2; section 7.6.1.1 (RPR, errorROEID 12345678) and 7.6.2.1 (COR) worked examples. */
     @Test
     void r04ErrorRoeidTable16Seq2AndSection76() {
         assertEquals(List.of(), errs(menoB().action("RPR", "12345678")));
@@ -114,7 +114,7 @@ class CatRulesTest {
         }
     }
 
-    /** Table 3, Price: Numeric (10,8); Table 16 seq 19: >= 0, required for LMT, blank for MKT. */
+    /** Table 3, Price: Numeric (10,8); Table 15 seq 19: >= 0, required for LMT, blank for MKT. */
     @Test
     void r08PriceTable3AndTable16Seq19() {
         assertEquals(List.of(), errs(menoB().field("price", "9999999999.99999999")));

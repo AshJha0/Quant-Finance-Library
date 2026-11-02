@@ -1,6 +1,7 @@
 package com.quantfinlib.regreporting.cat;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -19,7 +20,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 /**
  * {@link CatSchema}: the Table 3 data-type examples, the section 6.1.2.2 record example and
- * the section 6.1.5.3 schema example of CAT IM Technical Specifications v4.1.0 r14 are
+ * the section 6.1.4.3 schema example of CAT IM Technical Specifications v4.2.0 r4 are
  * pinned; the other cases are own constructions.
  */
 class CatSchemaTest {
@@ -40,8 +41,13 @@ class CatSchemaTest {
 
     @Test
     void bundledSubsetCoversThePackagesTypes() {
-        assertEquals("4.1.0", S.version());
+        assertEquals("4.2.0", S.version());
         for (CatEventType t : CatEventType.values()) {
+            if (CatTableRules.V41_ONLY.contains(t)) {
+                // the v4.1.0 r14 quote types are not in v4.2.0 (deprecated in 4.0.0)
+                assertFalse(S.eventNames().contains(t.name()), t.name());
+                continue;
+            }
             assertTrue(S.eventNames().contains(t.name()), t.name());
             for (String f : t.requiredFields()) {
                 CatSchema.Field def = S.fields(t.name()).stream().filter(x -> x.name().equals(f)).findFirst()
@@ -49,7 +55,7 @@ class CatSchemaTest {
                 assertEquals("Required", def.required(), t + "." + f);
             }
         }
-        assertEquals(66, S.eventNames().size());
+        assertEquals(55, S.eventNames().size());
         CatSchema.Field ts = S.fields("MENO").stream().filter(f -> f.name().equals("orderKeyDate")).findFirst()
                 .orElseThrow();
         assertEquals(List.of("STRING", "NUMBER"), ts.jsonTypes());
@@ -96,7 +102,7 @@ class CatSchemaTest {
     @Test
     void printedRepairRecordSection6122() {
         List<CatSchema.Issue> issues = S.validateLine(PRINTED_RPR);
-        // the printed example omits representativeInd, which Table 16 seq 33 marks 'R'
+        // the printed example omits representativeInd, which Table 15 seq 33 marks 'R'
         assertEquals(List.of("CAT-S05"), rules(issues), issues.toString());
         assertEquals("representativeInd", issues.get(0).field());
         String fixed = PRINTED_RPR.substring(0, PRINTED_RPR.length() - 1) + ",\"representativeInd\":\"N\"}";
@@ -162,7 +168,7 @@ class CatSchemaTest {
         assertEquals(List.of("CAT-S04"), rules(S.validateLine(j)));
     }
 
-    /** Section 6.1.5.3 printed schema fragment (MECO), plus load, scoped choices and dataTypes. */
+    /** Section 6.1.4.3 printed schema fragment (MECO), plus load, scoped choices and dataTypes. */
     @Test
     void loadsTheSection6153Layout(@TempDir Path dir) throws IOException {
         String schema = "{\"dataTypes\":[{\"dataType\":\"Text (64)\",\"JSONDataType\":\"STRING\",\"maxLength\":8}],"
@@ -201,6 +207,6 @@ class CatSchemaTest {
             assertEquals(String.format("CAT-S%02d", i + 1), r.get(i).id());
             assertTrue(r.get(i).evidence() != Evidence.UNCONFIRMED);
         }
-        assertTrue(CatEvent.CHECKED_AGAINST_LIFECYCLE.contains("Tables 17, 63, 70"));
+        assertTrue(CatEvent.CHECKED_AGAINST_LIFECYCLE.contains("Tables 16, 62, 69"));
     }
 }

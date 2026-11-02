@@ -4,13 +4,15 @@ The library has three kinds of code, and they come with different promises. This
 says which package is which and how versions are numbered from 2.0.0 onward.
 
 Since 3.0 the tiers are the Maven modules, so the jar you depend on tells you the
-promise:
+promise. 4.0 added two incubating modules:
 
 | Tier | Artifact | JPMS module | Source tree |
 |---|---|---|---|
-| Stable | `quant-finance-library` | `com.quantfinlib` | `core/` |
+| Stable | `quant-finance-library` | `com.quantfinlib` (requires only `java.base`) | `core/` |
+| Incubating | `quant-finance-library-io` | `com.quantfinlib.io` (`requires transitive com.quantfinlib`) | `io/` |
+| Incubating | `quant-finance-library-research` | `com.quantfinlib.research` (`requires transitive com.quantfinlib`) | `research/` |
 | Reference | `quant-finance-library-lowlatency` | `com.quantfinlib.lowlatency` (`requires transitive com.quantfinlib`) | `lowlatency/` |
-| Examples | `quant-finance-library-lowlatency`, classifier `examples` | not a module export | `lowlatency/src/main/java/com/quantfinlib/examples` |
+| Examples | `quant-finance-library-lowlatency`, classifier `examples` | not a module | `cli`, `backtest.strategies` and `examples` under `lowlatency/src/main/java` |
 
 ## Stable research and risk APIs
 
@@ -20,12 +22,12 @@ documented error.
 
 | Area | Packages (under `com.quantfinlib`) |
 |---|---|
-| Data and series | `core` (including the exception types and, since 3.0, the order `Side`), `data` (CSV loading, alignment, corporate actions, point-in-time universes), `marketdata.tick` (the QFLT tick-file reader and writer, since 3.0), `stats` |
+| Data and series | `core` (including the exception types and, since 3.0, the order `Side`), `data` (alignment, corporate actions, point-in-time universes; the CSV loaders moved to `io` in 4.0), `stats` |
 | Pricing and instruments | `pricing`, `rates`, `credit`, `fx` (conventions, curves, instruments, volatility surface; `CrossOp` since 3.0), `commodities`, `markets` |
 | Risk | `risk`, `crb`, `volatility`, `hedging` |
-| Portfolio and research | `optimization`, `alpha`, `backtest` and its subpackages, `indicators`, `simulation`, `ml`, `screener`, `dsl` |
-| Execution research | `microstructure`, `execution`, `regulatory`, `rfq` |
-| Output and tools | `report`, `cli` (commands and options), `persist` |
+| Portfolio and research | `optimization`, `alpha`, `backtest` and `backtest.portfolio`, `indicators`, `simulation`, `ml`, `screener` |
+| Execution research | `microstructure`, `execution`, `regulatory` |
+| State | `persist` |
 
 Types added in 2.1 in these packages are stable on the same terms: in `rates`,
 `DiscountCurve`, `MultiCurveBootstrap`, `MultiCurveRisk`, `CurvePair` and the curve
@@ -48,7 +50,7 @@ types `QuantFinException`, `WireProtocolException`, `MalformedDataException` and
 behaviour; the message text is not.
 
 The stable jar is the named module `com.quantfinlib`. It exports exactly the
-packages in the table above, plus `internal` to `com.quantfinlib.lowlatency` only
+packages in the table above, plus `internal` to the other library modules only
 (shared helpers, not API). Adding a package to the exports is a minor change;
 removing one is a major change. Up to 2.4 one jar exported both tiers and the tier
 was set by this page alone.
@@ -57,6 +59,22 @@ Within these packages, stability covers method signatures, record components and
 documented behaviour (conventions, units, default parameters). It does not cover
 `toString()` output, the exact text of exception messages, or the last digits of
 results computed by iterative solvers.
+
+## Incubating modules (4.0)
+
+"Incubating" means: the code is tested to the same standard as the stable tier
+(per-package coverage, SpotBugs, Error Prone), but its API may still change in a minor
+release. A minor that changes an incubating signature says so under "Changed" in the
+changelog with the old and new form, and keeps the old form deprecated for at least
+that minor where it can. Results do not change silently: a numerical change follows
+the same "Fixed" rule as the stable tier. Patch releases do not change incubating
+APIs. A package leaves incubation in a minor release that says so here; from then on
+it carries the stable promise.
+
+| Module | Packages | Why incubating |
+|---|---|---|
+| `com.quantfinlib.io` | `io` (`CsvBarLoader`, `HttpBarFetcher`, `UniverseCsvLoader`), `report` | file and HTTP formats, report layouts and chart output are still settling |
+| `com.quantfinlib.research` | `dsl` | the rule language is young and small |
 
 ## Reference implementations
 
@@ -69,7 +87,10 @@ audit trails, operational tooling).
 | Package | What it is |
 |---|---|
 | `trading` | Risk gate, order gateway, order state machine, quoter, auto hedger, paper venue, sharding; from 2.1 `PositionLedger`, `DropCopyReconciler`, `LimitsConfig` and `LimitsManager`; from 2.2 `FillListener` and `LedgerFillListener`; from 2.4 paper-gateway busts and corrections |
-| `marketdata` | Ring buffers, market-data bus, ITCH 5.0 codec, L3 book builder, NBBO; since 3.0 the bus recorders `TickCapture` and `AsyncTickCapture` and the streaming `CrossRateEngine` |
+| `marketdata` | Ring buffers, market-data bus, ITCH 5.0 codec, L3 book builder, NBBO; since 3.0 the bus recorders `TickCapture` and `AsyncTickCapture` and the streaming `CrossRateEngine`; since 3.2 `AggregatedBook` |
+| `marketdata.tick` | QFLT tick-file reader and writer (stable tier in 3.x; here since 4.0) |
+| `backtest.tick` | Tick-replay backtester (stable tier in 3.x; here since 4.0, because it replays `marketdata.tick` files) |
+| `rfq` | RFQ auction and dealer scorecard (stable tier in 3.x; here since 4.0) |
 | `orderbook` | Reference matching engine (`OrderBook`), price-ladder engine (`HftOrderBook`) and call auctions (`AuctionBook`, from 2.1) |
 | `fix` | FIX 4.4 session (4.2 and 5.0 SP2 from 2.2; the hot-path encoder and views in all three from 2.3), journal store, garbage-free encoders and views; from 2.1 session schedules (`FixSessionSchedule`, `FixSessionOptions`); from 2.2 FIX 4.2 and 5.0 SP2 (`FixVersion`) and repeating groups (`FixDictionary`, `FixGroupDef`, `FixGroup`) |
 | `entitlements` | Entitlement service and pre-trade check (2.2) |
@@ -88,15 +109,17 @@ keeps reading the previous version, and is listed under "Changed" in the changel
 
 ## How compatibility is checked
 
-Compatibility is checked by japicmp against the released 3.0.0 jars, one per
-module (`./mvnw -Papi-compat -DskipTests verify` after
-`scripts/fetch-api-baseline.sh`; the CI job is `API compatibility`). Every package of
-the stable module fails the build on a binary-incompatible change (`core/pom.xml`,
-profile `api-compat`; report `core/target/japicmp/api-stable.html`). There is no
-allow-list: 3.x makes no breaking changes, so a break is fixed in code. (3.0 listed
-its intended breaks against 2.4.0 one by one, each with its row in
-[MIGRATION_3.0.md](MIGRATION_3.0.md); that list was emptied in 3.1.0.) The reference
-module is compared with the 3.0.0 low-latency jar and reported in
+Compatibility is checked by japicmp against the released jars of the previous
+release, one per module (`./mvnw -Papi-compat -DskipTests verify` after
+`scripts/fetch-api-baseline.sh`; the CI job is `API compatibility`). For 4.0.0 the
+baseline is 3.2.0. Every package of the stable module fails the build on a
+binary-incompatible change (`core/pom.xml`, profile `api-compat`; report
+`core/target/japicmp/api-stable.html`), except the 4.0 break list: one exclude per
+row of [MIGRATION_4.0.md](MIGRATION_4.0.md), and nothing else. (3.0 did the same
+against 2.4.0 with [MIGRATION_3.0.md](MIGRATION_3.0.md), and 3.1 emptied that list.)
+After 4.0.0 is released the baseline moves to 4.0.0, the break list is emptied, and
+the io and research modules get baselines of their own. The reference module is
+compared with the 3.2.0 low-latency jar and reported in
 `lowlatency/target/japicmp/api-lowlatency.html` but does not fail the build.
 
 Stable packages are `@NullMarked` (JSpecify 1.0): unannotated parameters and return
@@ -111,10 +134,10 @@ reported, not enforced.
 
 ## Examples
 
-`com.quantfinlib.examples` holds demos, hand-written benchmarks and the sample
-strategies (`examples.strategies`). It is compiled with the low-latency module and
-ships in that artifact's separate `examples` jar, not in either library jar, and
-carries no compatibility promise. Benchmark output formats can change in any release.
+`com.quantfinlib.examples` holds demos and hand-written benchmarks. Since 4.0 the
+command line (`cli`) and the sample strategies (`backtest.strategies`) are with it.
+All three are compiled with the low-latency module and ship in that artifact's
+separate `examples` jar, not in any library jar, and carry no compatibility promise. Benchmark output formats can change in any release.
 
 ## Versioning policy from 2.0.0
 
@@ -164,6 +187,20 @@ three months between a deprecation and its removal; both rules were dropped on
 - A major version has no breaking changes after its .0 release. New behaviour arrives
   as new classes, methods or options; the old path stays and is deprecated.
 - Each major has a migration guide listing every removal and its replacement. The
-  4.0 module split is planned in [DESIGN_4.0.md](DESIGN_4.0.md).
+  4.0 module split is described in [DESIGN_4.0.md](DESIGN_4.0.md).
 - Tags are never moved. A release that fails after tagging is fixed by a new patch
   release.
+
+### The 4.x promise
+
+From 4.0.0 until 5.0.0:
+
+- The stable module keeps every public type, member and signature it has at 4.0.0,
+  keeps its results except under "Fixed", and keeps requiring only `java.base`.
+- No package moves between modules. The module graph stays as drawn in section 113 of
+  [DIAGRAMS.md](DIAGRAMS.md): io, research and lowlatency require the stable module,
+  and only the examples jar uses the incubating modules from lowlatency.
+- Incubating APIs follow the incubating rule above, and reference packages the
+  reference rule. Either may graduate to stable in a minor; neither moves back.
+- Anything 4.x deprecates for removal stays until 5.0 at the earliest, and its
+  replacement ships in the same minor as the deprecation.

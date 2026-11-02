@@ -21,8 +21,8 @@ import sys
 import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CLASS_DIRS = [os.path.join(ROOT, "core", "target", "classes"),
-              os.path.join(ROOT, "lowlatency", "target", "classes")]
+CLASS_DIRS = [os.path.join(ROOT, m, "target", "classes")
+              for m in ("core", "io", "research", "lowlatency")]
 COOKBOOK = os.path.join(ROOT, "docs", "COOKBOOK.md")
 JDK_PACKAGES = ["java.util", "java.util.function", "java.util.stream", "java.nio.file",
                 "java.time", "java.io", "java.util.concurrent", "java.nio",
@@ -40,10 +40,7 @@ def library_imports():
                 pkgs.add(os.path.relpath(d, root).replace(os.sep, "."))
     nested = ["com.quantfinlib.pricing.BlackScholes.OptionType",
               "com.quantfinlib.execution.BenchmarkExecutor.Benchmark",
-              # 3.2 replacements of deprecated same-named types: a single-type
-              # import wins over the wildcard, so recipes see the new type.
-              "com.quantfinlib.io.CsvBarLoader", "com.quantfinlib.io.HttpBarFetcher",
-              "com.quantfinlib.io.UniverseCsvLoader", "com.quantfinlib.marketdata.AggregatedBook"]
+              ]
     return "".join(f"import {n};\n" for n in nested) + "".join(
         f"import {p}.*;\n" for p in sorted(pkgs) + JDK_PACKAGES)
 

@@ -11,7 +11,7 @@ import java.util.TreeSet;
 
 /**
  * Aligns multi-asset bar series onto one shared timeline — the bridge from
- * raw vendor files ({@link com.quantfinlib.io.CsvBarLoader}) to the index-aligned input the
+ * raw vendor files ({@code io.CsvBarLoader}) to the index-aligned input the
  * {@code PortfolioBacktester} requires. Real data never lines up: different
  * holidays, listing dates, and gaps.
  *

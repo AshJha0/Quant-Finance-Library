@@ -15,14 +15,25 @@ connectivity stack; see [docs/STABILITY.md](docs/STABILITY.md).
 
 ## Status
 
-- **4.0 notice:** 4.0.0 follows 3.2.0 directly. It moves `cli`, `backtest.strategies`, `report`, `dsl`, `rfq`, `marketdata.tick`, `backtest.tick` and the `io` loaders to other jars and removes the types 3.2 deprecates for removal; [docs/MIGRATION_4.0.md](docs/MIGRATION_4.0.md) lists each change and its new dependency.
+- Version 4.0.0. Requires Java 25 (LTS). 4.0 is the module split announced in 3.2.0:
+  the stable jar now requires only `java.base`; `io` and `report` move to the new
+  `quant-finance-library-io`, `dsl` to the new `quant-finance-library-research`, `rfq`,
+  `marketdata.tick` and `backtest.tick` to the low-latency jar, and `cli` and
+  `backtest.strategies` to its `examples` classifier jar. Everything 3.x deprecated for
+  removal is gone, including `SwapPricer`. No number changes.
+  [docs/MIGRATION_4.0.md](docs/MIGRATION_4.0.md) lists every move and removal with the
+  import and dependency to change.
 - Version 3.2.0. Requires Java 25 (LTS). 3.2 is additive over 3.1: all 66 CAT
   option and multi-leg event types of Tables 60 and 61 (47 new) with their table
   rules, a nightly comparison with the official CAT schema file (which found and
   fixed 17 transcription errors), EMIR Refit fields 2.2 to 2.4 with rule 2001-04
   and its siblings (30 stateful rules), and the 4.0 replacements: `io.*` for the
   `data` loaders and `marketdata.AggregatedBook`. The old types are deprecated for
-  removal and still work. [CHANGELOG.md](CHANGELOG.md) lists every change.
+  removal in 3.2 and removed in 4.0. [CHANGELOG.md](CHANGELOG.md) lists every change.
+- At 4.0.0 the full suite (`./mvnw verify -Pfull`) runs 2,182 tests (core 1,373,
+  io 27, research 7, lowlatency 775), 9 skipped for the same reasons as below. The 5 fewer
+  than 3.2.0 are the tests of the four removed types, less the new EMIR third-country and
+  CAT linkage tests; moved packages took their tests along.
 - At 3.2.0 the full suite (`./mvnw verify -Pfull`) runs 2,187 tests (core 1,467,
   lowlatency 720). 9 are skipped: 8 need optional external files or the
   network (ISDA grids, ESMA XSDs, the official CAT schema, the SIX CFI list,
@@ -84,13 +95,19 @@ connectivity stack; see [docs/STABILITY.md](docs/STABILITY.md).
 
 ### JitPack
 
-Since 3.0 the library is two artifacts. Research, pricing and risk users need only
-the first; users of the trading lane depend on the second, which pulls in the first.
+Since 4.0 the library is four artifacts. Pricing, rates, credit and risk users need
+only the first. Each of the others requires the first transitively.
 
-| Artifact | JPMS module | What it holds |
-|---|---|---|
-| `quant-finance-library` | `com.quantfinlib` | the stable tier: pricing, rates, credit, risk, research, backtesting, execution analytics |
-| `quant-finance-library-lowlatency` | `com.quantfinlib.lowlatency` | the reference trading lane: `trading`, `marketdata`, `orderbook`, `fix`, `sbe`, `feed`, `entitlements`, `regreporting`, `util` |
+| Artifact | JPMS module | Tier | What it holds |
+|---|---|---|---|
+| `quant-finance-library` | `com.quantfinlib` | stable | pricing, rates, credit, risk, alpha research, backtesting, execution analytics; requires only `java.base` |
+| `quant-finance-library-io` | `com.quantfinlib.io` | incubating | `io` (CSV bars and universes, CSV over HTTP) and `report` |
+| `quant-finance-library-research` | `com.quantfinlib.research` | incubating | `dsl`, the rule-based strategy builder |
+| `quant-finance-library-lowlatency` | `com.quantfinlib.lowlatency` | reference | the trading lane: `trading`, `marketdata` (with `marketdata.tick` and `AggregatedBook`), `orderbook`, `fix`, `sbe`, `feed`, `entitlements`, `regreporting`, `rfq`, `backtest.tick`, `util` |
+
+The lowlatency artifact also has an `examples` classifier jar: the command line
+(`cli`), the sample strategies (`backtest.strategies`) and the demos. It is not a module;
+put it on the class path with the other four jars.
 
 ```xml
 <repositories>
@@ -104,30 +121,54 @@ the first; users of the trading lane depend on the second, which pulls in the fi
 <dependency>
   <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
   <artifactId>quant-finance-library</artifactId>
-  <version>v3.2.0</version>
+  <version>v4.0.0</version>
 </dependency>
 
-<!-- or the trading lane, which brings the stable tier with it -->
+<!-- CSV and HTTP loaders, reports -->
+<dependency>
+  <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
+  <artifactId>quant-finance-library-io</artifactId>
+  <version>v4.0.0</version>
+</dependency>
+
+<!-- the strategy DSL -->
+<dependency>
+  <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
+  <artifactId>quant-finance-library-research</artifactId>
+  <version>v4.0.0</version>
+</dependency>
+
+<!-- the trading lane -->
 <dependency>
   <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
   <artifactId>quant-finance-library-lowlatency</artifactId>
-  <version>v3.2.0</version>
+  <version>v4.0.0</version>
+</dependency>
+
+<!-- the command line, sample strategies and demos -->
+<dependency>
+  <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
+  <artifactId>quant-finance-library-lowlatency</artifactId>
+  <version>v4.0.0</version>
+  <classifier>examples</classifier>
 </dependency>
 ```
 
-Gradle: `implementation("com.github.AshJha0.Quant-Finance-Library:quant-finance-library:v3.2.0")`
-(or `quant-finance-library-lowlatency`) with `maven("https://jitpack.io")` in
-`repositories`. JitPack names the group `com.github.<user>.<repo>` for a multi-module
-build; 2.x was a single module and used `com.github.AshJha0:Quant-Finance-Library`.
+Gradle: `implementation("com.github.AshJha0.Quant-Finance-Library:quant-finance-library:v4.0.0")`
+(or any other artifact above) with `maven("https://jitpack.io")` in `repositories`.
+JitPack names the group `com.github.<user>.<repo>` for a multi-module build; 2.x was a
+single module and used `com.github.AshJha0:Quant-Finance-Library`.
 
 The jars attached to each GitHub release can also be put on a classpath directly.
 Publishing to Maven Central is not set up yet; see [docs/PUBLISHING.md](docs/PUBLISHING.md).
-Upgrading from 2.x: [docs/MIGRATION_3.0.md](docs/MIGRATION_3.0.md).
+Upgrading from 3.x: [docs/MIGRATION_4.0.md](docs/MIGRATION_4.0.md), one row per move,
+each with its dependency snippet. From 2.x: [docs/MIGRATION_3.0.md](docs/MIGRATION_3.0.md).
 
 ### Module path
 
 Add `requires com.quantfinlib;` to your `module-info.java`, or
-`requires com.quantfinlib.lowlatency;` for the trading lane (it reads
+`requires com.quantfinlib.io;`, `requires com.quantfinlib.research;` or
+`requires com.quantfinlib.lowlatency;` for the other modules (each reads
 `com.quantfinlib` transitively), or use the jars on the class path as before. Faults
 in external input throw types that implement `core.QuantFinException`
 (`WireProtocolException`, `MalformedDataException`, `ConfigurationException`); each
@@ -148,13 +189,16 @@ the build, the command-line backtester, the paper-trading demo and the benchmark
 
 ## Quick start
 
+This example uses the stable jar, the io jar (`CsvBarLoader`) and the examples jar
+(`SmaCrossStrategy`).
+
 ```java
 import com.quantfinlib.backtest.BacktestConfig;
 import com.quantfinlib.backtest.BacktestResult;
 import com.quantfinlib.backtest.Backtester;
 import com.quantfinlib.backtest.strategies.SmaCrossStrategy;
 import com.quantfinlib.core.BarSeries;
-import com.quantfinlib.data.CsvBarLoader;
+import com.quantfinlib.io.CsvBarLoader;
 import com.quantfinlib.pricing.BlackScholes;
 import com.quantfinlib.pricing.BlackScholes.OptionType;
 import com.quantfinlib.risk.TailRisk;
@@ -192,7 +236,7 @@ public class QuickStart {
 The same backtest runs without writing Java through the bundled command line:
 
 ```bash
-java -jar core/target/quant-finance-library-3.2.0.jar backtest \
+java -cp "core/target/classes:io/target/classes:research/target/classes:lowlatency/target/classes" com.quantfinlib.cli.Main backtest \
     --csv bars.csv --symbol SPY --strategy sma --fast 10 --slow 30 --out report.html
 ```
 

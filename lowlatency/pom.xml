@@ -4,11 +4,11 @@
     <!-- Own coordinates first: JitPack's artifact scan reads the first groupId/artifactId/version in the file. -->
     <groupId>com.quantfinlib</groupId>
     <artifactId>quant-finance-library-lowlatency</artifactId>
-    <version>3.2.0</version>
+    <version>4.0.0</version>
     <parent>
         <groupId>com.quantfinlib</groupId>
         <artifactId>quant-finance-library-parent</artifactId>
-        <version>3.2.0</version>
+        <version>4.0.0</version>
     </parent>
     <packaging>jar</packaging>
     <name>Quant-Finance-Library low-latency lane</name>
@@ -21,6 +21,21 @@
             <groupId>com.quantfinlib</groupId>
             <artifactId>quant-finance-library</artifactId>
             <version>${project.version}</version>
+        </dependency>
+        <!-- Optional: only the examples classifier jar (cli,
+             backtest.strategies, examples) uses io and research
+             (requires static in module-info). A lane user does not get them. -->
+        <dependency>
+            <groupId>com.quantfinlib</groupId>
+            <artifactId>quant-finance-library-io</artifactId>
+            <version>${project.version}</version>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>com.quantfinlib</groupId>
+            <artifactId>quant-finance-library-research</artifactId>
+            <version>${project.version}</version>
+            <optional>true</optional>
         </dependency>
     </dependencies>
     <build>
@@ -36,6 +51,8 @@
                         <configuration>
                             <excludes>
                                 <exclude>com/quantfinlib/examples/**</exclude>
+                                <exclude>com/quantfinlib/cli/**</exclude>
+                                <exclude>com/quantfinlib/backtest/strategies/**</exclude>
                             </excludes>
                         </configuration>
                     </execution>
@@ -51,7 +68,14 @@
                             <classifier>examples</classifier>
                             <includes>
                                 <include>com/quantfinlib/examples/**</include>
+                                <include>com/quantfinlib/cli/**</include>
+                                <include>com/quantfinlib/backtest/strategies/**</include>
                             </includes>
+                            <archive>
+                                <manifest>
+                                    <mainClass>com.quantfinlib.cli.Main</mainClass>
+                                </manifest>
+                            </archive>
                         </configuration>
                     </execution>
                 </executions>
@@ -59,7 +83,7 @@
         </plugins>
     </build>
     <profiles>
-        <!-- Reference tier: compared with the released 3.0.0 low-latency jar and reported only
+        <!-- Reference tier: compared with the released 3.2.0 low-latency jar and reported only
              (docs/STABILITY.md: formats and signatures may change in a minor).
              Report: lowlatency/target/japicmp/api-lowlatency.html. -->
         <profile>

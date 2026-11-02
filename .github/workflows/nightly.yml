@@ -70,6 +70,8 @@ jobs:
           path: |
             analysis.log
             core/target/spotbugsXml.xml
+            io/target/spotbugsXml.xml
+            research/target/spotbugsXml.xml
             lowlatency/target/spotbugsXml.xml
           if-no-files-found: ignore
 
@@ -100,14 +102,14 @@ jobs:
         run: bash scripts/fetch-reference-files.sh "$RUNNER_TEMP/qfl-ref" >> "$GITHUB_ENV"
       - name: Reference tests (required, not skippable)
         run: >-
-          ./mvnw -B --no-transfer-progress -pl core,lowlatency test -Djacoco.skip=true
+          ./mvnw -B --no-transfer-progress -pl core,io,research,lowlatency test -Djacoco.skip=true
           -Dsurefire.failIfNoSpecifiedTests=false
           -Dtest=IsdaGridVerificationTest,IsdaGoldenSubsetTest,Auth016XmlTest,Auth016EnvelopeTest,StatusAdviceTest,EsmaXsdGoldenTest,CatOfficialSchemaTest
       - name: Check nothing was skipped
         run: |
           set -euo pipefail
           # writeGolden is the generator and is meant to skip; nothing else may.
-          skipped=$(grep -l '<skipped' core/target/surefire-reports/TEST-*.xml lowlatency/target/surefire-reports/TEST-*.xml                     | xargs -r grep -h -B1 '<skipped' | grep -o '<testcase name="[^"]*"' | grep -v '"writeGolden"' || true)
+          skipped=$(grep -l '<skipped' core/target/surefire-reports/TEST-*.xml io/target/surefire-reports/TEST-*.xml research/target/surefire-reports/TEST-*.xml lowlatency/target/surefire-reports/TEST-*.xml                     | xargs -r grep -h -B1 '<skipped' | grep -o '<testcase name="[^"]*"' | grep -v '"writeGolden"' || true)
           if [ -n "$skipped" ]; then echo "::error::skipped reference tests: $skipped"; exit 1; fi
 
   mutation:
@@ -190,7 +192,7 @@ jobs:
           -Dpit.mutationThreshold=83
           "-Dpit.targets=com.quantfinlib.regreporting.*,com.quantfinlib.fix.FixDecoder*,com.quantfinlib.fix.FixOrderEncoder*,com.quantfinlib.fix.FixParse*,com.quantfinlib.fix.FixMessage*,com.quantfinlib.fix.FixGroup*,com.quantfinlib.fix.FixExecReportView*,com.quantfinlib.fix.FixMarketDataView*,com.quantfinlib.fix.FixDictionary*"
           "-Dpit.targetTests=com.quantfinlib.regreporting.*,com.quantfinlib.fix.*"
-          -pl core,lowlatency test-compile org.pitest:pitest-maven:mutationCoverage
+          -pl core,io,research,lowlatency test-compile org.pitest:pitest-maven:mutationCoverage
       - name: Summary and per-package floors
         if: always() && hashFiles('lowlatency/target/pit-reports/mutations.xml') != ''
         run: |
@@ -202,4 +204,43 @@ jobs:
         with:
           name: mutation-report-lowlatency
           path: lowlatency/target/pit-reports
+          if-no-files-found: ignore
+
+  mutation-io-research:
+    # PIT on the two incubating modules of 4.0: io and report (module io) and
+    # dsl (module research). Report only for now: they have no floors in
+    # scripts/pit-thresholds.txt until a nightly run has measured them. Core
+    # runs in the same reactor with no matching targets.
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Mutation testing
+        run: >-
+          ./mvnw -B --no-transfer-progress -Pmutation -Dpit.threads=4 -Dpit.failWhenNoMutations=false
+          -Dpit.mutationThreshold=0
+          "-Dpit.targets=com.quantfinlib.io.*,com.quantfinlib.report.*,com.quantfinlib.dsl.*"
+          "-Dpit.targetTests=com.quantfinlib.io.*,com.quantfinlib.report.*,com.quantfinlib.dsl.*"
+          -pl core,io,research test-compile org.pitest:pitest-maven:mutationCoverage
+      - name: Summary
+        if: always()
+        run: |
+          for m in io research; do
+            if [ -f "$m/target/pit-reports/mutations.xml" ]; then
+              python3 scripts/pit-summary.py "$m/target/pit-reports/mutations.xml" | tee -a "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mutation-report-io-research
+          path: |
+            io/target/pit-reports
+            research/target/pit-reports
           if-no-files-found: ignore

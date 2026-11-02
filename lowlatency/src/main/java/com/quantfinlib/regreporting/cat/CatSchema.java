@@ -31,10 +31,10 @@ import java.util.regex.Pattern;
  * side, so a bad record is caught before the file goes out.</p>
  *
  * <p><b>Formal statement.</b> The schema layout is that of CAT Reporting Technical
- * Specifications for Industry Members v4.1.0 r14, section 6.1.5.2: {@code eventDefinitions}
+ * Specifications for Industry Members v4.2.0 r4, section 6.1.4.2: {@code eventDefinitions}
  * (each an {@code eventName} and {@code fields}, each field a {@code name},
  * {@code dataType}, {@code JSONDataType}, {@code required} and {@code position}) as printed
- * in the section 6.1.5.3 example. The names of the other two top-level members are not
+ * in the section 6.1.4.3 example. The names of the other two top-level members are not
  * printed; this class reads {@code choices} (objects with {@code name}, {@code values} and
  * optionally {@code eventNames}) and {@code dataTypes} (objects with {@code dataType},
  * {@code maxLength}, {@code precision}, {@code scale}), which is the library's reading. Since
@@ -49,13 +49,13 @@ import java.util.regex.Pattern;
  * from its public URL with a pinned SHA-256 and compares this transcription with it
  * (scripts/reference-files.sha256, {@code CatOfficialSchemaTest}).
  * {@link #bundledSubset()} is the library's own transcription of the event tables
- * this package supports (Tables 16 to 139, see the resource's {@code _provenance}). Use
+ * this package supports (Tables 15 to 122, see the resource's {@code _provenance}). Use
  * {@link #load(Path)} with the official file when you have it.</p>
  *
  * <p><b>Worked example</b> (section 6.1.2.2 rule 3c, printed): the MENO repair record
  * {@code {"actionType":"RPR","errorROEID":12345678,...,"negotiatedTradeFlag":false}} gives one
  * issue against the bundled subset, CAT-S05 for {@code representativeInd}: the printed example
- * leaves out a field that Table 16 seq 33 marks 'R' (an abbreviated example, or a stale one).
+ * leaves out a field that Table 15 seq 33 marks 'R' (an abbreviated example, or a stale one).
  * With {@code "representativeInd":"N"} added it passes; then {@code "price":10.010} still
  * passes (a Price may carry trailing zeros), {@code "quantity":500.0} fails CAT-S07 (Real
  * Quantity has no trailing zeros) and {@code "price":"10.01"} fails CAT-S06 (Price is a JSON
@@ -68,8 +68,8 @@ import java.util.regex.Pattern;
  * @since 3.1.0
  */
 public final class CatSchema {
-    private static final String SPEC = "CAT IM Technical Specifications v4.1.0 r14, ";
-    private static final String BUNDLED = "cat-im-schema-subset-4.1.0r14.json";
+    private static final String SPEC = "CAT IM Technical Specifications v4.2.0 r4, ";
+    private static final String BUNDLED = "cat-im-schema-subset-4.2.0r4.json";
     /** Maximum bytes per line (section 6.1.2.1 rule 3). */
     public static final int MAX_LINE_BYTES = 8190;
 
@@ -79,17 +79,17 @@ public final class CatSchema {
             new RuleProvenance("CAT-S02", "a record is one well-formed JSON object (RFC 8259, no duplicate keys)",
                     SPEC + "section 6.1.2.2 rules 1 and 3; duplicate keys rejected is the library's reading",
                     Evidence.PUBLISHED_REFERENCE),
-            new RuleProvenance("CAT-S03", "type names an event defined in the schema", SPEC + "section 6.1.5.2 "
+            new RuleProvenance("CAT-S03", "type names an event defined in the schema", SPEC + "section 6.1.4.2 "
                     + "item 2 (Event Definitions)", Evidence.PUBLISHED_REFERENCE),
             new RuleProvenance("CAT-S04", "every field name is one the event defines, matched case-sensitively",
                     SPEC + "section 2.5.1 ('Field Names ... are case sensitive'); rejecting an unknown name is the "
-                    + "library's reading of section 6.1.5", Evidence.LIBRARY_READING),
+                    + "library's reading of section 6.1.4", Evidence.LIBRARY_READING),
             new RuleProvenance("CAT-S05", "every field marked Required is present, except Booleans (absent means "
-                    + "false) and except on a DEL record", SPEC + "section 6.1.5.2 item 2 (required), Table 3 "
+                    + "false) and except on a DEL record", SPEC + "section 6.1.4.2 item 2 (required), Table 3 "
                     + "Boolean, section 7.6.3 (DEL carries only actionType and an ROEID)",
                     Evidence.PUBLISHED_REFERENCE),
             new RuleProvenance("CAT-S06", "each value has the field's JSON type (STRING, NUMBER, BOOLEAN, OBJECT, "
-                    + "ARRAY; Timestamp STRING or NUMBER)", SPEC + "Table 3 JSON Type column, section 6.1.5.2 "
+                    + "ARRAY; Timestamp STRING or NUMBER)", SPEC + "Table 3 JSON Type column, section 6.1.4.2 "
                     + "(JSONDataType)", Evidence.PUBLISHED_REFERENCE),
             new RuleProvenance("CAT-S07", "each value fits its data type: Numeric (p,s) with a digit before any "
                     + "point and no point when s is 0; Price (10,8); Real Quantity (12,6), not negative, no "
@@ -102,7 +102,7 @@ public final class CatSchema {
                     + "minutes and seconds 00-59 is the library's reading, Table 3 prints 01-59 but its own "
                     + "examples use 00", Evidence.PUBLISHED_REFERENCE),
             new RuleProvenance("CAT-S08", "a Choice value is one of the schema's values for that field (and "
-                    + "event, when the choice is scoped)", SPEC + "section 6.1.5.2 item 3 (Choices); Appendix G",
+                    + "event, when the choice is scoped)", SPEC + "section 6.1.4.2 item 3 (Choices); Appendix G",
                     Evidence.PUBLISHED_REFERENCE),
             new RuleProvenance("CAT-S09", "a field without a value is omitted, not sent as an empty string or null",
                     SPEC + "section 6.1.2.2 rule 3b", Evidence.PUBLISHED_REFERENCE));
@@ -125,7 +125,7 @@ public final class CatSchema {
     }
 
     /**
-     * One field definition (section 6.1.5.2 item 2).
+     * One field definition (section 6.1.4.2 item 2).
      *
      * @param name field name
      * @param dataType CAT data type, for example {@code "Price"} or {@code "Text (64)"}; since 3.2.0
@@ -200,7 +200,7 @@ public final class CatSchema {
      * @param file the JSON file
      * @return the schema
      * @throws IOException if the file cannot be read or is not a schema in the section
-     *     6.1.5.2 layout
+     *     6.1.4.2 layout
      */
     public static CatSchema load(Path file) throws IOException {
         return parse(Files.readString(file, StandardCharsets.UTF_8));
@@ -211,7 +211,7 @@ public final class CatSchema {
      *
      * @param json the schema text
      * @return the schema
-     * @throws IOException if the text is not a schema in the section 6.1.5.2 layout
+     * @throws IOException if the text is not a schema in the section 6.1.4.2 layout
      */
     public static CatSchema parse(String json) throws IOException {
         Object root;
@@ -310,7 +310,7 @@ public final class CatSchema {
     }
 
     /**
-     * The schema version given in the file (section 6.1.5.1), or an empty string. Read from
+     * The schema version given in the file (section 6.1.4.1), or an empty string. Read from
      * {@code schemaVersion}, or since 3.2.0 from {@code version} when that is absent, which is
      * the name the official file uses.
      *

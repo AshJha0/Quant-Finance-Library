@@ -4,39 +4,26 @@
     <!-- Own coordinates first: JitPack's artifact scan reads the first groupId/artifactId/version in the file. -->
     <groupId>com.quantfinlib</groupId>
     <artifactId>quant-finance-library</artifactId>
-    <version>3.2.0</version>
+    <version>4.0.0</version>
     <parent>
         <groupId>com.quantfinlib</groupId>
         <artifactId>quant-finance-library-parent</artifactId>
-        <version>3.2.0</version>
+        <version>4.0.0</version>
     </parent>
     <packaging>jar</packaging>
     <name>Quant-Finance-Library</name>
-    <description>Stable tier of Quant-Finance-Library: pricing, rates, credit, market risk, alpha research, backtesting and execution analytics. Pure JDK.</description>
+    <description>Stable tier of Quant-Finance-Library: pricing, rates, credit, market risk, alpha research, backtesting and execution analytics. Pure JDK, java.base only.</description>
     <properties>
         <qfl.module>com.quantfinlib</qfl.module>
     </properties>
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-jar-plugin</artifactId>
-                <version>3.5.1</version>
-                <configuration>
-                    <archive>
-                        <manifest>
-                            <mainClass>com.quantfinlib.cli.Main</mainClass>
-                        </manifest>
-                    </archive>
-                </configuration>
-            </plugin>
-        </plugins>
-    </build>
     <profiles>
-        <!-- API compatibility gate (japicmp) against the released 3.0.0 core
+        <!-- API compatibility gate (japicmp) against the released 3.2.0 core
              jar (api.baseline.version in the parent POM). Every package of this
-             module is stable tier and fails the build on a binary-incompatible
-             change; there is no allow-list.
+             module is stable tier. 4.0 is a major release, so the comparison
+             with 3.2.0 reports MAJOR (execution api-stable); the gate
+             (api-stable-gate) excludes exactly the 4.0 break list of
+             docs/MIGRATION_4.0.md and fails on any other binary-incompatible
+             change.
                bash scripts/fetch-api-baseline.sh
                ./mvnw -Papi-compat -DskipTests verify
              Report: core/target/japicmp/api-stable.html. -->
@@ -61,8 +48,34 @@
                             </newVersion>
                         </configuration>
                         <executions>
+                            <!-- Report: the full comparison with 3.2.0. For 4.0 it
+                                 reports semver MAJOR (the moves and removals of
+                                 docs/MIGRATION_4.0.md); it does not fail the build. -->
                             <execution>
                                 <id>api-stable</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>cmp</goal>
+                                </goals>
+                                <configuration>
+                                    <parameter>
+                                        <onlyModified>true</onlyModified>
+                                        <accessModifier>protected</accessModifier>
+                                        <ignoreMissingClasses>true</ignoreMissingClasses>
+                                        <breakBuildOnBinaryIncompatibleModifications>false</breakBuildOnBinaryIncompatibleModifications>
+                                        <breakBuildOnSourceIncompatibleModifications>false</breakBuildOnSourceIncompatibleModifications>
+                                        <includes>
+                                            <include>com.quantfinlib.*</include>
+                                        </includes>
+                                    </parameter>
+                                </configuration>
+                            </execution>
+                            <!-- Gate: the same comparison with the explicit 4.0 break
+                                 list excluded. Each exclude is one row of
+                                 docs/MIGRATION_4.0.md; any other binary-incompatible
+                                 change fails the build. -->
+                            <execution>
+                                <id>api-stable-gate</id>
                                 <phase>verify</phase>
                                 <goals>
                                     <goal>cmp</goal>
@@ -77,10 +90,28 @@
                                         <includes>
                                             <include>com.quantfinlib.*</include>
                                         </includes>
-                                        <!-- No allow-list: 3.x makes no breaking changes
-                                             (docs/STABILITY.md), so any binary-incompatible
-                                             change against 3.0.0 fails the build and is
-                                             fixed in code, not excluded here. -->
+                                        <excludes>
+                                            <!-- MIGRATION_4.0 row 1: examples jar -->
+                                            <exclude>com.quantfinlib.cli.*</exclude>
+                                            <exclude>com.quantfinlib.backtest.strategies.*</exclude>
+                                            <!-- row 2: lowlatency marketdata.AggregatedBook -->
+                                            <exclude>com.quantfinlib.fx.AggregatedBook</exclude>
+                                            <!-- row 3: lowlatency -->
+                                            <exclude>com.quantfinlib.rfq.*</exclude>
+                                            <exclude>com.quantfinlib.marketdata.tick.*</exclude>
+                                            <exclude>com.quantfinlib.backtest.tick.*</exclude>
+                                            <!-- row 4: io package -->
+                                            <exclude>com.quantfinlib.data.CsvBarLoader</exclude>
+                                            <exclude>com.quantfinlib.data.HttpBarFetcher</exclude>
+                                            <exclude>com.quantfinlib.data.UniverseCsvLoader</exclude>
+                                            <exclude>com.quantfinlib.io.*</exclude>
+                                            <!-- row 5: io module -->
+                                            <exclude>com.quantfinlib.report.*</exclude>
+                                            <!-- row 6: research module -->
+                                            <exclude>com.quantfinlib.dsl.*</exclude>
+                                            <!-- row 8: removed -->
+                                            <exclude>com.quantfinlib.rates.SwapPricer</exclude>
+                                        </excludes>
                                     </parameter>
                                 </configuration>
                             </execution>

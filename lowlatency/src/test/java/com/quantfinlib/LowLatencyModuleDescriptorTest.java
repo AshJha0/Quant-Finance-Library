@@ -44,12 +44,16 @@ class LowLatencyModuleDescriptorTest {
         Set<String> expected = sourcePackages();
         assertTrue(expected.remove("com.quantfinlib.examples"));
         expected.removeIf(p -> p.startsWith("com.quantfinlib.examples."));
+        // The other two examples-jar packages (4.0): compiled here, never exported.
+        assertTrue(expected.remove("com.quantfinlib.cli"));
+        assertTrue(expected.remove("com.quantfinlib.backtest.strategies"));
         Set<String> exported = d.exports().stream()
                 .map(ModuleDescriptor.Exports::source)
                 .collect(Collectors.toCollection(TreeSet::new));
         assertEquals(expected, exported);
-        assertEquals(Set.of("com.quantfinlib.entitlements", "com.quantfinlib.feed", "com.quantfinlib.fix",
-                "com.quantfinlib.marketdata", "com.quantfinlib.orderbook", "com.quantfinlib.regreporting",
+        assertEquals(Set.of("com.quantfinlib.backtest.tick", "com.quantfinlib.entitlements",
+                "com.quantfinlib.feed", "com.quantfinlib.fix", "com.quantfinlib.marketdata",
+                "com.quantfinlib.marketdata.tick", "com.quantfinlib.rfq", "com.quantfinlib.orderbook", "com.quantfinlib.regreporting",
                 "com.quantfinlib.regreporting.cat", "com.quantfinlib.regreporting.emir",
                 "com.quantfinlib.regreporting.registry", "com.quantfinlib.sbe", "com.quantfinlib.trading",
                 "com.quantfinlib.util"), exported);
@@ -62,11 +66,13 @@ class LowLatencyModuleDescriptorTest {
             if (r.name().equals("com.quantfinlib")) {
                 assertTrue(r.modifiers().contains(ModuleDescriptor.Requires.Modifier.TRANSITIVE));
             }
-            if (r.name().equals("org.jspecify")) {
+            if (r.name().equals("org.jspecify") || r.name().equals("com.quantfinlib.io")
+                    || r.name().equals("com.quantfinlib.research")) {
                 assertTrue(r.modifiers().contains(ModuleDescriptor.Requires.Modifier.STATIC));
             }
             requires.add(r.name());
         }
-        assertEquals(Set.of("java.base", "com.quantfinlib", "java.xml", "jdk.httpserver", "org.jspecify"), requires);
+        assertEquals(Set.of("java.base", "com.quantfinlib", "com.quantfinlib.io", "com.quantfinlib.research",
+                "java.net.http", "java.xml", "jdk.httpserver", "org.jspecify"), requires);
     }
 }

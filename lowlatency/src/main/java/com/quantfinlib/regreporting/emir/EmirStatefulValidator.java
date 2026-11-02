@@ -119,7 +119,9 @@ public final class EmirStatefulValidator {
             new RuleProvenance("EMIR-VR-1003-01", "1.3 is populated unless 2.41 is a regulated market, and blank "
                     + "when it is; regulated market read as ISO 10383 category RMKT in an EEA country, active on "
                     + "the date of 2.42; a non-EEA RMKT (third-country equivalence) or an unknown MIC or "
-                    + "category skips the rule", WB + "row 7 (field 1.3); the RMKT/EEA reading is the library's",
+                    + "category skips the rule; since 4.0.0, with withThirdCountryMarkets, a non-EEA venue is a "
+                    + "regulated market when the caller's EMIR Article 2a list holds it on the date of 2.42",
+                    WB + "row 7 (field 1.3); the RMKT/EEA reading is the library's",
                     Evidence.LIBRARY_READING),
             new RuleProvenance("EMIR-VR-1008-02", "1.8 is unchanged since the first accepted report",
                     WB + "row 12 (field 1.8)", Evidence.PUBLISHED_REFERENCE),
@@ -185,11 +187,14 @@ public final class EmirStatefulValidator {
     private final @Nullable MicRegistry mics;
     private final @Nullable Function<EmirRefitReport, String> tradeKey;
     private final boolean adCodes;
+    private final @Nullable ThirdCountryMarkets thirdCountry;
 
     private EmirStatefulValidator(@Nullable UtiHistory history, @Nullable LeiRegistry leis,
             @Nullable CurrencyRegistry currencies, @Nullable MicRegistry mics,
-            @Nullable Function<EmirRefitReport, String> tradeKey, boolean adCodes) {
+            @Nullable Function<EmirRefitReport, String> tradeKey, boolean adCodes,
+            @Nullable ThirdCountryMarkets thirdCountry) {
         this.adCodes = adCodes;
+        this.thirdCountry = thirdCountry;
         this.history = history;
         this.leis = leis;
         this.currencies = currencies;
@@ -203,7 +208,7 @@ public final class EmirStatefulValidator {
      * @return the validator
      */
     public static EmirStatefulValidator create() {
-        return new EmirStatefulValidator(null, null, null, null, null, false);
+        return new EmirStatefulValidator(null, null, null, null, null, false, null);
     }
 
     /**
@@ -213,7 +218,7 @@ public final class EmirStatefulValidator {
      * @return a new validator
      */
     public EmirStatefulValidator withHistory(UtiHistory h) {
-        return new EmirStatefulValidator(h, leis, currencies, mics, tradeKey, adCodes);
+        return new EmirStatefulValidator(h, leis, currencies, mics, tradeKey, adCodes, thirdCountry);
     }
 
     /**
@@ -223,7 +228,7 @@ public final class EmirStatefulValidator {
      * @return a new validator
      */
     public EmirStatefulValidator withLeiRegistry(LeiRegistry r) {
-        return new EmirStatefulValidator(history, r, currencies, mics, tradeKey, adCodes);
+        return new EmirStatefulValidator(history, r, currencies, mics, tradeKey, adCodes, thirdCountry);
     }
 
     /**
@@ -233,7 +238,7 @@ public final class EmirStatefulValidator {
      * @return a new validator
      */
     public EmirStatefulValidator withCurrencies(CurrencyRegistry c) {
-        return new EmirStatefulValidator(history, leis, c, mics, tradeKey, adCodes);
+        return new EmirStatefulValidator(history, leis, c, mics, tradeKey, adCodes, thirdCountry);
     }
 
     /**
@@ -246,7 +251,7 @@ public final class EmirStatefulValidator {
      */
     public EmirStatefulValidator withMicRegistry(MicRegistry m) {
         return new EmirStatefulValidator(history, leis, currencies, java.util.Objects.requireNonNull(m, "m"),
-                tradeKey, adCodes);
+                tradeKey, adCodes, thirdCountry);
     }
 
     /**
@@ -264,7 +269,7 @@ public final class EmirStatefulValidator {
      */
     public EmirStatefulValidator withTradeKey(Function<EmirRefitReport, String> key) {
         return new EmirStatefulValidator(history, leis, currencies, mics,
-                java.util.Objects.requireNonNull(key, "key"), adCodes);
+                java.util.Objects.requireNonNull(key, "key"), adCodes, thirdCountry);
     }
 
     /**
@@ -283,7 +288,27 @@ public final class EmirStatefulValidator {
      * @since 3.2.0
      */
     public EmirStatefulValidator withColumnAdCodes() {
-        return new EmirStatefulValidator(history, leis, currencies, mics, tradeKey, true);
+        return new EmirStatefulValidator(history, leis, currencies, mics, tradeKey, true, thirdCountry);
+    }
+
+    /**
+     * A copy that also decides EMIR-VR-1003-01 for venues outside the EEA, using the caller's
+     * list of third-country markets considered equivalent to a regulated market (EMIR
+     * Article 2a; ESMA74-362-2683, sheet Validations_Cpty_derivative, row 7, column AC,
+     * condition 1). Without it a non-EEA venue skips the rule, as before. It needs
+     * {@link #withMicRegistry} for the venue's country, and field 2.42 for the date; a
+     * non-EEA venue with an unknown country or no 2.42 still skips.
+     *
+     * <p>Worked example (own test): XNYS (US) on the list from 2020-01-01, executed
+     * 2026-03-02: 1.3 must be blank. XNYS not on the list: 1.3 must be populated.</p>
+     *
+     * @param markets the equivalence list
+     * @return a new validator
+     * @since 4.0.0
+     */
+    public EmirStatefulValidator withThirdCountryMarkets(ThirdCountryMarkets markets) {
+        return new EmirStatefulValidator(history, leis, currencies, mics, tradeKey, adCodes,
+                java.util.Objects.requireNonNull(markets, "markets"));
     }
 
     /**
@@ -449,12 +474,19 @@ public final class EmirStatefulValidator {
         }
         String country = rec.get().country().isEmpty() ? mics.country(mic).orElse("") : rec.get().country();
         boolean rmkt = "RMKT".equals(rec.get().marketCategory());
-        if (rmkt && !EEA.contains(country)) {
-            return; // third-country equivalence is not in ISO 10383, so it cannot be decided here
-        }
         @Nullable Instant executed = instant(f.getOrDefault("executionTimestamp", ""));
-        boolean regulated = rmkt && (executed == null
-                || mics.isActiveOn(mic, executed.atZone(ZoneOffset.UTC).toLocalDate()));
+        boolean regulated;
+        if (!country.isEmpty() && !EEA.contains(country) && thirdCountry != null) {
+            if (executed == null) {
+                return;
+            }
+            regulated = thirdCountry.isEquivalent(mic, executed.atZone(ZoneOffset.UTC).toLocalDate());
+        } else if (rmkt && !EEA.contains(country)) {
+            return; // third-country equivalence is not in ISO 10383; see withThirdCountryMarkets
+        } else {
+            regulated = rmkt && (executed == null
+                    || mics.isActiveOn(mic, executed.atZone(ZoneOffset.UTC).toLocalDate()));
+        }
         boolean populated = !f.getOrDefault("entityResponsibleForReporting", "").isEmpty();
         if (regulated && populated) {
             out.add("EMIR-VR-1003-01: field 1.3 must be blank, 2.41 " + mic + " is a regulated market");

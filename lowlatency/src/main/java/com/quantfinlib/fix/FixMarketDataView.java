@@ -322,7 +322,7 @@ public final class FixMarketDataView {
 
     /**
      * MDEntryPx as a double — the safe conversion for double-domain
-     * consumers ({@code fx.FxTierBook}, {@code fx.AggregatedBook}). The
+     * consumers ({@code fx.FxTierBook}, {@code marketdata.AggregatedBook}). The
      * scaled-long getters remain for pipelines that never touch a double.
      */
     public double price(int entry) {

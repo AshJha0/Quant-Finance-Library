@@ -21,7 +21,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Hull-White convexity adjustment, and exact bucket structure of the DV01
  * of a par input swap.
  */
-@SuppressWarnings("removal") // SwapPricer kept through 3.x; pinned here unchanged
 class MultiCurveTest {
 
     private static final LocalDate VAL = LocalDate.of(2026, 11, 2);
@@ -354,19 +353,6 @@ class MultiCurveTest {
     }
 
     // ---- pricer overloads ------------------------------------------------
-
-    @Test
-    void swapPricerOverloadsOnCurvePair() {
-        CurvePair c = curves(CurveInterpolation.MONOTONE_CONVEX);
-        InterestRateSwap s = irs(7, 0.0374);
-        assertEquals(0, SwapPricer.payerPv(c.discount(), c.projection(), s), 1e-12);
-        assertEquals(0.0374, SwapPricer.parRate(c.discount(), c.projection(), s), 1e-10);
-        assertEquals(s.annuity(c.discount()), SwapPricer.annuity(c.discount(), s), 0);
-        double dv01 = SwapPricer.dv01(c.discount(), c.projection(), s);
-        assertTrue(dv01 > 0 && dv01 < 7e-4, "dv01 " + dv01);
-        double single = SwapPricer.dv01(c.discount(), c.discount(), s);
-        assertTrue(single > 0);
-    }
 
     @Test
     void swaptionAndCapParityOnCurvePair() {

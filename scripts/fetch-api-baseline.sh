@@ -4,13 +4,13 @@
 # Releases before 3.0.0 are one jar; from 3.0.0 there are two, the core
 # library and the low-latency module, and both are fetched.
 #
-#   scripts/fetch-api-baseline.sh            # version 3.0.0 (current baseline)
+#   scripts/fetch-api-baseline.sh            # version 3.2.0 (current baseline)
 #   scripts/fetch-api-baseline.sh 2.1.0      # another release
 #
 # Then: ./mvnw -Papi-compat -DskipTests verify
 set -euo pipefail
 
-version="${1:-3.0.0}"
+version="${1:-3.2.0}"
 repo="AshJha0/Quant-Finance-Library"
 dir="${HOME}/.m2/api-baseline"
 major="${version%%.*}"

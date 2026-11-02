@@ -590,10 +590,12 @@ sources it was given, so a missing source skips its rules), `UtiHistory`,
 and the event types MENQ, MONO, MOOR and MONQ (rules CAT-R13 to CAT-R16).
 Since 3.2 the builder fills 2.2 to 2.4 and the validator checks 2001-04 (2.1 against 2.2 to
 2.4, with its siblings 2002-02, 2003-05 and 2004-04); `withColumnAdCodes()` reports the row 13
-client code prefix as 1009-08, column AD's number for it (recipes 470 and 471). Still not
-checked for EMIR: third-country regulated markets in 1003-01. For CAT the option lifecycle, multi-leg and supplement events, linkage across
+client code prefix as 1009-08, column AD's number for it (recipes 470 and 471). Since 4.0
+`withThirdCountryMarkets(...)` decides 1003-01 for a non-EEA venue from the caller's list of
+markets considered equivalent under EMIR Article 2a (no list is bundled; without one the rule
+still skips such a venue, recipe 490). For CAT the option lifecycle, multi-leg and supplement events, linkage across
 files and the schema gate came later in 3.1 (17j to 17l), and the other events of Tables 60
-and 61 in 3.2 (17m); still not checked are their linkage and reference data. `check` is
+and 61 in 3.2 (17m), with their linkage in 4.0; still not checked is their reference data. `check` is
 batch-local, so pass a whole day's events for a firm, or use `checkFiles`. Recipes 364 and 365.
 
 #### Branches, venues, a changed UTI, and dates the repository remembers (3.1)
@@ -847,8 +849,8 @@ Formally:
 
 The library's readings are two:
 
-- The new types are not linkage-checked yet. `CatLinkageChecker` skips them, so its
-  results for the 3.1 types are unchanged.
+- In 3.2 the new types were not linkage-checked: `CatLinkageChecker` skipped them.
+  Since 4.0 they are (see "Linkage for the 47 types" below).
 - Each type has a family (`CatEventFamily`), taken from the columns of Tables 60 and 61.
   It is there to group the work, and it does not change any check.
 
@@ -865,13 +867,60 @@ Worked examples (own tests, `CatTable6061Test`):
    accepted with a reason in `cat-official-schema-deltas.txt`.
 
 *In this library:* `CatEventBuilder.start(type)` starts any type. `CatEventType.family()`
-groups them. The bundled schema now covers all 66 types. Recipes 480 to 483.
+groups them. The bundled schema covered all 66 types in 3.2; since 4.0 it covers the 55
+that v4.2.0 still defines (17n). Recipes 480 to 483.
+
+Table numbers in this section are those of v4.1.0 r14, the specification 3.2 transcribed.
+v4.2.0 r4 numbers each table from 13 to 84 one lower and each from 90 to 127 six lower
+(Table 76, MOCO, is Table 75), because it drops a table before the equity events and the
+option and multi-leg quote tables.
+
+#### Linkage for the 47 types (4.0)
+
+The plain idea: every one of these events either starts a key (a child order, an internal
+route accepted by a desk, a received quote, an allocation) or points at one that must
+already exist (a cancel, a modification request, an amendment). CAT checks the pointer;
+so does the library now.
+
+Formally, each type uses the keys of the linkage list under its own table (v4.2.0 r4;
+section 2.6.1, Table 5 for the key fields):
+
+- **Start a key.** MOIR, MOCO, MLIR, MLCO and MLOA assign an Order Key; MOPA an
+  Allocation Key; the v4.1.0 r14 quote types MOQR, MLNQ and MLQR a Quote Key. Two of them
+  with one key are both reported (CAT-LK01, as for the 3.1 types).
+- **Parent Order Key (CAT-LK06).** An internal route or child order that carries
+  parentOrderKeyDate and parentOrderID must name an order in scope (Tables 70, 75, 103
+  and 111).
+- **Prior key.** MOIM, MOCOM, MOOJ, MOOE, MLIM, MLCOM, MLOM and MLOE link through the
+  Prior Order Key when they carry one, and then hold a new Order Key; MOFA through the
+  Prior Fulfillment Key, MOAA through the Prior Allocation Key, MOQM and MLQM through the
+  Prior Quote Key. Without a prior key they link through their own key.
+- **Everything else needs its key in scope:** order events CAT-LK07, quote events CAT-LK08,
+  fulfillment and allocation amendments CAT-LK09, supplements CAT-LK04.
+
+The library's reading: for these types any originating event with the same key kind
+links. Order Keys are unique per reporter (Table 5), so the key alone names the order;
+the library does not also check that a child-order cancel points at a child order. It is
+marked `LIBRARY_READING` on CAT-LK07. Routes (MOOR, MLOR) may now route internal-route,
+child, accepted, adjusted and effective orders, and MLOC may cancel an MLOA. A batch of
+the 3.1 types alone gives the same issues as in 3.x.
+
+Worked examples (own tests, `CatTable6061LinkageTest`):
+
+1. A MONO P1, a MOCO C1 with parent P1, a MOCOC for C1 and a MOOR for C1 give no issue.
+   Drop the MONO and the MOCO gives CAT-LK06.
+2. A MOCOM with prior key C1 and new orderID C2 links to MOCO C1; a MOCOC for C2 then
+   links to the MOCOM.
+3. A MOFA with the fulfillmentID of a MOOF links; alone it gives CAT-LK09.
+4. Two MOIR events with orderID D1 both give CAT-LK01.
+
+*In this library:* `CatLinkageChecker.rules()` (nine rules). Recipes 491 to 494.
 
 
 ### 17n. Maintaining the CAT transcription (3.2)
 
 The library's CAT checks rest on a transcription: the field tables of a PDF
-specification turned into a JSON file (`cat-im-schema-subset-4.1.0r14.json`) and a
+specification turned into a JSON file (`cat-im-schema-subset-4.2.0r4.json` since 4.0; the 4.1.0r14 file in 3.2) and a
 row of rules per event type. A transcription can be wrong in two ways. The script can
 misread the PDF, or CAT can publish a new version. Two tools tell those apart: the
 script that regenerates the file, and the nightly comparison with the official schema.
@@ -920,8 +969,33 @@ tables): the comparison listed 33 differences.
 - 16 were version changes. 4.2.0 drops the eleven option and multi-leg quote events
   (MONQ, MORQ, MOQR, MOQC, MOQM, MLNQ, MLRQ, MLQS, MLQR, MLQC, MLQM) and retires five
   MENQ fields (RFQID, RFQFlag, bidRelativePrice, askRelativePrice, validUntilDuration).
-  These are the 16 lines of the deltas file. The library keeps those types at v4.1.0 r14
-  until a 4.2 specification is transcribed.
+  These were the 16 lines of the deltas file in 3.2. The library kept those types at
+  v4.1.0 r14 until a 4.2 specification was transcribed, which 4.0 does (below).
+
+#### Moving the transcription to v4.2.0 r4 (4.0)
+
+Worked example (4.0.0, own transcription): `gen2.py` now takes the version, and with
+`4.2.0r4` reads the CLEAN file of 10/21/2026 from catnmsplan.com (public, no login; the
+PDF is kept out of the repo like the 4.1 one). With `4.1.0r14` it still re-derives the 3.2
+file byte for byte, which is the check that the script change did not alter the old
+reading.
+
+- The 55 events v4.2.0 still defines have the same fields, data types, Include Keys and
+  positions as in v4.1.0 r14, and the same price and choice rules. Only the table numbers
+  move. MENQ loses the five RFQ fields v4.2.0 retires.
+- One script fix: in Table 92 (MOAA) the price sentence runs over a page break, and the
+  running header broke "greater than or equal to zero". The script now removes the
+  header first; without it MOAA would have lost its non-negative price rule.
+- The eleven quote types are deprecated for removal (`CatEventType.MONQ` and the ten
+  others, and `CatEventBuilder.newOptionQuote`), not removed: the release policy needs one
+  minor of deprecation before a removal, so they go in 5.0. Their record and linkage rules
+  stay, cited to v4.1.0 r14, for files still reported under it. The bundled schema
+  (`cat-im-schema-subset-4.2.0r4.json`) leaves them out, so `CatSchema` reports them as
+  CAT-S03.
+- Against the official 4.2.0 schema (sha256 21c6e732...cad9) the comparison finds no
+  difference, and the deltas file is empty.
+- The v4.2.0 Quote Key no longer lists RFQID. RFQID is retired on MENQ, so the key the
+  library builds is unchanged for MENQ records that leave it blank.
 
 *In this library:* `scripts/cat-transcription/`, `scripts/reference-files.sha256`,
 `CatOfficialSchemaTest`, `cat-official-schema-deltas.txt`. Diagram:
@@ -1038,30 +1112,35 @@ runtime: for core only `jspecify` (annotations), for lowlatency core plus `jspec
 
 ### 20. Modules and exceptions
 
-A Java module is a jar that says what it offers and what it needs. Since 3.0 the
-library is two modules, and the split is the stability promise. The stable one,
+A Java module is a jar that says what it offers and what it needs. Since 4.0 the
+library is four modules, and the split is the stability promise. The stable one,
 `com.quantfinlib` (artifact `quant-finance-library`), holds pricing, risk, research
-and backtesting. The reference one, `com.quantfinlib.lowlatency` (artifact
-`quant-finance-library-lowlatency`), holds the trading lane: order books, FIX and
-SBE, feeds, the market-data bus, gateways and regulatory reporting.
+and backtesting. Two incubating ones hold file and HTTP I/O (`com.quantfinlib.io`:
+`io`, `report`) and the strategy DSL (`com.quantfinlib.research`). The reference one,
+`com.quantfinlib.lowlatency` (artifact `quant-finance-library-lowlatency`), holds the
+trading lane: order books, FIX and SBE, feeds, the market-data bus and tick files,
+gateways, RFQ and regulatory reporting. (3.x had two modules; MIGRATION_4.0.md lists
+what moved.)
 
-Formally: the low-latency module `requires transitive com.quantfinlib`, so anything
-that reads it also reads the stable module, and dependencies run one way only. A
+Formally: each of the other three modules `requires transitive com.quantfinlib`, so
+anything that reads one also reads the stable module, and dependencies run one way
+only. A
 package belongs to exactly one module, which is why a few types changed package in
 3.0: the order side became `core.Side` because stable `execution` and `backtest`
 signatures use it, while `StrategyRunner` moved to `trading` because its paper
 engine is a lane class. The stable module exports a helper package, `internal`, to
-the lane module alone (a qualified export); to everyone else it does not exist. The
-stable module needs only `java.net.http`; `jdk.httpserver` and `java.xml` are lane
-needs, and a test runs `jdeps` on the stable classes to keep it that way.
+the lane module alone (a qualified export); to everyone else it does not exist. Since
+4.0 the stable module needs only `java.base`: `java.net.http` belongs to io and the
+lane, `jdk.httpserver` and `java.xml` to the lane, and a test runs `jdeps` on the
+stable classes to keep it that way.
 
 Worked example. A research project writes `requires com.quantfinlib;` and gets
 `pricing`, `risk` and `backtest`; trying to import `com.quantfinlib.trading` fails
 at compile time, because that package is not in the module it reads. A trading
 project writes `requires com.quantfinlib.lowlatency;` and can import both
 `trading.HftOrderGateway` and `core.Side` with no second line. On the class path
-neither descriptor matters; put both jars on it. The demos in
-`com.quantfinlib.examples` are not exported and ship in the low-latency artifact's
+no descriptor matters; put the jars you need on it. The demos, the command line and
+the sample strategies are not exported and ship in the low-latency artifact's
 `examples` jar.
 
 Exceptions follow one rule: a fault in external input (a broken FIX or SBE frame, a
@@ -1074,15 +1153,15 @@ type is an interface, `core.QuantFinException`, and
 from the caller, such as a negative size, stays a plain `IllegalArgumentException`.
 See [ARCHITECTURE.md](../ARCHITECTURE.md#exception-policy).
 
-### 20b. Where the library is going: the 4.0 design (3.1, revised 3.2)
+### 20b. The 4.0 module split (designed in 3.1, revised in 3.2, shipped in 4.0)
 
-`docs/DESIGN_4.0.md` is the plan for the next major release. The plain idea: the
-stable jar should promise only what one maintainer can check, and a pricing user
-should not get an HTTP client. Formally, 4.0 moves the file and HTTP loaders (the new
-`io` package) and `report` to an incubating `-io` module, `dsl` to `-research`,
-hot-lane code (`AggregatedBook`, `rfq`, `marketdata.tick`, `backtest.tick`) to the
-low-latency module, and `cli` and the toy strategies to an examples jar. Most package
-names stay the same, so most users change a dependency, not an import.
+`docs/DESIGN_4.0.md` explains the split. The plain idea: the stable jar should promise
+only what one maintainer can check, and a pricing user should not get an HTTP client.
+Formally, 4.0 moved the file and HTTP loaders (the `io` package) and `report` to the
+incubating `-io` module, `dsl` to `-research`, hot-lane code (`AggregatedBook`,
+`rfq`, `marketdata.tick`, `backtest.tick`) to the low-latency module, and `cli` and
+the toy strategies to an examples jar. Most package names stayed the same, so most
+users changed a dependency, not an import.
 
 The 3.1 draft wanted to move more (`execution`, `microstructure`, `persist`,
 `screener`, `ml`, all of `data`). A scan of imports showed stable code uses each of
@@ -1092,16 +1171,43 @@ a cycle. Worked example: `alpha.Factors` reads `screener.Fundamentals`, so `scre
 stays wherever `alpha` is, which is the stable jar.
 
 A jar move cannot be `@Deprecated`: Java modules forbid one package in two jars, so
-there is no new home to point at until 4.0 exists. Where 3.2 could add a replacement
+there was no new home to point at before 4.0 existed. Where 3.2 could add a replacement
 type, it did and deprecated the old one for removal: `io.CsvBarLoader` and two others
-replace their `data` namesakes, and `marketdata.AggregatedBook` replaces
-`fx.AggregatedBook`. Every move is announced in `package-info` javadoc and in
-MIGRATION_4.0.md, and 4.0 follows 3.2.0 directly.
+replaced their `data` namesakes, and `marketdata.AggregatedBook` replaced
+`fx.AggregatedBook`. 4.0 removed those and the single-curve swap pricer. japicmp against 3.2.0 reports
+the release as MAJOR, and a second japicmp run excludes exactly the MIGRATION_4.0 rows
+and fails on any other break.
 
 Meanwhile 3.1 split the three largest classes internally. `Indicators`,
 `MultiCurrencyExposureSimulator` and `FixSession` are now facades over package-private
 classes, with identical public signatures (checked with japicmp against 3.0.0) and
 the unchanged test suite passing.
+
+### 20c. Which jar do I need? (4.0)
+
+The plain idea: start from the packages your code imports. Each package lives in
+exactly one jar, and every jar except the examples jar brings the stable jar with it,
+so you list only the most specialised one or two.
+
+Formally, the rule is a lookup from package to artifact:
+
+| You import | Artifact | `requires` |
+|---|---|---|
+| `pricing`, `rates`, `credit`, `risk`, `fx`, `volatility`, `alpha`, `backtest`, `execution`, `microstructure`, `data`, ... | `quant-finance-library` | `com.quantfinlib` |
+| `io`, `report` | `quant-finance-library-io` | `com.quantfinlib.io` |
+| `dsl` | `quant-finance-library-research` | `com.quantfinlib.research` |
+| `trading`, `marketdata` (incl. `marketdata.tick`, `AggregatedBook`), `orderbook`, `fix`, `sbe`, `feed`, `entitlements`, `regreporting`, `rfq`, `backtest.tick`, `util` | `quant-finance-library-lowlatency` | `com.quantfinlib.lowlatency` |
+| `cli`, `backtest.strategies`, `examples` | `quant-finance-library-lowlatency`, classifier `examples` | none (class path) |
+
+The stable jar requires only `java.base`. `ModuleGraphTest` checks that no package is
+in two modules and that the graph has no cycle, so the table cannot drift from the
+build. COOKBOOK recipes 485 to 489 have the dependency snippet for each row.
+
+Worked example: a desk tool that loads a CSV of bars, runs a `dsl` rule and sends
+orders through `trading.HftOrderGateway` imports `io`, `dsl` and `trading`. It needs
+three dependencies (`-io`, `-research`, `-lowlatency`) and three `requires` lines; the
+stable jar arrives with each of them. A pricing service that imports only `pricing` and
+`rates` needs one dependency and its module graph is `com.quantfinlib` plus `java.base`.
 
 ---
 

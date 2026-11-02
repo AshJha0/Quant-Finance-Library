@@ -1,9 +1,6 @@
 package com.quantfinlib.markets;
 
 import com.quantfinlib.commodities.CommodityCurve;
-import com.quantfinlib.rates.RatesOptions;
-import com.quantfinlib.rates.SwapPricer;
-import com.quantfinlib.rates.YieldCurve;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -18,47 +15,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * (divisor continuity, turnover) and private-market analytics (IRR,
  * multiples, KS-PME, Geltner round trip).
  */
-@SuppressWarnings("removal") // SwapPricer kept through 3.x; pinned here unchanged
 class AssetClassRoundTest {
 
-    private static YieldCurve flat5() {
-        double[] t = {1, 2, 3, 4, 5, 7, 10};
-        double[] z = new double[t.length];
-        java.util.Arrays.fill(z, 0.05);
-        return YieldCurve.ofZeroRates(t, z);
-    }
-
-    // ------------------------------------------------------------------- swaps
-
-    @Test
-    void parSwapPricesToZeroAndMatchesRatesOptions() {
-        YieldCurve c = flat5();
-        double par = SwapPricer.parRate(c, 5);
-        assertEquals(0.0, SwapPricer.payerPv(c, 5, par), 1e-12,
-                "a swap struck at par is worth exactly zero");
-        // Same object RatesOptions computes as the 0-into-5y forward rate.
-        assertEquals(RatesOptions.forwardSwapRate(c, 0, 5), par, 1e-12);
-        // Flat cc curve: par = the simple annual forward.
-        assertEquals(Math.exp(0.05) - 1, par, 1e-12);
-        // Below-par fixed rate favors the payer.
-        assertTrue(SwapPricer.payerPv(c, 5, par - 0.01) > 0);
-    }
-
-    @Test
-    void dv01IsAnnuityTimesTheParRateSensitivity() {
-        // Subtlety worth pinning: a 1bp bump to the CC zero curve moves
-        // the SIMPLE par rate by e^z bp (d(e^z - 1)/dz), so the payer
-        // DV01 on a flat 5% curve is annuity * e^0.05 * 1bp — the naive
-        // "annuity * 1bp" is the sensitivity to the PAR rate, a
-        // different derivative.
-        YieldCurve c = flat5();
-        double par = SwapPricer.parRate(c, 5);
-        double dv01 = SwapPricer.dv01(c, 5, par);
-        assertTrue(dv01 > 0, "rates up helps the fixed payer");
-        assertEquals(SwapPricer.annuity(c, 5) * 1e-4 * Math.exp(0.05), dv01,
-                SwapPricer.annuity(c, 5) * 1e-4 * 0.01,
-                "DV01 = annuity * e^z * 1bp on a flat cc curve (within 1%)");
-    }
 
     // -------------------------------------------------------------- commodities
 

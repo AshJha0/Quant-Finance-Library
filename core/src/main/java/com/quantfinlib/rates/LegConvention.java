@@ -13,8 +13,8 @@ import java.util.Objects;
  *
  * <p>The plain idea: two swaps with the same dates and rates can differ in
  * value only through these fields, so they are stated once per leg instead
- * of being assumed (the deprecated {@link SwapPricer} methods on a
- * {@link YieldCurve} assume an annual fixed leg with {@code tau = 1}).</p>
+ * of being assumed (the {@code SwapPricer} methods on a
+ * {@link YieldCurve}, removed in 4.0, assumed an annual fixed leg with {@code tau = 1}).</p>
  *
  * <p>Formally, the unadjusted period ends come from
  * {@link BusinessCalendar#unadjustedSchedule(LocalDate, LocalDate, int, BusinessCalendar.StubType, boolean)};

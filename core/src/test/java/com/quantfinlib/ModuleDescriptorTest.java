@@ -22,8 +22,8 @@ import org.junit.jupiter.api.Test;
  * The tests run on the class path, so the module descriptor is checked here
  * directly: every source package except {@code internal} is exported,
  * {@code internal} only to the low-latency module, and the only requirements
- * are {@code java.net.http} and static JSpecify. Since 3.0 the stable module
- * must not need {@code jdk.httpserver}; {@link #jdepsFindsNoHttpServerDependency}
+ * are {@code java.base} and static JSpecify (4.0 dropped {@code java.net.http}). Since 3.0 the stable module
+ * must not need {@code jdk.httpserver}; {@link #jdepsFindsNoHttpDependency}
  * checks the compiled classes with {@code jdeps}, not just the descriptor.
  */
 class ModuleDescriptorTest {
@@ -62,13 +62,14 @@ class ModuleDescriptorTest {
     }
 
     @Test
-    void jdepsFindsNoHttpServerDependency() {
+    void jdepsFindsNoHttpDependency() {
         ToolProvider jdeps = ToolProvider.findFirst("jdeps").orElseThrow();
         StringWriter out = new StringWriter();
         int rc = jdeps.run(new PrintWriter(out), new PrintWriter(out),
                 "--ignore-missing-deps", "-summary", Path.of("target", "classes").toString());
         assertEquals(0, rc, out.toString());
-        assertTrue(out.toString().contains("java.net.http"), out.toString());
+        // 4.0: java.net.http moved out with io.HttpBarFetcher (docs/MIGRATION_4.0.md row 7).
+        assertFalse(out.toString().contains("java.net.http"), out.toString());
         assertFalse(out.toString().contains("jdk.httpserver"), out.toString());
     }
 
@@ -81,6 +82,6 @@ class ModuleDescriptorTest {
             }
             requires.add(r.name());
         }
-        assertEquals(Set.of("java.base", "java.net.http", "org.jspecify"), requires);
+        assertEquals(Set.of("java.base", "org.jspecify"), requires);
     }
 }

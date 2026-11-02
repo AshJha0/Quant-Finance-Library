@@ -11,15 +11,15 @@ behaviour; performance figures are in [BENCHMARKS.md](BENCHMARKS.md).
 The design splits everything into a hot lane (zero allocation,
 single-producer/single-consumer, latency-budgeted) and a research lane
 (clarity first, allocation allowed). Knowing which lane a class is in tells
-you what to expect from it.
+you what to expect from it. Which jar each package ships in since 4.0 is section 113.
 
 ```mermaid
 flowchart LR
     subgraph IN["Data in"]
-        CSV["CSV / HTTP bars<br/>(data)"]
+        CSV["CSV / HTTP bars<br/>(io, -io jar)"]
         WS["WebSocket live<br/>(feed)"]
         SBE_IN["Binary SBE stream<br/>(sbe)"]
-        QFLT["QFLT tick files<br/>(data)"]
+        QFLT["QFLT tick files<br/>(marketdata.tick)"]
         UNIV["Universe CSV<br/>(io.UniverseCsvLoader)"]
     end
 
@@ -36,7 +36,7 @@ flowchart LR
         BT["backtest: bar / execution-aware /<br/>tick / portfolio+survivorship"]
         PRICE["pricing • fx • rates •<br/>volatility • hedging"]
         RISK["risk • optimization •<br/>ml • screener"]
-        REPORT["report: HTML/PDF/XLSX/CSV<br/>+ SVG charts • cli • dashboard"]
+        REPORT["report (-io jar): HTML/PDF/XLSX/CSV<br/>+ SVG charts • cli (examples) • dashboard"]
     end
 
     subgraph VENUEBOX["Venue side (both lanes)"]
@@ -3439,7 +3439,7 @@ and bilateral CVA. Diagram 51 is the survival curve this consumes.
 
 One yield curve prices a vanilla swap three ways that must agree: the par
 rate zeroes the swap, the annuity is the DV01's backbone, and a
-one-basis-point bump reprices the risk. `SwapPricer` builds all three off
+one-basis-point bump reprices the risk. `VanillaSwap` builds all three off
 the same discount factors.
 
 ```mermaid
@@ -3493,7 +3493,7 @@ flowchart TD
     end
     SHORT83["shortRate = b0 + b1<br/>(the t->0 limit)"]
     LONG83["longRate = b0<br/>(the t->infinity limit)"]
-    USE83(["zeroRate(t) -> DF(t) -><br/>SwapPricer / BondPricer;<br/>rmse reports fit quality:<br/>prefer NS unless the extra hump<br/>earns its 2 parameters"])
+    USE83(["zeroRate(t) -> DF(t) -><br/>VanillaSwap / BondPricer;<br/>rmse reports fit quality:<br/>prefer NS unless the extra hump<br/>earns its 2 parameters"])
 
     TENORS83 --> B0_83
     TENORS83 --> B1_83
@@ -4596,7 +4596,7 @@ flowchart LR
     SUB_110["toSubmissionXml (2.4)<br/>head.003 envelope, head.001 header,<br/>auth.016 payload"]
     CAT_110["regreporting.cat<br/>CatEventBuilder (MENO/MEOR/MEOT/MEOF;<br/>MENQ/MONO/MOOR/MONQ, option lifecycle,<br/>supplements, multi-leg from 3.1)"]
     CSCH_110["CatSchema (3.1)<br/>JSON line vs schema file"]
-    LINK_110["CatLinkageChecker (3.1)<br/>Order/Trade/Fulfillment/Quote Keys<br/>across a batch or several files"]
+    LINK_110["CatLinkageChecker (3.1; LK06-LK09 4.0)<br/>Order/Trade/Fulfillment/Quote Keys<br/>across a batch or several files"]
     EMIR_110["regreporting.emir<br/>EmirRefitReportBuilder"]
     STATE_110["EmirStatefulValidator (3.1, opt-in)<br/>UTI history, receipt time,<br/>GLEIF status and branch, venue MIC,<br/>trade key, UTI dates, ISO 4217"]
     CHK_110["regreporting.registry<br/>ReferenceDataChecker"]
@@ -4664,14 +4664,14 @@ can this tag be published (release).
 flowchart TD
     subgraph PR22["every push and PR (ci.yml)"]
         T22["tests, JDK 25 (3 OS)<br/>+ committed stand-ins:<br/>IsdaGoldenSubsetTest, EsmaXsdGoldenTest"]
-        API22["api-compat (japicmp)<br/>vs the 3.0.0 jars, no allow-list"]
+        API22["api-compat (japicmp)<br/>vs the 3.2.0 jars, report MAJOR;<br/>gate excludes the MIGRATION_4.0 rows only"]
     end
     subgraph NIGHT22["nightly.yml"]
         FULL22["full-tests<br/>(load, timing)"]
         AN22["analysis<br/>(SpotBugs, Error Prone)"]
         REF22["reference-files<br/>fetch ISDA grids + ESMA XSDs,<br/>check SHA-256 pins,<br/>QFL_REQUIRE_REFERENCE_FILES=true,<br/>fail on any skip"]
         FUZ22["fuzz<br/>-Pfuzz parser fuzz tests (200,000 cases),<br/>pricing properties (20,000 cases)"]
-        MUT22["mutation (core)<br/>mutation-lowlatency<br/>(regreporting, FIX codecs)<br/>floors: pit-thresholds.txt"]
+        MUT22["mutation (core)<br/>mutation-lowlatency<br/>(regreporting, FIX codecs)<br/>floors: pit-thresholds.txt;<br/>mutation-io-research (report only)"]
     end
     subgraph REL22["v* tag (release.yml)"]
         TG22["tag-guard<br/>no forced push, no existing release,<br/>no re-used tag name"]
@@ -4690,19 +4690,18 @@ tags are never moved) is in [PUBLISHING.md](PUBLISHING.md).
 
 ---
 
-## 113. The 4.0 module plan: what moves where
+## 113. The 4.0 modules: what moved where
 
-3.2.0 announces these moves and ships the replacement types; 4.0.0 makes them. Solid
-arrows are `requires`; dashed arrows show where 3.x packages go. The table was revised
-in 3.2.0: `microstructure`, `execution`, `persist`, `screener`, `ml` and the rest of
-`data` stay in the stable jar, because moving them would create a module cycle.
-Details and evidence are in [DESIGN_4.0.md](DESIGN_4.0.md); what to change is in
-[MIGRATION_4.0.md](MIGRATION_4.0.md).
+Since 4.0. Solid arrows are `requires`; the dashed arrows show where 3.x core packages
+went. Everything not listed stayed in the stable module, including `execution`,
+`microstructure`, `persist`, `screener`, `ml` and most of `data`, because stable code
+uses them (the reasons are in [DESIGN_4.0.md](DESIGN_4.0.md); the user steps in
+[MIGRATION_4.0.md](MIGRATION_4.0.md)).
 
 ```mermaid
 flowchart LR
-    subgraph S23["quant-finance-library (stable, no java.net.http)"]
-        ST23["core, stats, pricing, rates, credit, risk, crb,<br/>volatility, hedging, fx, indicators, optimization,<br/>alpha, backtest, data, execution, microstructure,<br/>persist, screener, ml, ..."]
+    subgraph S23["quant-finance-library (stable, java.base only)"]
+        ST23["core, stats, pricing, rates, credit,<br/>risk, crb, volatility, hedging, fx,<br/>indicators, optimization, alpha, backtest,<br/>data, execution, microstructure,<br/>persist, screener, ml"]
     end
     subgraph IO23["-io (incubating)"]
         IOP23["io (CsvBarLoader, HttpBarFetcher,<br/>UniverseCsvLoader), report"]
@@ -4717,9 +4716,10 @@ flowchart LR
     IO23 --> S23
     RS23 --> S23
     LL23 --> S23
+    LL23 -. "requires static" .-> IO23
+    LL23 -. "requires static" .-> RS23
     EX23 --> LL23
-    C30["3.x core exports"] -.-> ST23
-    C30 -.-> IOP23
+    C30["3.x core exports"] -.-> IOP23
     C30 -.-> RSP23
     C30 -.-> LLP23
     C30 -.-> EX23
@@ -4748,8 +4748,10 @@ flowchart LR
 ```
 
 Every type gets the schema gate (CAT-S01 to S09) and the record rules its table
-prints (CAT-R22 price, CAT-R23 choices). Linkage (CAT-LK01 to LK05) covers the 19
-types of 3.1 only. Recipes 480 to 483, LEARN 17m.
+prints (CAT-R22 price, CAT-R23 choices). Linkage (CAT-LK01 to LK05) covered the 19
+types of 3.1 only in 3.2; from 4.0 CAT-LK06 to LK09 link the other 47 as well,
+and table numbers follow v4.2.0 r4; the eleven option and multi-leg quote types it drops
+are deprecated for removal in 5.0. Recipes 480 to 483 and 491 to 494, LEARN 17m and 17n.
 
 ## 115. The nightly reference-files job: fetch, pin, test (3.2)
 
@@ -4765,7 +4767,7 @@ flowchart TD
     CHK_115 -->|mismatch or download error| RED_115["job fails:<br/>a file was republished,<br/>review before re-pinning"]
     CHK_115 -->|match| ENV_115["export QFL_ISDA_GRID_DIR, QFL_ESMA_*_XSD,<br/>QFL_CAT_SCHEMA,<br/>QFL_REQUIRE_REFERENCE_FILES=true"]
     ENV_115 --> TST_115["IsdaGridVerificationTest, Auth016XmlTest,<br/>Auth016EnvelopeTest, StatusAdviceTest,<br/>EsmaXsdGoldenTest, IsdaGoldenSubsetTest,<br/>CatOfficialSchemaTest"]
-    DEL_115["cat-official-schema-deltas.txt<br/>accepted differences, each with a reason"] --> TST_115
+    DEL_115["cat-official-schema-deltas.txt<br/>accepted differences, each with a reason<br/>(empty since 4.0, CAT v4.2.0 r4)"] --> TST_115
     TST_115 --> SK_115{"any test skipped?"}
     SK_115 -->|yes| RED_115
     SK_115 -->|no| OK_115["green"]

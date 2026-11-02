@@ -8,8 +8,8 @@
  * lines.</p>
  *
  * <p><b>Not certified.</b> Field names and single-record checks are checked against the CAT
- * Reporting Technical Specifications for Industry Members v4.1.0 r14 (2026-02-13): Tables 3,
- * 16, 18, 48, 52 and 165, section 7.6 and Appendix G, for the equity event types MENO, MEOR,
+ * Reporting Technical Specifications for Industry Members v4.2.0 r4 (2026-10-21): Tables 3,
+ * 15, 17, 47, 51 and 148, section 7.6 and Appendix G, for the equity event types MENO, MEOR,
  * MEOT and MEOF; {@link com.quantfinlib.regreporting.cat.CatEvent#rules()} lists each rule.
  * Only a core subset of fields is populated (listed on
  * {@link com.quantfinlib.regreporting.cat.CatEventBuilder}); linkage, reference data (symbol
@@ -19,17 +19,17 @@
  * starting point, not as a filing.</p>
  *
  * <p><b>Since 3.1.0.</b> Four more event types are built and checked: new quote (MENQ,
- * Table 39), new option order (MONO, Table 62), option order route (MOOR, Table 64) and new
- * option quote (MONQ, Table 85). {@link com.quantfinlib.regreporting.cat.CatLinkageChecker}
+ * Table 38), new option order (MONO, Table 61), option order route (MOOR, Table 63) and new
+ * option quote (MONQ, v4.1.0 r14 Table 85). {@link com.quantfinlib.regreporting.cat.CatLinkageChecker}
  * checks Order, Trade, Fulfillment and Quote Keys across a batch (section 2.6.1, Table 5).
  * Also since 3.1.0: the option lifecycle events MOOA, MOOM, MOOC, MOOT and MOOF
- * (Tables 70, 79, 83, 90, 92), the supplements MENOS, MONOS and MLOS (Tables 17, 63, 139),
- * the multi-leg events MLNO, MLOR and MLOC with their legDetails (Tables 100 to 103, 126),
+ * (Tables 69, 78, 82, 84, 86), the supplements MENOS, MONOS and MLOS (Tables 16, 62, 122),
+ * the multi-leg events MLNO, MLOR and MLOC with their legDetails (Tables 94 to 97, 120),
  * linkage across several files ({@code CatLinkageChecker.checkFiles}), and a
  * dependency-free check of JSON record lines against a CAT schema file in the section
- * 6.1.5.2 layout ({@link com.quantfinlib.regreporting.cat.CatSchema}; the bundled schema is
+ * 6.1.4.2 layout ({@link com.quantfinlib.regreporting.cat.CatSchema}; the bundled schema is
  * the library's transcription, not the official file). Since 3.2.0 the other 47 option and
- * multi-leg events of Tables 60 and 61 are built ({@code CatEventBuilder.start}) and checked
+ * multi-leg events of Tables 59 and 60 are built ({@code CatEventBuilder.start}) and checked
  * record by record, grouped by {@link com.quantfinlib.regreporting.cat.CatEventFamily}; their
  * linkage is not checked yet. Still not covered: equity events other than MENO, MENOS, MEOR,
  * MENQ, MEOT and MEOF, Name/Value Pair and side-detail contents, CAIS, and reference data.</p>

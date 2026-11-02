@@ -1,7 +1,8 @@
 # Migrating to 4.0
 
-Status: written for 3.2.0, which announces every change below; 4.0.0 follows 3.2.0
-directly and makes them. The design and its reasons are in
+Status: implemented for 4.0.0. 3.2.0 announced every change below; 4.0.0 follows
+3.2.0 directly and makes them. japicmp against the 3.2.0 jars reports MAJOR, and its
+gate run excludes exactly the rows below (core/pom.xml, execution `api-stable-gate`). The design and its reasons are in
 [DESIGN_4.0.md](DESIGN_4.0.md). On 3.2.0, compiling with `-Xlint:removal` lists every
 line that uses a type 4.0 removes, and each of those has a replacement you can switch to
 on 3.2.0 already.
@@ -57,7 +58,7 @@ Package names unchanged. Add the lowlatency dependency (snippet in row 2) and
 `requires com.quantfinlib.lowlatency;`. That module requires the stable module
 transitively, so nothing else changes.
 
-### 4. `data.CsvBarLoader`, `data.HttpBarFetcher`, `data.UniverseCsvLoader` become `io.*`
+### 4. `data.CsvBarLoader`, `data.HttpBarFetcher`, `data.UniverseCsvLoader` become `io.*`, and `io` moves to `-io`
 
 ```xml
 <dependency>
@@ -74,7 +75,9 @@ import com.quantfinlib.data.CsvBarLoader;
 import com.quantfinlib.io.CsvBarLoader;
 ```
 
-Same for the other two. `module-info.java`: `requires com.quantfinlib.io;`. The rest of
+Same for the other two. In 3.2.0 the `io` package shipped inside the stable jar so that
+you could switch imports early; in 4.0.0 it lives in the `-io` jar, so code that already
+imports `io.*` changes only its dependency. `module-info.java`: `requires com.quantfinlib.io;`. The rest of
 `data` (`PointInTimeUniverse`, `CorporateActions`, `CorporateEvents`,
 `CorporateEventPositions`, `SeriesAligner`) stays in the stable jar.
 
@@ -106,6 +109,32 @@ module requires it (not transitively).
 Deprecated since 3.1.0, marked for removal in 3.2.0. The replacements are in
 [MIGRATION_3.1.md](MIGRATION_3.1.md), section 1. No dependency change.
 
+### 9. CAT: the transcription follows v4.2.0 r4; the quote types are deprecated (lowlatency)
+
+Not a signature break, so japicmp does not list it; the results of some checks change.
+
+- `CatSchema.bundledSubset()` now reads `cat-im-schema-subset-4.2.0r4.json` (CAT IM
+  Technical Specifications v4.2.0 r4, 10/21/2026): 55 events, `version()` "4.2.0". The
+  3.2 resource `cat-im-schema-subset-4.1.0r14.json` is gone. Code that loaded it by name
+  must use `bundledSubset()` or its own copy.
+- v4.2.0 drops the option and multi-leg quote events. `CatEventType.MONQ`, `MORQ`, `MOQR`,
+  `MOQC`, `MOQM`, `MLNQ`, `MLRQ`, `MLQS`, `MLQR`, `MLQC`, `MLQM` and
+  `CatEventBuilder.newOptionQuote()` are `@Deprecated(since = "4.0.0", forRemoval = true)`
+  and will be removed in 5.0.0. They still build and validate (rules cite v4.1.0 r14), but
+  the bundled schema reports them as CAT-S03.
+- MENQ no longer has RFQID, RFQFlag, bidRelativePrice, askRelativePrice and
+  validUntilDuration in the bundled schema (retired in v4.2.0); a MENQ line that carries
+  them gets CAT-S04 (unknown field) from `CatSchema`.
+- Rule citations, `CatEvent.CHECKED_AGAINST*` and the table in each CAT-R22/R23 message
+  use v4.2.0 r4 numbers (each table from 13 to 84 is one lower, each from 90 to 127 six
+  lower: "Table 65 seq 20" is now "Table 64 seq 20"). Code that matches on message text
+  must follow.
+- `CatLinkageChecker` checks the 47 Table 59/60 types it skipped in 3.2 (new rules
+  CAT-LK06 to CAT-LK09; `rules()` has 9 entries, not 5). A batch with those types can now
+  give issues. Batches of the 3.1 types alone give the same issues as before.
+
+No dependency change. Recipes 491 to 494, LEARN 17m and 17n.
+
 ## What does not break
 
 Everything else in the stable jar keeps its package, class and signature. In particular
@@ -113,11 +142,88 @@ Everything else in the stable jar keeps its package, class and signature. In par
 the stable jar; the 3.1 draft of DESIGN_4.0 proposed moving them, and DESIGN_4.0 explains
 why they stay.
 
-## Worked example
+## Worked examples, before and after
 
-A user on 3.1 with `quant-finance-library` who loads bars from CSV and prices options:
+### A. A pricing user who also loads CSV bars
 
-1. On 3.2.0, change `import com.quantfinlib.data.CsvBarLoader;` to
-   `import com.quantfinlib.io.CsvBarLoader;`. It compiles with no removal warning.
-2. On 4.0.0, add the `quant-finance-library-io` dependency and
-   `requires com.quantfinlib.io;`. The pricing code is untouched.
+Before, on 3.1:
+
+```xml
+<dependency>
+  <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
+  <artifactId>quant-finance-library</artifactId>
+  <version>v3.1.0</version>
+</dependency>
+```
+
+```java
+import com.quantfinlib.data.CsvBarLoader;
+import com.quantfinlib.pricing.BlackScholes;
+
+BarSeries bars = CsvBarLoader.load(Path.of("bars.csv"), "SPY");
+```
+
+Step 1, on 3.2.0: change the import to `com.quantfinlib.io.CsvBarLoader`. It compiles
+with no removal warning, and the results are the same (the 3.2 `data` class delegated
+to it).
+
+Step 2, on 4.0.0: replace the dependency with the io artifact, which brings the stable
+jar with it, and add one `requires` line.
+
+```xml
+<dependency>
+  <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
+  <artifactId>quant-finance-library-io</artifactId>
+  <version>v4.0.0</version>
+</dependency>
+```
+
+```java
+// module-info.java
+module my.pricer {
+    requires com.quantfinlib.io;      // reads com.quantfinlib transitively
+}
+
+import com.quantfinlib.io.CsvBarLoader;     // unchanged since step 1
+import com.quantfinlib.pricing.BlackScholes; // unchanged
+```
+
+The pricing code is untouched.
+
+### B. A researcher using the DSL and a sample strategy
+
+Before, on 3.2:
+
+```java
+import com.quantfinlib.backtest.strategies.SmaCrossStrategy;
+import com.quantfinlib.dsl.Rules;
+import com.quantfinlib.dsl.StrategyBuilder;
+```
+
+with only `quant-finance-library` as a dependency. After, on 4.0.0, the imports are the
+same; the dependencies are the research artifact (row 6) for `dsl`, and either a copy
+of `SmaCrossStrategy` in your own code or the examples classifier jar (row 1) on the
+class path. A module that copied the strategy needs only
+`requires com.quantfinlib.research;`.
+
+### C. A trading-lane user with `fx.AggregatedBook` and tick files
+
+Before, on 3.1, with `quant-finance-library-lowlatency`:
+
+```java
+import com.quantfinlib.fx.AggregatedBook;
+import com.quantfinlib.marketdata.tick.TickFileReader;
+```
+
+After, on 4.0.0, the dependency is unchanged (it already pulls the stable jar):
+
+```java
+import com.quantfinlib.marketdata.AggregatedBook;          // row 2
+import com.quantfinlib.marketdata.tick.TickFileReader;     // row 3: same import, now in lowlatency
+```
+
+### D. A user of the removed swap pricer
+
+`rates.SwapPricer` is gone (row 8). MIGRATION_3.1.md section 1 shows the replacement
+with the convention-driven leg model, before and after.
+

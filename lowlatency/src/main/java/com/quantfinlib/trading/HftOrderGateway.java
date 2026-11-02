@@ -476,10 +476,12 @@ public final class HftOrderGateway implements AutoCloseable {
             reportCounters.getAndAdd(UNKNOWN, 1);
             return false;
         }
-        if (!transition(slot, OrderStateMachine.EVENT_REJECT)) {
+        int next = nextState(slot, OrderStateMachine.EVENT_REJECT);
+        if (next == OrderStateMachine.ILLEGAL) {
             return false;
         }
         releaseAll(slot);
+        orders.setState(slot, next);
         reportCounters.getAndAdd(REJECTS, 1);
         return true;
     }
@@ -636,12 +638,14 @@ public final class HftOrderGateway implements AutoCloseable {
             reportCounters.getAndAdd(UNKNOWN, 1);
             return false;
         }
-        if (!transition(slot, OrderStateMachine.EVENT_CANCELED)) {
+        int next = nextState(slot, OrderStateMachine.EVENT_CANCELED);
+        if (next == OrderStateMachine.ILLEGAL) {
             return false;
         }
         releaseAll(slot);
         orders.clearFlag(slot, (byte) (OrderStateTable.PENDING_CANCEL
                 | OrderStateTable.PENDING_REPLACE));
+        orders.setState(slot, next);
         reportCounters.getAndAdd(CANCELED, 1);
         return true;
     }
@@ -700,6 +704,22 @@ public final class HftOrderGateway implements AutoCloseable {
         }
         orders.setState(slot, next);
         return true;
+    }
+
+    /**
+     * The state {@code event} leads to, or {@link OrderStateMachine#ILLEGAL}
+     * (counted) if the event is not allowed. Terminal events compute the next
+     * state with this, release the reservation, and only then publish the
+     * state, so a reader that sees CANCELED, REJECTED or FILLED also sees the
+     * released exposure. A repeated terminal event still finds a terminal
+     * state, gets ILLEGAL and releases nothing.
+     */
+    private int nextState(int slot, int event) {
+        int next = OrderStateMachine.next(orders.state(slot), event);
+        if (next == OrderStateMachine.ILLEGAL) {
+            reportCounters.getAndAdd(ILLEGAL, 1);
+        }
+        return next;
     }
 
     private void releaseAll(int slot) {
@@ -774,8 +794,12 @@ public final class HftOrderGateway implements AutoCloseable {
             if (riskGate.isKilled()) {
                 // Queued before the kill: never let it reach the venue.
                 int slot = orders.slotOf(orderId);
-                if (slot >= 0 && transition(slot, OrderStateMachine.EVENT_REJECT)) {
-                    releaseAll(slot);
+                if (slot >= 0) {
+                    int next = nextState(slot, OrderStateMachine.EVENT_REJECT);
+                    if (next != OrderStateMachine.ILLEGAL) {
+                        releaseAll(slot);
+                        orders.setState(slot, next);
+                    }
                 }
                 venueCounters.incrementOpaque(SUPPRESSED);
                 return;

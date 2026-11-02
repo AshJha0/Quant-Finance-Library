@@ -12,7 +12,7 @@
  * RR/BF wings, premium-adjusted delta↔strike solving),
  * {@link com.quantfinlib.fx.FixingRisk} (WM/R-window TWAP/VWAP tracking
  * error and participation), and the hot-path pieces:
- * {@link com.quantfinlib.fx.AggregatedBook} (zero-alloc multi-venue BBO
+ * {@code marketdata.AggregatedBook} (lowlatency since 4.0) (zero-alloc multi-venue BBO
  * with venue attribution) (the streaming cross-rate engine, which runs on
  * the market-data bus, moved to {@code marketdata.CrossRateEngine} in the
  * low-latency artifact in 3.0),
@@ -23,11 +23,10 @@
  * rejects into the decision) and {@link com.quantfinlib.fx.SyntheticCross}
  * (direct-vs-legs execution arithmetic with spread composition).
  *
- * <p><b>Moves in 4.0.</b> {@code AggregatedBook} is hot-lane code and leaves
- * the stable jar: it is deprecated for removal in 3.2.0, and its replacement
- * {@code com.quantfinlib.marketdata.AggregatedBook} in {@code quant-finance-
- * library-lowlatency} has the same API. Change one import. The rest of the
- * package stays. See docs/DESIGN_4.0.md and docs/MIGRATION_4.0.md.</p>
+ * <p><b>Since 4.0.</b> {@code AggregatedBook} is {@code
+ * com.quantfinlib.marketdata.AggregatedBook} in {@code quant-finance-
+ * library-lowlatency} (module {@code com.quantfinlib.lowlatency}), with the
+ * same API. See docs/MIGRATION_4.0.md.</p>
  */
 @NullMarked
 package com.quantfinlib.fx;
