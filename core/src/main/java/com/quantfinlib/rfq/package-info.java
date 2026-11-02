@@ -13,6 +13,12 @@
  * {@code execution.VenueScorecard} (order-book venues) and
  * {@code fx.LpScorecard} (FX quote streams): three market structures,
  * one learned-counterparty-quality discipline.
+ *
+ * <p><b>Moves in 4.0.</b> This package moves, with its name unchanged, to
+ * the reference-tier artifact {@code quant-finance-library-lowlatency}
+ * (module {@code com.quantfinlib.lowlatency}): it is an execution workflow,
+ * not pricing. Add that dependency; imports do not change. See
+ * docs/DESIGN_4.0.md and docs/MIGRATION_4.0.md.</p>
  */
 @NullMarked
 package com.quantfinlib.rfq;

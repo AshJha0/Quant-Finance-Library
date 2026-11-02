@@ -243,7 +243,7 @@ checks. These need native code or hardware and are out of scope.
 
 | Lane | Contents | Contract |
 |---|---|---|
-| Hot | `marketdata` bus, rings, `ItchCodec`, `L3BookBuilder`, `Nbbo`; `trading` gate, gateway, quoter, hedger, throttle, `LastLookGate`; `orderbook.HftOrderBook`; `execution.HftSor`; `microstructure` streaming signals and models; `sbe`; `fx.AggregatedBook`, `CrossRateEngine`, `FxTierBook`; `pricing.IncrementalGreeks`; `fix.FixOrderEncoder`, `FixExecReportView`, `FixMarketDataView`; `util.LatencyRecorder` | No allocation and no locks per event |
+| Hot | `marketdata` bus, rings, `ItchCodec`, `L3BookBuilder`, `Nbbo`; `trading` gate, gateway, quoter, hedger, throttle, `LastLookGate`; `orderbook.HftOrderBook`; `execution.HftSor`; `microstructure` streaming signals and models; `sbe`; `marketdata.AggregatedBook`, `CrossRateEngine`, `FxTierBook`; `pricing.IncrementalGreeks`; `fix.FixOrderEncoder`, `FixExecReportView`, `FixMarketDataView`; `util.LatencyRecorder` | No allocation and no locks per event |
 | Warm | `execution.BenchmarkExecutor`, `PortfolioExecutor`, `LiquiditySeekingAlgo`, `VenueScorecard`; `microstructure.EwmaCovariance` | Decides per interval (seconds), allocation-free by test |
 | Edge | `fix.FixSession`, `feed.WebSocketFeed`, `data` tick files, `persist.Checkpoint` | I/O-bound; `FixSession` takes a lock per send to keep journal and socket in order |
 | Research | Everything else | Clarity first; allocation is acceptable |

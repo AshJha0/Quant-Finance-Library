@@ -6,9 +6,9 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.quantfinlib.data.CsvBarLoader;
+import com.quantfinlib.io.CsvBarLoader;
 import com.quantfinlib.marketdata.tick.TickFileReader;
-import com.quantfinlib.data.UniverseCsvLoader;
+import com.quantfinlib.io.UniverseCsvLoader;
 import java.io.IOException;
 import java.util.List;
 import org.junit.jupiter.api.Test;

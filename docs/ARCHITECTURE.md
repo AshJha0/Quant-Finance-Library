@@ -206,7 +206,7 @@ tiers lived only in STABILITY.md.
 
 | Module | Directive | Why |
 |---|---|---|
-| `com.quantfinlib` | `requires transitive java.net.http` | `data.HttpBarFetcher` |
+| `com.quantfinlib` | `requires transitive java.net.http` | `io.HttpBarFetcher` (3.2; moves to `-io` in 4.0) |
 | `com.quantfinlib` | `requires static org.jspecify` | `@NullMarked` and `@Nullable`; compile time only |
 | `com.quantfinlib.lowlatency` | `requires transitive com.quantfinlib` | lane signatures use stable types (`core.Side`, `core.BarSeries`, `backtest.TradingStrategy`) |
 | `com.quantfinlib.lowlatency` | `requires java.xml` | the FIRDS parser in `regreporting.registry` |
@@ -257,7 +257,7 @@ input fault from any other failure.
 | Type (in `core` unless named) | Extends | Thrown by |
 |---|---|---|
 | `WireProtocolException` | `IllegalStateException` | A stream that breaks its framing: FIX BodyLength in `fix.FixDecoder`, the SBE schema and template header in `sbe.SbeFrames`. Drop the connection and recover by sequence number. |
-| `MalformedDataException` | `IllegalArgumentException` | A file or record that does not follow its format: `data.CsvBarLoader.parse`, `data.UniverseCsvLoader.parse` |
+| `MalformedDataException` | `IllegalArgumentException` | A file or record that does not follow its format: `io.CsvBarLoader.parse`, `io.UniverseCsvLoader.parse` |
 | `ConfigurationException` | `IllegalArgumentException` | An invalid configuration or limit: `trading.LimitsConfig` |
 | `fix.FixParseException` | `IllegalArgumentException` | A malformed FIX message; predates the scheme and implements the marker |
 | `MalformedFileException` | `IOException` | A file with a bad magic number, version or structure (2.2): `marketdata.tick.TickFileReader`, `persist.Checkpoint`, `fix.FileSessionStore`, `execution.VenueScorecard`, `fx.LpScorecard` |

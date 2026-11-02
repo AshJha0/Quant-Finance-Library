@@ -9,6 +9,10 @@
  * EPS, ROE, dividend yield, leverage), then ranks survivors with the
  * weighted min-max {@link com.quantfinlib.screener.RankingEngine} and
  * exports to CSV.
+ *
+ * <p><b>4.0.</b> This package stays in the stable jar in 4.0. The 3.1 design
+ * proposed moving it out, but stable packages ({@code alpha}) depend on it,
+ * and a move would make the module graph cyclic. See docs/DESIGN_4.0.md.</p>
  */
 @NullMarked
 package com.quantfinlib.screener;

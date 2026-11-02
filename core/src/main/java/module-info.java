@@ -11,7 +11,8 @@
  *
  * <p>{@code com.quantfinlib.internal} holds shared implementation helpers
  * and is exported only to the low-latency module; it is not API.
- * {@code java.net.http} backs {@code data.HttpBarFetcher}. JSpecify is a
+ * {@code java.net.http} backs {@code io.HttpBarFetcher} (and the deprecated
+ * {@code data.HttpBarFetcher}); in 4.0 it moves out with {@code io}. JSpecify is a
  * compile-time dependency only ({@code requires static}).</p>
  */
 // "module": the qualified export names com.quantfinlib.lowlatency, which is
@@ -38,6 +39,7 @@ module com.quantfinlib {
     exports com.quantfinlib.fx;
     exports com.quantfinlib.hedging;
     exports com.quantfinlib.indicators;
+    exports com.quantfinlib.io;
     exports com.quantfinlib.marketdata.tick;
     exports com.quantfinlib.markets;
     exports com.quantfinlib.microstructure;
