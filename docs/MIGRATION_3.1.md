@@ -45,7 +45,7 @@ annual tenors off a `YieldCurve`, the new one the actual accrual fractions
 and business-day schedule. In the special case of no lag and no lookback,
 `VanillaSwap` equals `OisSwap` (and, with a `TermRateLeg`,
 `InterestRateSwap`) to 1e-14 (`VanillaSwapTest`). Lookback, observation
-shift, lockout and payment lag are explained in LEARN 10d.1.
+shift, lockout and payment lag are explained in [LEARN 10d.1](learn/02-risk-derivatives-rates-credit.md#10d1-lookback-observation-shift-lockout-and-payment-lag).
 
 ## 2. `BondPricer` with non-integral maturities
 

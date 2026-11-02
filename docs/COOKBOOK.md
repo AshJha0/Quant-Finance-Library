@@ -3565,7 +3565,7 @@ calendar anomalies weakened after publication; re-test out of sample
 ## 100. Run the full pipeline end to end
 
 A systematic desk's work is a chain of five stages: alpha discovery,
-signal, validation, sizing and execution (LEARN.md section 8c). Each
+signal, validation, sizing and execution ([LEARN.md section 8c](learn/01-markets-execution-alpha.md#8c-the-full-trading-pipeline)). Each
 hand-off is a place where money is made or quietly lost. This recipe runs
 the whole chain in one compact pass.
 
@@ -3615,7 +3615,7 @@ has on financial data; PBO asks whether picking the best of K was itself
 noise-mining; beta-neutralization and inverse-vol budgeting stop the book
 being a leveraged market bet in disguise; and the executor turns targets into
 children the market can absorb. Skip a stage and the backtest improves: that
-is the tell, not a reward. LEARN.md 8c walks the same line with the math
+is the tell, not a reward. [LEARN.md 8c](learn/01-markets-execution-alpha.md#8c-the-full-trading-pipeline) walks the same line with the math
 attached; recipes 3, 4, 10 and 20 expand the individual stages.
 
 ## 101. Bootstrap a credit curve and price a CDS
@@ -11227,7 +11227,7 @@ the history only after the repository accepted it, or a rejected NEWT makes
 the corrected one fail EMIR-VR-2151-03. The library does not ship the ISO
 4217 list (SIX changes it several times a year), so load your copy. The
 GLEIF branch tests, EMIR-VR-1003-01, 2001-03/04 and the "reported for that
-UTI" date rules are not checked; the package javadoc lists them. LEARN 17i.
+UTI" date rules are not checked; the package javadoc lists them. [LEARN 17i](learn/04-technology.md#17i-emir-rules-that-need-state-and-cat-linkage-keys-31).
 
 ## 365. CAT option orders, routes and the linkage check (3.1)
 
@@ -11259,7 +11259,7 @@ without a MONO of the same Order Key is CAT-LK02, two NEW events with one key
 are CAT-LK01 for each of them, and a missing key field is CAT-LK03. The file
 IMID fills in a blank CATReporterIMID. The check is batch-local, while CAT
 links across files, so pass a whole day for a firm. Quotes use `newQuote()` or
-`newOptionQuote()` with `quoteKey(quoteId, time)`. LEARN 17i.
+`newOptionQuote()` with `quoteKey(quoteId, time)`. [LEARN 17i](learn/04-technology.md#17i-emir-rules-that-need-state-and-cat-linkage-keys-31).
 
 ## 366. Property and fuzz tests: running deeper, reproducing a failure (3.1)
 
@@ -11279,4 +11279,4 @@ test with the same `qfl.cases` and it fails at the same case. A fuzz test
 fails when a parser throws anything other than its documented exception
 (`FixParseException`, `WireProtocolException` or `IOException`), so a new
 parser should declare that exception and get a fuzz test with a small seed
-corpus. LEARN section 19.
+corpus. [LEARN section 19](learn/04-technology.md#19-how-this-codebase-tests-itself).
