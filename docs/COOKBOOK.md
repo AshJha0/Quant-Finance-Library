@@ -11626,21 +11626,26 @@ List<String> need = CatEventType.MOPA.requiredFields();    // allocationKeyDate,
 
 `start` puts the common fields and the type's required fields in place, blank,
 so `validate()` names whatever you forgot ("missing parentOrderID"). The 47 types
-added in 3.2 are record-checked only; `CatLinkageChecker` skips them.
+added in 3.2 were record-checked only in 3.2; since 4.0 `CatLinkageChecker` checks
+their keys too (recipes 491 to 494). Table numbers here are v4.1.0 r14's; MOCO is
+Table 75 in v4.2.0 r4.
 [LEARN 17m](learn/04-technology.md#17m-the-rest-of-tables-60-and-61-and-the-official-schema-32).
 
 ## 481. Price and choice rules per table (3.2)
 
 ```java
 Instant t = Instant.parse("2026-03-02T14:30:00Z");
-CatEvent quote = CatEventBuilder.start(CatEventType.MOQR)       // Table 87
+CatEvent quote = CatEventBuilder.start(CatEventType.MOQR)       // v4.1.0 r14 Table 87
     .reporter("FRMA", "R8").eventTimestamp(t).optionId("AAPL  260320C00150000")
     .quoteKey("Q-1", t).field("receivedQuoteID", "RQ-1").field("receiverIMID", "FRMA")
     .field("RFQID", "RFQ-1").field("senderType", "E")
     .build();
 List<String> v = quote.validate();
-// [senderType must be one of [F, N, S] (Table 87 seq 23)]
+// [senderType must be one of [F, N, S] (v4.1.0 r14 Table 87 seq 23)]
 ```
+
+MOQR is one of the quote types v4.2.0 dropped; since 4.0 it is deprecated for removal
+and its messages name the v4.1.0 r14 table (recipe 494).
 
 CAT-R22 applies the price sentences each table prints (not negative; required
 with LMT; blank with MKT); a multi-leg net price may be negative. CAT-R23 checks
@@ -11670,13 +11675,13 @@ find their parents (linkage)?
 
 Formally: `CatSchema.validateLines` applies CAT-S01 to S09 line by line,
 `CatEvent.validate()` applies the record rules (CAT-R01 to R23, each only where the
-type's table prints it), and `CatLinkageChecker.check` applies CAT-LK01 to LK05 over the
-whole list. Linkage covers the 19 types of 3.1; the 47 types added in 3.2 are checked by
-the first two passes only.
+type's table prints it), and `CatLinkageChecker.check` applies CAT-LK01 to LK09 over the
+whole list. In 3.2 linkage covered the 19 types of 3.1; since 4.0 it covers all 66
+(recipe 491). Since 4.0 the bundled schema has the 55 types v4.2.0 defines.
 
 ```java
 List<CatEvent> day = List.of();                            // your day's events
-CatSchema schema = CatSchema.bundledSubset();              // 66 event definitions
+CatSchema schema = CatSchema.bundledSubset();              // 55 event definitions (v4.2.0 r4)
 List<String> lines = new ArrayList<>();
 Map<CatEventFamily, Integer> failedByFamily = new EnumMap<>(CatEventFamily.class);
 for (CatEvent e : day) {
@@ -11694,7 +11699,8 @@ Worked example: a day with one MOCO child order that leaves out parentOrderID fa
 the second pass with "missing parentOrderID" and counts once under `CHILD_ORDER`; the
 first pass reports the same gap as CAT-S05 ("missing required field parentOrderID") on
 line 1, and the third
-pass says nothing, because MOCO is not linkage-checked. Grouping failures by family
+pass says nothing: a MOCO starts an Order Key, and without parentOrderID there is no
+Parent Order Key to look for. Grouping failures by family
 tells you which desk process to look at first. Several files of one day: use
 `CatLinkageChecker.checkFiles` (recipe 423) so keys opened in one file count in another.
 [LEARN 17m](learn/04-technology.md#17m-the-rest-of-tables-60-and-61-and-the-official-schema-32).
@@ -11886,3 +11892,117 @@ Worked example: to run the command line from a checkout,
 `java -cp "$QFL_CP" com.quantfinlib.cli.Main report --csv bars.csv --symbol SPY --out market.html` (GETTING_STARTED.md
 shows how to build `QFL_CP`). For production code, copy the strategy you need into your
 own project rather than depending on this jar.
+
+## 491. Link a child order to its parent and its cancel (4.0)
+
+The plain idea: a child order names its parent with the Parent Order Key, and a cancel
+names the child with its Order Key. Both must find an event in the batch.
+
+Formally: CAT-LK06 checks parentOrderKeyDate and parentOrderID of MOIR, MOCO, MLIR and
+MLCO against the orders in scope (v4.2.0 r4 Tables 70, 75, 103 and 111); CAT-LK07 checks
+the Order Key of every other Table 59/60 order event.
+
+```java
+Instant t = Instant.parse("2026-03-02T14:30:00Z");
+String osi = "AAPL  260320C00150000";
+CatEvent parent = CatEventBuilder.newOptionOrder().reporter("FRMA", "R1").orderKey("P-1", t)
+    .eventTimestamp(t).optionId(osi).sidePriceQty("B", new BigDecimal("2.15"), new BigDecimal("10"))
+    .build();
+CatEvent child = CatEventBuilder.start(CatEventType.MOCO).reporter("FRMA", "R2").orderKey("C-1", t)
+    .eventTimestamp(t).optionId(osi)
+    .field("parentOrderKeyDate", parent.fields().get("orderKeyDate")).field("parentOrderID", "P-1")
+    .build();
+CatEvent cancel = CatEventBuilder.start(CatEventType.MOCOC).reporter("FRMA", "R3").orderKey("C-1", t)
+    .eventTimestamp(t).optionId(osi).build();
+List<CatLinkageChecker.Issue> ok = CatLinkageChecker.check(List.of(parent, child, cancel), "FRMA");
+List<CatLinkageChecker.Issue> orphan = CatLinkageChecker.check(List.of(child, cancel), "FRMA");
+```
+
+Worked example: `ok` is empty. `orphan` holds one CAT-LK06 issue for R2 ("MOCO has no
+order with Parent Order Key ..."); the cancel still links, to the child.
+[LEARN 17m](learn/04-technology.md#17m-the-rest-of-tables-60-and-61-and-the-official-schema-32).
+
+## 492. A modification that assigns a new key (4.0)
+
+The plain idea: a modified child order (MOCOM) may get a new orderID. It then carries the
+old one as priorOrderID, links through it, and later events use the new one.
+
+Formally: for MOIM, MOCOM, MOOJ, MOOE, MLIM, MLCOM, MLOM and MLOE, priorOrderKeyDate and
+priorOrderID form the Prior Order Key (Table 5). When both are present the event links
+through it and opens its own Order Key.
+
+```java
+Instant t = Instant.parse("2026-03-02T14:30:00Z");
+String osi = "AAPL  260320C00150000";
+CatEvent child = CatEventBuilder.start(CatEventType.MOCO).reporter("FRMA", "R1").orderKey("C-1", t)
+    .eventTimestamp(t).optionId(osi).build();
+CatEvent mod = CatEventBuilder.start(CatEventType.MOCOM).reporter("FRMA", "R2").orderKey("C-2", t)
+    .eventTimestamp(t).optionId(osi)
+    .field("priorOrderKeyDate", child.fields().get("orderKeyDate")).field("priorOrderID", "C-1")
+    .build();
+CatEvent cancel = CatEventBuilder.start(CatEventType.MOCOC).reporter("FRMA", "R3").orderKey("C-2", t)
+    .eventTimestamp(t).optionId(osi).build();
+List<CatLinkageChecker.Issue> issues = CatLinkageChecker.check(List.of(child, mod, cancel), "FRMA");
+```
+
+Worked example: no issues. Change the cancel's orderID to C-1 and it still links (the
+child's key is still in scope); change it to C-9 and it gives CAT-LK07.
+
+## 493. Allocation and fulfillment amendments (4.0)
+
+The plain idea: an amended allocation (MOAA) or fulfillment (MOFA) either keeps the ID of
+the event it amends, or carries that ID as the prior one.
+
+Formally: CAT-LK09. MOFA uses the Fulfillment Key or the Prior Fulfillment Key
+(priorFillKeyDate, priorFulfillmentID), MOAA the Allocation Key or the Prior Allocation
+Key (priorAllocationKeyDate, priorAllocationID); v4.2.0 r4 Tables 90 and 92.
+
+```java
+Instant t = Instant.parse("2026-03-02T14:30:00Z");
+String osi = "AAPL  260320C00150000";
+String kd = "20260302 093000.000000000";
+CatEvent alloc = CatEventBuilder.start(CatEventType.MOPA).reporter("FRMA", "A1").eventTimestamp(t)
+    .optionId(osi).field("allocationKeyDate", kd).field("allocationID", "AL-1").build();
+CatEvent amended = CatEventBuilder.start(CatEventType.MOAA).reporter("FRMA", "A2").eventTimestamp(t)
+    .optionId(osi).field("allocationKeyDate", kd).field("allocationID", "AL-2")
+    .field("priorAllocationKeyDate", kd).field("priorAllocationID", "AL-1").build();
+List<CatLinkageChecker.Issue> issues = CatLinkageChecker.check(List.of(alloc, amended), "FRMA");
+```
+
+Worked example: no issues; without `alloc` the MOAA gives CAT-LK09.
+
+## 494. Files still reported under v4.1.0 r14: the quote types (4.0)
+
+The plain idea: v4.2.0 dropped the option and multi-leg quote events. The library keeps
+them for one major, so that older files still check, and warns at compile time.
+
+Formally: `CatEventType.MONQ`, MORQ, MOQR, MOQC, MOQM, MLNQ, MLRQ, MLQS, MLQR, MLQC, MLQM
+and `CatEventBuilder.newOptionQuote()` are `@Deprecated(since = "4.0.0", forRemoval =
+true)`. Their record rules and linkage (CAT-LK08) are unchanged and cite v4.1.0 r14. The
+bundled v4.2.0 r4 schema does not define them.
+
+```java
+@SuppressWarnings("removal")
+static boolean isV41Quote(CatEvent e) {
+    return switch (e.type()) {
+        case MONQ, MORQ, MOQR, MOQC, MOQM, MLNQ, MLRQ, MLQS, MLQR, MLQC, MLQM -> true;
+        default -> false;
+    };
+}
+```
+
+```java
+List<CatEvent> day = List.of();                            // your day's events
+CatSchema schema = CatSchema.bundledSubset();
+for (CatEvent e : day) {
+    if (isV41Quote(e)) {
+        List<String> recordProblems = e.validate();        // still checked
+    } else {
+        List<CatSchema.Issue> wellFormed = schema.validateLine(schema.toJson(e));
+    }
+}
+```
+
+Worked example: an MOQR passed to `schema.validateLine` gives CAT-S03 ("type MOQR is not
+an event in the schema"); `validate()` still applies CAT-R23 to it. Plan to stop
+producing these types before 5.0. [docs/MIGRATION_4.0.md](MIGRATION_4.0.md) row 9.

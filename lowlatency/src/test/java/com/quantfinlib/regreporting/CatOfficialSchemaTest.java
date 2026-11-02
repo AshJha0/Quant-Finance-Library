@@ -30,7 +30,7 @@ import org.junit.jupiter.api.Test;
  * <p>For every event both files define, each field of the transcription must exist in the
  * official file with the same dataType, JSONDataType and required value. Differences the
  * library has looked at and accepted (for example a field the published version added or
- * changed after the v4.1.0 r14 tables) are listed in {@code cat-official-schema-deltas.txt}
+ * changed after the v4.2.0 r4 tables) are listed in {@code cat-official-schema-deltas.txt}
  * with a reason; anything else fails, and the message lists every difference. Evidence class:
  * externally anchored.</p>
  */
@@ -92,7 +92,7 @@ class CatOfficialSchemaTest {
         List<String> diff = differences(CatSchema.bundledSubset(), official);
         List<String> unexplained = diff.stream().filter(d -> !ok.contains(d.split(" ", 2)[0])).toList();
         assertEquals(List.of(), unexplained, "official schema " + official.version() + " differs from the "
-                + "v4.1.0 r14 transcription; review each line and either fix the transcription or add it, "
+                + "v4.2.0 r4 transcription; review each line and either fix the transcription or add it, "
                 + "with a reason, to cat-official-schema-deltas.txt");
     }
 

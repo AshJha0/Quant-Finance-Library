@@ -109,6 +109,32 @@ module requires it (not transitively).
 Deprecated since 3.1.0, marked for removal in 3.2.0. The replacements are in
 [MIGRATION_3.1.md](MIGRATION_3.1.md), section 1. No dependency change.
 
+### 9. CAT: the transcription follows v4.2.0 r4; the quote types are deprecated (lowlatency)
+
+Not a signature break, so japicmp does not list it; the results of some checks change.
+
+- `CatSchema.bundledSubset()` now reads `cat-im-schema-subset-4.2.0r4.json` (CAT IM
+  Technical Specifications v4.2.0 r4, 10/21/2026): 55 events, `version()` "4.2.0". The
+  3.2 resource `cat-im-schema-subset-4.1.0r14.json` is gone. Code that loaded it by name
+  must use `bundledSubset()` or its own copy.
+- v4.2.0 drops the option and multi-leg quote events. `CatEventType.MONQ`, `MORQ`, `MOQR`,
+  `MOQC`, `MOQM`, `MLNQ`, `MLRQ`, `MLQS`, `MLQR`, `MLQC`, `MLQM` and
+  `CatEventBuilder.newOptionQuote()` are `@Deprecated(since = "4.0.0", forRemoval = true)`
+  and will be removed in 5.0.0. They still build and validate (rules cite v4.1.0 r14), but
+  the bundled schema reports them as CAT-S03.
+- MENQ no longer has RFQID, RFQFlag, bidRelativePrice, askRelativePrice and
+  validUntilDuration in the bundled schema (retired in v4.2.0); a MENQ line that carries
+  them gets CAT-S04 (unknown field) from `CatSchema`.
+- Rule citations, `CatEvent.CHECKED_AGAINST*` and the table in each CAT-R22/R23 message
+  use v4.2.0 r4 numbers (each table from 13 to 84 is one lower, each from 90 to 127 six
+  lower: "Table 65 seq 20" is now "Table 64 seq 20"). Code that matches on message text
+  must follow.
+- `CatLinkageChecker` checks the 47 Table 59/60 types it skipped in 3.2 (new rules
+  CAT-LK06 to CAT-LK09; `rules()` has 9 entries, not 5). A batch with those types can now
+  give issues. Batches of the 3.1 types alone give the same issues as before.
+
+No dependency change. Recipes 491 to 494, LEARN 17m and 17n.
+
 ## What does not break
 
 Everything else in the stable jar keeps its package, class and signature. In particular

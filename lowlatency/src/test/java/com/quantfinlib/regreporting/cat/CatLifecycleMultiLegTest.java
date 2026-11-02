@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Option lifecycle, supplement and multi-leg events and cross-file linkage (3.1.0), each case
- * written from the CAT IM Technical Specifications v4.1.0 r14 table cited on the test. Cases
+ * written from the CAT IM Technical Specifications v4.2.0 r4 table cited on the test. Cases
  * are own constructions.
  */
 class CatLifecycleMultiLegTest {
@@ -60,7 +60,7 @@ class CatLifecycleMultiLegTest {
                 .field("priceType", "PU");
     }
 
-    /** Table 70 (MOOA): required fields, senderType E/F/O (Appendix G), price rules seq 21. */
+    /** Table 69 (MOOA): required fields, senderType E/F/O (Appendix G), price rules seq 21. */
     @Test
     void optionAcceptedTable70() {
         assertEquals(List.of(), mooa().build().validate());
@@ -73,7 +73,7 @@ class CatLifecycleMultiLegTest {
         assertTrue(mooa().field("receiverIMID", "").build().validate().contains("missing receiverIMID"));
     }
 
-    /** Table 79 (MOOM) and Table 83 (MOOC): initiator C/F; cancelQty, leavesQty Real Quantity. */
+    /** Table 78 (MOOM) and Table 82 (MOOC): initiator C/F; cancelQty, leavesQty Real Quantity. */
     @Test
     void modifiedAndCancelledTables79And83() {
         assertEquals(List.of(), mooc("O-1", "C1").validate());
@@ -91,7 +91,7 @@ class CatLifecycleMultiLegTest {
         assertEquals(List.of(), moom.validate());
     }
 
-    /** Table 90 (MOOT) side details, Table 92 (MOOF) option fulfillmentLinkType O/OS/OE. */
+    /** Table 84 (MOOT) side details, Table 86 (MOOF) option fulfillmentLinkType O/OS/OE. */
     @Test
     void tradeAndFulfillmentTables90And92() {
         CatEvent moot = CatEventBuilder.optionTrade().reporter("FRMA", "T1").field("tradeKeyDate",
@@ -108,7 +108,7 @@ class CatLifecycleMultiLegTest {
                 moof.field("fulfillmentLinkType", "Y").build().validate());
     }
 
-    /** Table 100 and Table 101 (MLNO, legDetails); Table 102 (MLOR); Table 126 (MLOC). */
+    /** Table 94 and Table 95 (MLNO, legDetails); Table 96 (MLOR); Table 120 (MLOC). */
     @Test
     void multiLegTables100To102And126() {
         CatEvent ok = mlno().build();
@@ -155,7 +155,7 @@ class CatLifecycleMultiLegTest {
                 .field("underlying", "X".repeat(23)).build().validate());
     }
 
-    /** Tables 17, 63, 139 (supplements) and Tables 79, 83, 126 (lifecycle) linkage: LK04, LK05. */
+    /** Tables 16, 62, 122 (supplements) and Tables 78, 82, 120 (lifecycle) linkage: LK04, LK05. */
     @Test
     void supplementAndLifecycleLinkage() {
         CatEvent monos = CatEventBuilder.optionOrderSupplement().reporter("FRMA", "S1").orderKey("O-1", T0)
@@ -172,7 +172,7 @@ class CatLifecycleMultiLegTest {
                 .eventTimestamp(T1).symbol("TEST").build();
         assertEquals(List.of(), menos.validate());
         assertEquals(1, CatLinkageChecker.check(List.of(mono("O-1", "R1"), menos), "FRMA").size());
-        // multi-leg: MLOR, MLOC and MLOS link to the MLNO (key without symbol, Table 100)
+        // multi-leg: MLOR, MLOC and MLOS link to the MLNO (key without symbol, Table 94)
         CatEvent mlos = CatEventBuilder.multiLegSupplement().reporter("FRMA", "S3").orderKey("ML-1", T0)
                 .eventTimestamp(T1).build();
         CatEvent mlor = CatEventBuilder.multiLegRoute().reporter("FRMA", "M3").orderKey("ML-1", T0)
@@ -184,7 +184,7 @@ class CatLifecycleMultiLegTest {
                 mloc), "FRMA").stream().map(CatLinkageChecker.Issue::ruleId).toList());
     }
 
-    /** Table 79 seq 9-10: a MOOM with a prior key assigns a new Order Key; routes follow the new key. */
+    /** Table 78 seq 9-10: a MOOM with a prior key assigns a new Order Key; routes follow the new key. */
     @Test
     void modifiedWithNewOrderKeyTable79() {
         CatEvent moom = CatEventBuilder.optionModified().reporter("FRMA", "M1").orderKey("O-2", T1)
