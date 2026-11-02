@@ -11,7 +11,7 @@ documented error.
 
 | Area | Packages (under `com.quantfinlib`) |
 |---|---|
-| Data and series | `core` (including the exception types), `data` (CSV loading, alignment, corporate actions, point-in-time universes), `stats`, `util.MathUtils` |
+| Data and series | `core` (including the exception types), `data` (CSV loading, alignment, corporate actions, point-in-time universes), `stats`, `util.MathUtils` (deprecated for removal in 2.4.0; goes in 3.0) |
 | Pricing and instruments | `pricing`, `rates`, `credit`, `fx` (conventions, curves, instruments, volatility surface), `commodities`, `markets` |
 | Risk | `risk`, `crb`, `volatility`, `hedging` |
 | Portfolio and research | `optimization`, `alpha`, `backtest` and its subpackages, `indicators`, `simulation`, `ml`, `screener`, `dsl` |
@@ -57,12 +57,12 @@ audit trails, operational tooling).
 
 | Package | What it is |
 |---|---|
-| `trading` | Risk gate, order gateway, order state machine, quoter, auto hedger, paper venue, sharding; from 2.1 `PositionLedger`, `DropCopyReconciler`, `LimitsConfig` and `LimitsManager`; from 2.2 `FillListener` and `LedgerFillListener` |
+| `trading` | Risk gate, order gateway, order state machine, quoter, auto hedger, paper venue, sharding; from 2.1 `PositionLedger`, `DropCopyReconciler`, `LimitsConfig` and `LimitsManager`; from 2.2 `FillListener` and `LedgerFillListener`; from 2.4 paper-gateway busts and corrections |
 | `marketdata` | Ring buffers, market-data bus, ITCH 5.0 codec, L3 book builder, NBBO |
 | `orderbook` | Reference matching engine (`OrderBook`), price-ladder engine (`HftOrderBook`) and call auctions (`AuctionBook`, from 2.1) |
 | `fix` | FIX 4.4 session (4.2 and 5.0 SP2 from 2.2; the hot-path encoder and views in all three from 2.3), journal store, garbage-free encoders and views; from 2.1 session schedules (`FixSessionSchedule`, `FixSessionOptions`); from 2.2 FIX 4.2 and 5.0 SP2 (`FixVersion`) and repeating groups (`FixDictionary`, `FixGroupDef`, `FixGroup`) |
 | `entitlements` | Entitlement service and pre-trade check (2.2) |
-| `reporting` | MiFIR RTS 22 transaction report builder and identifier checks (2.2); auth.016 output and data-only ESMA rules (2.3) |
+| `reporting` | MiFIR RTS 22 transaction report builder and identifier checks (2.2); auth.016 output and data-only ESMA rules (2.3); reference-data rules and the head.001/head.003 submission envelope (2.4) |
 | `reporting.registry` | GLEIF, FIRDS and ISO 10383 reference data and a checking sink (2.3) |
 | `reporting.cat` | CAT order events as JSON lines (2.3); indicative, not certified |
 | `reporting.emir` | EMIR Refit core fields, UTI and action/event pairing (2.3); indicative, not checked against Regulation 2022/1860 |
@@ -88,7 +88,7 @@ file classes of `data` excluded.
 
 Stable packages are `@NullMarked` (JSpecify 1.0): unannotated parameters and return
 values are non-null, and a member that accepts or returns null says so with
-`@Nullable`. `util` (where only `MathUtils` is stable) and the reference packages are
+`@Nullable`. `util` (where only `MathUtils` is stable, and it is deprecated for removal in 2.4.0) and the reference packages are
 not marked. JSpecify is a compile-time, optional dependency, so the library still
 has no runtime dependencies; a module that reads the annotations should declare
 `requires static org.jspecify;`.
@@ -132,4 +132,5 @@ that other packages can reach them. Reducing it is a breaking change and is plan
 for 3.0; 2.x keeps every public type of 2.0.
 
 Deprecated API is marked with `@Deprecated` and stays for at least one minor release
-before removal in the next major.
+before removal in the next major. 2.4.0 deprecates for removal everything 3.0 takes
+out; [MIGRATION_3.0.md](MIGRATION_3.0.md) lists each item and its replacement.

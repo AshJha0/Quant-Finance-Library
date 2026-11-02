@@ -295,7 +295,8 @@ A 2.x `FileSessionStore` opened on a directory written by the v1 store
 (`seqnums.dat`, `messages.dat`) imports it and renames the old files with a
 `.migrated` suffix. 3.0 drops that import: it starts a fresh journal and leaves
 the v1 files untouched, so sequence numbers would restart. Migrate before you
-upgrade, with any 2.x jar:
+upgrade. Opening the store once with any 2.x jar does it; the 2.4 examples jar
+has a command that does it for a list of directories:
 
 ```sh
 java -cp quant-finance-library-2.4.0.jar:quant-finance-library-2.4.0-examples.jar \

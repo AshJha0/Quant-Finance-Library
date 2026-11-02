@@ -7150,8 +7150,8 @@ double[] returns = /* strategy per-period returns, >= 50 finite */;
 double[] samples = BlockBootstrap.sharpeSamples(
         returns, 20, 5_000, 252, 42L);   // mean block 20, 5000 paths, seed 42
 // samples is sorted ascending: read percentiles straight off it.
-double lo = MathUtils.percentileSorted(samples, 0.05);
-double hi = MathUtils.percentileSorted(samples, 0.95);
+double lo = Stats.quantileSorted(samples, 0.05);
+double hi = Stats.quantileSorted(samples, 0.95);
 System.out.printf("Sharpe 90%% CI: [%.2f, %.2f]%n", lo, hi);
 ```
 
@@ -8317,7 +8317,7 @@ boolean cleared =
         wf.efficiency() > 0.5                                   // travels out of sample
      && dsr > 0.95                                              // survives its own search
      && pbo.pbo() < 0.5                                         // process is not noise-mining
-     && MathUtils.percentileSorted(sh, 0.05) > 0;               // CI excludes zero
+     && Stats.quantileSorted(sh, 0.05) > 0;               // CI excludes zero
 System.out.println(cleared ? "CLEARED for paper trading" : "REJECTED: back to research");
 
 // Post-mortem: walk the arrows; gross intact but net gone => costs;
@@ -9263,7 +9263,7 @@ double[] venueSharpes = perVenueRealizedSharpe;         // one per venue
 double deflated = SharpeValidation.deflatedSharpe(
         bestVenueSharpe, venueSharpes, nObs, skew, kurtosis);
 double expectedBest = SharpeValidation.expectedMaxSharpe(
-        venueSharpes.length, MathUtils.variance(venueSharpes));
+        venueSharpes.length, Stats.sampleVariance(venueSharpes));
 
 // The best venue only "wins" if it beats what luck alone would produce.
 boolean genuinelyBetter = bestVenueSharpe > expectedBest && deflated > 0;
@@ -9755,7 +9755,7 @@ path.
 // Offline: size the collar to the realized move distribution, the position
 // cap to a VaR-consistent level.
 double[] intradayReturns = /* from captured sessions */;
-double collarPct = 5 * MathUtils.stdDev(intradayReturns);  // 5-sigma fat-finger band
+double collarPct = 5 * Stats.sampleStdDev(intradayReturns);  // 5-sigma fat-finger band
 double var99 = VarEngine.deltaNormalVar(exposures, cov, 0.99);
 long positionCap = (long) (riskAppetite / var99 * currentPosition);
 
@@ -9835,7 +9835,7 @@ BacktestResult bt = Backtester.run(new SmaCrossStrategy(20, 50), bars,
 //    the position's market value (P&L per unit return); the covariance is
 //    the variance of daily returns.
 double price = bars.lastClose();
-double dailyVol = MathUtils.stdDev(bars.returns());
+double dailyVol = Stats.sampleStdDev(bars.returns());
 double[][] cov = {{dailyVol * dailyVol}};
 double varBudget = 20_000;                                       // currency
 double varPerShare = VarEngine.deltaNormalVar(new double[]{price}, cov, 0.99);
@@ -10727,7 +10727,7 @@ and rebuilds the affected book from the surviving fills, so average cost and
 realised P&L come out as if the busted trade had never happened. The
 reconciler compares effective fills on both sides and matches the two
 adjustment lists by execution id. The gateway does not reopen a filled order
-after a bust, and `PaperTradingGateway` does not produce busts.
+after a bust. For busts in paper trading see recipe 350.
 
 ## 345. Foreign-currency swaps, a stochastic basis, and wrong-way bilateral CVA
 
@@ -10778,7 +10778,7 @@ String xml = Rts22TransactionReport.toAuth016Xml(List.of(rep));
 `toAuth016Xml` writes auth.016.001.01 without the head.001 envelope.
 `validateEsmaRules` runs about 45 of ESMA's content rules that need only the
 report itself (code lists, conditional fields, identifier shapes). Rules that
-need reference data are left to `ReferenceDataChecker`. The tests validate the
+need reference data are in `validateWithReferenceData` (recipe 353). The tests validate the
 XML against ESMA's XSD when the environment variable `QFL_ESMA_XSD` points to it;
 the XSD is not redistributable and is not in the repository.
 
@@ -10797,7 +10797,9 @@ The registries load the public files you download yourself: the GLEIF golden
 copy (or `GleifApiLeiRegistry` for single lookups over HTTPS), an ESMA FIRDS
 FULINS file and the ISO 10383 MIC list. The checker refuses a report whose LEI
 is unknown or lapsed, whose ISIN is not in FIRDS, or whose MIC is unknown or
-inactive, and forwards the rest. The field keys depend on the report type.
+inactive, and forwards the rest. The field keys depend on the report type. The
+loaders read status only; registration dates, country and venue flags are not
+parsed, which limits the dated ESMA rules of recipe 353.
 
 ## 349. CAT and EMIR Refit reports
 
@@ -10823,3 +10825,96 @@ MEOT, MEOF) and writes them as JSON lines with Eastern-time timestamps. The EMIR
 builder covers the Refit core fields, the UTI shape and the allowed pairs of
 action and event type. Both are indicative and not certified; EMIR has not been
 checked field by field against Regulation 2022/1860.
+
+## 350. Busts and corrections in the paper gateway
+
+```java
+PaperTradingGateway paper = new PaperTradingGateway(1_000_000);
+paper.setReopenOnBust(true);                       // default false, the 2.3 behaviour
+paper.addTradeListener(LedgerFillListener.forPaperTrades(ledger, 1, 7, symbolIds::get));
+long[] execs = paper.executionIds(orderId);        // fills of one order, in order
+long bustId = paper.bustFill(execs[0]);            // -1 if unknown or already busted
+long corrId = paper.correctFill(execs[1], 80, 10.02);
+```
+
+A bust removes a simulated execution and a correction replaces its quantity and
+price. The gateway replays cash and positions from the surviving fills, so the
+account is the one you would have had without the busted trade. With
+`setReopenOnBust(true)` the order's filled quantity drops too and a filled order
+can work again; with the default it stays as it was, as `HftOrderGateway` does.
+A refused adjustment returns -1 and counts in `rejectedTradeAdjustmentCount`.
+`forPaperTrades` books the same events in a `PositionLedger` under the gateway's
+execution ids, so `DropCopyReconciler` can compare the two.
+
+## 351. Default risk charge for securitisations
+
+```java
+double rwLong = FrtbDrcSecuritisation.drcRiskWeight(0.90);   // 90% banking book -> 7.2%
+double rwShort = FrtbDrcSecuritisation.drcRiskWeight(0.50);  // 50% -> 4%
+FrtbDrcSecuritisation.NonCtpBucket rmbsEu = new FrtbDrcSecuritisation.NonCtpBucket(
+    FrtbDrcSecuritisation.AssetClass.RMBS, FrtbDrcSecuritisation.Region.EUROPE);
+double drc = FrtbDrcSecuritisation.nonCtpTotal(List.of(
+    new FrtbDrcSecuritisation.Position<>(rmbsEu, new FrtbDrcSecuritisation.NetJtd(100, rwLong)),
+    new FrtbDrcSecuritisation.Position<>(rmbsEu, new FrtbDrcSecuritisation.NetJtd(-50, rwShort))));
+// 7.2 - (2/3) x 2.0 = 5.87
+double ctp = FrtbDrcSecuritisation.ctpAggregate(List.of(100.0, -100.0));   // 50 (MAR22.45)
+```
+
+The jump-to-default amount of a tranche is its market value (MAR22.27). Longs
+and shorts net only within the same tranche (`netTranche`, MAR22.29). In a
+non-CTP bucket shorts offset longs by the hedge benefit ratio and the bucket is
+floored at zero; buckets add up (MAR22.33, 22.35). CTP buckets can be negative,
+and a net-short bucket counts at half (MAR22.45, published example). Risk weights
+come from SEC-SA (`kA`, `secSaRiskWeight`) or the one-year SEC-ERBA table
+(`erbaRiskWeight`); a SEC-IRBA weight you pass in yourself. The 8% factor in
+`drcRiskWeight` is the library's reading: the Basel text does not print it
+(unconfirmed).
+
+## 352. Securitisation collateral and the no-ratings haircut table
+
+```java
+double h = SaCcrHaircuts.haircut10Day(SaCcrHaircuts.Table.CRE22,
+    SaCcrHaircuts.CollateralKind.SECURITISATION, SaCcrHaircuts.DebtRating.A_TO_BBB, 4);   // 0.12
+double h2 = SaCcrHaircuts.haircut10DayNoExternalRatings(
+    SaCcrHaircuts.NoRatingsDebtClass.SENIOR_SECURITISATION_SA_RW_BELOW_100, 4);         // 0.12
+```
+
+CRE22.49 gives securitisations their own rows (A+ to BBB-, 3 to 5 years: 12%).
+The 2006 table has no such row, so the same call with `Table.BASEL_II_2006`
+throws. `Table.CRE22_NO_EXTERNAL_RATINGS` is CRE22.50, for jurisdictions that do
+not use external ratings: debt is classed by issuer risk weight or seniority
+instead, through `haircut10DayNoExternalRatings` (published reference). Fund
+haircuts are left to you.
+
+## 353. ESMA reference-data rules and the submission file
+
+```java
+ReferenceData refs = ReferenceData.of(leis, isins, mics);
+List<String> problems = rep.validateWithReferenceData(refs, LocalDate.of(2026, 11, 3));
+String file = Rts22TransactionReport.toSubmissionXml(List.of(rep),
+    submittingLei, "FR", "FILE0001", Instant.parse("2026-11-02T10:15:30Z"));
+```
+
+`validateWithReferenceData` runs 36 ESMA content rules that need registries,
+for example that a counterparty LEI was not retired on the trading date (CON-160
+accepts a lapsed LEI) and that the ISIN was admitted on the venue. The registries
+that ship read status only, so only the status checks bite; supply richer
+reference data for the dated rules. `toSubmissionXml` writes the head.003
+envelope with the head.001 header (sender LEI, authority country, file id,
+creation time to the second) around auth.016 (ESMA65-8-2356 paras 124 to 132).
+CON-330, CON-331, CON-430, the seven-day pending workflow and auth.031 feedback
+are not implemented.
+
+## 354. Moving off MathUtils
+
+```java
+double z = SpecialFunctions.normInv(0.99);
+double[][] l = LinearAlgebra.cholesky(cov);
+double vol = Stats.sampleStdDev(returns);
+double rho = Stats.pearsonOrZero(x, y);      // MathUtils.correlation: 0 at zero dispersion
+double beta = Numerics.decayFactor(dtNanos, halfLifeNanos);
+```
+
+`util.MathUtils` is deprecated for removal in 2.4.0. Every method delegates to
+one of these, so the switch changes no result. docs/MIGRATION_3.0.md section 4
+has the full table.

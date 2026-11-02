@@ -266,8 +266,8 @@ symbol-routing facade. A symbol can be registered on several shards;
   reports (`reporting`) exist; drop-copy reconciliation
   (`trading.DropCopyReconciler`) compares fills the caller supplies, and nothing
   connects a drop-copy session.
-- Busts and corrections in `PaperTradingGateway`, and reopening an order after a bust.
-  From 2.3 `HftOrderGateway.onTradeBust` and `onTradeCorrect` (ExecType H and G) reach
+- Reopening an order after a bust in `HftOrderGateway` (`PaperTradingGateway` simulates
+  busts and corrections from 2.4 and reopens only with `setReopenOnBust(true)`). From 2.3 `HftOrderGateway.onTradeBust` and `onTradeCorrect` (ExecType H and G) reach
   each `FillListener` and `trading.PositionLedger`, which rebuilds the book from the
   surviving fills; `DropCopyReconciler` compares effective fills.
 - `orderbook.AuctionBook` leaves out the market-pressure step some venues apply

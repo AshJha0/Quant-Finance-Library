@@ -1768,8 +1768,49 @@ gives `H` = 6% and `C = 1,000 x (1 - 0.06 - 0.08) = 860`; CRE22.49 gives
 `RC = 5 + 50 = 55`; netting the parts first, as 2.2 did, gave 20.
 
 *In this library:* `risk/SaCcrHaircuts.java` (`Table.BASEL_II_2006`, the
-default, and `Table.CRE22`) and `risk/SaCcr.subNettingSets`. The CRE22.50
-table and securitisation collateral are not implemented. Recipe 335.
+default, `Table.CRE22`, and since 2.4 `Table.CRE22_NO_EXTERNAL_RATINGS` with
+`haircut10DayNoExternalRatings` for CRE22.50) and `risk/SaCcr.subNettingSets`.
+Securitisation collateral uses the CRE22.49 securitisation rows (2.4) and is
+refused under the 2006 table, which has none. Fund haircuts are left to the
+caller. Recipes 335 and 352.
+
+### 10u. Default risk charge for securitisations
+
+A securitisation tranche can lose its whole value when enough loans in the pool
+default. The banking book already has risk weights for that loss, so FRTB does
+not model the pool again. It takes the tranche's market value as the amount at
+risk and borrows the banking-book weight.
+
+Formally (MAR22.27 to 22.45, published reference): the gross jump-to-default
+of a tranche is its market value (MAR22.27, 22.36). Longs and shorts net only
+within exactly the same tranche of the same pool, scaled by maturity
+`min(max(M, 0.25), 1)` (MAR22.29, 22.39). Outside the correlation trading
+portfolio (non-CTP), each bucket charge is
+`max(sum RW x long - HBR x sum RW x |short|, 0)` with
+`HBR = sum long / (sum long + sum |short|)`, and buckets are summed with no
+diversification (MAR22.33, 22.35). Inside the CTP a bucket (one per index) may
+be negative, and `DRC = max(sum_b (max(DRC_b, 0) + 0.5 min(DRC_b, 0)), 0)`
+(MAR22.44, 22.45). The weight is the banking-book weight with a one-year
+maturity (MAR22.34(1), 22.42), from SEC-SA (CRE41) or SEC-ERBA (CRE42). The
+banking-book weight is a multiple of exposure that already contains the 8%
+capital ratio; the library multiplies by 8% to get a weight per unit of JTD.
+The Basel text does not print that step, so treat it as the library's reading
+(unconfirmed). It is the reading under which a 1250% weight gives a charge
+equal to the market value, the fair-value cap of MAR22.34(3).
+
+Worked example (own test, `FrtbDrcSecuritisationTest`). In the RMBS Europe
+bucket, a long of 100 with a 90% banking-book weight (DRC weight 7.2%) and a
+short of 50 with 50% (4%): `HBR = 100 / 150 = 2/3`, charge
+`7.2 - 2/3 x 2.0 = 5.87`. A net short of 10 in another bucket is floored at 0.
+In the CTP, buckets of +100 and -100 give `100 - 0.5 x 100 = 50` (the MAR22.45
+example).
+
+*In this library:* `risk/FrtbDrcSecuritisation.java` (`grossJtd`,
+`netTranche`, `nthToDefaultAttachment`, `kA`, `secSaRiskWeight`,
+`erbaRiskWeight`, `drcRiskWeight`, `nonCtpTotal`, `ctpTotal`). Left to the
+caller: SEC-IRBA weights, an unknown delinquency ratio W (CRE41.9), CRE41.15,
+and decomposing index and nth-to-default positions (MAR22.28, 22.30, 22.39).
+Recipe 351.
 
 ### 11. Backtesting without fooling yourself
 
@@ -2394,8 +2435,11 @@ default no-op), `trading/PositionLedger.java` (`onBust`, `onCorrect`,
 `effectiveFills`, `adjustments`) and `trading/DropCopyReconciler.java`
 (`Adjustment`, and a `reconcile` overload that takes the drop copy's
 adjustments). A FIX 4.2 report with ExecTransType 1 or 2 is read as H or
-G. The gateway does not reopen an order after a bust, and
-`PaperTradingGateway` produces none. Recipe 344.
+G. The gateway does not reopen an order after a bust. Since 2.4
+`PaperTradingGateway.bustFill` and `correctFill` simulate busts and
+corrections; cash and positions are replayed from the surviving fills, and
+`setReopenOnBust(true)` also reduces the order's filled quantity (default off).
+Recipes 344 and 350.
 
 ### 17e. Regulatory reports and reference data
 
@@ -2420,8 +2464,9 @@ tests only when `QFL_ESMA_XSD` is set, since it cannot be redistributed),
 `reporting/registry/` (GLEIF golden copy and API, FIRDS FULINS, ISO 10383,
 `ReferenceDataChecker`), `reporting/cat/` and `reporting/emir/`. CAT and
 EMIR are indicative and not certified; EMIR has not been checked against
-Regulation 2022/1860 field by field. Rules that need reference data, the
-head.001 envelope and swap legs are not implemented. Recipes 347 to 349.
+Regulation 2022/1860 field by field. Section 17g covers the ESMA rules that
+need reference data and the submission envelope (2.4). Swap legs are not
+implemented. Recipes 347 to 349.
 
 ### 17f. One order encoder, three FIX versions
 
@@ -2444,6 +2489,31 @@ encoder with `applVerId("9")` writes `1128=9` in every header.
 `applVerId`), `fix/FixExecReportView.java` (`execType`, `rawExecType`) and
 `fix/FixMarketDataView.java`, which ends the NoMDEntries group at the first
 tag that is not a member. Recipe 343.
+
+### 17g. ESMA rules that need reference data, and the file you send
+
+Section 17e checked that an LEI exists today. Many ESMA rules ask a sharper
+question: was it valid on the trading date, was the instrument admitted on that
+venue that day, and is the file being sent within the deadline? Those need dated
+reference data.
+
+Formally, ESMA's validation rules (CON-xxx) are applied by the competent
+authority to each auth.016 record. The file itself goes in a head.003.001.01
+envelope that holds a head.001.001.01 business application header (sender LEI,
+receiving authority, message definition `auth.016.001.01`, creation time) and the
+auth.016 document (ESMA65-8-2356, paragraphs 124 to 132; published reference).
+
+Worked example (own test, `Rts22ReferenceRulesTest`). A buy on XPAR whose
+counterparty LEI has status RETIRED in the fixture registry fails CON-160 for
+field 16; with status LAPSED it passes, because CON-160 accepts a lapsed LEI.
+
+*In this library:* `Rts22TransactionReport.validateWithReferenceData` (36 CON
+rules), `toSubmissionXml`, and in `reporting/registry/` the types
+`ReferenceData`, `LeiValidity` and `CodeRegistry`, plus dated default methods on
+the three registries. The shipped GLEIF, FIRDS and ISO 10383 loaders do not
+parse dates, country or venue flags, so with them only the status checks run.
+Not implemented: CON-330, CON-331, CON-430, the seven-day pending workflow,
+field 2 history, auth.031 feedback and the header's `Rltd` element. Recipe 353.
 
 ### 18. Scaling out and staying safe
 
@@ -6829,8 +6899,8 @@ edge came from comparing prices against zero-filled warm-up SMAs; it
 bought the first 200 bars of everything it ever saw.
 
 *In this library:* `indicators/Indicators.java` -- every function
-allocates via `MathUtils.nanArray` and only writes from the first fully
-warmed index; `util/MathUtils.java` provides the NaN-aware plumbing.
+allocates via `Numerics.nanArray` and only writes from the first fully
+warmed index; `stats/Numerics.java` provides the NaN-aware plumbing.
 
 ### 159. "Indicators lag. Is that a bug, a parameter choice, or a law?"
 
@@ -14817,7 +14887,7 @@ diagnosable. Upstream, the durable fixes are estimating the full matrix
 on one window, shrinkage (Q461), or a nearest-PSD projection after
 manual overrides.
 
-*In this library:* `util/MathUtils.java` -- `cholesky` implements
+*In this library:* `stats/LinearAlgebra.java` -- `cholesky` implements
 exactly this relative-pivot policy; the javadoc names the
 rank-deficient-factor-model case, and the exception reports which pivot
 failed and by how much.
@@ -24198,8 +24268,8 @@ an estimator that does not degrade exactly when the data is
 well-behaved-but-offset, which is most real data. This is why the
 one-pass "optimization" is a downgrade, not a speedup.
 
-*In this library:* `util/MathUtils.variance` and the `[from, to)`
-overloads (`stdDevP`, `stdDevSample`) -- all two-pass, mean-then-
+*In this library:* `stats/Stats.sampleVariance` and the `[from, to)`
+overloads (`populationStdDev`, `sampleStdDev`) -- all two-pass, mean-then-
 deviations, and NaN rather than 0 when there are too few points (a
 variance of one observation is undefined, and a 0 would make a
 one-point Sharpe ratio look infinitely good); `covariance` follows the
@@ -24229,7 +24299,7 @@ indefinite input, and when you need to repair an estimate rather than
 refuse it, project it onto the nearest correlation matrix (Higham 2002)
 explicitly and say so.
 
-*In this library:* `util/MathUtils.cholesky` -- the `indefinite`
+*In this library:* `stats/LinearAlgebra.cholesky` -- the `indefinite`
 threshold, the `sum <= 0 -> 1e-12` clamp, and the loud throw with the
 correlations-beyond-1 hint; `risk/PsdMatrices.java`; `choleskyPsd`
 (shared by `VarEngine.monteCarloVar`, `GaussianCopula` and
@@ -24260,9 +24330,9 @@ return a large finite lie. The practical takeaway for a risk desk:
 is exactly the code path that runs, so the quantile is trustworthy;
 what you must never do is feed it a p that rounds to 0 or 1.
 
-*In this library:* `util/MathUtils.normInv` -- Acklam seed, the
+*In this library:* `stats/SpecialFunctions.normInv` -- Acklam seed, the
 plow/phigh region split, the Halley refinement and the
-`p <= 0 || p >= 1` guard; `util/MathUtils.normCdf` (Cody erfc) and
+`p <= 0 || p >= 1` guard; `stats/SpecialFunctions.normCdf` (Cody erfc) and
 `logNormPdf`. Its exact-tail
 companion is `tCdf` (Student-t via the regularized incomplete beta,
 no normal approximation, because the tails are where the two diverge).
@@ -24285,7 +24355,7 @@ The design lesson is that you cannot cheaply NaN-check every inner
 loop, so you validate inputs at ingest and make the structural errors
 (shape, sign) loud, then trust the interior.
 
-*In this library:* `util/MathUtils.dot` and `covariance` (length-
+*In this library:* `stats/LinearAlgebra.dot` and `Stats.sampleCovariance` (length-
 mismatch throws, no per-element NaN check), `pairSort` (documents
 "callers filter NaN before ranking"), and the `!(x > 0)` guards in
 `logGamma` / `regularizedIncompleteBeta`.
@@ -24310,8 +24380,8 @@ window slides: no gap, no overlap. The fix for the reported bug is
 almost always to stop mixing an inclusive index in with these
 half-open helpers.
 
-*In this library:* `util/MathUtils.mean(v, from, to)`,
-`stdDevP(v, from, to)`, `stdDevSample(v, from, to)` -- half-open span,
+*In this library:* `stats/Stats.mean(v, from, to)`,
+`populationStdDev(v, from, to)`, `sampleStdDev(v, from, to)` -- half-open span,
 `n` vs `n - 1` from one `to - from`, short-window guards.
 
 ### 857. "Two of your reports annualize vol differently and the numbers don't tie out. Where does that come from, and how does the library keep estimators consistent?"
@@ -24332,7 +24402,7 @@ reports that both call the named helper cannot drift. When numbers
 must tie out across teams, the fix is to agree the estimator, not to
 fudge the factor.
 
-*In this library:* `util/MathUtils.stdDevP` vs `stdDevSample`
+*In this library:* `stats/Stats.populationStdDev` vs `sampleStdDev`
 (explicitly named population vs sample), sharing the `mean(v, from,
 to)` core; the same single-home principle as `decayFactor`.
 
@@ -24353,7 +24423,7 @@ next operation would otherwise divide by or take a log of the bad
 value, turning a 0/0 or log(negative) into an explicit
 `IllegalArgumentException` at the boundary.
 
-*In this library:* `util/MathUtils.logGamma` (`!(x > 0)`),
+*In this library:* `stats/SpecialFunctions.logGamma` (`!(x > 0)`),
 `regularizedIncompleteBeta` (`!(a > 0) || !(b > 0) || !(x >= 0 && x
 <= 1)`), `tCdf` (`!(df > 0)`) -- each guarding a division or log that
 NaN would otherwise poison.
@@ -24378,7 +24448,7 @@ beta continued fraction). The only doubles you compare with `==` are
 sentinels you set yourself, like the NaN-as-unset reference price.
 
 *In this library:* `FormulaPinsTest` pins values at 1e-7,
-`util/MathUtils.solveLinear` treats a pivot below 1e-12 as singular,
+`stats/LinearAlgebra.solveLinear` treats a pivot below 1e-12 as singular,
 `betaContinuedFraction` converges at eps 3e-14 -- tolerances chosen to
 match each computation's error budget.
 
@@ -24447,7 +24517,7 @@ comparator sort whose stability you would have to reason about. Once
 the inputs are presented in a defined order on every JVM, the sums
 reduce identically and the rankings match laptop to runner.
 
-*In this library:* `util/MathUtils.pairSort` (deterministic
+*In this library:* `stats/Numerics.pairSort` (deterministic
 median-of-three quicksort over primitive keys/values, NaN excluded by
 contract) -- the stable-order primitive that keeps order-sensitive
 reductions reproducible across JVMs.
@@ -24470,7 +24540,7 @@ than open-coding the exponential. This is the same single-source-of-
 truth discipline as the annualization constant: the correctness of a
 shared constant is a property of it having exactly one home.
 
-*In this library:* `util/MathUtils.decayFactor` -- the one home for
+*In this library:* `stats/Numerics.decayFactor` -- the one home for
 the half-life-to-decay conversion, `ln2` included by construction, the
 `dt <= 0 -> 1.0` guard, called by the streaming estimators.
 
@@ -29498,16 +29568,16 @@ the code returns the deterministic limits rather than NaN.
   make results reproducible. Glasserman (2004), section 4.2.
 - `A = L L'` (lower-triangular L). The Cholesky factorisation that turns
   independent Gaussians into correlated ones (`x = L z`).
-  `MathUtils.cholesky` fails on a matrix that is not positive definite;
+  `LinearAlgebra.cholesky` fails on a matrix that is not positive definite;
   `PsdMatrices.choleskyPsd` accepts positive semidefinite (rank-deficient)
   matrices and rejects indefinite ones, which should be repaired
-  explicitly with `nearestCorrelation`. `util/MathUtils.java`,
+  explicitly with `nearestCorrelation`. `stats/LinearAlgebra.java`,
   `risk/PsdMatrices.java`; Golub and Van Loan (2013), section 4.2.
 - `N(x) = erfc(-x/sqrt(2)) / 2` with erfc from Cody's rational Chebyshev
   approximations, accurate to about 1e-15 relative error down to
   x = -37.5. `N^{-1}(p)`: Acklam's rational approximation (absolute error
   below 1.15e-9) refined by one Halley step against the double-precision
-  CDF, which brings it to double precision. `util/MathUtils.java`
+  CDF, which brings it to double precision. `stats/SpecialFunctions.java`
   (normCdf, normInv, logNormPdf); Cody (1969), Acklam (2003).
 - Implied volatility by a safeguarded Newton iteration on the normalised
   Black function `b(x, s) = e^{x/2} N(x/s + s/2) - e^{-x/2} N(x/s - s/2)`,
@@ -29522,11 +29592,11 @@ the code returns the deterministic limits rather than NaN.
   simple OLS pair behind hedge ratios, betas, AR(1) fits and factor
   loadings. OLS minimises vertical error, so when x is noisy the slope is
   biased toward zero. `alpha/Ols.java` solves the multivariate case by
-  Householder QR with classical and HAC errors. `util/MathUtils.java`
-  (covariance, correlation), `risk/RiskMetrics.java` (beta); Greene,
+  Householder QR with classical and HAC errors. `stats/Stats.java`
+  (sampleCovariance, pearson, pearsonOrZero), `risk/RiskMetrics.java` (beta); Greene,
   *Econometric Analysis*, chapter 3; Golub and Van Loan (2013), section
   5.3.
-- `variance = sum (x - mean)^2 / (n - 1)` for n >= 2. `MathUtils.variance`,
-  `stdDev`, `stdDevSample` and `stdDevP` return NaN when there are too
+- `variance = sum (x - mean)^2 / (n - 1)` for n >= 2. `Stats.sampleVariance`,
+  `sampleStdDev` and `populationStdDev` return NaN when there are too
   few observations rather than 0, so a one-point window cannot pass as a
-  zero-risk asset. `util/MathUtils.java`.
+  zero-risk asset. `stats/Stats.java`.

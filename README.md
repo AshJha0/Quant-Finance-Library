@@ -15,8 +15,18 @@ connectivity stack; see [docs/STABILITY.md](docs/STABILITY.md).
 
 ## Status
 
-- Version 2.3.0. Requires Java 25 (LTS). The full suite (`./mvnw verify -Pfull`) runs
-  1,825 tests.
+- Version 2.4.0. Requires Java 25 (LTS). The full suite (`./mvnw verify -Pfull`) ran
+  1,825 tests at 2.3.0; the 2.4.0 count is recorded after the release gate.
+- Version 2.4 is additive over 2.3 and changes no result by default. It deprecates
+  for removal everything 3.0 takes out (`util.MathUtils`, which now delegates to the
+  new `stats.SpecialFunctions`, `LinearAlgebra` and `Numerics`; seedless optimizer
+  constructors; the 8-argument `VenueQuote` constructor; the single-currency
+  exposure simulator; four sample strategies). New: busts and corrections in
+  `PaperTradingGateway`, the FRTB default risk charge for securitisations, the
+  CRE22.49 securitisation rows and the CRE22.50 table in SA-CCR haircuts, ESMA
+  reference-data rules and the head.001/head.003 submission envelope for RTS 22.
+  [docs/MIGRATION_2.4.md](docs/MIGRATION_2.4.md) covers 2.4;
+  [docs/MIGRATION_3.0.md](docs/MIGRATION_3.0.md) is the draft plan for 3.0.
 - Version 2.3 removes the `risk.simm` package (ISDA licenses SIMM) and fixes several
   results: FRTB SBM and curvature aggregation, SA-CCR sub-netting-set replacement
   cost, drop-copy reconciliation after busts, and the FIX 4.2 ExecType seen through
@@ -60,11 +70,11 @@ connectivity stack; see [docs/STABILITY.md](docs/STABILITY.md).
 <dependency>
   <groupId>com.github.AshJha0</groupId>
   <artifactId>Quant-Finance-Library</artifactId>
-  <version>v2.3.0</version>
+  <version>v2.4.0</version>
 </dependency>
 ```
 
-Gradle: `implementation("com.github.AshJha0:Quant-Finance-Library:v2.3.0")` with
+Gradle: `implementation("com.github.AshJha0:Quant-Finance-Library:v2.4.0")` with
 `maven("https://jitpack.io")` in `repositories`.
 
 The jars attached to each GitHub release can also be put on a classpath directly.
@@ -137,7 +147,7 @@ public class QuickStart {
 The same backtest runs without writing Java through the bundled command line:
 
 ```bash
-java -jar target/quant-finance-library-2.3.0.jar backtest \
+java -jar target/quant-finance-library-2.4.0.jar backtest \
     --csv bars.csv --symbol SPY --strategy sma --fast 10 --slow 30 --out report.html
 ```
 
@@ -248,21 +258,28 @@ These are common requirements that the library does not cover, or covers only in
 part. Code that needs them should use a specialised library or add them.
 
 - ISDA SIMM: not included; ISDA licenses SIMM for use.
-- FRTB SA certification, and the default risk charge for securitisations.
-- The CRE22.50 haircut table (jurisdictions without external ratings) and
-  securitisation collateral in SA-CCR.
+- FRTB SA certification. The securitisation default risk charge
+  (`FrtbDrcSecuritisation`) leaves SEC-IRBA weights, the decomposition of
+  index and nth-to-default positions (MAR22.28, 22.30, 22.39) and an unknown
+  delinquency ratio W (CRE41.9) to the caller, and its 8% conversion from a
+  banking-book weight to a DRC weight is the library's reading, not printed in
+  the Basel text.
+- Haircuts for UCITS and mutual funds in SA-CCR (CRE22.50 fund rule).
 - A stochastic basis for foreign-currency swaps (only domestic swaps see the basis
   factor), and more than one basis factor.
-- Busts and corrections in `PaperTradingGateway`; `HftOrderGateway` does not reopen
-  an order after a bust.
+- `HftOrderGateway` does not reopen an order after a bust (`PaperTradingGateway`
+  can, with `setReopenOnBust(true)`).
 - Certification of the CAT and EMIR reports (EMIR not checked field by field against
-  Regulation 2022/1860); MiFIR rules that need reference data, the head.001
-  envelope, swap legs, and the post-2024 MiFIR review.
+  Regulation 2022/1860); the MiFIR rules CON-330, CON-331 and CON-430, the
+  seven-day pending workflow, field 2 history, auth.031 feedback, swap legs, and
+  the post-2024 MiFIR review. The shipped GLEIF, FIRDS and ISO 10383 loaders read
+  status only, so date, country and flag rules run only with richer reference data
+  supplied by the caller.
 - Corporate-action elections and cost basis inside the portfolio backtester
   (`CorporateEventPositions` handles them for single holdings).
 - Live broker or exchange connectivity, certification, and kernel-bypass networking.
-- A smaller public API surface is planned for 3.0: 2.4.0 will deprecate what goes,
-  and 2.x keeps every 2.0 public type.
+- A smaller public API surface is planned for 3.0: 2.4.0 deprecates what goes (see
+  [docs/MIGRATION_3.0.md](docs/MIGRATION_3.0.md)), and 2.x keeps every 2.0 public type.
 
 ## Performance
 
@@ -275,6 +292,8 @@ Benchmark method, environment and results are in [docs/BENCHMARKS.md](docs/BENCH
 | [GETTING_STARTED.md](docs/GETTING_STARTED.md) | Build, first backtest, paper trading, benchmarks, troubleshooting |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Package map, data flow, design rules |
 | [STABILITY.md](docs/STABILITY.md) | Stable APIs, reference implementations, versioning policy |
+| [MIGRATION_3.0.md](docs/MIGRATION_3.0.md) | Draft: what 3.0 removes or moves, and the 2.4 replacement for each |
+| [MIGRATION_2.4.md](docs/MIGRATION_2.4.md) | 2.4 deprecations, new opt-in behaviour, unconfirmed readings |
 | [MIGRATION_2.3.md](docs/MIGRATION_2.3.md) | The removed SIMM package and the 2.3 result changes |
 | [MIGRATION_2.2.md](docs/MIGRATION_2.2.md) | The two 2.2 default changes and how to keep 2.1 behaviour |
 | [MIGRATION_2.1.md](docs/MIGRATION_2.1.md) | What 2.1 adds and how to adopt it |

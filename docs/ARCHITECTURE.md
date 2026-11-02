@@ -78,18 +78,18 @@ carries on. Without a listener nothing changes from 2.1.
 | Package | Purpose | Main classes |
 |---|---|---|
 | `core` | OHLCV series on primitive arrays | `Bar`, `BarSeries` |
-| `stats` | Descriptive statistics, one definition each | `Stats` (mean, sample and population variance, covariance, Pearson, Hyndman-Fan type 7 and type 1 quantiles, median, midranks) |
-| `util` | Numerics and measurement | `MathUtils` (normal CDF by Cody's erfc algorithm), `LatencyRecorder`, `HiccupMonitor` |
+| `stats` | Descriptive statistics and numerical routines, one definition each | `Stats` (mean, sample and population variance, covariance, Pearson, skewness, kurtosis, Hyndman-Fan type 7 and type 1 quantiles, median, midranks), `SpecialFunctions` (normal CDF by Cody's erfc algorithm, inverse normal, log-gamma, incomplete beta, Student-t CDF), `LinearAlgebra` (Cholesky, linear solve, inverse), `Numerics` (clamp, NaN arrays, decay factor, pair sort) |
+| `util` | Measurement | `LatencyRecorder`, `HiccupMonitor`; `MathUtils` is deprecated for removal in 2.4.0 and delegates to `stats` |
 | `data` | Data in and out | `CsvBarLoader`, `HttpBarFetcher`, `SeriesAligner`, `CorporateActions`, `CorporateEvents`, `CorporateEventPositions`, `PointInTimeUniverse`, `UniverseCsvLoader`, `TickFileWriter`/`TickFileReader` (QFLT v2), `TickCapture`, `AsyncTickCapture` |
 | `feed` | Live and multicast feeds | `WebSocketFeed`, `BinanceTradeParser`, `MoldUdp64Receiver` |
 | `sbe` | SBE-style binary codecs (schema 2) | `MessageHeader`, `Decimal64`, `TradeFlyweight`, `OrderFlyweight`, `QuoteFlyweight`, `BinaryMarketDataClient`, `BinaryOrderPublisher`, `BinaryOrderReceiver` |
 | `fix` | FIX session (4.4 default, 4.2, 5.0 SP2) and garbage-free codecs | `FixSession`, `FixSessionSchedule`, `FixSessionOptions`, `FixVersion`, `FixDictionary`, `FixGroupDef`, `FixGroup`, `FileSessionStore` (CRC-32C journal), `FixMessage`, `FixOrderEncoder`, `FixExecReportView`, `FixExecReportView.ExecIdDeduplicator`, `FixMarketDataView` |
 | `marketdata` | Trading-lane transport and equities L3 | `HftMarketDataBus`, `TickRingBuffer`, `SymbolRegistry`, `ItchCodec`, `L3BookBuilder`, `Nbbo`; simpler `MarketDataProcessor`, `RingBuffer` |
 | `orderbook` | Matching engines and book analytics | `OrderBook` (readable reference), `HftOrderBook` (price ladder, pooled nodes, self-trade prevention), `AuctionBook` (opening and closing call auctions), `BookAnalytics` |
-| `trading` | Order entry and pre-trade risk | `HftRiskGate`, `HftOrderGateway`, `OrderStateMachine`, `OrderRingBuffer`, `OrderListener`, `HftQuoter`, `AutoHedger`, `OrderThrottle`, `LastLookGate`, `LoopbackVenue`, `PaperTradingGateway`, `TradingDashboard`, `ShardedTradingEngine`, `GlobalRiskAggregator`, `PositionLedger`, `FillListener`, `LedgerFillListener`, `DropCopyReconciler`, `LimitsConfig`, `LimitsManager` |
+| `trading` | Order entry and pre-trade risk | `HftRiskGate`, `HftOrderGateway`, `OrderStateMachine`, `OrderRingBuffer`, `OrderListener`, `HftQuoter`, `AutoHedger`, `OrderThrottle`, `LastLookGate`, `LoopbackVenue`, `PaperTradingGateway`, `TradingDashboard`, `ShardedTradingEngine`, `GlobalRiskAggregator`, `PositionLedger`, `FillListener`, `LedgerFillListener`, `DropCopyReconciler`, `LimitsConfig`, `LimitsManager`; `PaperTradingGateway.TradeListener` (busts and corrections, 2.4) |
 | `entitlements` | Who may trade what, where and when | `EntitlementService`, `Grant`, `Permission`, `Decision`, `EntitlementPreTradeCheck` |
-| `reporting` | Regulatory transaction reports | `TransactionReport`, `TransactionReportSink`, `Rts22ReportBuilder`, `Rts22TransactionReport`, `ReportingIdentifiers` (`Rts22TransactionReport.toAuth016Xml`, `validateEsmaRules` from 2.3) |
-| `reporting.registry` | Reference data for reports (2.3) | `LeiRegistry`, `GleifGoldenCopyLeiRegistry`, `GleifApiLeiRegistry`, `InstrumentRegistry`, `FirdsInstrumentRegistry`, `MicRegistry`, `Iso10383MicRegistry`, `ReferenceDataChecker` |
+| `reporting` | Regulatory transaction reports | `TransactionReport`, `TransactionReportSink`, `Rts22ReportBuilder`, `Rts22TransactionReport`, `ReportingIdentifiers` (`Rts22TransactionReport.toAuth016Xml`, `validateEsmaRules` from 2.3; `validateWithReferenceData`, `toSubmissionXml` from 2.4) |
+| `reporting.registry` | Reference data for reports (2.3) | `LeiRegistry`, `GleifGoldenCopyLeiRegistry`, `GleifApiLeiRegistry`, `InstrumentRegistry`, `FirdsInstrumentRegistry`, `MicRegistry`, `Iso10383MicRegistry`, `ReferenceDataChecker`; `ReferenceData`, `LeiValidity`, `CodeRegistry` (2.4) |
 | `reporting.cat` | US CAT order events, indicative (2.3) | `CatEventBuilder`, `CatEvent`, `CatEventType`, `CatJsonLinesSink` |
 | `reporting.emir` | EMIR Refit derivative reports, indicative (2.3) | `EmirRefitReportBuilder`, `EmirRefitReport`, `EmirActionType`, `EmirEventType` |
 | `indicators` | Technical indicators | `Indicators` (batch), `StreamingIndicators` (one update per tick) |
@@ -99,7 +99,7 @@ carries on. Without a listener nothing changes from 2.1.
 | `fx` | FX conventions, instruments and e-FX structure | `CurrencyPair`, `SwapPointsCurve`, `FxSwap`, `Ndf`, `FxVolSurface`, `FixingRisk`, `VannaVolgaTouch`, `AggregatedBook`, `CrossRateEngine`, `FxTierBook`, `LpScorecard`, `LpRouter`, `SyntheticCross` |
 | `commodities`, `markets` | Futures curves; index and private-market analytics | `CommodityCurve`, `IndexConstruction`, `PrivateMarketAnalytics` |
 | `volatility` | Volatility models | `EwmaVolatility`, `Garch11`, `GjrGarch11`, `Egarch11` (maximum likelihood), `HarRv`, `RangeVolatility`, `VolatilityIndex`, `VolatilityDecomposition`, `InformationCriteria` |
-| `risk` | Market, credit and limit risk | `TailRisk`, `VarEngine`, `RiskMetrics`, `FrtbEs`, `PnlAttribution`, `VarBacktest`, `ExtremeValueTheory`, `StressTester`, `ComponentVar`, `CovarianceShrinkage`, `PsdMatrices`, `GaussianCopula`, `Dependence`, `Pca`, `PreTradeLimitChecker`, `CounterpartyExposureTracker`, `SaCcr`, `SaCcrHaircuts`, `FrtbSa`, `FrtbDrc`, `FrtbRrao`, `FrtbNmrf`, `FactorRiskModel` |
+| `risk` | Market, credit and limit risk | `TailRisk`, `VarEngine`, `RiskMetrics`, `FrtbEs`, `PnlAttribution`, `VarBacktest`, `ExtremeValueTheory`, `StressTester`, `ComponentVar`, `CovarianceShrinkage`, `PsdMatrices`, `GaussianCopula`, `Dependence`, `Pca`, `PreTradeLimitChecker`, `CounterpartyExposureTracker`, `SaCcr`, `SaCcrHaircuts`, `FrtbSa`, `FrtbDrc`, `FrtbDrcSecuritisation`, `FrtbRrao`, `FrtbNmrf`, `FactorRiskModel` |
 | `crb` | Central risk book | `CentralRiskBook`, `InternalizationEngine`, `SkewedQuoter`, `HedgeOptimizer`, `CrbHedgeUniverse`, `CrbAutoHedger`, `CrbRouter`, `CrbPnlLedger` |
 | `hedging` | Hedging | `DeltaHedger`, `HedgingSimulator`, `GreekHedger`, `OptionsBook`, `MinimumVarianceHedge`, `FxHedger`, `PairsHedger`, `CointegrationTest`, `WhalleyWilmott` |
 | `optimization` | Portfolio construction | `QuadraticProgram` (active-set), `PortfolioOptimizer`, `ConstrainedPortfolioOptimizer`, `RiskParityOptimizer`, `BlackLitterman`, `NelderMead` |
@@ -177,11 +177,12 @@ midranks with ties averaged. Empty input gives NaN, the sample variance of fewer
 two values is NaN, and a probability outside [0, 1] or NaN throws
 `IllegalArgumentException`.
 
-The older helpers delegate to it: `MathUtils.mean`, `variance`, `stdDev`, `stdDevP`,
-`stdDevSample`, `percentile`, `percentileSorted` and `covariance`, and
-`risk.Dependence.ranks`. Results on valid input are unchanged bit for bit.
-`MathUtils.correlation` keeps its convention of 0 for zero dispersion, where
-`Stats.pearson` returns NaN.
+`risk.Dependence.ranks` delegates to it. `Stats.pearsonOrZero` returns 0 for zero
+dispersion, where `Stats.pearson` returns NaN. In 2.4.0 `util.MathUtils` is
+deprecated for removal: every method delegates to `Stats`, `SpecialFunctions`,
+`LinearAlgebra` or `Numerics`, the library no longer calls it, and results on valid
+input are unchanged bit for bit (`MovedFromMathUtilsTest` pins the 2.3.0 values).
+[MIGRATION_3.0.md](MIGRATION_3.0.md) section 4 maps each method.
 
 Four similar computations stay separate because their conventions differ:
 `alpha.AlphaCombiner.pearson` (pairwise-complete, NaN below three pairs),

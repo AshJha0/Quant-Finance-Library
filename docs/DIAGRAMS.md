@@ -3268,7 +3268,7 @@ flowchart TD
     EV78(["event stream: trades /<br/>quotes / your own fills"])
     KICK78["each event adds excitation alpha<br/>to S(t) (onEvent)"]
     BASE78["baseline mu (events/sec):<br/>the rate with NO excitation"]
-    DECAY78["S(t) decays at beta = ln2/halfLife<br/>(MathUtils.decayFactor):<br/>the burst fades between events"]
+    DECAY78["S(t) decays at beta = ln2/halfLife<br/>(Numerics.decayFactor):<br/>the burst fades between events"]
     LAMBDA78["intensity(now) = mu + S(now)<br/>the self-exciting arrival rate"]
     BRANCH78{"branching ratio<br/>n = alpha / beta"}
     STABLE78["n < 1: each event spawns < 1<br/>child on average -> bursts die out<br/>(stationary, the only regime kept)"]
@@ -4576,8 +4576,11 @@ flowchart LR
 
 A bust removes the original execution and a correction replaces its quantity
 and price. The ledger keeps the original in its log and recomputes average cost
-and realised P&L as if the busted trade had never been booked. See LEARN
-section 17d and recipe 344.
+and realised P&L as if the busted trade had never been booked. Since 2.4
+`PaperTradingGateway.bustFill` and `correctFill` produce the same events in
+paper trading and reach a ledger through `LedgerFillListener.forPaperTrades`;
+there the order is reopened only with `setReopenOnBust(true)`. See LEARN
+section 17d and recipes 344 and 350.
 
 ---
 
@@ -4586,7 +4589,8 @@ section 17d and recipe 344.
 ```mermaid
 flowchart LR
     FILL_110["execution"]
-    RTS_110["Rts22ReportBuilder<br/>validate, validateEsmaRules,<br/>toAuth016Xml"]
+    RTS_110["Rts22ReportBuilder<br/>validate, validateEsmaRules,<br/>validateWithReferenceData (2.4)"]
+    SUB_110["toSubmissionXml (2.4)<br/>head.003 envelope, head.001 header,<br/>auth.016 payload"]
     CAT_110["reporting.cat<br/>CatEventBuilder (MENO/MEOR/MEOT/MEOF)"]
     EMIR_110["reporting.emir<br/>EmirRefitReportBuilder"]
     CHK_110["reporting.registry<br/>ReferenceDataChecker"]
@@ -4597,11 +4601,16 @@ flowchart LR
     FILL_110 --> CAT_110 --> CHK_110
     FILL_110 --> EMIR_110 --> CHK_110
     REG_110 --> CHK_110 -->|clean| SINK_110
+    REG_110 -.->|ReferenceData| RTS_110
+    RTS_110 --> SUB_110
 ```
 
 Every report type shares the `TransactionReport` view, so one checker serves
-them all. CAT and EMIR are indicative and not certified. See LEARN section 17e
-and recipes 347 to 349.
+them all. CAT and EMIR are indicative and not certified. Since 2.4 the RTS 22
+report also runs the ESMA rules that need reference data and writes the
+submission file; the shipped loaders read status only, so the dated rules need
+richer reference data. See LEARN sections 17e and 17g and recipes 347 to 349
+and 353.
 
 ---
 
