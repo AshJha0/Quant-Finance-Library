@@ -138,6 +138,37 @@ jobs:
           path: core/target/pit-reports
           if-no-files-found: ignore
 
+  fuzz:
+    # Seeded mutation fuzzing of the FIX, FIRDS XML, CFI XLSX and GLEIF/MIC
+    # CSV parsers (-Pfuzz runs only *FuzzTest, qfl.cases = fuzz.tries,
+    # default 200000), then the core pricing property tests at a deeper case
+    # count than the per-PR 1000. A failure message names the seed and case
+    # index that reproduce it.
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Fuzz the parsers
+        run: ./mvnw -B --no-transfer-progress -Pfuzz -Djacoco.skip=true -pl lowlatency -am test
+      - name: Pricing property tests, 20000 cases
+        run: >-
+          ./mvnw -B --no-transfer-progress -Djacoco.skip=true -Dqfl.cases=20000
+          -Dtest=PricingInvariantPropertiesTest -Dsurefire.failIfNoSpecifiedTests=false -pl core test
+      - name: Upload reports
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-reports
+          path: |
+            lowlatency/target/surefire-reports
+            core/target/surefire-reports
+          if-no-files-found: ignore
+
   mutation-lowlatency:
     # PIT on the low-latency module: regreporting and the FIX codecs (decoder,
     # encoder, parser, message, groups, views, dictionary; not the session state
