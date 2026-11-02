@@ -28,16 +28,45 @@ import java.util.Objects;
  * @param maturityYears M_i, remaining maturity of the contract
  * @param delta         supervisory delta (|delta| &le; 15, the CDO-tranche maximum)
  * @param marketValue   current market value of the trade
+ * @param hedgingSetType ordinary, basis or volatility hedging set
+ *                      (BCBS 279 paras 162-163); see {@link #asBasis()}
+ *                      and {@link #asVolatility()}
  */
 public record SaCcrTrade(SaCcr.AssetClass assetClass, String hedgingSet,
                          SaCcr.CreditGrade creditGrade, boolean index,
                          SaCcr.CommoditySet commoditySet, double notional,
                          double startYears, double endYears, double maturityYears,
-                         double delta, double marketValue) {
+                         double delta, double marketValue,
+                         SaCcr.HedgingSetType hedgingSetType) {
+
+    /**
+     * The 2.1 constructor: an ordinary (non-basis, non-volatility) trade.
+     *
+     * @param assetClass    the SA-CCR asset class
+     * @param hedgingSet    hedging-set key
+     * @param creditGrade   rating bucket for credit trades, else null
+     * @param index         true for index credit or equity trades
+     * @param commoditySet  commodity hedging set, else null
+     * @param notional      notional or adjusted notional
+     * @param startYears    S_i
+     * @param endYears      E_i
+     * @param maturityYears M_i
+     * @param delta         supervisory delta
+     * @param marketValue   current market value
+     */
+    public SaCcrTrade(SaCcr.AssetClass assetClass, String hedgingSet,
+                      SaCcr.CreditGrade creditGrade, boolean index,
+                      SaCcr.CommoditySet commoditySet, double notional,
+                      double startYears, double endYears, double maturityYears,
+                      double delta, double marketValue) {
+        this(assetClass, hedgingSet, creditGrade, index, commoditySet, notional, startYears,
+                endYears, maturityYears, delta, marketValue, SaCcr.HedgingSetType.ORDINARY);
+    }
 
     /** Validates every field. */
     public SaCcrTrade {
         Objects.requireNonNull(assetClass, "assetClass");
+        Objects.requireNonNull(hedgingSetType, "hedgingSetType");
         Objects.requireNonNull(hedgingSet, "hedgingSet");
         if (hedgingSet.isBlank()) {
             throw new IllegalArgumentException("hedgingSet must not be blank");
@@ -166,5 +195,39 @@ public record SaCcrTrade(SaCcr.AssetClass assetClass, String hedgingSet,
         Objects.requireNonNull(set, "set");
         return new SaCcrTrade(SaCcr.AssetClass.COMMODITY, commodityType, null, false, set,
                 adjustedNotional, 0, 0, maturityYears, delta, marketValue);
+    }
+
+    /**
+     * This trade as a basis transaction (para 162): a non-FX trade whose
+     * two floating legs reference risk factors of the same asset class
+     * in the same currency, such as 3m LIBOR against OIS. Basis trades
+     * on the same pair of risk factors form their own hedging set, keyed
+     * by {@link #hedgingSet()} (name it after the pair, e.g.
+     * "USD 3M/OIS"), and take half the supervisory factor.
+     *
+     * @return a copy marked basis
+     */
+    public SaCcrTrade asBasis() {
+        return withType(SaCcr.HedgingSetType.BASIS);
+    }
+
+    /**
+     * This trade as a volatility transaction (para 163): the reference
+     * is a volatility or variance of a risk factor, such as a variance
+     * swap. Volatility trades form their own hedging sets and take five
+     * times the supervisory factor.
+     *
+     * @return a copy marked volatility
+     */
+    public SaCcrTrade asVolatility() {
+        return withType(SaCcr.HedgingSetType.VOLATILITY);
+    }
+
+    private SaCcrTrade withType(SaCcr.HedgingSetType type) {
+        if (type == SaCcr.HedgingSetType.BASIS && assetClass == SaCcr.AssetClass.FX) {
+            throw new IllegalArgumentException("para 162 basis hedging sets exclude FX trades");
+        }
+        return new SaCcrTrade(assetClass, hedgingSet, creditGrade, index, commoditySet, notional,
+                startYears, endYears, maturityYears, delta, marketValue, type);
     }
 }

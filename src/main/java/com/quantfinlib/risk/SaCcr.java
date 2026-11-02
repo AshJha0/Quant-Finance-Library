@@ -48,9 +48,21 @@ import java.util.Objects;
  *   sets, summed over sets.</li>
  * </ul>
  *
- * <p>Out of scope: basis and volatility hedging sets (paras 162-163),
- * multiple margin agreements per netting set (paras 185-187) and
- * collateral haircuts (pass C already haircut). Times are year
+ * <p>Basis and volatility transactions (paras 162-163) form their own
+ * hedging sets inside their asset class, with the supervisory factor
+ * times 0.5 (basis) or 5 (volatility); mark a trade with
+ * {@link SaCcrTrade#asBasis()} or {@link SaCcrTrade#asVolatility()}.
+ * For example a USD 3m/OIS basis swap with adjusted notional 78,694
+ * in the over-5y bucket adds 0.5 * 0.5% * 78,694 = 196.7 on its own,
+ * where the same trade as an ordinary swap would add 393.5 and net
+ * against the other USD swaps.</p>
+ *
+ * <p>Margin agreements and netting sets (paras 185-187):
+ * {@link #oneMarginAgreementManyNettingSets} for one agreement covering
+ * several netting sets, {@link #subNettingSets} for one netting set
+ * under several agreements (or partly unmargined). Collateral C is
+ * passed already haircut; {@link SaCcrHaircuts} gives the supervisory
+ * haircuts. Times are year
  * fractions the caller computes; the S and E floor of ten business
  * days is applied as 10/250 years. The tests reproduce Annex 4a
  * Examples 1 to 5. Research lane, deterministic.</p>
@@ -91,6 +103,30 @@ public final class SaCcr {
     private static final double TEN_DAYS = 10 / DAYS_PER_YEAR;
 
     private SaCcr() {
+    }
+
+    /**
+     * Hedging-set kind of a trade (paras 162-163) and its multiplier on
+     * the supervisory factor.
+     */
+    public enum HedgingSetType {
+        /** Ordinary hedging set, factor 1. */
+        ORDINARY(1),
+        /** Basis transaction, own hedging set per risk-factor pair, factor 0.5. */
+        BASIS(0.5),
+        /** Volatility transaction, own hedging set, factor 5. */
+        VOLATILITY(5);
+
+        private final double factorMultiplier;
+
+        HedgingSetType(double factorMultiplier) {
+            this.factorMultiplier = factorMultiplier;
+        }
+
+        /** Returns the multiplier applied to the supervisory factor. */
+        public double factorMultiplier() {
+            return factorMultiplier;
+        }
     }
 
     /** The five SA-CCR asset classes. */
@@ -264,6 +300,129 @@ public final class SaCcr {
     }
 
     /**
+     * One margin agreement covering several netting sets (paras 185-186).
+     * The agreement's collateral cannot be split between the netting
+     * sets, so {@code RC_MA = max(sum_NS max(V_NS, 0) - C_MA, 0)}, and
+     * {@code PFE_MA = sum_NS PFE_NS} with each netting set's PFE computed
+     * as if unmargined. Each multiplier uses that set's own V_NS with no
+     * collateral, since C_MA belongs to no single set; that is this
+     * library's reading of para 186.
+     *
+     * <p>Example (own hand computation): netting sets with V of 100 and
+     * -40 under one agreement holding C = 30 give
+     * RC = max(100 + 0 - 30, 0) = 70. Netting the two sets first would
+     * give 30, which the rule does not allow.</p>
+     *
+     * @param nettingSets    the netting sets, each non-empty
+     * @param collateralHeld C_MA, haircut net collateral under the agreement
+     * @return a result whose add-on fields are sums over the netting sets
+     *         and whose multiplier is PFE divided by the aggregate add-on
+     */
+    public static Result oneMarginAgreementManyNettingSets(List<List<SaCcrTrade>> nettingSets,
+                                                           double collateralHeld) {
+        Objects.requireNonNull(nettingSets, "nettingSets");
+        if (nettingSets.isEmpty()) {
+            throw new IllegalArgumentException("no netting sets");
+        }
+        if (!Double.isFinite(collateralHeld)) {
+            throw new IllegalArgumentException("collateral must be finite, got " + collateralHeld);
+        }
+        double v = 0;
+        double positive = 0;
+        double[] sum = new double[6];
+        for (List<SaCcrTrade> ns : nettingSets) {
+            Result r = compute(ns, 0, null);
+            v += r.marketValue();
+            positive += Math.max(r.marketValue(), 0);
+            accumulate(sum, r);
+        }
+        return combine(v, Math.max(positive - collateralHeld, 0), sum);
+    }
+
+    /**
+     * One part of a netting set for {@link #subNettingSets}: the trades
+     * under one margin agreement (or the unmargined trades when
+     * {@code margin} is null) and the haircut collateral that belongs to
+     * them.
+     *
+     * @param trades         the trades of the sub-netting set
+     * @param collateralHeld haircut collateral held for these trades
+     * @param margin         the margin agreement, or null for unmargined
+     */
+    public record SubNettingSet(List<SaCcrTrade> trades, double collateralHeld, Margin margin) {
+        /** Validates and copies the trade list. */
+        public SubNettingSet {
+            trades = List.copyOf(Objects.requireNonNull(trades, "trades"));
+            if (trades.isEmpty()) {
+                throw new IllegalArgumentException("sub-netting set has no trades");
+            }
+            if (!Double.isFinite(collateralHeld)) {
+                throw new IllegalArgumentException("collateral must be finite, got " + collateralHeld);
+            }
+        }
+    }
+
+    /**
+     * One netting set under several margin agreements, or mixing
+     * margined and unmargined trades (para 187). The PFE is computed per
+     * sub-netting set aligned with its agreement, with that part's own
+     * maturity factors and own multiplier from V_k - C_k, and the parts
+     * are summed. The replacement cost is for the netting set as a whole,
+     * {@code RC = max(V - C, sum_k (TH_k + MTA_k - NICA_k), 0)} over the
+     * margined parts. Para 187 prescribes only the PFE split; summing the
+     * margined floors for RC is this library's reading.
+     *
+     * @param parts the sub-netting sets
+     * @return a result whose add-on fields are sums over the parts and
+     *         whose multiplier is PFE divided by the aggregate add-on
+     */
+    public static Result subNettingSets(List<SubNettingSet> parts) {
+        Objects.requireNonNull(parts, "parts");
+        if (parts.isEmpty()) {
+            throw new IllegalArgumentException("no sub-netting sets");
+        }
+        double v = 0;
+        double c = 0;
+        double floor = 0;
+        boolean anyMargined = false;
+        double[] sum = new double[6];
+        for (SubNettingSet part : parts) {
+            Objects.requireNonNull(part, "part");
+            Result r = compute(part.trades(), part.collateralHeld(), part.margin());
+            v += r.marketValue();
+            c += part.collateralHeld();
+            if (part.margin() != null) {
+                anyMargined = true;
+                Margin m = part.margin();
+                floor += m.threshold() + m.minimumTransfer() - m.nica();
+            }
+            accumulate(sum, r);
+        }
+        double rc = Math.max(v - c, 0);
+        if (anyMargined) {
+            rc = Math.max(rc, floor);
+        }
+        return combine(v, rc, sum);
+    }
+
+    private static void accumulate(double[] sum, Result r) {
+        sum[0] += r.addOnInterestRate();
+        sum[1] += r.addOnFx();
+        sum[2] += r.addOnCredit();
+        sum[3] += r.addOnEquity();
+        sum[4] += r.addOnCommodity();
+        sum[5] += r.pfe();
+    }
+
+    private static Result combine(double v, double rc, double[] sum) {
+        double aggregate = sum[0] + sum[1] + sum[2] + sum[3] + sum[4];
+        double pfe = sum[5];
+        double multiplier = aggregate > 0 ? pfe / aggregate : 1;
+        return new Result(v, rc, sum[0], sum[1], sum[2], sum[3], sum[4], aggregate, multiplier,
+                pfe, ALPHA * (rc + pfe));
+    }
+
+    /**
      * The PFE multiplier of para 149.
      *
      * @param vMinusC   V - C
@@ -369,7 +528,8 @@ public final class SaCcr {
             if (t.assetClass() != AssetClass.INTEREST_RATE) {
                 continue;
             }
-            double[] d = buckets.computeIfAbsent(t.hedgingSet(), k -> new double[3]);
+            double[] d = buckets.computeIfAbsent(t.hedgingSetType().ordinal() + "|" + t.hedgingSet(),
+                    k -> new double[]{0, 0, 0, t.hedgingSetType().factorMultiplier()});
             int b = t.endYears() < 1 ? 0 : (t.endYears() <= 5 ? 1 : 2);
             d[b] += effective(t, margin);
         }
@@ -377,7 +537,7 @@ public final class SaCcr {
         for (double[] d : buckets.values()) {
             double sq = d[0] * d[0] + d[1] * d[1] + d[2] * d[2]
                     + 1.4 * d[0] * d[1] + 1.4 * d[1] * d[2] + 0.6 * d[0] * d[2];
-            addOn += SF_IR * Math.sqrt(Math.max(sq, 0));
+            addOn += d[3] * SF_IR * Math.sqrt(Math.max(sq, 0));
         }
         return addOn;
     }
@@ -386,7 +546,8 @@ public final class SaCcr {
         Map<String, Double> sets = new LinkedHashMap<>();
         for (SaCcrTrade t : trades) {
             if (t.assetClass() == AssetClass.FX) {
-                sets.merge(t.hedgingSet(), effective(t, margin), Double::sum);
+                sets.merge(t.hedgingSetType().ordinal() + "|" + t.hedgingSet(),
+                        t.hedgingSetType().factorMultiplier() * effective(t, margin), Double::sum);
             }
         }
         double addOn = 0;
@@ -398,7 +559,8 @@ public final class SaCcr {
 
     private static double addOnCreditOrEquity(List<SaCcrTrade> trades, Margin margin,
                                               AssetClass cls) {
-        Map<String, double[]> entities = new LinkedHashMap<>();   // {effective notional, SF, rho}
+        // per hedging-set type: entity -> {effective notional, SF, rho}
+        Map<HedgingSetType, Map<String, double[]>> sets = new LinkedHashMap<>();
         for (SaCcrTrade t : trades) {
             if (t.assetClass() != cls) {
                 continue;
@@ -409,19 +571,25 @@ public final class SaCcr {
             } else {
                 sf = t.index() ? SF_EQUITY_INDEX : SF_EQUITY_SINGLE;
             }
+            double fsf = sf * t.hedgingSetType().factorMultiplier();
             double rho = t.index() ? RHO_INDEX : RHO_SINGLE;
-            double[] e = entities.computeIfAbsent(t.hedgingSet(), k -> new double[]{0, sf, rho});
-            if (e[1] != sf || e[2] != rho) {
+            double[] e = sets.computeIfAbsent(t.hedgingSetType(), k -> new LinkedHashMap<>())
+                    .computeIfAbsent(t.hedgingSet(), k -> new double[]{0, fsf, rho});
+            if (e[1] != fsf || e[2] != rho) {
                 throw new IllegalArgumentException("entity " + t.hedgingSet()
                         + " has trades with different grades or index flags");
             }
             e[0] += effective(t, margin);
         }
-        return systematicPlusIdiosyncratic(entities);
+        double addOn = 0;
+        for (Map<String, double[]> entities : sets.values()) {
+            addOn += systematicPlusIdiosyncratic(entities);
+        }
+        return addOn;
     }
 
     private static double addOnCommodity(List<SaCcrTrade> trades, Margin margin) {
-        Map<CommoditySet, Map<String, double[]>> sets = new LinkedHashMap<>();
+        Map<String, Map<String, double[]>> sets = new LinkedHashMap<>();
         for (SaCcrTrade t : trades) {
             if (t.assetClass() != AssetClass.COMMODITY) {
                 continue;
@@ -429,9 +597,11 @@ public final class SaCcr {
             String type = t.hedgingSet().trim();
             double sf = t.commoditySet() == CommoditySet.ENERGY
                     && type.equalsIgnoreCase("electricity") ? SF_ELECTRICITY : SF_COMMODITY_OTHER;
-            double[] e = sets.computeIfAbsent(t.commoditySet(), k -> new LinkedHashMap<>())
+            double fsf = sf * t.hedgingSetType().factorMultiplier();
+            double[] e = sets.computeIfAbsent(t.hedgingSetType().ordinal() + "|" + t.commoditySet(),
+                            k -> new LinkedHashMap<>())
                     .computeIfAbsent(type.toLowerCase(java.util.Locale.ROOT),
-                            k -> new double[]{0, sf, RHO_COMMODITY});
+                            k -> new double[]{0, fsf, RHO_COMMODITY});
             e[0] += effective(t, margin);
         }
         double addOn = 0;
