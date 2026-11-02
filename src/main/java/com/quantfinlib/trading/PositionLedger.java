@@ -48,6 +48,27 @@ import java.util.Objects;
  * nothing and returns false; the reason is counted. Fees are accumulated per
  * book and reported apart from realised P&amp;L.</p>
  *
+ * <p>Busts and corrections ({@link #onBust}, {@link #onCorrect}). The plain
+ * idea: a bust says an execution never happened, a correction says it
+ * happened at a different quantity or price. Neither edits history: each is
+ * appended to the fill log as its own entry naming the execution it refers
+ * to (FIX ExecRefID, tag 19), and the referenced fill is marked busted or
+ * given an effective quantity and price. The book is then rebuilt by
+ * replaying its live fills, in their original order, at their effective
+ * values. Formally, after any sequence of fills, busts and corrections, every
+ * book equals the book obtained by applying {@link #onFill} to the surviving
+ * fills alone, so average cost, FIFO lots, realised P&amp;L, fees and traded
+ * quantities are what they would have been had the venue reported the
+ * corrected tape in the first place (own test: PositionLedgerBustTest
+ * compares against a fresh ledger fed the surviving fills). Worked example:
+ * buy 100 at 10, buy 100 at 12, sell 150 at 11, then bust the buy at 12.
+ * The surviving tape is buy 100 at 10, sell 150 at 11: position -50 opened
+ * at 11, average-cost realised {@code 100 (11 - 10) = 100}. A fee booked
+ * with a busted fill is removed with it. Replay needs the whole log, so a
+ * bust or correction is refused once the log has overflowed or is full.
+ * They are cold-path calls, O(log size), and allocate a small snapshot to
+ * restore the book if the replay cannot fit the FIFO lot queue.</p>
+ *
  * <p>Not thread-safe: one writer thread applies fills, and readers either run
  * on that thread or take their own synchronisation.</p>
  */
@@ -97,12 +118,49 @@ public final class PositionLedger {
     private final byte[] logSide;
     private final long[] logQty;
     private final double[] logPx;
+    private final double[] logFee;
+    private final byte[] logKind;        // KIND_*
+    private final byte[] logStatus;      // STATUS_* (fill entries only)
+    private final long[] logRefExecId;   // bust/correct: the execution referred to
+    private final int[] logRoot;         // index of the root fill entry
+    private final long[] logEffQty;      // fill entries: quantity after corrections
+    private final double[] logEffPx;     // fill entries: price after corrections
     private int logSize;
     private long logOverflow;
 
     private long fillCount;
     private long invalidFillCount;
     private long lotOverflowCount;
+    private long bustCount;
+    private long correctionCount;
+    private long rejectedAdjustmentCount;
+
+    /** Kind of a fill-log entry. @since 2.3.0 */
+    public enum EntryKind {
+        /** An execution. */
+        FILL,
+        /** A trade cancel (ExecType H) of an earlier execution. */
+        BUST,
+        /** A trade correct (ExecType G) of an earlier execution. */
+        CORRECT
+    }
+
+    /** State of a logged execution after busts and corrections. @since 2.3.0 */
+    public enum FillStatus {
+        /** Stands as reported. */
+        LIVE,
+        /** Cancelled by a bust; contributes nothing. */
+        BUSTED,
+        /** Stands at a corrected quantity or price. */
+        CORRECTED
+    }
+
+    private static final byte KIND_FILL = 0;
+    private static final byte KIND_BUST = 1;
+    private static final byte KIND_CORRECT = 2;
+    private static final byte STATUS_LIVE = 0;
+    private static final byte STATUS_BUSTED = 1;
+    private static final byte STATUS_CORRECTED = 2;
 
     /**
      * @param symbols         number of dense symbol ids
@@ -148,6 +206,13 @@ public final class PositionLedger {
         this.logSide = new byte[fillLogCapacity];
         this.logQty = new long[fillLogCapacity];
         this.logPx = new double[fillLogCapacity];
+        this.logFee = new double[fillLogCapacity];
+        this.logKind = new byte[fillLogCapacity];
+        this.logStatus = new byte[fillLogCapacity];
+        this.logRefExecId = new long[fillLogCapacity];
+        this.logRoot = new int[fillLogCapacity];
+        this.logEffQty = new long[fillLogCapacity];
+        this.logEffPx = new double[fillLogCapacity];
     }
 
     /** Sets the contract multiplier of a symbol (default 1); call before its first fill. */
@@ -188,11 +253,21 @@ public final class PositionLedger {
             return false;
         }
         int b = book(accountId, strategyId, symbolId);
+        if (!apply(b, symbolId, side, quantity, price, fee)) {
+            lotOverflowCount++;
+            return false;
+        }
+        fillCount++;
+        appendLog(execId, accountId, strategyId, symbolId, side, quantity, price, fee);
+        return true;
+    }
+
+    /** Applies one execution to book {@code b}; false, with nothing changed, when the lot queue is full. */
+    private boolean apply(int b, int symbolId, Side side, long quantity, double price, double fee) {
         int dir = side.sign();
         long pos = position[b];
         boolean opening = pos == 0 || Long.signum(pos) == dir;
         if (opening && lotCount[b] == maxLots) {
-            lotOverflowCount++;
             return false;
         }
         double m = multiplier[symbolId];
@@ -233,8 +308,6 @@ public final class PositionLedger {
         } else {
             soldQty[b] += quantity;
         }
-        fillCount++;
-        appendLog(execId, accountId, strategyId, symbolId, side, quantity, price);
         return true;
     }
 
@@ -249,12 +322,19 @@ public final class PositionLedger {
         lotCount[b]++;
     }
 
-    private void appendLog(long execId, int a, int t, int s, Side side, long q, double p) {
+    private void appendLog(long execId, int a, int t, int s, Side side, long q, double p, double fee) {
         if (logSize == logExecId.length) {
             logOverflow++;
             return;
         }
         int i = logSize++;
+        logFee[i] = fee;
+        logKind[i] = KIND_FILL;
+        logStatus[i] = STATUS_LIVE;
+        logRefExecId[i] = 0;
+        logRoot[i] = i;
+        logEffQty[i] = q;
+        logEffPx[i] = p;
         logExecId[i] = execId;
         logAccount[i] = a;
         logStrategy[i] = t;
@@ -262,6 +342,242 @@ public final class PositionLedger {
         logSide[i] = (byte) side.ordinal();
         logQty[i] = q;
         logPx[i] = p;
+    }
+
+    // ------------------------------------------------------------------
+    // Busts and corrections
+    // ------------------------------------------------------------------
+
+    /**
+     * Books a trade cancel (FIX ExecType H) of the execution {@code execRefId}
+     * and rebuilds its book without it. {@code execRefId} may name the
+     * original execution or a correction of it.
+     *
+     * @param execId    id of the bust report; must not already be in the log
+     * @param execRefId execution being cancelled (FIX tag 19)
+     * @return false, with nothing changed, when {@code execRefId} is unknown
+     *         or already busted, {@code execId} is a repeat, or the log is full
+     *         or has overflowed
+     * @since 2.3.0
+     */
+    public boolean onBust(long execId, long execRefId) {
+        int root = resolveAdjustment(execId, execRefId);
+        if (root < 0) {
+            return false;
+        }
+        byte prev = logStatus[root];
+        logStatus[root] = STATUS_BUSTED;
+        if (!rebuild(root)) {
+            logStatus[root] = prev;
+            rejectedAdjustmentCount++;
+            return false;
+        }
+        appendAdjustment(execId, execRefId, root, KIND_BUST, logEffQty[root], logEffPx[root]);
+        bustCount++;
+        return true;
+    }
+
+    /**
+     * Books a trade correct (FIX ExecType G): the execution {@code execRefId}
+     * now stands at {@code quantity} and {@code price} (they replace, they do
+     * not add), and its book is rebuilt. Side, symbol and allocation are kept.
+     *
+     * @return false, with nothing changed, under the rules of {@link #onBust}
+     *         or when {@code quantity <= 0} or {@code price} is not finite
+     * @since 2.3.0
+     */
+    public boolean onCorrect(long execId, long execRefId, long quantity, double price) {
+        if (quantity <= 0 || !Double.isFinite(price)) {
+            rejectedAdjustmentCount++;
+            return false;
+        }
+        int root = resolveAdjustment(execId, execRefId);
+        if (root < 0) {
+            return false;
+        }
+        byte prevStatus = logStatus[root];
+        long prevQty = logEffQty[root];
+        double prevPx = logEffPx[root];
+        logStatus[root] = STATUS_CORRECTED;
+        logEffQty[root] = quantity;
+        logEffPx[root] = price;
+        if (!rebuild(root)) {
+            logStatus[root] = prevStatus;
+            logEffQty[root] = prevQty;
+            logEffPx[root] = prevPx;
+            rejectedAdjustmentCount++;
+            return false;
+        }
+        appendAdjustment(execId, execRefId, root, KIND_CORRECT, quantity, price);
+        correctionCount++;
+        return true;
+    }
+
+    /** Root fill index for an adjustment, or -1 (counted) when it must be refused. */
+    private int resolveAdjustment(long execId, long execRefId) {
+        if (logOverflow > 0 || logSize == logExecId.length) {
+            rejectedAdjustmentCount++;
+            return -1;
+        }
+        int root = -1;
+        for (int i = 0; i < logSize; i++) {
+            if (logExecId[i] == execId) {
+                rejectedAdjustmentCount++;   // repeated report id
+                return -1;
+            }
+            if (logExecId[i] == execRefId && logKind[i] != KIND_BUST) {
+                root = logRoot[i];
+            }
+        }
+        if (root < 0 || logStatus[root] == STATUS_BUSTED) {
+            rejectedAdjustmentCount++;
+            return -1;
+        }
+        return root;
+    }
+
+    private void appendAdjustment(long execId, long ref, int root, byte kind, long q, double p) {
+        int i = logSize++;
+        logExecId[i] = execId;
+        logAccount[i] = logAccount[root];
+        logStrategy[i] = logStrategy[root];
+        logSymbol[i] = logSymbol[root];
+        logSide[i] = logSide[root];
+        logQty[i] = q;
+        logPx[i] = p;
+        logFee[i] = 0.0;
+        logKind[i] = kind;
+        logStatus[i] = STATUS_LIVE;
+        logRefExecId[i] = ref;
+        logRoot[i] = root;
+        logEffQty[i] = q;
+        logEffPx[i] = p;
+    }
+
+    /** Replays the live fills of the book of log entry {@code root}; restores the book on failure. */
+    private boolean rebuild(int root) {
+        int a = logAccount[root];
+        int t = logStrategy[root];
+        int s = logSymbol[root];
+        int b = book(a, t, s);
+        long savedPos = position[b];
+        double savedAvg = avgCost[b];
+        double savedRa = realisedAvg[b];
+        double savedRf = realisedFifo[b];
+        double savedFees = fees[b];
+        long savedBought = boughtQty[b];
+        long savedSold = soldQty[b];
+        int savedHead = lotHead[b];
+        int savedCount = lotCount[b];
+        long[] savedLotQty = java.util.Arrays.copyOfRange(lotQty, b * maxLots, (b + 1) * maxLots);
+        double[] savedLotPx = java.util.Arrays.copyOfRange(lotPx, b * maxLots, (b + 1) * maxLots);
+
+        position[b] = 0;
+        avgCost[b] = 0.0;
+        realisedAvg[b] = 0.0;
+        realisedFifo[b] = 0.0;
+        fees[b] = 0.0;
+        boughtQty[b] = 0;
+        soldQty[b] = 0;
+        lotHead[b] = 0;
+        lotCount[b] = 0;
+        for (int i = 0; i < logSize; i++) {
+            if (logKind[i] != KIND_FILL || logStatus[i] == STATUS_BUSTED
+                    || logAccount[i] != a || logStrategy[i] != t || logSymbol[i] != s) {
+                continue;
+            }
+            Side side = logSide[i] == 0 ? Side.BUY : Side.SELL;
+            if (!apply(b, s, side, logEffQty[i], logEffPx[i], logFee[i])) {
+                position[b] = savedPos;
+                avgCost[b] = savedAvg;
+                realisedAvg[b] = savedRa;
+                realisedFifo[b] = savedRf;
+                fees[b] = savedFees;
+                boughtQty[b] = savedBought;
+                soldQty[b] = savedSold;
+                lotHead[b] = savedHead;
+                lotCount[b] = savedCount;
+                System.arraycopy(savedLotQty, 0, lotQty, b * maxLots, maxLots);
+                System.arraycopy(savedLotPx, 0, lotPx, b * maxLots, maxLots);
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Kind of the {@code i}-th log entry. @since 2.3.0 */
+    public EntryKind loggedKind(int i) {
+        return EntryKind.values()[logKind[Objects.checkIndex(i, logSize)]];
+    }
+
+    /**
+     * Status of the {@code i}-th log entry: for a fill, whether it was busted
+     * or corrected; a bust or correct entry is always {@link FillStatus#LIVE}.
+     *
+     * @since 2.3.0
+     */
+    public FillStatus loggedStatus(int i) {
+        return FillStatus.values()[logStatus[Objects.checkIndex(i, logSize)]];
+    }
+
+    /** ExecRefID of the {@code i}-th entry when it is a bust or correct, else 0. @since 2.3.0 */
+    public long loggedRefExecId(int i) {
+        return logRefExecId[Objects.checkIndex(i, logSize)];
+    }
+
+    /**
+     * The executions as they now stand, oldest first: busted fills left out,
+     * corrected fills at their corrected quantity and price under their
+     * original execution id. This is what {@link DropCopyReconciler} compares.
+     * Allocates.
+     *
+     * @since 2.3.0
+     */
+    public java.util.List<DropCopyReconciler.Fill> effectiveFills() {
+        java.util.List<DropCopyReconciler.Fill> out = new java.util.ArrayList<>(logSize);
+        for (int i = 0; i < logSize; i++) {
+            if (logKind[i] == KIND_FILL && logStatus[i] != STATUS_BUSTED) {
+                out.add(new DropCopyReconciler.Fill(logExecId[i], logAccount[i], logStrategy[i],
+                        logSymbol[i], logSide[i] == 0 ? Side.BUY : Side.SELL, logEffQty[i],
+                        logEffPx[i]));
+            }
+        }
+        return out;
+    }
+
+    /** Bust and correct entries in log order, as reconciler adjustments. Allocates. @since 2.3.0 */
+    public java.util.List<DropCopyReconciler.Adjustment> adjustments() {
+        java.util.List<DropCopyReconciler.Adjustment> out = new java.util.ArrayList<>();
+        for (int i = 0; i < logSize; i++) {
+            if (logKind[i] == KIND_BUST) {
+                out.add(DropCopyReconciler.Adjustment.bust(logExecId[i], logRefExecId[i]));
+            } else if (logKind[i] == KIND_CORRECT) {
+                out.add(DropCopyReconciler.Adjustment.correct(logExecId[i], logRefExecId[i],
+                        logQty[i], logPx[i]));
+            }
+        }
+        return out;
+    }
+
+    /** Busts applied. @since 2.3.0 */
+    public long bustCount() {
+        return bustCount;
+    }
+
+    /** Corrections applied. @since 2.3.0 */
+    public long correctionCount() {
+        return correctionCount;
+    }
+
+    /**
+     * Busts and corrections refused: unknown or already-busted ExecRefID,
+     * repeated id, bad corrected values, full or overflowed log, or a replay
+     * that did not fit the lot queue.
+     *
+     * @since 2.3.0
+     */
+    public long rejectedAdjustmentCount() {
+        return rejectedAdjustmentCount;
     }
 
     private int book(int a, int t, int s) {
@@ -470,7 +786,12 @@ public final class PositionLedger {
         return logSize;
     }
 
-    /** The {@code i}-th logged fill as a value (allocates; for reconciliation and reports). */
+    /**
+     * The {@code i}-th log entry as a value, at the quantity and price it was
+     * reported with (allocates). For a bust or correct entry the side, symbol
+     * and allocation are those of the execution it refers to; see
+     * {@link #loggedKind} and {@link #effectiveFills}.
+     */
     public DropCopyReconciler.Fill loggedFill(int i) {
         Objects.checkIndex(i, logSize);
         return new DropCopyReconciler.Fill(logExecId[i], logAccount[i], logStrategy[i],
