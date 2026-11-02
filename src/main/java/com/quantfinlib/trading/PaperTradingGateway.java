@@ -44,6 +44,29 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * may call back into the gateway or take its own locks without deadlock;
  * fills from one call are delivered in order, but listeners on different
  * threads can see interleaved deliveries.</p>
+ *
+ * <h2>Busts and corrections</h2>
+ * <p>Every simulated fill gets an execution id (1, 2, 3, ... in the order
+ * fills are made; bust and correction ids come from the same sequence).
+ * {@link #bustFill} and {@link #correctFill} simulate a venue cancelling
+ * (FIX ExecType H) or correcting (ExecType G) one of those fills. The account
+ * is then rebuilt by replaying the surviving executions in their original
+ * order from the initial cash, so positions, cash, realised P&amp;L and
+ * commission come out as if the fill had never happened, or had happened at
+ * the corrected quantity and price. Every {@link TradeListener} is told.</p>
+ *
+ * <p>By default, as in {@link HftOrderGateway#onTradeBust}, the order itself
+ * is untouched: a busted fill does not reopen it and {@link #filledQuantity}
+ * still counts it. With {@link #setReopenOnBust(boolean) setReopenOnBust(true)}
+ * the order's filled quantity follows the adjustment, and a limit order with
+ * leaves again goes back to NEW or PARTIALLY_FILLED and rests on the book. A
+ * CANCELED order stays CANCELED, and a market order with leaves becomes
+ * CANCELED (its remainder was immediate-or-cancel).</p>
+ *
+ * <p>Example (own test {@code PaperTradingBustTest}): buy 100 at 10 (exec 1),
+ * buy 50 at 11 (exec 2), then {@code bustFill(1)} leaves a position of 50 and
+ * cash of {@code initial - 550}; {@code correctFill(2, 40, 10.5)} then leaves
+ * 40 and cash {@code initial - 420}.</p>
  */
 public final class PaperTradingGateway implements OrderGateway {
 
@@ -93,7 +116,54 @@ public final class PaperTradingGateway implements OrderGateway {
         }
     }
 
-    private record Fill(long id, String symbol, Side side, double price, long qty, long ts) {
+    private record Fill(long id, String symbol, Side side, double price, long qty, long ts,
+                        long execId) {
+    }
+
+    /** One simulated execution; quantity and price change on correction. */
+    private static final class Execution {
+        final long execId;
+        final WorkingOrder order;
+        long quantity;
+        double price;
+        boolean busted;
+
+        Execution(long execId, WorkingOrder order, long quantity, double price) {
+            this.execId = execId;
+            this.order = order;
+            this.quantity = quantity;
+            this.price = price;
+        }
+    }
+
+    /**
+     * Listener that sees execution ids and simulated busts and corrections.
+     * Called after the gateway lock is released, like
+     * {@link OrderGateway.ExecutionListener}.
+     *
+     * @since 2.4.0
+     */
+    public interface TradeListener {
+        /** A simulated fill, with its execution id. */
+        void onFill(long execId, long orderId, String symbol, Side side, long quantity,
+                    double price, long timestampNanos);
+
+        /**
+         * Execution {@code execRefId} was busted by {@code execId};
+         * {@code quantity} is what the busted execution stood at.
+         */
+        default void onBust(long execId, long execRefId, long orderId, String symbol, Side side,
+                            long quantity, long timestampNanos) {
+        }
+
+        /** Execution {@code execRefId} now stands at {@code quantity} and {@code price}. */
+        default void onCorrect(long execId, long execRefId, long orderId, String symbol,
+                               Side side, long quantity, double price, long timestampNanos) {
+        }
+    }
+
+    private record Adjustment(long execId, long execRefId, long orderId, String symbol, Side side,
+                              long quantity, double price, long ts) {
     }
 
     private final PreTradeLimitChecker limitChecker;   // null = no gate
@@ -103,6 +173,14 @@ public final class PaperTradingGateway implements OrderGateway {
     private final List<WorkingOrder> resting = new ArrayList<>();
     private final Map<String, Position> positions = new HashMap<>();
     private final List<ExecutionListener> listeners = new CopyOnWriteArrayList<>();
+    private final List<TradeListener> tradeListeners = new CopyOnWriteArrayList<>();
+    private final List<Execution> executions = new ArrayList<>();
+    private final Map<Long, Execution> executionsById = new HashMap<>();
+    private final double initialCash;
+    private boolean reopenOnBust;
+    private long nextExecId = 1;
+    private long tradeAdjustments;
+    private long rejectedTradeAdjustments;
     // Capped: a soak with a misconfigured limit checker rejects every order,
     // and an unbounded String log would grow the heap for the whole run.
     private static final int REJECTION_LOG_CAP = 1_000;
@@ -119,6 +197,7 @@ public final class PaperTradingGateway implements OrderGateway {
     public PaperTradingGateway(double initialCash, double commissionRate,
                                PreTradeLimitChecker limitChecker) {
         this.cash = initialCash;
+        this.initialCash = initialCash;
         this.commissionRate = commissionRate;
         this.limitChecker = limitChecker;
     }
@@ -254,6 +333,118 @@ public final class PaperTradingGateway implements OrderGateway {
         listeners.add(listener);
     }
 
+    /** Adds a listener that also sees execution ids, busts and corrections. @since 2.4.0 */
+    public void addTradeListener(TradeListener listener) {
+        tradeListeners.add(java.util.Objects.requireNonNull(listener, "listener"));
+    }
+
+    /**
+     * When true, a bust or a downward correction reduces the order's filled
+     * quantity and can reopen it; an upward correction adds to it. Default
+     * false, the 2.3 behaviour: the order is left as it is.
+     *
+     * @since 2.4.0
+     */
+    public synchronized void setReopenOnBust(boolean reopen) {
+        this.reopenOnBust = reopen;
+    }
+
+    /** Whether busts and corrections move the order's filled quantity. @since 2.4.0 */
+    public synchronized boolean reopenOnBust() {
+        return reopenOnBust;
+    }
+
+    /** Execution ids of an order's fills, in order, busted ones included. @since 2.4.0 */
+    public synchronized long[] executionIds(long orderId) {
+        return executions.stream().filter(e -> e.order.id == orderId)
+                .mapToLong(e -> e.execId).toArray();
+    }
+
+    /**
+     * Simulates the venue busting execution {@code execRefId}, which may be
+     * a fill or a correction of one.
+     *
+     * @return the bust's own execution id, or -1 (counted in
+     *         {@link #rejectedTradeAdjustmentCount}) when {@code execRefId}
+     *         is unknown or already busted
+     * @since 2.4.0
+     */
+    public long bustFill(long execRefId) {
+        Adjustment adj;
+        synchronized (this) {
+            Execution e = executionsById.get(execRefId);
+            if (e == null || e.busted) {
+                rejectedTradeAdjustments++;
+                return -1;
+            }
+            long bustedQty = e.quantity;
+            e.busted = true;
+            if (reopenOnBust) {
+                adjustOrderFilled(e.order, -bustedQty);
+            }
+            rebuildAccount();
+            tradeAdjustments++;
+            long id = nextExecId++;
+            adj = new Adjustment(id, execRefId, e.order.id, e.order.symbol, e.order.side,
+                    bustedQty, Double.NaN, System.nanoTime());
+        }
+        for (TradeListener l : tradeListeners) {
+            l.onBust(adj.execId(), adj.execRefId(), adj.orderId(), adj.symbol(), adj.side(),
+                    adj.quantity(), adj.ts());
+        }
+        return adj.execId();
+    }
+
+    /**
+     * Simulates the venue correcting execution {@code execRefId} to
+     * {@code quantity} at {@code price}; they replace, they do not add.
+     *
+     * @return the correction's own execution id, or -1 (counted) when
+     *         {@code execRefId} is unknown or busted, {@code quantity <= 0},
+     *         {@code price} is not finite and positive, or the order's total
+     *         executed quantity would exceed its order quantity
+     * @since 2.4.0
+     */
+    public long correctFill(long execRefId, long quantity, double price) {
+        Adjustment adj;
+        synchronized (this) {
+            Execution e = executionsById.get(execRefId);
+            if (e == null || e.busted || quantity <= 0 || !(price > 0)
+                    || price == Double.POSITIVE_INFINITY
+                    || executedQuantity(e.order) - e.quantity + quantity > e.order.quantity) {
+                rejectedTradeAdjustments++;
+                return -1;
+            }
+            long delta = quantity - e.quantity;
+            e.quantity = quantity;
+            e.price = price;
+            if (reopenOnBust) {
+                adjustOrderFilled(e.order, delta);
+            }
+            rebuildAccount();
+            tradeAdjustments++;
+            long id = nextExecId++;
+            executionsById.put(id, e);   // a later bust or correct may name the correction
+            adj = new Adjustment(id, execRefId, e.order.id, e.order.symbol, e.order.side,
+                    quantity, price, System.nanoTime());
+        }
+        for (TradeListener l : tradeListeners) {
+            l.onCorrect(adj.execId(), adj.execRefId(), adj.orderId(), adj.symbol(), adj.side(),
+                    adj.quantity(), adj.price(), adj.ts());
+        }
+        return adj.execId();
+    }
+
+    /** Busts and corrections applied. @since 2.4.0 */
+    public synchronized long tradeAdjustmentCount() {
+        return tradeAdjustments;
+    }
+
+    /** Busts and corrections refused. @since 2.4.0 */
+    public synchronized long rejectedTradeAdjustmentCount() {
+        return rejectedTradeAdjustments;
+    }
+
     // ------------------------------------------------------------------
     // Account
     // ------------------------------------------------------------------
@@ -356,13 +547,62 @@ public final class PaperTradingGateway implements OrderGateway {
         order.state = OrderStateMachine.next(order.state, order.leaves() == 0
                 ? OrderStateMachine.EVENT_FULL_FILL : OrderStateMachine.EVENT_PARTIAL_FILL);
         applyFill(order.symbol, order.side, price, qty);
-        out.add(new Fill(order.id, order.symbol, order.side, price, qty, System.nanoTime()));
+        Execution e = new Execution(nextExecId++, order, qty, price);
+        executions.add(e);
+        executionsById.put(e.execId, e);
+        out.add(new Fill(order.id, order.symbol, order.side, price, qty, System.nanoTime(),
+                e.execId));
     }
 
     private void dispatch(List<Fill> fills) {
         for (Fill f : fills) {
             for (ExecutionListener l : listeners) {
                 l.onFill(f.id(), f.symbol(), f.side(), f.price(), f.qty(), f.ts());
+            }
+            for (TradeListener l : tradeListeners) {
+                l.onFill(f.execId(), f.id(), f.symbol(), f.side(), f.qty(), f.price(), f.ts());
+            }
+        }
+    }
+
+    private long executedQuantity(WorkingOrder order) {
+        long total = 0;
+        for (Execution e : executions) {
+            if (e.order == order && !e.busted) {
+                total += e.quantity;
+            }
+        }
+        return total;
+    }
+
+    /** Moves an order's filled quantity by {@code delta}; fixes its state and resting entry. */
+    private void adjustOrderFilled(WorkingOrder order, long delta) {
+        order.filled += delta;
+        if (order.state == OrderStateMachine.CANCELED) {
+            return;
+        }
+        if (order.leaves() == 0) {
+            order.state = OrderStateMachine.FILLED;
+            resting.remove(order);
+        } else if (Double.isNaN(order.limitPrice)) {
+            order.state = OrderStateMachine.CANCELED;   // market remainder is IOC
+        } else {
+            order.state = order.filled == 0 ? OrderStateMachine.NEW
+                    : OrderStateMachine.PARTIALLY_FILLED;
+            if (!resting.contains(order)) {
+                resting.add(order);
+            }
+        }
+    }
+
+    /** Replays surviving executions, in original order, from the initial cash. */
+    private void rebuildAccount() {
+        cash = initialCash;
+        realizedPnl = 0;
+        positions.clear();
+        for (Execution e : executions) {
+            if (!e.busted) {
+                applyFill(e.order.symbol, e.order.side, e.price, e.quantity);
             }
         }
     }
