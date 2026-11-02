@@ -57,6 +57,12 @@ import java.util.Set;
  * </ul>
  * <p>For the original types the results of {@link #check(List, String)} are unchanged: the
  * new rules only fire on events of the new types.</p>
+
+ *
+ * <p>The 47 Table 60 and 61 types added in 3.2.0 (internal routes, child orders, route
+ * modifications, quote lifecycle, allocations, effective events and the rest) are not
+ * linkage-checked yet: the checker skips them, so they neither open keys nor raise issues.
+ * Their records are checked by {@link CatEvent#validate()} and {@link CatSchema}.</p>
  *
  * @since 3.1.0
  */
@@ -213,6 +219,10 @@ public final class CatLinkageChecker {
                 continue;
             }
             CatEventType t = e.type();
+            if (CatTableRules.ROWS.containsKey(t)) {
+                // the Table 60/61 types added in 3.2.0 are record-checked only; their linkage is not
+                continue;
+            }
             List<String> missing = new ArrayList<>();
             String key = key(e, en.fileImid(), keyFields(t), missing);
             if (!missing.isEmpty()) {

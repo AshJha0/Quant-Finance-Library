@@ -11499,7 +11499,7 @@ types.
 ## 424. Checking JSON lines against the CAT schema (3.1)
 
 ```java
-CatSchema schema = CatSchema.bundledSubset();    // library transcription of 19 event tables
+CatSchema schema = CatSchema.bundledSubset();    // library transcription of the event tables
 // CatSchema schema = CatSchema.load(Path.of("IM_Schema_4.1.0.json"));  // the official file
 Instant t = Instant.parse("2026-03-02T14:30:00Z");
 CatEvent meno = CatEventBuilder.newOrder()
@@ -11602,3 +11602,56 @@ used the second number for 1009-05 to -07. Under column AD the same checks are
 1009-06, -07 and -08, and 1009-08 is the client code prefix rule.
 `withColumnAdCodes()` rewrites those three prefixes and changes nothing else. The
 AD reading is the library's (it already takes 1009-09 from AD).
+## 480. Any Table 60/61 option event: child order, internal route, allocation (3.2)
+
+```java
+Instant t = Instant.parse("2026-03-02T14:30:00Z");
+String osi = "AAPL  260320C00150000";
+CatEvent child = CatEventBuilder.start(CatEventType.MOCO)       // Table 76
+    .reporter("FRMA", "R7").orderKey("C-1", t).eventTimestamp(t).optionId(osi)
+    .field("parentOrderKeyDate", "20260302 093000.000000000").field("parentOrderID", "O-1")
+    .sidePriceQty("B", new BigDecimal("2.15"), new BigDecimal("5"))
+    .field("orderType", "LMT").field("timeInForce", "DAY=20260302").field("tradingSession", "REG")
+    .field("openCloseIndicator", "O")
+    .build();
+List<String> problems = child.validate();                 // []
+CatEventFamily f = CatEventType.MOCO.family();             // CHILD_ORDER
+List<String> need = CatEventType.MOPA.requiredFields();    // allocationKeyDate, allocationID, ...
+```
+
+`start` puts the common fields and the type's required fields in place, blank,
+so `validate()` names whatever you forgot ("missing parentOrderID"). The 47 types
+added in 3.2 are record-checked only; `CatLinkageChecker` skips them.
+[LEARN 17m](learn/04-technology.md#17m-the-rest-of-tables-60-and-61-and-the-official-schema-32).
+
+## 481. Price and choice rules per table (3.2)
+
+```java
+Instant t = Instant.parse("2026-03-02T14:30:00Z");
+CatEvent quote = CatEventBuilder.start(CatEventType.MOQR)       // Table 87
+    .reporter("FRMA", "R8").eventTimestamp(t).optionId("AAPL  260320C00150000")
+    .quoteKey("Q-1", t).field("receivedQuoteID", "RQ-1").field("receiverIMID", "FRMA")
+    .field("RFQID", "RFQ-1").field("senderType", "E")
+    .build();
+List<String> v = quote.validate();
+// [senderType must be one of [F, N, S] (Table 87 seq 23)]
+```
+
+CAT-R22 applies the price sentences each table prints (not negative; required
+with LMT; blank with MKT); a multi-leg net price may be negative. CAT-R23 checks
+initiator, senderType (order or quote list), priceType and the MOFA
+fulfillmentLinkType. Every message names the table and seq.
+
+## 482. The official CAT schema in the nightly job (3.2)
+
+```java
+CatSchema official = CatSchema.load(Path.of(System.getenv("QFL_CAT_SCHEMA")));
+String version = official.version();                       // "4.2.0" in November 2026
+List<CatSchema.Issue> issues = official.validateLines(Files.readAllLines(Path.of("out.json")));
+```
+
+The official file is public on catnmsplan.com but its terms reserve
+redistribution, so it is fetched at nightly time from its public URL, checked
+against the SHA-256 in `scripts/reference-files.sha256`, and never committed.
+`CatOfficialSchemaTest` compares it with the bundled transcription field by
+field; accepted differences live in `cat-official-schema-deltas.txt`.

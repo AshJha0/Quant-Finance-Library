@@ -49,7 +49,7 @@ class CatSchemaTest {
                 assertEquals("Required", def.required(), t + "." + f);
             }
         }
-        assertEquals(19, S.eventNames().size());
+        assertEquals(66, S.eventNames().size());
         CatSchema.Field ts = S.fields("MENO").stream().filter(f -> f.name().equals("orderKeyDate")).findFirst()
                 .orElseThrow();
         assertEquals(List.of("STRING", "NUMBER"), ts.jsonTypes());

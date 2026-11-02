@@ -51,6 +51,20 @@ public final class CatEventBuilder {
     }
 
     /**
+     * Starts an event of any type, with the common fields and the type's required fields
+     * ({@link CatEventType#requiredFields()}) present and blank, actionType NEW and manualFlag
+     * false. The named starters such as {@link #newOrder()} add a few optional fields as well;
+     * this one adds none. Use it for the Table 60 and 61 types that have no named starter.
+     *
+     * @param type the event type
+     * @return the builder
+     * @since 3.2.0
+     */
+    public static CatEventBuilder start(CatEventType type) {
+        return new CatEventBuilder(java.util.Objects.requireNonNull(type, "type"));
+    }
+
+    /**
      * Starts a new-order (MENO) event.
      *
      * @return the builder

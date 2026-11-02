@@ -27,7 +27,11 @@ import java.util.regex.Pattern;
  * {@link CatLinkageChecker} checks linkage keys across a batch of events. Also since 3.1.0 the
  * option lifecycle events (MOOA, MOOM, MOOC, MOOT, MOOF), the supplements (MENOS, MONOS,
  * MLOS) and the multi-leg events (MLNO, MLOR, MLOC) are checked (rules CAT-R17 to CAT-R21);
- * {@link CatSchema} checks a JSON record line against a CAT schema file.</p>
+ * {@link CatSchema} checks a JSON record line against a CAT schema file. Since 3.2.0 the other
+ * simple option events of Table 60 and multi-leg events of Table 61 (47 more types, grouped by
+ * {@link CatEventType#family()}) are checked for their required fields (CAT-R02), side and
+ * optionID (CAT-R13, CAT-R14) or the multi-leg rules (CAT-R21), and the price and choice rules
+ * of their own tables (CAT-R22, CAT-R23); see {@link #CHECKED_AGAINST_TABLES_60_61}.</p>
  *
  * <p>Multi-leg events carry their legs in {@code legDetails} (Table 101), held here as the
  * JSON array text written by {@link CatEventBuilder#optionLeg} and
@@ -93,6 +97,18 @@ public final class CatEvent implements TransactionReport {
             + "Specifications for Industry Members v4.1.0 r14 (2026-02-13), Tables 17, 63, 70, 79, 83, 90, 92, "
             + "100, 101, 102, 126 and 139 and Appendix G (senderType, initiator, priceType, "
             + "fulfillmentLinkType); not certified";
+
+    /**
+     * What the rules for the Table 60 and 61 types added in 3.2.0 have been compared with
+     * ({@link #CHECKED_AGAINST} and {@link #CHECKED_AGAINST_LIFECYCLE} are left as they were).
+     *
+     * @since 3.2.0
+     */
+    public static final String CHECKED_AGAINST_TABLES_60_61 = "checked against CAT Reporting Technical "
+            + "Specifications for Industry Members v4.1.0 r14 (2026-02-13), Tables 60 and 61 and the field "
+            + "tables 65-69, 71-78, 80-82, 84, 86-89, 94, 96-99, 104, 106, 107, 109, 111, 113, 114, 116, 117, "
+            + "119, 121, 122, 124, 127, 128, 130, 132, 134, 136, 137 and 141, and Appendix G (side, initiator, "
+            + "senderType, priceType, fulfillmentLinkType); not certified";
 
     private static final String SPEC = "CAT IM Technical Specifications v4.1.0 r14, ";
 
@@ -166,7 +182,19 @@ public final class CatEvent implements TransactionReport {
             new RuleProvenance("CAT-R21", "multi-leg events (MLNO, MLOR, MLOC, MLOS) carry no symbol and no "
                     + "optionID at the top level; underlying, when given, is at most 22 characters", SPEC
                     + "Tables 100, 102, 126, 139 (no symbol or optionID field; seq 8 underlying is Symbol 'O'); "
-                    + "Table 3 Symbol", Evidence.PUBLISHED_REFERENCE));
+                    + "Table 3 Symbol", Evidence.PUBLISHED_REFERENCE),
+            new RuleProvenance("CAT-R22", "on the Table 60 and 61 types added in 3.2.0, price is not negative "
+                    + "where the type's table says it must be greater than or equal to zero, required when "
+                    + "orderType is LMT and blank when MKT where the table says so; multi-leg net prices may be "
+                    + "negative", SPEC + "price field of each table, e.g. Table 65 seq 20, Table 76 seq 14, "
+                    + "Table 96 seq 17, Table 107 seq 19; the seq per type is in the message",
+                    Evidence.PUBLISHED_REFERENCE),
+            new RuleProvenance("CAT-R23", "on the Table 60 and 61 types added in 3.2.0, initiator is C or F; "
+                    + "senderType is E, F or O on order events and F, N or S on quote events (MOQR, MLQR); "
+                    + "priceType is PU, TC or TS and required when orderType is LMT; option fulfillmentLinkType "
+                    + "(MOFA) is O, OS or OE", SPEC + "Appendix G initiator, senderType (order and quote "
+                    + "events), priceType, fulfillmentLinkType; e.g. Table 72 seq 17, Table 87 seq 23, Table 104 "
+                    + "seq 33", Evidence.PUBLISHED_REFERENCE));
 
     private final Map<String, String> fields;
 
@@ -254,7 +282,8 @@ public final class CatEvent implements TransactionReport {
         }
         oneOf("capacity", CAPACITIES, out);
         oneOf("sideDetailsInd", SIDE_DETAILS, out);
-        oneOf("fulfillmentLinkType", t == CatEventType.MOOT || t == CatEventType.MOOF ? OPTION_LINK_TYPES
+        oneOf("fulfillmentLinkType", t == CatEventType.MOOT || t == CatEventType.MOOF
+                || t == CatEventType.MOFA ? OPTION_LINK_TYPES
                 : LINK_TYPES, out);
         String imid = v("CATReporterIMID");
         if (!imid.isEmpty() && !IMID.matcher(imid).matches()) {
@@ -269,6 +298,7 @@ public final class CatEvent implements TransactionReport {
             checkSideDetails(out);
         }
         checkLifecycle(t, out);
+        CatTableRules.check(t, this::v, out);
         for (String k : TIMESTAMPS) {
             String ts = v(k);
             if (!ts.isEmpty() && !TIMESTAMP.matcher(ts).matches()) {

@@ -75,7 +75,8 @@ jobs:
 
   reference-files:
     # External reference checks. Fetches the ISDA CDS Standard Model RFR test
-    # grids (cdsmodel.com) and the ESMA65-8-2598 XSDs (esma.europa.eu) from their
+    # grids (cdsmodel.com), the ESMA65-8-2598 XSDs (esma.europa.eu) and the CAT IM
+    # schema JSON (catnmsplan.com, compared by CatOfficialSchemaTest) from their
     # public URLs, checks the SHA-256 pinned in scripts/reference-files.sha256,
     # and runs the tests that need them with QFL_REQUIRE_REFERENCE_FILES=true, so
     # a missing file or a failed download fails the job instead of skipping.
@@ -101,7 +102,7 @@ jobs:
         run: >-
           ./mvnw -B --no-transfer-progress -pl core,lowlatency test -Djacoco.skip=true
           -Dsurefire.failIfNoSpecifiedTests=false
-          -Dtest=IsdaGridVerificationTest,IsdaGoldenSubsetTest,Auth016XmlTest,Auth016EnvelopeTest,StatusAdviceTest,EsmaXsdGoldenTest
+          -Dtest=IsdaGridVerificationTest,IsdaGoldenSubsetTest,Auth016XmlTest,Auth016EnvelopeTest,StatusAdviceTest,EsmaXsdGoldenTest,CatOfficialSchemaTest
       - name: Check nothing was skipped
         run: |
           set -euo pipefail

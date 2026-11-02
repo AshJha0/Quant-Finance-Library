@@ -592,8 +592,8 @@ Since 3.2 the builder fills 2.2 to 2.4 and the validator checks 2001-04 (2.1 aga
 2.4, with its siblings 2002-02, 2003-05 and 2004-04); `withColumnAdCodes()` reports the row 13
 client code prefix as 1009-08, column AD's number for it (recipes 470 and 471). Still not
 checked for EMIR: third-country regulated markets in 1003-01. For CAT the option lifecycle, multi-leg and supplement events, linkage across
-files and the schema gate came later in 3.1 (17j to 17l); still not checked are the other
-events of Tables 60 and 61, reference data and the official schema file. `check` is
+files and the schema gate came later in 3.1 (17j to 17l), and the other events of Tables 60
+and 61 in 3.2 (17m); still not checked are their linkage and reference data. `check` is
 batch-local, so pass a whole day's events for a firm, or use `checkFiles`. Recipes 364 and 365.
 
 #### Branches, venues, a changed UTI, and dates the repository remembers (3.1)
@@ -814,6 +814,59 @@ Worked examples:
 
 `CatLinkageChecker.checkFiles` with `Batch` and `FileIssue` is the cross-file check. The
 JSON reader is package-private and has no dependency. Recipes 423 and 424.
+
+### 17m. The rest of Tables 60 and 61, and the official schema (3.2)
+
+Tables 60 and 61 list every option event CAT knows: 35 simple option types and 25
+multi-leg types. By 3.1 the library had the ones a plain order life needs (new, route,
+accept, modify, cancel, trade, fill, supplements). The other 47 follow the same order
+through the firm: internal routes between desks, child orders, route modifications and
+cancels, modification and cancel requests, adjustments, the quote lifecycle (routed,
+received, modified, cancelled), fulfillment amendments, allocations and effective events.
+Each one is a table of fields, so adding it is mostly careful transcription.
+
+Formally:
+
+- **Required fields.** For each type, the required fields are the non-Boolean fields its
+  table marks R, the same reading as in 3.1 (a missing Boolean is read as false, Table 3).
+  For example, Table 76 (MOCO, child option order) marks parentOrderKeyDate,
+  parentOrderID and openCloseIndicator R.
+- **Price (CAT-R22).** Each table words its price rule. Option order events say "must be
+  greater than or equal to zero", required with LMT and blank with MKT (Table 65 seq 20).
+  Multi-leg events give a net price that may be negative, a credit (Table 104 seq 20).
+  Allocations and fulfillment amendments have the non-negative rule only (Table 96
+  seq 17). The library applies to each type exactly the sentences its table prints, and
+  the message names the table and seq.
+- **Choices (CAT-R23, Appendix G).** initiator is C or F. senderType has two lists:
+  E, F or O on order events, and F, N or S on quote events (MOQR, MLQR). priceType is PU,
+  TC or TS and is required with LMT on multi-leg orders.
+- **The official schema.** CAT publishes the schema JSON on its public website, with no
+  login. The site's legal notice reserves copying and redistribution, so the library does
+  not commit it. The nightly job fetches it with a pinned SHA-256 and compares it, field
+  by field, with the library's transcription. These are published references.
+
+The library's readings are two:
+
+- The new types are not linkage-checked yet. `CatLinkageChecker` skips them, so its
+  results for the 3.1 types are unchanged.
+- Each type has a family (`CatEventFamily`), taken from the columns of Tables 60 and 61.
+  It is there to group the work, and it does not change any check.
+
+Worked examples (own tests, `CatTable6061Test`):
+
+1. **A route modified with a negative price.** An MOMR with price -1 gives "price must be
+   greater than or equal to zero (Table 65 seq 20)". The same price on an MLMR (multi-leg)
+   passes, because a net credit is negative.
+2. **A quote received from an exchange.** An MOQR with senderType E fails, because E is an
+   order-event value; N (foreign) passes.
+3. **Schema drift.** The schema published in 2026 is version 4.2.0, while the library
+   transcribes the v4.1.0 r14 tables. The nightly comparison lists every field whose
+   dataType, JSONDataType or required flag differs. Each one is then either fixed or
+   accepted with a reason in `cat-official-schema-deltas.txt`.
+
+*In this library:* `CatEventBuilder.start(type)` starts any type. `CatEventType.family()`
+groups them. The bundled schema now covers all 66 types. Recipes 480 to 482.
+
 
 ### 18. Scaling out and staying safe
 
