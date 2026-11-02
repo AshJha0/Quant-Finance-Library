@@ -2,6 +2,7 @@ package com.quantfinlib.credit;
 
 import com.quantfinlib.credit.IsdaCdsModel.Contract;
 import com.quantfinlib.credit.IsdaCdsModel.Conventions;
+import com.quantfinlib.credit.IsdaRateCurve.Swap;
 import com.quantfinlib.rates.BusinessCalendar;
 import com.quantfinlib.rates.HolidayCalendars;
 import com.quantfinlib.rates.HolidayCalendars.Market;
@@ -14,7 +15,6 @@ import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -28,8 +28,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * set {@code QFL_ISDA_GRID_DIR} to it. Without the variable the test is
  * skipped.
  *
- * <p>The discount curve is bootstrapped here from the grid's swap rates
- * with the ISDA RFR curve conventions (spot T+2 business days, annual
+ * <p>The discount curve is bootstrapped by {@link IsdaRateCurve} from the
+ * grid's swap rates with the ISDA RFR curve conventions (spot T+2 business days, annual
  * fixed leg ACT/360, modified following, single payment below one year,
  * zero rates ACT/365F linear in r t between swap maturities). Both grids
  * match only with half-day accrual on default switched on; the 2021 grid
@@ -60,9 +60,6 @@ class IsdaGridVerificationTest {
         return out;
     }
 
-    record Swap(String tenor, double rate) {
-    }
-
     static List<Swap> readCurve(Path p) throws IOException {
         List<Swap> out = new ArrayList<>();
         List<String> lines = Files.readAllLines(p);
@@ -74,56 +71,6 @@ class IsdaGridVerificationTest {
             out.add(new Swap(f[1], Double.parseDouble(f[2])));
         }
         return out;
-    }
-
-    static double yrs(LocalDate base, LocalDate d) {
-        return ChronoUnit.DAYS.between(base, d) / 365.0;
-    }
-
-    /** ISDA RFR swap-only zero curve, base date = trade date. */
-    static IsdaCurve bootstrapSwaps(LocalDate trade, List<Swap> swaps, BusinessCalendar cal) {
-        LocalDate spot = cal.addBusinessDays(trade, 2);
-        int n = swaps.size();
-        double[] t = new double[n];
-        double[] r = new double[n];
-        for (int i = 0; i < n; i++) {
-            String ten = swaps.get(i).tenor();
-            int num = Integer.parseInt(ten.substring(0, ten.length() - 1));
-            int months = ten.endsWith("M") ? num : 12 * num;
-            LocalDate mat = cal.roll(spot.plusMonths(months), BusinessCalendar.Roll.MODIFIED_FOLLOWING);
-            List<LocalDate> pays = new ArrayList<>();
-            List<Double> yfs = new ArrayList<>();
-            LocalDate prev = spot;
-            int periods = Math.max(1, months / 12);
-            for (int k = 1; k <= periods; k++) {
-                LocalDate d = k == periods ? mat
-                        : cal.roll(spot.plusMonths(12L * k), BusinessCalendar.Roll.MODIFIED_FOLLOWING);
-                pays.add(d);
-                yfs.add(ChronoUnit.DAYS.between(prev, d) / 360.0);
-                prev = d;
-            }
-            t[i] = yrs(trade, mat);
-            double c = swaps.get(i).rate();
-            double lo = -0.5;
-            double hi = 1.0;
-            for (int it = 0; it < 200; it++) {
-                double mid = 0.5 * (lo + hi);
-                r[i] = mid;
-                IsdaCurve cv = IsdaCurve.ofZeroRates(Arrays.copyOf(t, i + 1), Arrays.copyOf(r, i + 1));
-                double pv = cv.value(yrs(trade, mat));
-                for (int k = 0; k < pays.size(); k++) {
-                    pv += c * yfs.get(k) * cv.value(yrs(trade, pays.get(k)));
-                }
-                double f = pv - cv.value(yrs(trade, spot));   // decreasing in r
-                if (f > 0) {
-                    lo = mid;
-                } else {
-                    hi = mid;
-                }
-            }
-            r[i] = 0.5 * (lo + hi);
-        }
-        return IsdaCurve.ofZeroRates(t, r);
     }
 
     static final class Err {
@@ -160,7 +107,7 @@ class IsdaGridVerificationTest {
         List<Row> rows = readGrid(dir.resolve(stem + "_grid.csv"));
         List<Swap> swaps = readCurve(dir.resolve(stem + "_curve.csv"));
         Conventions conv = new Conventions(cal, halfDay);
-        IsdaCurve disc = bootstrapSwaps(rows.get(0).trade(), swaps, cal);
+        IsdaCurve disc = IsdaRateCurve.bootstrapSwaps(rows.get(0).trade(), swaps, cal);
         Err csa = new Err("cashSettle");
         Err up = new Err("cleanUpfront");
         Err px = new Err("cleanPrice");
