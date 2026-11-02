@@ -11031,7 +11031,10 @@
     },
     {
      "name": "destination",
-     "dataType": "Industry Member ID",
+     "dataType": [
+      "Industry Member ID",
+      "Exchange ID"
+     ],
      "JSONDataType": "STRING",
      "required": "Conditional",
      "position": "12"
