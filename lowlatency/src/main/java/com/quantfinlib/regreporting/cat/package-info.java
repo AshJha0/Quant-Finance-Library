@@ -18,6 +18,12 @@
  * and nothing has been submitted to the CAT test environment. Use it as a structured
  * starting point, not as a filing.</p>
  *
+ * <p><b>Since 3.1.0.</b> Four more event types are built and checked: new quote (MENQ,
+ * Table 39), new option order (MONO, Table 62), option order route (MOOR, Table 64) and new
+ * option quote (MONQ, Table 85). {@link com.quantfinlib.regreporting.cat.CatLinkageChecker}
+ * checks Order, Trade, Fulfillment and Quote Keys across a batch (section 2.6.1, Table 5).
+ * Other option events, multi-leg events and cross-file linkage are still not covered.</p>
+ *
  * <p><b>3.0 notice.</b> Renamed to {@code com.quantfinlib.regreporting.cat} in 3.0
  * (the {@code report} and {@code reporting} names were one letter apart with
  * unrelated meanings), and moved with the rest of the reference tier to the

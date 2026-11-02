@@ -70,6 +70,70 @@ public final class CatEventBuilder {
     }
 
     /**
+     * Starts a new-quote (MENQ) event (section 4.10.1, Table 39).
+     *
+     * @return the builder
+     * @since 3.1.0
+     */
+    public static CatEventBuilder newQuote() {
+        return new CatEventBuilder(CatEventType.MENQ);
+    }
+
+    /**
+     * Starts a new option order (MONO) event (section 5.1.1, Table 62). Set the OSI symbol
+     * with {@link #optionId(String)}; {@code symbol} stays blank.
+     *
+     * @return the builder
+     * @since 3.1.0
+     */
+    public static CatEventBuilder newOptionOrder() {
+        return new CatEventBuilder(CatEventType.MONO);
+    }
+
+    /**
+     * Starts an option order route (MOOR) event (section 5.1.3, Table 64).
+     *
+     * @return the builder
+     * @since 3.1.0
+     */
+    public static CatEventBuilder optionRoute() {
+        return new CatEventBuilder(CatEventType.MOOR);
+    }
+
+    /**
+     * Starts a new option quote (MONQ) event (section 5.1.10.1, Table 85).
+     *
+     * @return the builder
+     * @since 3.1.0
+     */
+    public static CatEventBuilder newOptionQuote() {
+        return new CatEventBuilder(CatEventType.MONQ);
+    }
+
+    /**
+     * Sets the option's OSI symbol (field optionID, seq 8 of Tables 62, 64 and 85).
+     *
+     * @param osi the 21-character OSI symbol
+     * @return this
+     * @since 3.1.0
+     */
+    public CatEventBuilder optionId(String osi) {
+        return field("optionID", osi);
+    }
+
+    /**
+     * Sets the quote ID and its key date (MENQ and MONQ, Table 39 seq 6-7, Table 85 seq 6-7).
+     *
+     * @param quoteId firm-assigned quote ID
+     * @param quoteKeyTime when the ID was assigned
+     * @return this
+     * @since 3.1.0
+     */
+    public CatEventBuilder quoteKey(String quoteId, Instant quoteKeyTime) {
+        return field("quoteID", quoteId).field("quoteKeyDate", TS.format(quoteKeyTime));
+    }
+
+    /**
      * Starts a trade (MEOT) event.
      *
      * @return the builder
