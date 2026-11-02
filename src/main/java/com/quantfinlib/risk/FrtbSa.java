@@ -71,6 +71,18 @@ public final class FrtbSa {
                     throw new IllegalArgumentException("rho must be n x n");
                 }
             }
+            weighted = weighted.clone();
+            rho = copy(rho);
+        }
+
+        @Override
+        public double[] weighted() {
+            return weighted.clone();
+        }
+
+        @Override
+        public double[][] rho() {
+            return copy(rho);
         }
 
         /** Bucket with risk weights applied: WS_k = rw[k]·s[k]. */
@@ -201,6 +213,40 @@ public final class FrtbSa {
     public record RiskClass(List<Bucket> delta, double[][] deltaGamma,
             List<Bucket> vega, double[][] vegaGamma,
             List<Bucket> curvature, double[][] curvatureGamma) {
+        public RiskClass {
+            delta = List.copyOf(delta);
+            vega = List.copyOf(vega);
+            curvature = List.copyOf(curvature);
+            deltaGamma = copy(deltaGamma);
+            vegaGamma = copy(vegaGamma);
+            curvatureGamma = copy(curvatureGamma);
+        }
+
+        @Override
+        public double[][] deltaGamma() {
+            return copy(deltaGamma);
+        }
+
+        @Override
+        public double[][] vegaGamma() {
+            return copy(vegaGamma);
+        }
+
+        @Override
+        public double[][] curvatureGamma() {
+            return copy(curvatureGamma);
+        }
+    }
+
+    private static double[][] copy(double[][] m) {
+        if (m == null) {
+            return null;
+        }
+        double[][] c = new double[m.length][];
+        for (int i = 0; i < m.length; i++) {
+            c[i] = m[i].clone();
+        }
+        return c;
     }
 
     /** Total SBM charge of a set of risk classes under one scenario. */

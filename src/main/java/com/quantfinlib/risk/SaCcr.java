@@ -575,7 +575,7 @@ public final class SaCcr {
             double rho = t.index() ? RHO_INDEX : RHO_SINGLE;
             double[] e = sets.computeIfAbsent(t.hedgingSetType(), k -> new LinkedHashMap<>())
                     .computeIfAbsent(t.hedgingSet(), k -> new double[]{0, fsf, rho});
-            if (e[1] != fsf || e[2] != rho) {
+            if (Double.compare(e[1], fsf) != 0 || Double.compare(e[2], rho) != 0) {
                 throw new IllegalArgumentException("entity " + t.hedgingSet()
                         + " has trades with different grades or index flags");
             }
