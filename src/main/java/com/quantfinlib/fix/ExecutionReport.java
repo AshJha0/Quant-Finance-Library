@@ -29,6 +29,21 @@ public record ExecutionReport(String orderId, String execId, char execType, char
     public static final char EXEC_TYPE_REPLACED = '5';
     public static final char EXEC_TYPE_TRADE = 'F';
     public static final char EXEC_TYPE_REJECTED = '8';
+    /**
+     * ExecType H, trade cancel (bust): the execution named by ExecRefID (19)
+     * did not happen. FIX 4.4 and later; in FIX 4.2 the same value is sent in
+     * ExecTransType (20) = 1.
+     *
+     * @since 2.3.0
+     */
+    public static final char EXEC_TYPE_TRADE_CANCEL = 'H';
+    /**
+     * ExecType G, trade correct: the execution named by ExecRefID (19) is
+     * replaced by this report's LastQty and LastPx.
+     *
+     * @since 2.3.0
+     */
+    public static final char EXEC_TYPE_TRADE_CORRECT = 'G';
     public static final char ORD_STATUS_NEW = '0';
     public static final char ORD_STATUS_PARTIALLY_FILLED = '1';
     public static final char ORD_STATUS_FILLED = '2';
@@ -38,6 +53,26 @@ public record ExecutionReport(String orderId, String execId, char execType, char
 
     public boolean isFill() {
         return execType == EXEC_TYPE_TRADE;
+    }
+
+    /** True for ExecType H (trade cancel, a bust). @since 2.3.0 */
+    public boolean isTradeCancel() {
+        return isTradeCancel(execType);
+    }
+
+    /** True for ExecType G (trade correct). @since 2.3.0 */
+    public boolean isTradeCorrect() {
+        return isTradeCorrect(execType);
+    }
+
+    /** True when {@code execType} (tag 150 value) is H, trade cancel. @since 2.3.0 */
+    public static boolean isTradeCancel(int execType) {
+        return execType == EXEC_TYPE_TRADE_CANCEL;
+    }
+
+    /** True when {@code execType} (tag 150 value) is G, trade correct. @since 2.3.0 */
+    public static boolean isTradeCorrect(int execType) {
+        return execType == EXEC_TYPE_TRADE_CORRECT;
     }
 
     /** Venue-side convenience: acknowledge a new order. */

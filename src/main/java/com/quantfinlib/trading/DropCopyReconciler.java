@@ -30,6 +30,23 @@ import java.util.Objects;
  * {@code sum(drop copy) - sum(own)} with buys positive, which is the
  * position correction the breaks imply.</p>
  *
+ * <p>Busts and corrections. Both sides are first brought to the executions
+ * as they now stand: a bust (FIX ExecType H) removes the execution its
+ * ExecRefID names, a correction (ExecType G) replaces that execution's
+ * quantity and price and keeps its original id. The ledger does this itself
+ * ({@link PositionLedger#effectiveFills}); for the drop copy, pass its trade
+ * cancel and trade correct records as {@link Adjustment}s to
+ * {@link #reconcile(PositionLedger, List, List, double)}. The adjustments
+ * themselves are then matched by their own execution id: one booked here and
+ * absent from the drop copy is {@link BreakType#EXTRA}, the reverse is
+ * {@link BreakType#MISSING}, a different kind, reference or corrected value
+ * is {@link BreakType#MISMATCH}, and a drop-copy adjustment whose ExecRefID
+ * names no drop-copy execution is a {@link BreakType#MISMATCH} too. Adjustment
+ * breaks carry null fills. Worked example: we book fills 1 (buy 100 at 10)
+ * and 2 (buy 50 at 10.5), then bust 2 with id 3; the drop copy has the same
+ * three records. Both sides reduce to fill 1 alone, the bust matches, and the
+ * report is clean with {@code matched() == 1}.</p>
+ *
  * <p>Not on the hot path: runs on a snapshot, allocates freely.</p>
  */
 public final class DropCopyReconciler {
@@ -54,6 +71,32 @@ public final class DropCopyReconciler {
 
         long signedQuantity() {
             return side.sign() * quantity;
+        }
+    }
+
+    /**
+     * A trade cancel or trade correct record: execution {@code execId}
+     * cancels, or corrects to {@code quantity} at {@code price}, the
+     * execution {@code execRefId}. A bust carries quantity 0 and price NaN.
+     *
+     * @since 2.3.0
+     */
+    public record Adjustment(long execId, long execRefId, boolean bust, long quantity,
+                             double price) {
+        public Adjustment {
+            if (!bust && (quantity <= 0 || !Double.isFinite(price))) {
+                throw new IllegalArgumentException("a correction needs quantity > 0 and a finite price");
+            }
+        }
+
+        /** A trade cancel (ExecType H). */
+        public static Adjustment bust(long execId, long execRefId) {
+            return new Adjustment(execId, execRefId, true, 0, Double.NaN);
+        }
+
+        /** A trade correct (ExecType G). */
+        public static Adjustment correct(long execId, long execRefId, long quantity, double price) {
+            return new Adjustment(execId, execRefId, false, quantity, price);
         }
     }
 
@@ -133,12 +176,105 @@ public final class DropCopyReconciler {
     }
 
     /** Reconciles the ledger's fill log against a drop copy. */
+    /**
+     * Reconciles the ledger's executions, as they stand after any busts and
+     * corrections, against a drop copy of plain executions. With no busts or
+     * corrections booked this is the 2.2 behaviour.
+     */
     public static Report reconcile(PositionLedger ledger, List<Fill> dropCopy, double priceTolerance) {
-        List<Fill> own = new ArrayList<>(ledger.loggedFills());
-        for (int i = 0; i < ledger.loggedFills(); i++) {
-            own.add(ledger.loggedFill(i));
+        return reconcile(ledger.effectiveFills(), dropCopy, priceTolerance,
+                ledger.fillLogOverflow() == 0);
+    }
+
+    /**
+     * Reconciles the ledger against a drop copy that also reports busts and
+     * corrections: the drop copy's executions are adjusted, in list order,
+     * then compared with the ledger's effective executions, and the two
+     * adjustment lists are matched by execution id.
+     *
+     * @since 2.3.0
+     */
+    public static Report reconcile(PositionLedger ledger, List<Fill> dropCopy,
+                                   List<Adjustment> dropCopyAdjustments, double priceTolerance) {
+        Objects.requireNonNull(dropCopyAdjustments, "dropCopyAdjustments");
+        List<Break> pre = new ArrayList<>();
+        List<Fill> theirs = applyAdjustments(dropCopy, dropCopyAdjustments, pre);
+        Report r = reconcile(ledger.effectiveFills(), theirs, priceTolerance,
+                ledger.fillLogOverflow() == 0);
+        List<Break> all = new ArrayList<>(r.breaks());
+        all.addAll(pre);
+        all.addAll(compareAdjustments(ledger.adjustments(), dropCopyAdjustments, priceTolerance));
+        return new Report(all, r.quantityDifference(), r.matched(), r.ownLogComplete());
+    }
+
+    private static List<Fill> applyAdjustments(List<Fill> fills, List<Adjustment> adjustments,
+                                               List<Break> breaks) {
+        Map<Long, Fill> byId = new LinkedHashMap<>();
+        List<Fill> dups = new ArrayList<>();
+        for (Fill f : fills) {
+            if (byId.putIfAbsent(f.execId(), f) != null) {
+                dups.add(f);
+            }
         }
-        return reconcile(own, dropCopy, priceTolerance, ledger.fillLogOverflow() == 0);
+        Map<Long, Long> root = new java.util.HashMap<>();
+        for (Adjustment a : adjustments) {
+            long target = root.getOrDefault(a.execRefId(), a.execRefId());
+            Fill f = byId.get(target);
+            if (f == null) {
+                breaks.add(new Break(BreakType.MISMATCH, a.execId(), null, null,
+                        (a.bust() ? "drop copy bust" : "drop copy correction")
+                                + " refers to unknown execution " + a.execRefId()));
+                continue;
+            }
+            if (a.bust()) {
+                byId.remove(target);
+            } else {
+                byId.put(target, new Fill(f.execId(), f.accountId(), f.strategyId(), f.symbolId(),
+                        f.side(), a.quantity(), a.price()));
+                root.put(a.execId(), target);
+            }
+        }
+        List<Fill> out = new ArrayList<>(byId.values());
+        out.addAll(dups);
+        return out;
+    }
+
+    private static List<Break> compareAdjustments(List<Adjustment> own, List<Adjustment> theirs,
+                                                  double tol) {
+        List<Break> breaks = new ArrayList<>();
+        Map<Long, Adjustment> t = new LinkedHashMap<>();
+        for (Adjustment a : theirs) {
+            if (t.putIfAbsent(a.execId(), a) != null) {
+                breaks.add(new Break(BreakType.DUPLICATE, a.execId(), null, null,
+                        "adjustment repeated in drop copy"));
+            }
+        }
+        java.util.Set<Long> seen = new java.util.HashSet<>();
+        for (Adjustment a : own) {
+            seen.add(a.execId());
+            Adjustment d = t.get(a.execId());
+            if (d == null) {
+                breaks.add(new Break(BreakType.EXTRA, a.execId(), null, null,
+                        "booked " + describe(a) + ", absent from drop copy"));
+            } else if (a.bust() != d.bust() || a.execRefId() != d.execRefId()
+                    || (!a.bust() && (a.quantity() != d.quantity()
+                    || Math.abs(a.price() - d.price()) > tol))) {
+                breaks.add(new Break(BreakType.MISMATCH, a.execId(), null, null,
+                        "booked " + describe(a) + ", drop copy " + describe(d)));
+            }
+        }
+        for (Adjustment d : t.values()) {
+            if (!seen.contains(d.execId())) {
+                breaks.add(new Break(BreakType.MISSING, d.execId(), null, null,
+                        "drop copy " + describe(d) + ", not booked"));
+            }
+        }
+        return breaks;
+    }
+
+    private static String describe(Adjustment a) {
+        return a.bust() ? "bust of " + a.execRefId()
+                : "correction of " + a.execRefId() + " to " + a.quantity() + " at " + a.price();
     }
 
     /** Reconciles two fill lists; {@code priceTolerance} is an absolute price difference. */

@@ -24,9 +24,12 @@ import java.util.function.ToIntFunction;
  * carries no execution id, {@link #forPaper} maps names to ids and numbers
  * executions from 1.</p>
  *
- * <p>Busts and corrections are not modelled: neither gateway reports them
- * and the ledger has no reversal entry. A bust must be booked by the caller
- * as an offsetting fill, which a drop copy will show as a difference.</p>
+ * <p>Busts and corrections reported through
+ * {@link HftOrderGateway#onTradeBust} and {@link HftOrderGateway#onTradeCorrect}
+ * reach {@link PositionLedger#onBust} and {@link PositionLedger#onCorrect};
+ * one the ledger refuses (unknown ExecRefID, for example) is counted in
+ * {@link #rejectedCount()}. {@link PaperTradingGateway} simulates its own
+ * fills and never busts them.</p>
  *
  * <p>The ledger is single-writer: register this adapter on a gateway whose
  * reports come from one thread, or synchronise externally. A fill the
@@ -55,7 +58,25 @@ public final class LedgerFillListener implements FillListener {
         }
     }
 
-    /** Fills the ledger refused (bad ids, full lot queue). */
+    /** @since 2.3.0 */
+    @Override
+    public void onBust(long execId, long execRefId, long orderId, int symbolId, Side side,
+                       long quantity, long timestampNanos) {
+        if (!ledger.onBust(execId, execRefId)) {
+            rejected.incrementAndGet();
+        }
+    }
+
+    /** @since 2.3.0 */
+    @Override
+    public void onCorrect(long execId, long execRefId, long orderId, int symbolId, Side side,
+                          long quantity, double price, long timestampNanos) {
+        if (!ledger.onCorrect(execId, execRefId, quantity, price)) {
+            rejected.incrementAndGet();
+        }
+    }
+
+    /** Fills, busts and corrections the ledger refused (bad ids, full lot queue, unknown ExecRefID). */
     public long rejectedCount() {
         return rejected.get();
     }
