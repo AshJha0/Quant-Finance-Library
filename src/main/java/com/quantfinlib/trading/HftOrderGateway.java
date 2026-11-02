@@ -7,6 +7,8 @@ import com.quantfinlib.util.NanoClock;
 import com.quantfinlib.util.ThreadPlacement;
 
 import java.util.Arrays;
+import java.util.Objects;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.ThreadFactory;
 
 /**
@@ -81,6 +83,11 @@ public final class HftOrderGateway implements AutoCloseable {
     private final OrderThrottle throttle;
     private final long ackTimeoutNanos;
     private volatile OrderListener[] listeners = NO_LISTENERS;
+    private static final FillListener[] NO_FILL_LISTENERS = new FillListener[0];
+    private volatile FillListener[] fillListeners = NO_FILL_LISTENERS;
+    private final AtomicLong execSeq = new AtomicLong();
+    private final AtomicLong fillListenerErrors =
+            new AtomicLong();
     private final Dispatcher dispatcher = new Dispatcher();
 
     private final StridedSequences tradingCounters = new StridedSequences(6);
@@ -175,6 +182,26 @@ public final class HftOrderGateway implements AutoCloseable {
             next[next.length - 1] = listener;
             listeners = next;
         }
+    }
+
+    /**
+     * Registers a post-trade listener that receives every accepted fill,
+     * for example a {@link LedgerFillListener}. Cold path.
+     *
+     * @since 2.2.0
+     */
+    public void addFillListener(FillListener listener) {
+        Objects.requireNonNull(listener, "listener");
+        synchronized (lock) {
+            FillListener[] next = Arrays.copyOf(fillListeners, fillListeners.length + 1);
+            next[next.length - 1] = listener;
+            fillListeners = next;
+        }
+    }
+
+    /** Exceptions thrown by {@link FillListener}s (each is swallowed after counting). */
+    public long fillListenerErrorCount() {
+        return fillListenerErrors.get();
     }
 
     public void start() {
@@ -461,6 +488,19 @@ public final class HftOrderGateway implements AutoCloseable {
      * after, so a concurrent check never understates exposure.
      */
     public boolean onFill(long orderId, long quantity, double price, long timestampNanos) {
+        return onFill(orderId, 0, quantity, price, timestampNanos);
+    }
+
+    /**
+     * As {@link #onFill(long, long, double, long)} with the venue's
+     * execution id, which is passed to {@link FillListener}s. An
+     * {@code execId} of 0 means none: the gateway assigns {@code -1, -2, ...}
+     * so its own numbers never collide with positive venue ids.
+     *
+     * @since 2.2.0
+     */
+    public boolean onFill(long orderId, long execId, long quantity, double price,
+                          long timestampNanos) {
         int slot = orders.slotOf(orderId);
         if (slot < 0 || quantity <= 0) {
             reportCounters.getAndAdd(UNKNOWN, 1);
@@ -486,6 +526,17 @@ public final class HftOrderGateway implements AutoCloseable {
         }
         orders.setState(slot, next);
         reportCounters.getAndAdd(FILLS, 1);
+        FillListener[] fl = fillListeners;
+        if (fl.length > 0) {
+            long id = execId != 0 ? execId : -execSeq.incrementAndGet();
+            for (FillListener l : fl) {
+                try {
+                    l.onFill(id, orderId, symbolId, side, quantity, price, timestampNanos);
+                } catch (RuntimeException e) {
+                    fillListenerErrors.incrementAndGet();
+                }
+            }
+        }
         return true;
     }
 

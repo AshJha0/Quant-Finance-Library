@@ -89,6 +89,32 @@ public final class Backtester {
     }
 
     /**
+     * As {@link #run(TradingStrategy, BarSeries, BacktestConfig)} but entries
+     * buy a whole number of lots instead of investing all cash.
+     *
+     * <p>The plain idea: a real account cannot hold 37.4 shares. An entry
+     * buys the largest multiple of {@code lotSize} that cash covers after
+     * slippage and commission, and the rest stays in cash. Formally, with
+     * fill price {@code f} and commission rate {@code c}, the quantity is
+     * {@code q = lot * floor(cash / (f (1 + c) lot))}; the entry pays
+     * {@code q f (1 + c)}. When {@code q = 0} the signal is dropped. Worked
+     * example (own test): cash 1000, price 30, lot 1, no costs gives
+     * {@code q = 33} and 10 left in cash, which is what the tick backtester
+     * and the paper gateway fill.</p>
+     *
+     * @param lotSize positive lot size, 1 for whole shares
+     * @since 2.2.0
+     */
+    public static BacktestResult runWholeLots(TradingStrategy strategy, BarSeries series,
+                                              BacktestConfig config, double lotSize) {
+        if (!(lotSize > 0) || Double.isInfinite(lotSize)) {
+            throw new IllegalArgumentException("lotSize must be positive and finite, got " + lotSize);
+        }
+        return runSegment(strategy, series, config, 0, State.flat(config.initialCapital()), 0,
+                true, lotSize).result();
+    }
+
+    /**
      * Runs bars {@code [tradeFrom, n)} of {@code series} starting from
      * {@code start}. Trade indices are reported as {@code local index +
      * indexOffset}, so a caller running on a slice of a longer series passes
@@ -102,13 +128,19 @@ public final class Backtester {
     public static Segment runSegment(TradingStrategy strategy, BarSeries series,
                                      BacktestConfig config, int tradeFrom, State start,
                                      int indexOffset, boolean liquidateAtEnd) {
+        return runSegment(strategy, series, config, tradeFrom, start, indexOffset, liquidateAtEnd, 0);
+    }
+
+    private static Segment runSegment(TradingStrategy strategy, BarSeries series,
+                                      BacktestConfig config, int tradeFrom, State start,
+                                      int indexOffset, boolean liquidateAtEnd, double lotSize) {
         int n = series.size();
         if (tradeFrom < 0 || tradeFrom >= n) {
             throw new IllegalArgumentException(
                     "tradeFrom must be in [0, " + n + "), got " + tradeFrom);
         }
         strategy.init(series);
-        Engine e = new Engine(strategy, series, config, start, indexOffset);
+        Engine e = new Engine(strategy, series, config, start, indexOffset, lotSize);
         double[] equity = new double[n - tradeFrom];
         for (int i = tradeFrom; i < n; i++) {
             e.bar(i);
@@ -132,6 +164,7 @@ public final class Backtester {
         final BarSeries series;
         final BacktestConfig config;
         final int offset;
+        final double lotSize;  // 0 = fractional (invest all cash)
         final double stopLoss;
         final double takeProfit;
         final List<Trade> trades = new ArrayList<>();
@@ -145,8 +178,9 @@ public final class Backtester {
         Signal pending;
 
         Engine(TradingStrategy strategy, BarSeries series, BacktestConfig config, State s,
-               int offset) {
+               int offset, double lotSize) {
             this.strategy = strategy;
+            this.lotSize = lotSize;
             this.series = series;
             this.config = config;
             this.offset = offset;
@@ -183,7 +217,22 @@ public final class Backtester {
         void fillPending(int i, double price, boolean atOpen) {
             Signal sig = pending;
             pending = Signal.HOLD;
-            if (sig == Signal.BUY && qty == 0 && cash > 0) {
+            if (sig == Signal.BUY && qty == 0 && cash > 0 && lotSize > 0) {
+                double fill = price * (1 + config.slippageRate());
+                double perLot = fill * (1 + config.commissionRate()) * lotSize;
+                double q = Math.floor(cash / perLot) * lotSize;
+                if (q > 0) {
+                    double notional = q * fill;
+                    double fee = notional * config.commissionRate();
+                    qty = q;
+                    entryPrice = fill;
+                    entryCost = notional + fee;
+                    entryIndex = i + offset;
+                    entryTime = series.timestamp(i);
+                    entryAtOpen = atOpen;
+                    cash -= entryCost;
+                }
+            } else if (sig == Signal.BUY && qty == 0 && cash > 0) {
                 double fill = price * (1 + config.slippageRate());
                 double fee = cash * config.commissionRate();
                 qty = (cash - fee) / fill;

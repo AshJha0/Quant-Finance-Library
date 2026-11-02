@@ -136,4 +136,67 @@ class StrategyRunnerTest {
         assertThrows(NullPointerException.class,
                 () -> new StrategyRunner.Fill(0, null, 1, 1));
     }
+
+    List<StrategyRunner.Run> all(BarSeries tape, double capital, StrategyRunner.Sizing sizing)
+            throws IOException {
+        return List.of(
+                StrategyRunner.run(StrategyRunner.Engine.BAR_BACKTESTER, upDown(), tape, capital,
+                        dir, sizing),
+                StrategyRunner.run(StrategyRunner.Engine.TICK_BACKTESTER, upDown(), tape,
+                        capital, dir, sizing),
+                StrategyRunner.run(StrategyRunner.Engine.PAPER_GATEWAY, upDown(), tape, capital,
+                        dir, sizing));
+    }
+
+    @Test
+    void wholeShareSizingGivesExactThreeEngineEqualityOnNonIntegerCashAndPrice()
+            throws IOException {
+        for (StrategyRunner.Sizing sizing : List.of(StrategyRunner.Sizing.wholeShares(),
+                StrategyRunner.Sizing.lots(100))) {
+            for (long seed = 1; seed <= 5; seed++) {
+                // cents prices, capital with cents: cash/price is essentially never whole
+                List<StrategyRunner.Run> runs = all(tape(seed, false), 1_000_003.37, sizing);
+                List<StrategyRunner.Fill> bar = runs.get(0).fills();
+                assertTrue(bar.size() >= 6, "fills " + bar.size());
+                boolean sawRemainder = false;
+                for (StrategyRunner.Fill f : bar) {
+                    assertEquals(0, f.quantity() % sizing.lotSize(), 0);
+                    sawRemainder |= f.quantity() > 0;
+                }
+                assertTrue(sawRemainder);
+                for (StrategyRunner.Run r : runs) {
+                    assertEquals(bar, r.fills(), r.engine() + " seed " + seed + " " + sizing);
+                    assertEquals(runs.get(0).finalEquity(), r.finalEquity(), 1e-6);
+                }
+            }
+        }
+    }
+
+    @Test
+    void wholeSharesWorkedExample() throws IOException {
+        BarSeries.Builder b = BarSeries.builder("W");
+        double[] px = {29, 30, 31};
+        for (int i = 0; i < px.length; i++) {
+            b.add(i, px[i], px[i], px[i], px[i], 10);
+        }
+        for (StrategyRunner.Run r : all(b.build(), 1000, StrategyRunner.Sizing.wholeShares())) {
+            assertEquals(33, r.fills().get(0).quantity(), 0, r.engine().toString());
+            // 1000 - 33*30 + 33*31 = 1033
+            assertEquals(1033, r.finalEquity(), 1e-9, r.engine().toString());
+        }
+    }
+
+    @Test
+    void fractionalSizingKeepsThe21BarEngine() throws IOException {
+        BarSeries t = tape(9, false);
+        StrategyRunner.Run frac = StrategyRunner.run(StrategyRunner.Engine.BAR_BACKTESTER,
+                upDown(), t, 1_000_000, dir, StrategyRunner.Sizing.fractionalShares());
+        BacktestResult direct = Backtester.run(upDown(), t,
+                new BacktestConfig(1_000_000, 0, 0, 0, 0, 252, FillPolicy.CLOSE));
+        assertEquals(direct.trades().get(0).quantity(), frac.fills().get(0).quantity(), 0);
+        assertTrue(frac.fills().get(0).quantity() % 1 != 0);
+        assertThrows(IllegalArgumentException.class, () -> StrategyRunner.Sizing.lots(0));
+        assertThrows(IllegalArgumentException.class, () -> Backtester.runWholeLots(upDown(), t,
+                new BacktestConfig(1, 0, 0, 0, 0, 252, FillPolicy.CLOSE), 0));
+    }
 }
