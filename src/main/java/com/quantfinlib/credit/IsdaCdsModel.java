@@ -79,16 +79,24 @@ import java.util.Objects;
  * {@code a (t - tS + 1/730)}, adding {@code a / 730 * integral h Q P dt}
  * per period (O'Kane 2008, sec. 6.6; R. White, "The Pricing and Risk
  * Management of Credit Default Swaps, with a Focus on the ISDA Model",
- * OpenGamma 2013, on the accrual-on-default term). Off by default,
- * which reproduces the v1.8.2 C library.</p>
+ * OpenGamma 2013, on the accrual-on-default term). Off by default, which
+ * keeps the 2.1 numbers. The ISDA Standard Model itself includes the
+ * half-day term: the official RFR test grids below match only with it on.</p>
  *
- * <p>Known gap against the C library: the published Markit test grid is
- * not reproduced in the tests (it sits behind a licence click-through
- * and was not used); the tests instead pin the closed-form segment
- * integrals against independent Gauss-Legendre quadrature to 1e-10,
- * the conventions against hand-built schedules, and the holiday and
- * half-day variants against an independent re-implementation in the
- * test. Research lane, deterministic.</p>
+ * <p>Verification against the official ISDA CDS Standard Model RFR test
+ * grids (cdsmodel.com, USD SOFR 2021-04-26 and 2022-06-21, 7164 rows
+ * each; published reference): with half-day accrual on, a weekends-only
+ * calendar for the 2021 grid and the New York calendar for the 2022 grid,
+ * cash settlement amounts agree within 1e-6 USD on 10mm notional and
+ * clean upfronts within 1e-13. With half-day accrual off the clean
+ * upfront is off by up to 4.6e-5 (about 460 USD on 10mm). The grids are
+ * copyright and not in the repository; {@code IsdaGridVerificationTest}
+ * runs when {@code QFL_ISDA_GRID_DIR} points at CSVs made by
+ * {@code scripts/isda-grid-to-csv.py}, and the swap-curve bootstrap it
+ * needs lives in that test. The in-repo tests also pin the closed-form
+ * segment integrals against Gauss-Legendre quadrature to 1e-10 and the
+ * holiday and half-day variants against an independent re-implementation.
+ * Research lane, deterministic.</p>
  */
 public final class IsdaCdsModel {
 
