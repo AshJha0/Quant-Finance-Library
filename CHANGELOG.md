@@ -6,6 +6,10 @@ Entries for 1.x releases are archived in [docs/history/CHANGELOG-1.x.md](docs/hi
 
 ## [Unreleased]
 
+### Removed
+
+- `risk.simm` (SIMM-structured margin calculator) removed pending licensing review; ISDA requires a licence to use SIMM. See [docs/MIGRATION_2.3.md](docs/MIGRATION_2.3.md).
+
 ## [2.2.0] - 2026-11-02
 
 Minor release. No 2.1 public signature is removed or changed, and the API-compatibility check now runs against 2.1.0. Two defaults change (`StrategyRunner` sizing, and one record gains a component); [docs/MIGRATION_2.2.md](docs/MIGRATION_2.2.md) says how to keep 2.1 behaviour.

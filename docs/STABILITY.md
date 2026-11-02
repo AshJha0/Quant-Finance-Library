@@ -61,7 +61,6 @@ audit trails, operational tooling).
 | `marketdata` | Ring buffers, market-data bus, ITCH 5.0 codec, L3 book builder, NBBO |
 | `orderbook` | Reference matching engine (`OrderBook`), price-ladder engine (`HftOrderBook`) and call auctions (`AuctionBook`, from 2.1) |
 | `fix` | FIX 4.4 session, journal store, garbage-free encoders and views; from 2.1 session schedules (`FixSessionSchedule`, `FixSessionOptions`); from 2.2 FIX 4.2 and 5.0 SP2 (`FixVersion`) and repeating groups (`FixDictionary`, `FixGroupDef`, `FixGroup`) |
-| `risk.simm` | ISDA SIMM calculator (2.2); structure checked against the public methodology, no official calibration shipped, so results depend on the calibration file you supply |
 | `entitlements` | Entitlement service and pre-trade check (2.2) |
 | `reporting` | MiFIR RTS 22 transaction report builder and identifier checks (2.2); not validated against the ESMA schema |
 | `sbe` | SBE-style binary codecs (schema 2) and channel adapters |

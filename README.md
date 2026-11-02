@@ -17,11 +17,10 @@ connectivity stack; see [docs/STABILITY.md](docs/STABILITY.md).
 
 - Version 2.2.0. Requires Java 25 (LTS). The full suite (`./mvnw verify -Pfull`) runs
   1,745 tests.
-- Version 2.2 is additive over 2.1 apart from two default changes:
-  `StrategyRunner` now trades whole shares, and SIMM reads equity, commodity and FX
-  vega amounts as raw dV/dsigma. New: holiday calendars and ISDA conventions,
+- Version 2.2 is additive over 2.1 apart from one default change:
+  `StrategyRunner` now trades whole shares. New: holiday calendars and ISDA conventions,
   multi-currency exposure and bilateral CVA, more of SA-CCR, the FRTB standardised
-  approach, a SIMM calculator for a licensed calibration, FIX 4.2 and 5.0 SP2 with
+  approach, FIX 4.2 and 5.0 SP2 with
   repeating groups, entitlements, MiFIR RTS 22 reports and corporate events in the
   portfolio backtester. [docs/MIGRATION_2.2.md](docs/MIGRATION_2.2.md) explains how
   to keep 2.1 behaviour.
@@ -179,9 +178,6 @@ with a summary; the javadoc is published at
   (sensitivities-based method, default risk charge, residual risk add-on) and NMRF
   stress capital, and a market, sector and style factor
   risk model with risk decomposition. See [docs/MARKET_RISK.md](docs/MARKET_RISK.md).
-- `risk.simm`: an ISDA SIMM calculator that reads CRIF sensitivities and a
-  calibration file you license from ISDA; only an illustrative calibration ships.
-  See [docs/SIMM.md](docs/SIMM.md).
 - `entitlements`, `reporting`: deny-overrides entitlements with time-bounded grants,
   an audit log and a pre-trade check; a MiFIR RTS 22 transaction report builder with
   LEI, ISIN and MIC check-digit validation.
@@ -234,8 +230,7 @@ with a summary; the javadoc is published at
 These are common requirements that the library does not cover, or covers only in
 part. Code that needs them should use a specialised library or add them.
 
-- SIMM with the official ISDA calibration, and the ISDA SIMM unit tests. Both are
-  licensed by ISDA; the repository holds an illustrative calibration only.
+- ISDA SIMM: not included; ISDA licenses SIMM for use.
 - FRTB SA certification, securitisation, and the inputs left to the caller (CSR
   inter-bucket correlations, GIRR inflation and basis correlations, equity repo).
 - The CRE22 (2017) SA-CCR collateral haircut table; haircuts follow Basel II para 151.
@@ -269,7 +264,6 @@ Benchmark method, environment and results are in [docs/BENCHMARKS.md](docs/BENCH
 | [COOKBOOK.md](docs/COOKBOOK.md) | Runnable recipes |
 | [DIAGRAMS.md](docs/DIAGRAMS.md) | Mermaid diagrams of the main flows |
 | [MARKET_RISK.md](docs/MARKET_RISK.md) | The market-risk workflow mapped to classes |
-| [SIMM.md](docs/SIMM.md) | The SIMM calculator, calibration file keys and licensing |
 | [CENTRAL_RISK_BOOK.md](docs/CENTRAL_RISK_BOOK.md) | Central risk book design |
 | [ULTRA_LOW_LATENCY.md](docs/ULTRA_LOW_LATENCY.md) | The trading lane, its order lifecycle and tuning |
 | [BENCHMARKS.md](docs/BENCHMARKS.md) | How performance is measured, and results |
