@@ -53,14 +53,20 @@ import java.util.TreeMap;
  * {@code SIMM_p = sqrt(sum IM_r^2 + sum_{r != s} psi_rs IM_r IM_s)};
  * {@code SIMM = sum_p SIMM_p}.</p>
  *
- * <p><b>Simplifications against the full methodology</b> (documented so a
- * reader does not mistake this for a complete SIMM): no add-ons or
- * notional-based schedule; no separate IR curvature scaling or
- * high-volatility-ratio terms (use {@code RC.curvature.multiplier}); FX
- * uses one bucket and does not apply currency-dependent risk weights unless
- * configured by bucket key; correlations within a non-IR bucket depend only
- * on whether the qualifier matches. These follow the published structure
- * but have not been checked against ISDA's unit tests, which are licensed.</p>
+ * <p>Structure checked against the public ISDA SIMM v2.9+2606 methodology
+ * (formulas only; see {@code docs/SIMM.md} for the section map):
+ * IR concentration is per currency, excludes cross-currency basis and has
+ * {@code f_kl = 1}; equity, commodity and FX vega use
+ * {@code sigma_k = RW_k sqrt(365/14) / Phi^-1(0.99)} and the class HVR, with
+ * the qualifier as risk factor (expiries summed); IR curvature is scaled by
+ * {@code HVR_IR^-2}; FX delta weights, correlations and thresholds can
+ * depend on volatility group, calculation currency and category; add-ons
+ * via {@link #calculateWithAddOns}.</p>
+ *
+ * <p><b>Limits</b>: correlations within a non-IR bucket depend only on
+ * whether the qualifier matches (or the FX groups); index-volatility
+ * special cases beyond the bucket keys are left to the caller's bucketing.
+ * Not checked against ISDA's unit tests, which are licensed.</p>
  *
  * <p><b>Worked example</b> (own hand computation, see the tests): one IR
  * delta of 1,000 at 5y with risk weight 50 and no concentration gives
@@ -149,38 +155,158 @@ public final class SimmCalculator {
 
     // ---------------------------------------------------------------- delta / vega
 
-    private double weightedMargin(SimmRiskClass rc, List<Net> rows, String kind) {
-        if (rows.isEmpty()) {
+    /** {@code Phi^-1(0.99)}, used in the equity, commodity and FX vega volatility. */
+    static final double Z99 = 2.3263478740408408;
+
+    private static boolean volWeightedClass(SimmRiskClass rc) {
+        return rc == SimmRiskClass.EQUITY || rc == SimmRiskClass.COMMODITY || rc == SimmRiskClass.FX;
+    }
+
+    private double opt(double dflt, String... keys) {
+        Double v = params.firstOrNull(keys);
+        return v == null ? dflt : v;
+    }
+
+    private boolean flag(String key) {
+        Double v = params.firstOrNull(key);
+        return v != null && v != 0;
+    }
+
+    /**
+     * Turns vega rows into vega (or curvature) risk factors. For equity,
+     * commodity and FX the risk factor is the qualifier: the CRIF amount (the
+     * vega dV/dsigma) is multiplied by
+     * {@code sigma_k = RW_k sqrt(365/14) / Phi^-1(0.99)} and, for the vega
+     * margin only, by the class HVR; rows of the same qualifier are then
+     * summed across expiries (each first multiplied by {@code SF(t)} for
+     * curvature). For IR and credit each expiry stays its own risk factor.
+     */
+    private List<Net> vegaRiskFactors(SimmRiskClass rc, List<Net> rows, boolean curvature) {
+        if (!volWeightedClass(rc)) {
+            List<Net> out = new ArrayList<>();
+            for (Net n : rows) {
+                double a = curvature ? scaling(expiry(n)) * n.amount : n.amount;
+                out.add(new Net(n.measure, n.bucket, n.qualifier, n.label1, n.label2, a));
+            }
+            return out;
+        }
+        boolean weighted = flag(rc.key() + ".vega.amountIsVolWeighted");
+        double hvr = curvature ? 1.0 : opt(1.0, rc.key() + ".hvr");
+        Map<String, Net> m = new LinkedHashMap<>();
+        for (Net n : rows) {
+            double sigma = weighted ? 1.0 : vegaSigma(rc, n);
+            double a = n.amount * sigma * hvr * (curvature ? scaling(expiry(n)) : 1.0);
+            String k = n.bucket + "\u0000" + n.qualifier;
+            Net old = m.get(k);
+            m.put(k, new Net(n.measure, n.bucket, n.qualifier, "", "", (old == null ? 0 : old.amount) + a));
+        }
+        return new ArrayList<>(m.values());
+    }
+
+    private static double expiry(Net n) {
+        if (n.label1.isEmpty()) {
+            throw new IllegalArgumentException("vega row needs label1 expiry for curvature: " + n.qualifier);
+        }
+        return SimmParameters.tenorYears(n.label1);
+    }
+
+    private double vegaSigma(SimmRiskClass rc, Net n) {
+        double rw;
+        if (rc == SimmRiskClass.FX) {
+            String[] pair = fxPair(n.qualifier);
+            rw = opt(Double.NaN, "FX.delta.rw." + fxGroup(pair[0]) + "." + fxGroup(pair[1]));
+            if (Double.isNaN(rw)) {
+                rw = params.first("FX.delta.rw");
+            }
+        } else {
+            rw = params.first(rc.key() + ".delta.rw." + n.bucket, rc.key() + ".delta.rw");
+        }
+        return rw * Math.sqrt(365.0 / 14.0) / Z99;
+    }
+
+    private static String[] fxPair(String q) {
+        String s = q.replace("/", "").trim();
+        if (s.length() != 6) {
+            throw new IllegalArgumentException("FX vega qualifier must be a currency pair such as EURUSD: " + q);
+        }
+        return new String[]{s.substring(0, 3), s.substring(3)};
+    }
+
+    /** FX volatility group of a currency: {@code High} if flagged, else {@code Regular}. */
+    private String fxGroup(String ccy) {
+        return flag("FX.highVolGroup." + ccy) ? "High" : "Regular";
+    }
+
+    /** FX concentration category of a currency (default 3, the catch-all). */
+    private int fxCategory(String ccy) {
+        return (int) opt(3, "FX.category." + ccy);
+    }
+
+    private String fxCalcCurrency() {
+        for (var e : params.values().entrySet()) {
+            if (e.getKey().startsWith("FX.calculationCurrency.") && e.getValue() != 0) {
+                return e.getKey().substring("FX.calculationCurrency.".length());
+            }
+        }
+        return null;
+    }
+
+    private Double threshold(SimmRiskClass rc, String kind, String b, String qualifier) {
+        if (rc == SimmRiskClass.FX) {
+            Double t = null;
+            if ("delta".equals(kind)) {
+                t = params.firstOrNull("FX.delta.threshold.cat" + fxCategory(qualifier));
+            } else if (qualifier.replace("/", "").length() == 6) {
+                String[] p = fxPair(qualifier);
+                int i = Math.min(fxCategory(p[0]), fxCategory(p[1]));
+                int j = Math.max(fxCategory(p[0]), fxCategory(p[1]));
+                t = params.firstOrNull("FX.vega.threshold.cat" + i + ".cat" + j);
+            }
+            if (t != null) {
+                return t;
+            }
+        }
+        return params.firstOrNull(rc.key() + "." + kind + ".threshold." + b, rc.key() + "." + kind + ".threshold");
+    }
+
+    private static boolean isXccy(Net n) {
+        return "XCcy".equalsIgnoreCase(n.label2);
+    }
+
+    private double weightedMargin(SimmRiskClass rc, List<Net> input, String kind) {
+        if (input.isEmpty()) {
             return 0;
         }
+        boolean ir = rc == SimmRiskClass.INTEREST_RATE;
+        List<Net> rows = "vega".equals(kind) ? vegaRiskFactors(rc, input, false) : input;
         Map<String, List<Net>> byBucket = byBucket(rows);
         Map<String, double[]> ks = new LinkedHashMap<>();   // bucket -> {K, S, CRbucket}
         double residual = 0;
         for (var e : byBucket.entrySet()) {
             String b = e.getKey();
             List<Net> ns = e.getValue();
-            Double t = params.firstOrNull(rc.key() + "." + kind + ".threshold." + b,
-                    rc.key() + "." + kind + ".threshold");
             Map<String, Double> qSum = new TreeMap<>();
             double bucketSum = 0;
             for (Net n : ns) {
+                if (ir && isXccy(n)) {
+                    continue;   // cross-currency basis is outside IR concentration
+                }
                 qSum.merge(n.qualifier, n.amount, Double::sum);
                 bucketSum += n.amount;
             }
+            double crBucket = ir ? concentration(bucketSum, threshold(rc, kind, b, b)) : 1.0;
             int m = ns.size();
             double[] ws = new double[m];
             double[] cr = new double[m];
             double sumWs = 0;
             for (int i = 0; i < m; i++) {
                 Net n = ns.get(i);
-                cr[i] = concentration(qSum.get(n.qualifier), t);
-                double rw = "delta".equals(kind)
-                        ? params.first(
-                        key(rc, "delta.rw", b, n.label1),
-                        n.label2.isEmpty() ? null : rc.key() + ".delta.rw." + n.label2,
-                        rc.key() + ".delta.rw." + b,
-                        n.label1.isEmpty() ? null : rc.key() + ".delta.rw." + n.label1,
-                        rc.key() + ".delta.rw")
+                if (ir) {
+                    cr[i] = isXccy(n) ? 1.0 : crBucket;
+                } else {
+                    cr[i] = concentration(qSum.get(n.qualifier), threshold(rc, kind, b, n.qualifier));
+                }
+                double rw = "delta".equals(kind) ? deltaRw(rc, b, n)
                         : params.first(rc.key() + ".vega.rw." + b, rc.key() + ".vega.rw");
                 ws[i] = rw * n.amount * cr[i];
                 sumWs += ws[i];
@@ -191,8 +317,9 @@ public final class SimmCalculator {
                     if (i == j) {
                         k2 += ws[i] * ws[i];
                     } else {
-                        double f = Math.min(cr[i], cr[j]) / Math.max(cr[i], cr[j]);
-                        k2 += intraRho(rc, b, ns.get(i), ns.get(j)) * f * ws[i] * ws[j];
+                        // f_kl is identically 1 in the IR class
+                        double f = ir ? 1.0 : Math.min(cr[i], cr[j]) / Math.max(cr[i], cr[j]);
+                        k2 += intraRho(rc, b, ns.get(i), ns.get(j), kind) * f * ws[i] * ws[j];
                     }
                 }
             }
@@ -201,10 +328,31 @@ public final class SimmCalculator {
                 residual += k;
             } else {
                 double s = Math.max(Math.min(sumWs, k), -k);
-                ks.put(b, new double[]{k, s, concentration(bucketSum, t)});
+                ks.put(b, new double[]{k, s, crBucket});
             }
         }
         return Math.sqrt(Math.max(0, acrossBuckets(rc, ks, false))) + residual;
+    }
+
+    private double deltaRw(SimmRiskClass rc, String b, Net n) {
+        if (rc == SimmRiskClass.FX) {
+            String calc = fxCalcCurrency();
+            if (calc != null && calc.equals(n.qualifier)) {
+                return 0.0;   // no FX risk factor for the calculation currency
+            }
+            if (calc != null) {
+                Double rw = params.firstOrNull("FX.delta.rw." + fxGroup(n.qualifier) + "." + fxGroup(calc));
+                if (rw != null) {
+                    return rw;
+                }
+            }
+        }
+        return params.first(
+                key(rc, "delta.rw", b, n.label1),
+                n.label2.isEmpty() ? null : rc.key() + ".delta.rw." + n.label2,
+                rc.key() + ".delta.rw." + b,
+                n.label1.isEmpty() ? null : rc.key() + ".delta.rw." + n.label1,
+                rc.key() + ".delta.rw");
     }
 
     private static String key(SimmRiskClass rc, String what, String b, String l1) {
@@ -242,20 +390,47 @@ public final class SimmCalculator {
         return v;
     }
 
-    private double intraRho(SimmRiskClass rc, String bucket, Net a, Net b) {
+    private double irTenorRho(String t1, String t2) {
+        if (t1.equals(t2)) {
+            return 1.0;
+        }
+        return params.first("IR.tenorRho." + t1 + "." + t2, "IR.tenorRho." + t2 + "." + t1, "IR.tenorRho");
+    }
+
+    private double intraRho(SimmRiskClass rc, String bucket, Net a, Net b, String kind) {
         if (rc == SimmRiskClass.INTEREST_RATE) {
+            boolean xa = isXccy(a);
+            boolean xb = isXccy(b);
+            if (xa || xb) {
+                return xa && xb ? 1.0 : params.first("IR.rho.xccy");
+            }
             boolean ia = "Inflation".equalsIgnoreCase(a.label2);
             boolean ib = "Inflation".equalsIgnoreCase(b.label2);
             if (ia != ib) {
                 return params.first("IR.rho.inflation");
             }
             if (ia) {
-                return 1.0;
+                // flat inflation delta nets fully; inflation vega carries expiries
+                return irTenorRho(a.label1, b.label1);
             }
-            double rho = a.label1.equals(b.label1) ? 1.0 : params.first(
-                    "IR.tenorRho." + a.label1 + "." + b.label1,
-                    "IR.tenorRho." + b.label1 + "." + a.label1, "IR.tenorRho");
+            double rho = irTenorRho(a.label1, b.label1);
             return a.label2.equals(b.label2) ? rho : rho * params.first("IR.phi");
+        }
+        if (rc == SimmRiskClass.FX) {
+            Double v = null;
+            if (!"delta".equals(kind)) {
+                v = params.firstOrNull("FX.rho.vega");
+            } else {
+                String calc = fxCalcCurrency();
+                if (calc != null) {
+                    String g = "FX.rho." + fxGroup(calc) + ".";
+                    v = params.firstOrNull(g + fxGroup(a.qualifier) + "." + fxGroup(b.qualifier),
+                            g + fxGroup(b.qualifier) + "." + fxGroup(a.qualifier));
+                }
+            }
+            if (v != null) {
+                return v;
+            }
         }
         String w = a.qualifier.equals(b.qualifier) ? "sameQualifier" : "diffQualifier";
         return params.first(rc.key() + ".rho." + w + "." + bucket, rc.key() + ".rho." + w);
@@ -267,32 +442,29 @@ public final class SimmCalculator {
         if (vega.isEmpty()) {
             return 0;
         }
-        Map<String, List<Net>> byBucket = byBucket(vega);
+        Map<String, List<Net>> byBucket = byBucket(vegaRiskFactors(rc, vega, true));
         Map<String, double[]> ks = new LinkedHashMap<>();
         double[] main = new double[2];   // sumCVR, sumAbs
         double[] res = new double[2];
         double resK = 0;
         for (var e : byBucket.entrySet()) {
             String b = e.getKey();
+            if (flag(rc.key() + ".curvature.zeroBucket." + b)) {
+                continue;   // e.g. the equity volatility-index bucket
+            }
             List<Net> ns = e.getValue();
             int m = ns.size();
-            double[] cvr = new double[m];
             double sum = 0;
             double abs = 0;
-            for (int i = 0; i < m; i++) {
-                Net n = ns.get(i);
-                if (n.label1.isEmpty()) {
-                    throw new IllegalArgumentException("vega row needs label1 expiry for curvature: " + n.qualifier);
-                }
-                cvr[i] = scaling(SimmParameters.tenorYears(n.label1)) * n.amount;
-                sum += cvr[i];
-                abs += Math.abs(cvr[i]);
+            for (Net n : ns) {
+                sum += n.amount;
+                abs += Math.abs(n.amount);
             }
             double k2 = 0;
             for (int i = 0; i < m; i++) {
                 for (int j = 0; j < m; j++) {
-                    double r = i == j ? 1.0 : intraRho(rc, b, ns.get(i), ns.get(j));
-                    k2 += r * r * cvr[i] * cvr[j];
+                    double r = i == j ? 1.0 : intraRho(rc, b, ns.get(i), ns.get(j), "curvature");
+                    k2 += r * r * ns.get(i).amount * ns.get(j).amount;
                 }
             }
             double k = Math.sqrt(Math.max(0, k2));
@@ -306,8 +478,11 @@ public final class SimmCalculator {
                 ks.put(b, new double[]{k, Math.max(Math.min(sum, k), -k), 1.0});
             }
         }
-        double mult = params.firstOrNull(rc.key() + ".curvature.multiplier") == null
-                ? 1.0 : params.first(rc.key() + ".curvature.multiplier");
+        double mult = opt(1.0, rc.key() + ".curvature.multiplier");
+        if (rc == SimmRiskClass.INTEREST_RATE) {
+            double hvr = opt(1.0, "IR.hvr");
+            mult /= hvr * hvr;
+        }
         double c = curvatureFormula(main[0], main[1], Math.sqrt(Math.max(0, acrossBuckets(rc, ks, true))))
                 + curvatureFormula(res[0], res[1], resK);
         return mult * c;
@@ -339,6 +514,36 @@ public final class SimmCalculator {
         return 0.5 * Math.min(1.0, 14.0 / days);
     }
 
+    // ---------------------------------------------------------------- add-ons
+
+    /**
+     * SIMM plus the standardised additional initial margin of the
+     * methodology's section L: {@code AddOnIM + sum_p (MS_p - 1) SIMM_p},
+     * with {@code AddOnIM = addon.fixed + sum_prod addon.factor.<prod> * notional_prod}
+     * and {@code MS_p = multiplier.<ProductClass>} (default 1, at least 1).
+     *
+     * @param crif      the sensitivities
+     * @param notionals total absolute notional per add-on product name (may be empty)
+     * @return SIMM, the additional margin and their sum
+     * @throws IllegalArgumentException if a notional has no factor, or a multiplier is below 1
+     */
+    public SimmAddOnResult calculateWithAddOns(Collection<CrifSensitivity> crif, Map<String, Double> notionals) {
+        SimmResult simm = calculate(crif);
+        double add = opt(0.0, "addon.fixed");
+        for (var e : notionals.entrySet()) {
+            double factor = params.first("addon.factor." + e.getKey());
+            add += factor * Math.abs(e.getValue());
+        }
+        for (var e : simm.productClasses().entrySet()) {
+            double ms = opt(1.0, "multiplier." + e.getKey().crifName());
+            if (ms < 1.0) {
+                throw new IllegalArgumentException("product-class multiplier must be at least 1: " + ms);
+            }
+            add += (ms - 1.0) * e.getValue().margin();
+        }
+        return new SimmAddOnResult(simm, add, simm.total() + add);
+    }
+
     // ---------------------------------------------------------------- base correlation
 
     private double baseCorrMargin(List<Net> rows) {
@@ -349,10 +554,9 @@ public final class SimmCalculator {
         for (Net n : rows) {
             q.merge(n.qualifier, n.amount, Double::sum);
         }
-        double rw = params.first("CreditQ.baseCorr.rw");
         double rho = params.first("CreditQ.baseCorr.rho");
         List<Double> ws = new ArrayList<>();
-        q.values().forEach(s -> ws.add(rw * s));
+        q.forEach((fam, s) -> ws.add(params.first("CreditQ.baseCorr.rw." + fam, "CreditQ.baseCorr.rw") * s));
         double v = 0;
         for (int i = 0; i < ws.size(); i++) {
             for (int j = 0; j < ws.size(); j++) {

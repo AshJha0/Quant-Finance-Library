@@ -44,7 +44,25 @@ import java.util.TreeMap;
  *       inter-bucket correlation.</li>
  *   <li>{@code RC.curvature.multiplier}: scale on curvature margin
  *       (default 1).</li>
- *   <li>{@code CreditQ.baseCorr.rw}, {@code CreditQ.baseCorr.rho}.</li>
+ *   <li>{@code CreditQ.baseCorr.rw}, {@code CreditQ.baseCorr.rho};
+ *       {@code CreditQ.baseCorr.rw.family}: per-index-family weight.</li>
+ *   <li>{@code IR.rho.xccy}: cross-currency basis against yields and
+ *       inflation; {@code IR.delta.rw.XCcy} its risk weight.</li>
+ *   <li>{@code RC.hvr}: historical volatility ratio (default 1). Multiplies
+ *       equity, commodity and FX vega; IR curvature is divided by
+ *       {@code IR.hvr^2}.</li>
+ *   <li>{@code RC.vega.amountIsVolWeighted = 1}: the equity, commodity or FX
+ *       vega amount already includes {@code sigma_k}; skip that factor.</li>
+ *   <li>{@code RC.curvature.zeroBucket.b = 1}: curvature of bucket b is zero
+ *       (the equity volatility-index bucket).</li>
+ *   <li>FX: {@code FX.calculationCurrency.CCY = 1}, {@code FX.highVolGroup.CCY = 1},
+ *       {@code FX.category.CCY = n}; {@code FX.delta.rw.G1.G2} (G is Regular or
+ *       High; currency then calculation currency); {@code FX.rho.Gcalc.G1.G2};
+ *       {@code FX.rho.vega}; {@code FX.delta.threshold.catN};
+ *       {@code FX.vega.threshold.catI.catJ} (I &lt;= J).</li>
+ *   <li>{@code addon.fixed}, {@code addon.factor.product},
+ *       {@code multiplier.ProductClass} (CRIF name, e.g. {@code RatesFX}):
+ *       additional initial margin.</li>
  *   <li>{@code psi.RC1.RC2} (either order), {@code psi}: risk-class
  *       correlation within a product class.</li>
  *   <li>{@code label}: free text naming the calibration.</li>
@@ -186,6 +204,7 @@ public final class SimmParameters {
         }
         b.set("IR.delta.rw.Inflation", 50).set("IR.delta.rw", 60)
                 .set("IR.tenorRho", 0.5).set("IR.phi", 0.98).set("IR.rho.inflation", 0.3)
+                .set("IR.delta.rw.XCcy", 20).set("IR.rho.xccy", -0.1)
                 .set("IR.gamma", 0.3).set("IR.vega.rw", 0.2)
                 .set("IR.delta.threshold", 1.0e9).set("IR.vega.threshold", 1.0e10);
         cls(b, "CreditQ", 80, 200, 0.95, 0.4, 0.4, 0.3);

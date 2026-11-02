@@ -137,7 +137,8 @@ class SimmCalculatorTest {
     void curvatureAcrossBucketsUsesGammaSquared() {
         CrifSensitivity a = row(SimmProductClass.EQUITY, "Risk_EquityVol", "A", "1", "2w", "", 20);
         CrifSensitivity b = row(SimmProductClass.EQUITY, "Risk_EquityVol", "B", "2", "2w", "", -8);
-        SimmResult.RiskClassMargin m = new SimmCalculator(ILL).calculate(List.of(a, b))
+        SimmParameters p = SimmParameters.builder().from(ILL).set("Equity.vega.amountIsVolWeighted", 1).build();
+        SimmResult.RiskClassMargin m = new SimmCalculator(p).calculate(List.of(a, b))
                 .productClasses().get(SimmProductClass.EQUITY).riskClasses().get(SimmRiskClass.EQUITY);
         // CVR 10 and -4 (SF = 0.5); gamma^2 = 0.0225
         double root = Math.sqrt(100 + 16 + 2 * 0.0225 * 10 * -4);
