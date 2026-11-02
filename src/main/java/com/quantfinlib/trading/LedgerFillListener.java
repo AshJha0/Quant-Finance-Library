@@ -39,7 +39,7 @@ public final class LedgerFillListener implements FillListener {
     private final PositionLedger ledger;
     private final int accountId;
     private final int strategyId;
-    private long rejected;
+    private final AtomicLong rejected = new AtomicLong();
 
     public LedgerFillListener(PositionLedger ledger, int accountId, int strategyId) {
         this.ledger = Objects.requireNonNull(ledger, "ledger");
@@ -51,13 +51,13 @@ public final class LedgerFillListener implements FillListener {
     public void onFill(long execId, long orderId, int symbolId, Side side, long quantity,
                        double price, long timestampNanos) {
         if (!ledger.onFill(execId, accountId, strategyId, symbolId, side, quantity, price)) {
-            rejected++;
+            rejected.incrementAndGet();
         }
     }
 
     /** Fills the ledger refused (bad ids, full lot queue). */
     public long rejectedCount() {
-        return rejected;
+        return rejected.get();
     }
 
     /**

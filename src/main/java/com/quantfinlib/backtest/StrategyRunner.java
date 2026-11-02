@@ -186,7 +186,7 @@ public final class StrategyRunner {
         BacktestConfig cfg = new BacktestConfig(capital, 0, 0, 0, 0, 252, FillPolicy.CLOSE);
         BacktestResult r = sizing.fractional()
                 ? Backtester.run(withoutStops(strategy), tape, cfg)
-                : Backtester.runWholeLots(withoutStops(strategy), tape, cfg, sizing.lotSize());
+                : Backtester.runWholeLots(withoutStops(strategy), tape, cfg, (double) sizing.lotSize());
         List<Fill> fills = new ArrayList<>();
         for (Trade t : r.trades()) {
             fills.add(new Fill(t.entryIndex(), Side.BUY, t.entryPrice(), t.quantity()));
