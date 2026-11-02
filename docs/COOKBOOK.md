@@ -11559,3 +11559,46 @@ passed 256 fills. The cost is 36 bytes per order of capacity, so size
 `maxOrders` to the book you expect, not to the largest number you can type. The
 API and the trades delivered are unchanged.
 
+
+## 470. EMIR: fields 2.1 to 2.4 must differ (3.2)
+
+```java
+String lei = "5493001KJTIIGC8Y1R12";
+EmirRefitReport newt = EmirRefitReportBuilder.of(EmirActionType.NEWT, EmirEventType.NOVA)
+    .reportingTimestamp(java.time.Instant.parse("2026-03-02T10:00:00Z"))
+    .counterparties(lei, "529900T8BM49AURSDO55", true)
+    .uti(lei + "TRADE0002")
+    .priorUti(lei + "TRADE0002")            // 2.3, copied by mistake from 2.1
+    .build();
+List<String> problems = EmirStatefulValidator.create().validate(newt);
+// EMIR-VR-2001-04: field 2.1 ... equals field 2.3
+// EMIR-VR-2003-05: field 2.3 ... equals field 2.1
+```
+
+Rows 26 to 29 of the ESMA workbook each say the code in one of fields 2.1 (UTI),
+2.2 (report tracking number), 2.3 (prior UTI) and 2.4 (subsequent position UTI)
+"shall be different from" the other three. Since 3.2 the builder sets 2.2 to 2.4
+with `reportTrackingNumber`, `priorUti` and `subsequentPositionUti`, and the
+stateful validator checks every given pair, with no state source needed. A clash
+is reported from both sides, under each field's own code. Blank fields are not
+compared. `EmirRefitReport.validate()` is unchanged.
+
+## 471. EMIR: the client code rules under column AD's codes (3.2)
+
+```java
+String lei = "5493001KJTIIGC8Y1R12";
+EmirRefitReport r = EmirRefitReportBuilder.of(EmirActionType.NEWT, EmirEventType.TRAD)
+    .reportingTimestamp(java.time.Instant.parse("2026-03-02T10:00:00Z"))
+    .counterparties(lei, "CLIENT0001", false)   // natural person, code lacks the 1.4 prefix
+    .uti(lei + "TRADE0003")
+    .build();
+List<String> asBefore = EmirStatefulValidator.create().validate(r);                       // EMIR-VR-1009-07: ...
+List<String> asColumnAd = EmirStatefulValidator.create().withColumnAdCodes().validate(r); // EMIR-VR-1009-08: ...
+```
+
+Row 13 of the workbook prints its last four conditions with two numbers each
+("6 5." to "9 8.") but lists nine codes in column AD. The library has always
+used the second number for 1009-05 to -07. Under column AD the same checks are
+1009-06, -07 and -08, and 1009-08 is the client code prefix rule.
+`withColumnAdCodes()` rewrites those three prefixes and changes nothing else. The
+AD reading is the library's (it already takes 1009-09 from AD).

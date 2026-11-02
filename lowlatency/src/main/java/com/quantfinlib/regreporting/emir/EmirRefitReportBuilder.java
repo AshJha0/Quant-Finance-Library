@@ -171,6 +171,46 @@ public final class EmirRefitReportBuilder {
     }
 
     /**
+     * Sets field 2.2, the report tracking number (builder key {@code reportTrackingNumber}).
+     * ESMA74-362-2683 row 27: required when 2.41 is a trading venue MIC, up to 52 characters,
+     * and different from 2.1, 2.3 and 2.4 (EMIR-VR-2002-02, checked by
+     * {@link EmirStatefulValidator}).
+     *
+     * @param id the tracking number
+     * @return this
+     * @since 3.2.0
+     */
+    public EmirRefitReportBuilder reportTrackingNumber(String id) {
+        return field("reportTrackingNumber", id);
+    }
+
+    /**
+     * Sets field 2.3, the prior UTI (builder key {@code priorUti}). ESMA74-362-2683 row 28:
+     * required for NEWT with event NOVA, EXER or ALOC, and different from 2.1, 2.2 and 2.4
+     * (EMIR-VR-2003-05, checked by {@link EmirStatefulValidator}).
+     *
+     * @param uti the prior UTI
+     * @return this
+     * @since 3.2.0
+     */
+    public EmirRefitReportBuilder priorUti(String uti) {
+        return field("priorUti", uti);
+    }
+
+    /**
+     * Sets field 2.4, the subsequent position UTI (builder key {@code subsequentPositionUti}).
+     * ESMA74-362-2683 row 29: required for TERM with event INCP, and different from 2.1, 2.2
+     * and 2.3 (EMIR-VR-2004-04, checked by {@link EmirStatefulValidator}).
+     *
+     * @param uti the position UTI
+     * @return this
+     * @since 3.2.0
+     */
+    public EmirRefitReportBuilder subsequentPositionUti(String uti) {
+        return field("subsequentPositionUti", uti);
+    }
+
+    /**
      * Sets the reporting timestamp.
      *
      * @param t time
