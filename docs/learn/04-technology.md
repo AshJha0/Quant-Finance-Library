@@ -590,8 +590,10 @@ sources it was given, so a missing source skips its rules), `UtiHistory`,
 and the event types MENQ, MONO, MOOR and MONQ (rules CAT-R13 to CAT-R16).
 Since 3.2 the builder fills 2.2 to 2.4 and the validator checks 2001-04 (2.1 against 2.2 to
 2.4, with its siblings 2002-02, 2003-05 and 2004-04); `withColumnAdCodes()` reports the row 13
-client code prefix as 1009-08, column AD's number for it (recipes 470 and 471). Still not
-checked for EMIR: third-country regulated markets in 1003-01. For CAT the option lifecycle, multi-leg and supplement events, linkage across
+client code prefix as 1009-08, column AD's number for it (recipes 470 and 471). Since 4.0
+`withThirdCountryMarkets(...)` decides 1003-01 for a non-EEA venue from the caller's list of
+markets considered equivalent under EMIR Article 2a (no list is bundled; without one the rule
+still skips such a venue, recipe 490). For CAT the option lifecycle, multi-leg and supplement events, linkage across
 files and the schema gate came later in 3.1 (17j to 17l), and the other events of Tables 60
 and 61 in 3.2 (17m); still not checked are their linkage and reference data. `check` is
 batch-local, so pass a whole day's events for a firm, or use `checkFiles`. Recipes 364 and 365.

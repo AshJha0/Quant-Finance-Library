@@ -32,6 +32,10 @@ Owner decision, 2026-11-02: the revised design in [docs/DESIGN_4.0.md](docs/DESI
 - New tests: `ModuleGraphTest` fails on a module cycle or a package in two modules; the stable descriptor test fails if `jdeps` finds `java.net.http` or `jdk.httpserver` in core; descriptor tests for the two new modules.
 - The japicmp baseline moves from 3.0.0 to 3.2.0 (`scripts/fetch-api-baseline.sh`).
 
+#### Added
+
+- EMIR: `EmirStatefulValidator.withThirdCountryMarkets(ThirdCountryMarkets)`, with `ThirdCountryMarkets` and `InMemoryThirdCountryMarkets`. EMIR-VR-1003-01 now decides a venue outside the EEA when the caller supplies the list of third-country markets considered equivalent to a regulated market (EMIR Article 2a; ESMA74-362-2683, sheet Validations_Cpty_derivative, row 7, column AC, condition 1): listed on the date of 2.42 means 1.3 must be blank, otherwise populated. No list is bundled (ESMA publishes it; it is not on disk). Opt-in: without the list a non-EEA venue skips the rule, as in 3.x. Recipe 490, LEARN 17i.
+
 #### Fixed
 
 - `trading.HftOrderGateway`: on a venue cancel or reject (and an order rejected after a kill) the reservation is now released before the CANCELED or REJECTED state is published, as fills already did. Before, a thread that saw the terminal status could still read the old open quantity in the risk gate for a moment (exposure overstated, the conservative side); `OrderLifecycleTest.restingOrdersCountAgainstThePositionLimit` failed once on Windows CI from this. A repeated cancel or reject still releases nothing.

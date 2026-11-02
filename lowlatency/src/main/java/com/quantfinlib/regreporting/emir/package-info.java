@@ -41,9 +41,14 @@
  * differ). {@code withColumnAdCodes()} reports the row 13 client code rules under column AD's
  * numbering, where the prefix rule is EMIR-VR-1009-08.</p>
  *
- * <p><b>Still not checked</b>, by either validator:
- * third-country regulated markets in EMIR-VR-1003-01 (equivalence is not in ISO 10383).
- * Fields outside the populated subset (margins, collateral, leg 2, schedules, packages) are
+ * <p><b>Added in 4.0.0</b>: {@code withThirdCountryMarkets(ThirdCountryMarkets)} decides
+ * EMIR-VR-1003-01 for a venue outside the EEA from the caller's list of third-country markets
+ * considered equivalent to a regulated market (EMIR Article 2a; workbook row 7, column AC,
+ * condition 1), with {@code InMemoryThirdCountryMarkets} as a ready implementation. No list
+ * is bundled. Without it a non-EEA venue skips the rule, as before.</p>
+ *
+ * <p><b>Still not checked</b>, by either validator: third-country markets in
+ * EMIR-VR-1003-01 unless the caller supplies the equivalence list. Fields outside the populated subset (margins, collateral, leg 2, schedules, packages) are
  * not checked.</p>
  *
  * <p><b>3.0 notice.</b> Renamed to {@code com.quantfinlib.regreporting.emir} in 3.0
