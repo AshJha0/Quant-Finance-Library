@@ -11280,3 +11280,37 @@ fails when a parser throws anything other than its documented exception
 (`FixParseException`, `WireProtocolException` or `IOException`), so a new
 parser should declare that exception and get a fuzz test with a small seed
 corpus. LEARN section 19.
+
+## 450. Checking an "allocation-free" claim yourself (3.1)
+
+```bash
+# every javadoc allocation claim, core and lowlatency (tag "allocation")
+./mvnw -Djacoco.skip=true -Dgroups=allocation -pl core,lowlatency test
+```
+
+Each test warms the call up 50,000 times, then counts the bytes one batch of
+10,000 calls allocates on the test thread with
+`com.sun.management.ThreadMXBean.getCurrentThreadAllocatedBytes`. A batch may
+allocate at most 256 bytes, and the best of five batches counts. One object per
+call would put at least 160,000 bytes into every batch, so the tolerance only
+absorbs one-off events such as a deoptimisation. To test your own hot path, copy
+`AllocationProbe` from `core/src/test/java/com/quantfinlib/alloc` and call
+`AllocationProbe.assertAllocationFree("my claim", i -> handler.onTick(prices[i & 1023]))`.
+Build the inputs outside the lambda, or the test measures your test fixture.
+LEARN: Phase D notes (allocation tests).
+
+## 451. Sizing `HftOrderBook` for large sweeps (3.1)
+
+```java
+// 100,000 resting orders over a 20,000-tick ladder
+HftOrderBook book = new HftOrderBook(0, 19_999, 100_000);
+long bytes = 32L * 20_000 + 69L * 100_000;   // about 7.5 MB, plus the id map
+```
+
+Since 3.1 the book keeps a trade buffer of `maxOrders` fills, allocated in the
+constructor. A market order that sweeps every resting order therefore buffers
+all its fills without growing an array, where 3.0 copied five arrays once a sweep
+passed 256 fills. The cost is 36 bytes per order of capacity, so size
+`maxOrders` to the book you expect, not to the largest number you can type. The
+API and the trades delivered are unchanged.
+

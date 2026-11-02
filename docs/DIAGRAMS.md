@@ -4656,6 +4656,38 @@ tags are never moved) is in [PUBLISHING.md](PUBLISHING.md).
 
 ---
 
+## 23. The 4.0 module plan: what moves where
+
+Design only; 3.x ships none of these moves. Solid arrows are `requires`; the
+dashed arrows show where 3.x packages go. Details and dates are in
+[DESIGN_4.0.md](DESIGN_4.0.md).
+
+```mermaid
+flowchart LR
+    subgraph S23["quant-finance-library (stable, no java.net.http)"]
+        ST23["core, stats, pricing, rates, credit,<br/>risk, crb, volatility, hedging, fx,<br/>indicators, optimization, alpha, backtest"]
+    end
+    subgraph IO23["-io (incubating)"]
+        IOP23["data (incl. HttpBarFetcher),<br/>persist, report"]
+    end
+    subgraph RS23["-research (incubating)"]
+        RSP23["screener, dsl, ml"]
+    end
+    subgraph LL23["-lowlatency (reference)"]
+        LLP23["3.x lane packages<br/>+ execution, microstructure sims,<br/>rfq, marketdata.tick, AggregatedBook"]
+    end
+    EX23["examples classifier<br/>cli, backtest.strategies"]
+    IO23 --> S23
+    RS23 --> S23
+    LL23 --> S23
+    EX23 --> LL23
+    C30["3.x core exports"] -.-> ST23
+    C30 -.-> IOP23
+    C30 -.-> RSP23
+    C30 -.-> LLP23
+    C30 -.-> EX23
+```
+
 ## Where to go next
 
 - [LEARN.md](LEARN.md): the tutorial, covering every concept in these diagrams from first principles
