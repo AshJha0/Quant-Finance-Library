@@ -176,7 +176,7 @@ class IsdaGridVerificationTest {
             up.add(u, row.cleanUpfront(), where);
             px.add(100 * (1 - u), row.cleanPrice(), where);
             acc.add(NOTIONAL * accrued, row.accrued(), where);
-            days.add(ChronoUnit.DAYS.between(c.accrualStartDate(), stepIn), row.days(), where);
+            days.add((double) ChronoUnit.DAYS.between(c.accrualStartDate(), stepIn), row.days(), where);
             csa.add(NOTIONAL * (u - accrued), row.cashSettle(), where);
             if (!c.cashSettleDate().equals(row.cashSettleDate())) {
                 throw new AssertionError("cash settle date " + c.cashSettleDate() + " vs " + row.cashSettleDate());
