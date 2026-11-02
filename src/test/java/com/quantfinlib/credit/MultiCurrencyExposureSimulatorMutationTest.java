@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * (the Black formula for a lognormal basis is derived in
  * MultiCurrencySwapBasisTest); Monte Carlo checks use four standard errors.
  */
+@SuppressWarnings({"deprecation", "removal"}) // exercises 2.x types deprecated in 2.4.0
 class MultiCurrencyExposureSimulatorMutationTest {
 
     private static final LocalDate D0 = LocalDate.of(2026, 11, 2);

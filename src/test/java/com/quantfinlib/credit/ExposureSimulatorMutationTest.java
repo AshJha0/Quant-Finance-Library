@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * tests. All expected values are own closed forms; Monte Carlo checks use
  * four standard errors.
  */
-@SuppressWarnings("deprecation")
+@SuppressWarnings({"deprecation", "removal"})
 class ExposureSimulatorMutationTest {
 
     private static final double Z = 0.03;
