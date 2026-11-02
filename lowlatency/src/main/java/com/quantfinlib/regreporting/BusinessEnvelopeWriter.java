@@ -2,7 +2,6 @@ package com.quantfinlib.regreporting;
 
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Objects;
 
@@ -39,17 +38,56 @@ final class BusinessEnvelopeWriter {
         if (bizMsgId.isBlank() || bizMsgId.length() > 35) {
             throw new IllegalArgumentException("business message id must be 1 to 35 characters");
         }
-        String creDt = DateTimeFormatter.ISO_INSTANT.format(
-                Objects.requireNonNull(created, "created").truncatedTo(ChronoUnit.SECONDS));
-        String i = indent;
+        return appHdr(new BusinessHeader(submittingLei, ncaCountry, bizMsgId, MSG_DEF,
+                Objects.requireNonNull(created, "created")), indent);
+    }
+
+    /**
+     * Writes {@code AppHdr} from a header, with {@code Rltd} when the header has one. A party
+     * id that is a valid LEI gets scheme {@code LEI}, any other id {@code Authority code}
+     * (paragraph 132 example; using the same two schemes inside {@code Rltd} is the
+     * library's reading).
+     */
+    static String appHdr(BusinessHeader h, String indent) {
         StringBuilder sb = new StringBuilder();
-        sb.append(i).append("<AppHdr xmlns=\"").append(HEAD001).append("\">\n");
-        party(sb, i + "  ", "Fr", submittingLei, "LEI");
-        party(sb, i + "  ", "To", ncaCountry, "Authority code");
-        sb.append(i).append("  <BizMsgIdr>").append(esc(bizMsgId)).append("</BizMsgIdr>\n");
-        sb.append(i).append("  <MsgDefIdr>").append(MSG_DEF).append("</MsgDefIdr>\n");
-        sb.append(i).append("  <CreDt>").append(creDt).append("</CreDt>\n");
-        sb.append(i).append("</AppHdr>\n");
+        sb.append(indent).append("<AppHdr xmlns=\"").append(HEAD001).append("\">\n");
+        headerBody(sb, indent + "  ", h);
+        BusinessHeader rel = h.related();
+        if (rel != null) {
+            sb.append(indent).append("  <Rltd>\n");
+            headerBody(sb, indent + "    ", rel);
+            sb.append(indent).append("  </Rltd>\n");
+        }
+        sb.append(indent).append("</AppHdr>\n");
+        return sb.toString();
+    }
+
+    private static void headerBody(StringBuilder sb, String i, BusinessHeader h) {
+        party(sb, i, "Fr", h.from(), scheme(h.from()));
+        party(sb, i, "To", h.to(), scheme(h.to()));
+        sb.append(i).append("<BizMsgIdr>").append(esc(h.businessMessageId())).append("</BizMsgIdr>\n");
+        sb.append(i).append("<MsgDefIdr>").append(esc(h.messageDefinitionId())).append("</MsgDefIdr>\n");
+        sb.append(i).append("<CreDt>").append(DateTimeFormatter.ISO_INSTANT.format(h.created()))
+                .append("</CreDt>\n");
+    }
+
+    private static String scheme(String id) {
+        return Auth016Writer.isLei(id) ? "LEI" : "Authority code";
+    }
+
+    /** head.003 {@code BizData} around a header and a payload document (declaration stripped). */
+    static String wrap(String appHdr, String document) {
+        String doc = document.startsWith("<?xml") ? document.substring(document.indexOf('\n') + 1) : document;
+        StringBuilder sb = new StringBuilder();
+        sb.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+        sb.append("<BizData xmlns=\"").append(HEAD003).append("\">\n");
+        sb.append("  <Hdr>\n").append(appHdr).append("  </Hdr>\n");
+        sb.append("  <Pyld>\n");
+        for (String line : doc.split("\n")) {
+            sb.append("    ").append(line).append('\n');
+        }
+        sb.append("  </Pyld>\n");
+        sb.append("</BizData>\n");
         return sb.toString();
     }
 
@@ -79,19 +117,7 @@ final class BusinessEnvelopeWriter {
             }
         }
         String hdr = appHdr(submittingLei, ncaCountry, bizMsgId, created, "    ");
-        String doc = Auth016Writer.document(reports);
-        doc = doc.substring(doc.indexOf('\n') + 1); // drop the XML declaration
-        StringBuilder sb = new StringBuilder();
-        sb.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
-        sb.append("<BizData xmlns=\"").append(HEAD003).append("\">\n");
-        sb.append("  <Hdr>\n").append(hdr).append("  </Hdr>\n");
-        sb.append("  <Pyld>\n");
-        for (String line : doc.split("\n")) {
-            sb.append("    ").append(line).append('\n');
-        }
-        sb.append("  </Pyld>\n");
-        sb.append("</BizData>\n");
-        return sb.toString();
+        return wrap(hdr, Auth016Writer.document(reports));
     }
 
     private static String esc(String s) {

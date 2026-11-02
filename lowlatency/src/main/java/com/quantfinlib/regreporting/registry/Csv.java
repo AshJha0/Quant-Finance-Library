@@ -2,6 +2,11 @@ package com.quantfinlib.regreporting.registry;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -75,6 +80,39 @@ final class Csv {
     }
 
     static String get(List<String> row, int i) {
-        return i < row.size() ? row.get(i).trim() : "";
+        return i >= 0 && i < row.size() ? row.get(i).trim() : "";
+    }
+
+    /** Column index of an optional column, or -1 when the header lacks it. */
+    static int optional(Map<String, Integer> h, String name) {
+        return h.getOrDefault(name.toUpperCase(Locale.ROOT), -1);
+    }
+
+    /**
+     * Parses a date written {@code yyyy-MM-dd}, {@code yyyyMMdd}, or an ISO date-time. A
+     * date-time with a zone or offset is converted to its UTC date (the GLEIF golden copy
+     * mixes {@code Z} and {@code +01:00} values; ESMA reference data is in UTC); one without
+     * a zone keeps its own date. Empty gives null.
+     */
+    static @Nullable LocalDate date(String s) throws IOException {
+        String t = s.trim();
+        if (t.isEmpty()) {
+            return null;
+        }
+        try {
+            if (t.length() == 8 && t.chars().allMatch(Character::isDigit)) {
+                return LocalDate.parse(t, DateTimeFormatter.BASIC_ISO_DATE);
+            }
+            if (t.length() > 10) {
+                try {
+                    return OffsetDateTime.parse(t).withOffsetSameInstant(ZoneOffset.UTC).toLocalDate();
+                } catch (DateTimeParseException noZone) {
+                    return LocalDate.parse(t.substring(0, 10));
+                }
+            }
+            return LocalDate.parse(t);
+        } catch (DateTimeParseException e) {
+            throw new IOException("unparsable date '" + s + "'", e);
+        }
     }
 }

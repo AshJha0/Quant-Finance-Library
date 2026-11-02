@@ -1,5 +1,6 @@
 package com.quantfinlib.regreporting;
 
+import com.quantfinlib.regreporting.registry.CfiCodeRegistry;
 import com.quantfinlib.regreporting.registry.CodeRegistry;
 import com.quantfinlib.regreporting.registry.InstrumentRegistry;
 import com.quantfinlib.regreporting.registry.LeiRegistry;
@@ -14,6 +15,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 
 import static com.quantfinlib.regreporting.Rts22Field.*;
 
@@ -113,6 +115,14 @@ final class EsmaReferenceRules {
             if (has(WAIVER_INDICATOR) && eea(mics, venue).equals(Optional.of(false))) {
                 err("CON-610", "field 61 must be blank for the non-EEA venue " + venue);
             }
+        }
+        // CON-430 (rule 222): field 43 must be a CFI allowed by ISO 10962:2015 (table supplied by the caller).
+        Predicate<String> cfiCodes = refs.cfiCodes();
+        String cfi43 = v(INSTRUMENT_CLASSIFICATION);
+        if (cfiCodes != null && !cfi43.isEmpty() && !cfiCodes.test(cfi43)) {
+            String why = cfiCodes instanceof CfiCodeRegistry table ? table.problem(cfi43).map(s -> " (" + s + ")")
+                    .orElse("") : "";
+            err("CON-430", "field 43 CFI " + cfi43 + " is not allowed by ISO 10962" + why);
         }
         InstrumentRegistry instruments = refs.instruments();
         if (instruments != null) {
@@ -301,6 +311,11 @@ final class EsmaReferenceRules {
             }
             if (EsmaRules.cfi(cfi, "SC****") && !has(UP_FRONT_PAYMENT)) {
                 err("CON-381", "field 38 is mandatory for the CDS " + isin + " (CFI " + cfi + ")");
+            }
+            // CON-331 (rule 261): debt CFI in the reference data, quantity in units -> price not a percentage.
+            if (EsmaRules.unitDebtPercentage(r, cfi)) {
+                err("CON-331", "price notation is incorrect: field 33 is a percentage but field 30 is in units"
+                        + " for the debt instrument " + isin + " (CFI " + cfi + " in the reference data)");
             }
             if (ins.isCommodityDerivative(isin).orElse(false) && !has(COMMODITY_DERIVATIVE_INDICATOR)) {
                 err("CON-640", "field 64 is mandatory for the commodity derivative " + isin);
