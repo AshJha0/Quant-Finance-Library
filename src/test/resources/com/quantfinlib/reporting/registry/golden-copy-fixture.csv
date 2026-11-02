@@ -1,0 +1,5 @@
+"LEI","Entity.LegalName","Entity.LegalAddress.Country","Registration.RegistrationStatus"
+"TESTLEI0000000000A01","Example Bank, Plc","GB","ISSUED"
+"TESTLEI0000000000B02","Lapsed ""Holdings"" Ltd","DE","LAPSED"
+"TESTLEI0000000000C03","Pending Transfer SA","FR","PENDING_TRANSFER"
+"TESTLEI0000000000D04","Retired Fund","IE","RETIRED"
