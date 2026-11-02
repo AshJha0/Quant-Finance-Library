@@ -48,7 +48,9 @@ final class GarchEstimation {
         private final double[] robustSe;
 
         /**
-         * Creates the value; array and collection arguments are copied.
+         * Creates the value. The arrays are stored as given, not copied: this
+         * type is package-private and its callers hand over arrays they no
+         * longer touch. The accessors return the same arrays.
          */
         Estimate(double[] theta, double logLikelihood, double[] se, double[] robustSe) {
             this.theta = theta;

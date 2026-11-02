@@ -15,7 +15,16 @@ connectivity stack; see [docs/STABILITY.md](docs/STABILITY.md).
 
 ## Status
 
-- Version 2.1.0. Requires Java 25 (LTS).
+- Version 2.2.0. Requires Java 25 (LTS). The full suite (`./mvnw verify -Pfull`) runs
+  1,659 tests.
+- Version 2.2 is additive over 2.1 apart from two default changes:
+  `StrategyRunner` now trades whole shares, and SIMM reads equity, commodity and FX
+  vega amounts as raw dV/dsigma. New: holiday calendars and ISDA conventions,
+  multi-currency exposure and bilateral CVA, more of SA-CCR, the FRTB standardised
+  approach, a SIMM calculator for a licensed calibration, FIX 4.2 and 5.0 SP2 with
+  repeating groups, entitlements, MiFIR RTS 22 reports and corporate events in the
+  portfolio backtester. [docs/MIGRATION_2.2.md](docs/MIGRATION_2.2.md) explains how
+  to keep 2.1 behaviour.
 - Version 2.1 is additive over 2.0: multi-curve rates, the ISDA CDS model, exposure
   simulation and SA-CCR, SVI/SSVI and local volatility, a factor risk model, FIX
   session schedules, call auctions, a position ledger and versioned limits. Code
@@ -43,11 +52,11 @@ connectivity stack; see [docs/STABILITY.md](docs/STABILITY.md).
 <dependency>
   <groupId>com.github.AshJha0</groupId>
   <artifactId>Quant-Finance-Library</artifactId>
-  <version>v2.1.0</version>
+  <version>v2.2.0</version>
 </dependency>
 ```
 
-Gradle: `implementation("com.github.AshJha0:Quant-Finance-Library:v2.1.0")` with
+Gradle: `implementation("com.github.AshJha0:Quant-Finance-Library:v2.2.0")` with
 `maven("https://jitpack.io")` in `repositories`.
 
 The jars attached to each GitHub release can also be put on a classpath directly.
@@ -120,7 +129,7 @@ public class QuickStart {
 The same backtest runs without writing Java through the bundled command line:
 
 ```bash
-java -jar target/quant-finance-library-2.1.0.jar backtest \
+java -jar target/quant-finance-library-2.2.0.jar backtest \
     --csv bars.csv --symbol SPY --strategy sma --fast 10 --slow 30 --out report.html
 ```
 
@@ -149,8 +158,10 @@ with a summary; the javadoc is published at
   Nelson-Siegel and Svensson fits, short-rate models, key-rate durations.
 - `credit`: hazard-rate curve bootstrapped from CDS par spreads, CDS legs and par
   spread, the ISDA CDS Standard Model (IMM dates, upfront and quoted-spread
-  conversion), bond Z-spread, Monte Carlo netting-set exposure (EE, PFE, EPE) with a
-  CSA, CVA, DVA and wrong-way CVA.
+  conversion, holiday calendars and half-day accrual as options, checked against the
+  ISDA RFR test grids), bond Z-spread, Monte Carlo netting-set exposure (EE, PFE, EPE)
+  with a CSA, single-currency or multi-currency (several FX pairs, multi-curve swaps),
+  CVA, DVA, bilateral CVA and wrong-way CVA.
 - `fx`: currency pair conventions, swap points, FX swaps, NDFs, a delta-quoted FX
   volatility surface (forward or spot delta, premium adjustment, broker strangle
   butterflies), fixing risk, aggregated LP books and cross rates.
@@ -163,8 +174,17 @@ with a summary; the javadoc is published at
   definition (`TailRisk`), extreme value theory, copulas, PCA, stress testing,
   component VaR, VaR backtests (Kupiec, Christoffersen, Acerbi-Szekely), FRTB-style ES
   and P&L attribution, PSD repair and nearest correlation matrix, limits,
-  counterparty exposure, SA-CCR (BCBS 279) and a market, sector and style factor
+  counterparty exposure, SA-CCR (BCBS 279, with basis and volatility hedging sets,
+  shared margin agreements and collateral haircuts), the FRTB standardised approach
+  (sensitivities-based method, default risk charge, residual risk add-on) and NMRF
+  stress capital, and a market, sector and style factor
   risk model with risk decomposition. See [docs/MARKET_RISK.md](docs/MARKET_RISK.md).
+- `risk.simm`: an ISDA SIMM calculator that reads CRIF sensitivities and a
+  calibration file you license from ISDA; only an illustrative calibration ships.
+  See [docs/SIMM.md](docs/SIMM.md).
+- `entitlements`, `reporting`: deny-overrides entitlements with time-bounded grants,
+  an audit log and a pre-trade check; a MiFIR RTS 22 transaction report builder with
+  LEI, ISIN and MIC check-digit validation.
 - `crb`: a central risk book that nets equity and FX products onto one factor space,
   with internalisation, cost-aware hedging and routing. See
   [docs/CENTRAL_RISK_BOOK.md](docs/CENTRAL_RISK_BOOK.md).
@@ -183,8 +203,9 @@ with a summary; the javadoc is published at
   capacity curves.
 - `backtest`: bar, portfolio, tick-level and execution-algorithm backtesters, cost
   models, walk-forward analysis, purged k-fold, deflated Sharpe ratio, bootstrap
-  tools, and `StrategyRunner`, which runs one strategy on the bar, tick and
-  paper-trading engines.
+  tools, corporate events (spin-offs, rights, reverse splits, mergers and more) in the
+  portfolio backtester, and `StrategyRunner`, which runs one strategy on the bar, tick
+  and paper-trading engines in whole shares.
 - `indicators`, `screener`, `dsl`, `ml`, `simulation`, `report`, `cli`: technical
   indicators (batch and streaming), a stock screener, a rule-based strategy builder,
   regime and volatility forecasting models, Monte Carlo simulation, HTML/PDF/XLSX/CSV
@@ -197,10 +218,11 @@ with a summary; the javadoc is published at
 - `marketdata`, `orderbook`, `trading`: single-producer ring buffers, a market-data
   bus, a price-ladder matching engine, opening and closing call auctions, a pre-trade
   risk gate with a kill switch and versioned, audited limits, a position and P&L
-  ledger with drop-copy reconciliation, an
+  ledger with drop-copy reconciliation, fed from gateway fills by `LedgerFillListener`, an
   order gateway with cancel/replace and an order state machine, quoting and auto
   hedging, a paper-trading venue. See [docs/ULTRA_LOW_LATENCY.md](docs/ULTRA_LOW_LATENCY.md).
-- `fix`, `sbe`, `feed`, `data`: a FIX 4.4 session with a CRC-checked journal, session schedules and
+- `fix`, `sbe`, `feed`, `data`: a FIX session (4.4 by default, 4.2 and 5.0 SP2 over
+  FIXT.1.1 as options, repeating groups from a dictionary) with a CRC-checked journal, session schedules and
   NextExpectedMsgSeqNum, SBE-style
   binary codecs (schema 2), ITCH 5.0 decoding and MoldUDP64 framing, a WebSocket feed,
   tick capture and replay files.
@@ -212,21 +234,21 @@ with a summary; the javadoc is published at
 These are common requirements that the library does not cover, or covers only in
 part. Code that needs them should use a specialised library or add them.
 
-- SIMM, the FRTB standardised approach, NMRF capital and other regulatory capital
-  beyond the FRTB-style ES pieces and SA-CCR. SA-CCR has no basis or volatility
-  hedging sets, one margin agreement per netting set, and no collateral haircuts.
-- The ISDA CDS model has not been checked against the Markit test grid (its legs are
-  checked against numerical quadrature), applies weekends only as holidays and has no
-  half-day accrual-on-default adjustment.
-- The exposure simulator prices single-curve swaps and one FX pair with a
-  deterministic foreign rate; DVA is unilateral.
-- `StrategyRunner`'s bar engine trades fractional shares, so it matches the tick and
-  paper engines exactly only when cash over price is a whole number.
-- `PositionLedger` is not wired to gateway fills automatically; the caller feeds it.
-- FIX versions other than 4.4, FIX repeating-group dictionaries, entitlements and
-  regulatory reporting.
+- SIMM with the official ISDA calibration, and the ISDA SIMM unit tests. Both are
+  licensed by ISDA; the repository holds an illustrative calibration only.
+- FRTB SA certification, securitisation, and the inputs left to the caller (CSR
+  inter-bucket correlations, GIRR inflation and basis correlations, equity repo).
+- The CRE22 (2017) SA-CCR collateral haircut table; haircuts follow Basel II para 151.
+- Exposure for foreign-currency swaps, a stochastic basis, and wrong-way risk
+  together with bilateral CVA.
+- Trade busts and corrections in `PositionLedger` and the fill listeners.
+- The hot-path FIX order encoder writes FIX 4.4 only; message views are not
+  dictionary-driven; no per-message ApplVerID.
+- MiFIR XSD validation and ESMA auth.016 output, GLEIF, FIRDS and ISO 10383 lookups,
+  and CAT or EMIR reports.
+- Corporate-action elections and cost basis inside the portfolio backtester
+  (`CorporateEventPositions` handles them for single holdings).
 - Live broker or exchange connectivity, certification, and kernel-bypass networking.
-- Corporate actions beyond splits, cash dividends, delistings and mergers.
 - A smaller public API surface is planned for 3.0; 2.x keeps every 2.0 public type.
 
 ## Performance
@@ -240,12 +262,14 @@ Benchmark method, environment and results are in [docs/BENCHMARKS.md](docs/BENCH
 | [GETTING_STARTED.md](docs/GETTING_STARTED.md) | Build, first backtest, paper trading, benchmarks, troubleshooting |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Package map, data flow, design rules |
 | [STABILITY.md](docs/STABILITY.md) | Stable APIs, reference implementations, versioning policy |
+| [MIGRATION_2.2.md](docs/MIGRATION_2.2.md) | The two 2.2 default changes and how to keep 2.1 behaviour |
 | [MIGRATION_2.1.md](docs/MIGRATION_2.1.md) | What 2.1 adds and how to adopt it |
 | [MIGRATION_2.0.md](docs/MIGRATION_2.0.md) | Breaking changes from 1.x |
 | [LEARN.md](docs/LEARN.md) | Tutorial from first principles, with exercises |
 | [COOKBOOK.md](docs/COOKBOOK.md) | Runnable recipes |
 | [DIAGRAMS.md](docs/DIAGRAMS.md) | Mermaid diagrams of the main flows |
 | [MARKET_RISK.md](docs/MARKET_RISK.md) | The market-risk workflow mapped to classes |
+| [SIMM.md](docs/SIMM.md) | The SIMM calculator, calibration file keys and licensing |
 | [CENTRAL_RISK_BOOK.md](docs/CENTRAL_RISK_BOOK.md) | Central risk book design |
 | [ULTRA_LOW_LATENCY.md](docs/ULTRA_LOW_LATENCY.md) | The trading lane, its order lifecycle and tuning |
 | [BENCHMARKS.md](docs/BENCHMARKS.md) | How performance is measured, and results |

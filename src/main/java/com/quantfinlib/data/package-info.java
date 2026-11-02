@@ -9,7 +9,10 @@
  * deterministic replay), {@link com.quantfinlib.data.SeriesAligner}
  * (timestamp intersection / union+forward-fill for ragged multi-asset data)
  * {@link com.quantfinlib.data.CorporateActions} (split/dividend
- * back-adjustment) and {@link com.quantfinlib.data.PointInTimeUniverse}
+ * back-adjustment), {@link com.quantfinlib.data.CorporateEvents} and
+ * {@link com.quantfinlib.data.CorporateEventPositions} (bonus issues,
+ * reverse splits, special dividends, spin-offs, rights, symbol changes,
+ * cash-and-stock mergers) and {@link com.quantfinlib.data.PointInTimeUniverse}
  * (as-of membership + delisting/merger terminal events — the engine half of
  * survivorship-bias-free backtesting, consumed by the universe-aware
  * {@code PortfolioBacktester} overload and {@code StockScreener.membersAsOf})

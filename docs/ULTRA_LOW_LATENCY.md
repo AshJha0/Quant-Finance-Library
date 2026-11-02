@@ -123,7 +123,9 @@ trips when an exposed symbol has no reference price.
 
 ## 6. Protocol edges
 
-**FIX 4.4 (`fix`).** `FixSession` handles logon, heartbeats, test requests, resend
+**FIX (`fix`).** FIX 4.4 by default; `FixSessionOptions.withVersion` selects FIX 4.2
+or FIX 5.0 SP2 over FIXT.1.1, and `FixDictionary` validates repeating groups on
+receipt. `FixSession` handles logon, heartbeats, test requests, resend
 requests, sequence resets and logout, with validation of CompIDs, SendingTime
 (default tolerance 120 s), PossDup and OrigSendingTime. An application message before
 Logon disconnects; a well-framed message with a bad field gets a session Reject
@@ -254,12 +256,14 @@ symbol-routing facade. A symbol can be registered on several shards;
 
 - Kernel-bypass networking, thread affinity and NIC hardware timestamps (need native
   code).
-- FIX versions other than 4.4 and data dictionaries for repeating groups. Session
-  schedules (`fix.FixSessionSchedule`) and NextExpectedMsgSeqNum are implemented.
-- Order audit trails for regulators and entitlement checks. Drop-copy reconciliation
-  (`trading.DropCopyReconciler`) compares fills the caller supplies; nothing connects
-  a drop-copy session.
-- `trading.PositionLedger` is not fed from gateway fills automatically.
+- The hot-path order encoder (`FixOrderEncoder`) writes FIX 4.4 only, message views
+  are not dictionary-driven, and there is no per-message ApplVerID.
+- Order audit trails for regulators. Entitlement checks (`entitlements`) and RTS 22
+  reports (`reporting`) exist; drop-copy reconciliation
+  (`trading.DropCopyReconciler`) compares fills the caller supplies, and nothing
+  connects a drop-copy session.
+- Trade busts and corrections. Gateway fills reach `trading.PositionLedger` through
+  `LedgerFillListener` once it is registered with `HftOrderGateway.addFillListener`.
 - `orderbook.AuctionBook` leaves out the market-pressure step some venues apply
   before the reference-price tie-break.
 - Venue certification; the adapters have only run against in-process venues and

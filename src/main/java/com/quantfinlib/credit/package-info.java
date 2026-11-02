@@ -9,7 +9,12 @@
  * exposes the risky annuity (risky DV01);
  * {@link com.quantfinlib.credit.CreditSpreads} translates bond prices
  * into Z-spreads over the risk-free curve, the number that pairs with
- * the CDS par spread to form the cds-bond basis. Research lane;
+ * the CDS par spread to form the cds-bond basis.
+ * {@link com.quantfinlib.credit.IsdaCdsModel} is the ISDA CDS Standard
+ * Model; {@link com.quantfinlib.credit.ExposureSimulator} and
+ * {@link com.quantfinlib.credit.MultiCurrencyExposureSimulator} simulate
+ * netting-set exposure, and {@link com.quantfinlib.credit.CvaApproximator}
+ * turns it into CVA, DVA, bilateral and wrong-way CVA. Research lane;
  * discretization choices stated on each class.
  */
 @NullMarked

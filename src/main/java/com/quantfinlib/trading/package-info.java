@@ -37,5 +37,13 @@
  * the same order state machine) observed through
  * {@link com.quantfinlib.trading.TradingDashboard} (embedded HTTP, bound to
  * loopback by default).</p>
+ *
+ * <p><b>Post-trade</b>: {@link com.quantfinlib.trading.HftOrderGateway#addFillListener}
+ * publishes every accepted fill, with the venue execution id, to
+ * {@link com.quantfinlib.trading.FillListener}s;
+ * {@link com.quantfinlib.trading.LedgerFillListener} books them into a
+ * {@link com.quantfinlib.trading.PositionLedger}, which
+ * {@link com.quantfinlib.trading.DropCopyReconciler} checks against a drop
+ * copy.</p>
  */
 package com.quantfinlib.trading;

@@ -1259,10 +1259,15 @@ upfront is 8.39% of notional, paid by the protection buyer.
 *In this library:* `credit/IsdaCdsModel.java` (`standardContract`,
 `standardMaturity`, `schedule`, `protectionLeg`, `riskyAnnuityClean`,
 `parSpread`, `quotedSpreadToUpfront`, `upfrontToQuotedSpread`,
-`bootstrap`) and `credit/IsdaCurve.java`. Not implemented: the Markit
-test grid is not reproduced (the legs are checked against quadrature to
-1e-10 instead); holiday calendars (weekends only); the half-day
-accrual-on-default adjustment. Recipes 303 and 304.
+`bootstrap`, `Conventions`) and `credit/IsdaCurve.java`, with
+`rates/HolidayCalendars.java` for the New York Fed, London, TARGET and
+Tokyo calendars. The legs are checked against quadrature to 1e-10, and
+the model against the official ISDA RFR test grids for 2021-04-26 and
+2022-06-21 (14,328 rows; cash settlement within 1e-6 USD per 10mm, own
+test, run only when the licensed grids are present). The default
+conventions are weekends only without the half-day accrual-on-default
+adjustment, as in 2.1; the 2022 grid needs both switched on. Recipes 303,
+304 and 333.
 
 ### 10f. Counterparty exposure, CVA, DVA and wrong-way risk
 
@@ -1314,12 +1319,14 @@ margin period, EPE falls to about 0.23 and CVA to about 0.015.
 *In this library:* `credit/ExposureSimulator.java` (`simulate` over
 `Swap`s and `FxForward`s with an optional `Csa`), `credit/ExposureProfile.java`
 (`expectedExposure`, `expectedNegativeExposure`, `pfe`, `epe`), and
-`credit/CvaApproximator.java` (`cva`, `dva`, `cvaWrongWay`). Not
-implemented: multi-curve swaps (exposure swaps are single-curve), more
-than one FX pair, stochastic foreign rates, bilateral DVA with
-first-to-default, and a single joint default time across buckets for
-wrong-way risk (each bucket has its own path driver).
-Recipes 305 and 306.
+`credit/CvaApproximator.java` (`cva`, `dva`, `cvaWrongWay`, and
+`bilateral`, which conditions on who defaults first with independent
+defaults). `credit/MultiCurrencyExposureSimulator.java` adds multi-curve
+swaps with a fixed basis and several FX pairs with correlated Hull-White
+foreign rates. Not implemented: foreign-currency swaps, a stochastic
+basis, wrong-way risk together with bilateral CVA, and a single joint
+default time across buckets for wrong-way risk (each bucket has its own
+path driver). Recipes 305, 306 and 334.
 
 ### 10g. SA-CCR: the regulatory exposure
 
@@ -1356,10 +1363,12 @@ the money, and `EAD = 1.4 x (60 + 346.8) = 569`.
 *In this library:* `risk/SaCcr.java` (`unmargined`, `margined`,
 `supervisoryDuration`, `optionDelta`, `maturityFactor`) and
 `risk/SaCcrTrade.java` (`interestRate`, `fx`, `credit`, `equity`,
-`commodity`). The tests reproduce Annex 4a Examples 1 to 5. Not
-implemented: basis and volatility hedging sets, several margin agreements
-per netting set, and collateral haircuts (pass collateral already
-haircut). Recipes 307 and 308.
+`commodity`, `asBasis`, `asVolatility`), with
+`oneMarginAgreementManyNettingSets` and `subNettingSets` for margin
+agreements that do not line up with netting sets, and
+`risk/SaCcrHaircuts.java` for the Basel II paragraph 151 haircuts. The
+tests reproduce Annex 4a Examples 1 to 5. Not implemented: the CRE22
+(2017) haircut table. Recipes 307, 308 and 335.
 
 ### 10h. Smiles without arbitrage: SVI and SSVI
 
@@ -1600,6 +1609,108 @@ before the ex-date.
 `BinomialTree` with no dividends and matches the exact one-dividend
 integral for European and American calls. Recipe 317.
 
+### 10o. The FRTB standardised approach
+
+The standardised approach turns a book's sensitivities into capital with
+fixed regulatory weights and correlations, so two banks with the same
+book get the same number. It has three parts: the sensitivities-based
+method (delta, vega and curvature), a default risk charge for jump to
+default, and a small add-on for risks the first two do not capture.
+
+Formally, within a bucket `b` each sensitivity `s_k` becomes a weighted
+sensitivity `WS_k = RW_k s_k`, and
+
+```
+K_b = sqrt( max(0, sum_k WS_k^2 + sum_k sum_{l != k} rho_kl WS_k WS_l) )
+S_b = sum_k WS_k
+Delta = sqrt( sum_b K_b^2 + sum_b sum_{c != b} gamma_bc S_b S_c )
+```
+
+(BCBS d457, MAR21.4 to 21.5). The calculation is repeated with every
+`rho` and `gamma` scaled for low, medium and high correlation, and the
+capital is the largest of the three totals. Curvature uses the worse of
+an up and a down shock less the delta part, `CVR`.
+
+Worked example (own computation). Two GIRR sensitivities in one currency
+with weighted values 30 and -20 and a correlation of 0.6. Then
+`K_b = sqrt(900 + 400 - 2 x 0.6 x 600) = sqrt(580) = 24.1`. With the high
+scenario, `rho = min(1, 1.25 x 0.6) = 0.75`, and `K_b = sqrt(400) = 20`.
+The hedge is worth more when correlation is high, so here the low
+scenario, not the high one, can set the capital.
+
+*In this library:* `risk/FrtbSa.java` (`Bucket`, `bucket`, `deltaVega`,
+`curvature`, `cvr`, `RiskClass`, `sbmCapital`, and the `Girr`, `Fx`,
+`Equity`, `Commodity`, `Csr` parameter tables), `risk/FrtbDrc.java`
+(jump to default, hedge benefit ratio, bucket charge), `risk/FrtbRrao.java`
+and `risk/FrtbNmrf.java` (MAR33 stress scenario capital). The classes
+follow d457 but are not certified. The CSR risk weights are marked for
+checking against the text; CSR inter-bucket correlations, GIRR inflation
+and basis correlations, equity repo and securitisation are left to the
+caller. Recipe 336.
+
+### 10p. ISDA SIMM initial margin
+
+Two dealers facing each other on uncleared derivatives post initial
+margin, and they need to agree the amount without trusting each other's
+models. SIMM is the shared recipe: both feed the same sensitivities, in
+the CRIF file format, through the same formulas with the same published
+calibration.
+
+Formally, SIMM has the same shape as the FRTB method above. Within a
+bucket, `K_b = sqrt( sum_k WS_k^2 + sum_{k != l} rho_kl f_kl WS_k WS_l )`
+with concentration factors `CR_k` folded into `WS_k = RW_k s_k CR_k`.
+Buckets combine with `gamma_bc`, risk classes within a product class with
+the `psi` matrix, and product classes add. Margin for a risk class is
+`delta + vega + curvature + base correlation` (ISDA SIMM methodology,
+public text, version 2.9+2606).
+
+Worked example (own computation). The curvature term rescales each vega
+by a function of option expiry: `SF(t) = 0.5 min(1, 14 / days)`. A
+two-week option gets `SF = 0.5`, a one-year option
+`0.5 x 14 / 365 = 0.0192`, so curvature is a short-dated effect.
+`SimmCalculator.scaling(1.0)` returns that 0.0192.
+
+*In this library:* `risk/simm/SimmCalculator.java` (`calculate`,
+`riskClassMargin`, `calculateWithAddOns`), `SimmParameters` (a
+calibration loaded from a key-value file), `CrifSensitivity`
+(`parseCsv`). Only `SimmParameters.illustrative()` ships, and it is
+not an ISDA calibration; the official numbers and ISDA's unit tests are
+licensed and must come from ISDA. Equity, commodity and FX vega amounts
+are raw dV/dsigma unless `RC.vega.amountIsVolWeighted = 1`. See
+`docs/SIMM.md` and recipe 337.
+
+### 10q. Corporate events beyond splits and dividends
+
+A position is a number of shares of one ISIN, and corporate events
+change all three: the number, the security and sometimes the cash. A
+backtest that ignores them books a 10-for-1 reverse split as a 900%
+gain, or a spin-off as a loss equal to the child's value.
+
+Formally, each event maps a holding `(symbol, isin, shares, cost)` and an
+ex-date price to new holdings and cash. A rights issue of `r` new shares
+per old at subscription price `X` has the theoretical ex-rights price
+
+```
+TERP = (P_cum + r X) / (1 + r)
+```
+
+and a holder who sells the rights receives `P_cum - TERP` per old share.
+
+Worked example (own computation). Cum price 10, one new share for every
+four old at 6, so `r = 0.25`. `TERP = (10 + 1.5) / 1.25 = 9.20`, and each
+old share's right is worth 0.80. A holder of 100 shares who sells the
+rights ends with 100 shares at 9.20 and 80 in cash, 1,000 in all, as
+before.
+
+*In this library:* `data/CorporateEvents.java` (bonus issue, reverse
+split, regular and special dividends with a policy, spin-off, rights with
+`terp`, symbol and ISIN change, cash-and-stock merger, `priceFactor`,
+`volumeFactor`), `data/CorporateEventPositions.java` (`apply`,
+`takeUpRights`, `merger` with proration). `PortfolioBacktester.run`
+takes a map of events as an opt-in overload; in it a merger assumes the
+holder elects cash on exactly the maximum fraction and no cost basis is
+kept. Recipe 341.
+
 ### 11. Backtesting without fooling yourself
 
 A **backtest** replays history against your strategy. The ways it lies to
@@ -1674,11 +1785,11 @@ fills.
 The contract here is narrow: the strategy is asked once per
 bar after the close, a buy while flat spends all cash and a sell while
 long sells everything, both at the close, with no costs. That is the only
-setting in which the three fill models coincide. The bar engine buys
-`cash/price` shares, possibly fractional; the tick and paper engines buy
-`floor(cash/price)` whole shares. So tick and paper always agree with
-each other, and all three agree exactly when `cash/price` is whole at
-every entry. Costs, spreads, limit orders and queue models differ by
+setting in which the three fill models coincide. From 2.2 every engine
+buys `floor(cash/price)` whole shares by default, so all three agree
+exactly. `StrategyRunner.Sizing.fractionalShares()` brings back the 2.1
+bar engine, which buys `cash/price` shares, fractions included, and then
+agrees with the others only when `cash/price` is whole at every entry. Costs, spreads, limit orders and queue models differ by
 engine and are outside the contract.
 
 *In this library:* `backtest/StrategyRunner.java` (`run(Engine,
@@ -2160,6 +2271,45 @@ runs from 21:00Z to 22:00Z the next day: 25 hours.
 `fix/FileSessionStore.java` keeps the period in its `session.period`
 file. A Logon outside the window is refused, and an established session
 logs out when the window closes. Recipes 325 and 326.
+
+### 17c. FIX versions, repeating groups, and what happens after a fill
+
+Counterparties do not all speak FIX 4.4. Older brokers still run 4.2,
+and newer venues run FIX 5.0 SP2, where the session layer (FIXT.1.1) is
+split from the application version. Most real messages also carry
+repeating groups: several parties on one order, several legs, several
+market-data entries.
+
+Formally, a repeating group is a count tag `N` followed by `N` instances,
+each starting with the group's delimiter tag and using only the group's
+member tags, possibly with nested groups. A receiver validates three
+things: the first tag of each instance is the delimiter, no tag outside
+the group appears inside it, and the number of instances equals the
+count. Failures are session rejects with reason 16 (incorrect NumInGroup)
+or 15 (fields out of order).
+
+Worked example. Two parties on a NewOrderSingle:
+`453=2|448=TRADER1|447=D|452=11|448=FIRM1|447=D|452=1|`. Tag 453 says
+two instances, 448 opens each one, and 447 and 452 are members. Writing
+`453=3` with the same body is a reason 16 reject.
+
+After the fill, three controls in the library sit on either side of the
+gateway. Before the order leaves, `EntitlementPreTradeCheck` asks
+whether this user may trade this instrument on this venue for this
+account: default deny, a matching deny beats any allow, every decision
+logged. When a fill comes back, the gateway hands it, with the venue's
+execution id, to every registered `FillListener`; `LedgerFillListener`
+books it into a `PositionLedger`, which refuses a repeated execution id.
+After the day, `Rts22ReportBuilder` turns each fill into a MiFIR RTS 22
+transaction report and checks the LEI, ISIN and MIC check digits.
+
+*In this library:* `fix/FixVersion.java`, `FixDictionary.java`,
+`FixGroupDef.java`, `FixGroup.java`, `FixSessionOptions.withVersion`;
+`entitlements/`; `trading/FillListener.java`, `LedgerFillListener.java`;
+`reporting/`. The hot-path order encoder writes FIX 4.4 only. The report
+builder checks shapes and check digits only; it does not look anything
+up in GLEIF, FIRDS or ISO 10383, and its XML is not the ESMA auth.016
+message. Recipes 338, 339, 340 and 342.
 
 ### 18. Scaling out and staying safe
 
@@ -25739,12 +25889,12 @@ correlation entirely. The direction of the error is always the dangerous one:
 too small. The fixes are a wrong-way multiplier (an alpha add-on)
 or a joint simulation that correlates the exposure paths with the hazard;
 the approximator ships the independent baseline and documents
-the understatement rather than pretending it away. It is also unilateral:
-no DVA netting.
+the understatement rather than pretending it away. `cva` itself is
+unilateral; `bilateral` nets CVA and DVA with first-to-default.
 
 *In this library:* `credit/CvaApproximator.java` -- `cva`; the
-independence/wrong-way understatement and the unilateral limit are stated
-explicitly in the class doc.
+independence/wrong-way understatement is stated in the class doc, and
+`bilateral` gives the first-to-default version.
 
 ### 935. "You calibrated a CIR short-rate model. What must you check before you simulate with it?"
 
@@ -27228,8 +27378,9 @@ so the cash settlement includes the accrued amount in the buyer's favour. Protec
 upfront settles at T+3 business days.
 
 *In this library:* `credit/IsdaCdsModel.java` (`standardMaturity`,
-`nextImmDate`, `previousImmDate`, `accrualStartDate`, `schedule`).
-Holidays are not applied: the calendar is weekends only.
+`nextImmDate`, `previousImmDate`, `accrualStartDate`, `schedule`). The
+default calendar is weekends only; pass a `rates.HolidayCalendars`
+calendar to the overloads that take one.
 
 ### 1006. "How do you check a CDS pricer without the vendor's test grid?"
 
@@ -27356,14 +27507,17 @@ to 5; `SaCcr.optionDelta` gives the swaption delta.
 
 ### 1013. "What does the library's SA-CCR leave out?"
 
-Basis and volatility hedging sets (paras 162-163), netting sets covered
-by several margin agreements (paras 185-187) and collateral haircuts,
-which the caller applies before passing `C`. It also takes year
-fractions the caller computes rather than dates. Those gaps matter for a
-bank's full calculation; they do not change the mechanics a reader needs
-to follow the standard.
+Less than it did in 2.1. Basis and volatility hedging sets (paras
+162-163), netting sets covered by several margin agreements and several
+agreements inside one netting set (paras 185-187), and supervisory
+collateral haircuts are in since 2.2. What is still left out is the CRE22
+(2017) haircut table: the haircuts follow Basel II paragraph 151 with an
+8% currency-mismatch add-on. The calculator also takes year fractions the
+caller computes rather than dates. Two interpretive choices in the new
+code are marked in the javadoc. None of this changes the mechanics a
+reader needs to follow the standard.
 
-*In this library:* `risk/SaCcr.java` class javadoc, "Out of scope".
+*In this library:* `risk/SaCcr.java` class javadoc, `risk/SaCcrHaircuts.java`.
 
 ---
 
@@ -28663,7 +28817,8 @@ the code returns the deterministic limits rather than NaN.
   exposure. `credit/ExposureSimulator.java`; Brigo and Mercurio (2006),
   eq. 3.39.
 - `CVA = LGD sum_i E[D(0,t_i) E(t_i)] (PD(t_i) - PD(t_{i-1}))`;
-  `DVA` the same with own default and negative exposure. Unilateral.
+  `DVA` the same with own default and negative exposure. Unilateral;
+  `CvaApproximator.bilateral` weights each by the other party's survival.
   `credit/CvaApproximator.java`; Gregory, *The xVA Challenge* (2015).
 - `P(bucket i | X_i) = Phi((Phi^-1(PD_i) + rho X_i)/sqrt(1-rho^2)) - Phi((Phi^-1(PD_{i-1}) + rho X_i)/sqrt(1-rho^2))`,
   `X_i = W(t_i)/sqrt(t_i)` without a CSA, `(W(t_i) - W(t_i - MPR))/sqrt(MPR)` with one.

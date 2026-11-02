@@ -76,7 +76,7 @@ flowchart LR
     GATE -->|"reject = int code"| X(["counted, not thrown"])
     ORING -->|"venue thread"| OUT["OrderListener<br/>onNewOrder · onCancel ·<br/>onReplace · onCancelAll"]
     OUT --> SBEOUT["BinaryOrderPublisher<br/>(SBE header + 40-byte body,<br/>non-blocking, circuit breaker)"]
-    OUT --> FIXOUT["FixSession<br/>(FIX 4.4, journalled store,<br/>resend recovery)"]
+    OUT --> FIXOUT["FixSession<br/>(FIX 4.4 default, 4.2 or 5.0 SP2,<br/>journalled store, resend recovery)"]
     SBEOUT & FIXOUT -.->|"acks, fills, cancels, rejects"| EXEC["HftOrderGateway<br/>onAck · onFill · onCanceled ·<br/>onReplaced · onReject"]
     EXEC -.->|"fill: position;<br/>done: release reservation"| GATE
 ```
@@ -1897,7 +1897,7 @@ flowchart TD
     LH46["liquidity horizons LH_10 ... LH_120:<br/>how long each factor class takes<br/>to exit under stress: 10d major<br/>FX/rates, up to 120d exotic credit;<br/>esByHorizon[j] = ES with only<br/>factors of LH >= horizons[j] shocked"]
     CASC46["FrtbEs.liquidityHorizonEs (MAR33.4):<br/>ES = sqrt( sum_j [ ES_j x<br/>sqrt((LH_j - LH_j-1)/10) ]^2 )"]
     STRESS46["FrtbEs.stressCalibratedEs (MAR33.5-33.6):<br/>ES = ES_R,S x max(1, ES_F,C / ES_R,C)<br/>reduced set over the stressed period,<br/>scaled by full/reduced measured today;<br/>rejected if ES_R,C below 75% of ES_F,C"]
-    CAP46(["the capital number<br/>(not implemented: desk approvals,<br/>NMRF capital, the SA floor)"])
+    CAP46(["the capital number<br/>(not implemented: desk approvals,<br/>the SA floor; NMRF in FrtbNmrf)"])
 
     BT46["VarBacktest: Kupiec POF +<br/>Christoffersen independence +<br/>conditional coverage, with p-values;<br/>acerbiSzekelyZ2 for ES"]
     TL46["FrtbEs.TrafficLight over 250 days<br/>of 99% VaR exceptions:<br/>GREEN <= 4: model fine<br/>AMBER 5-9: multiplier rises<br/>RED >= 10: model presumed wrong"]
@@ -1932,8 +1932,9 @@ crises fails here), and their joint conditional-coverage p-value, while
 `TrafficLight.of` is the one-page summary supervisors actually use:
 count the 250-day exceptions and read the colour. The formulas follow
 BCBS MAR32/MAR33 and are pinned by tests, but this is not a certified
-implementation. Not implemented: desk approvals, NMRF capital and the
-standardized-approach floor (see `docs/MARKET_RISK.md`). P&L attribution
+implementation. NMRF stress capital is `FrtbNmrf` and the standardised approach
+`FrtbSa`. Not implemented: desk approvals and the standardised-approach floor (see
+`docs/MARKET_RISK.md`). P&L attribution
 is in `PnlAttribution` (diagram 14).
 
 ---
@@ -4465,11 +4466,11 @@ flowchart LR
     STRAT_106["TradingStrategy"]
     TAPE_106["BarSeries tape"]
     WRITE_106["writeTape<br/>one print per bar at the close"]
-    BAR_106["BAR_BACKTESTER<br/>Backtester, close fills,<br/>fractional shares"]
+    BAR_106["BAR_BACKTESTER<br/>Backtester, close fills,<br/>whole shares (Sizing)"]
     TICK_106["TICK_BACKTESTER<br/>TickBacktester,<br/>whole shares"]
     PAPER_106["PAPER_GATEWAY<br/>PaperTradingGateway,<br/>bid = ask = close"]
     FILLS_106["Run.fills<br/>(index, side, price, quantity)"]
-    CMP_106["compare<br/>tick = paper always,<br/>bar = tick when cash/price is whole"]
+    CMP_106["compare<br/>all three agree with whole shares;<br/>fractionalShares: bar = tick<br/>only when cash/price is whole"]
 
     STRAT_106 --> BAR_106
     STRAT_106 --> TICK_106
@@ -4488,6 +4489,74 @@ The contract is close fills, no costs and all-in long only, the one
 setting in which the three fill models coincide. A difference in fills
 under it points at an engine, not at the strategy. See LEARN section 11b
 and recipe 324.
+
+---
+
+## 107. Around an order: entitlements, fills, ledger, reports
+
+What happens before an order leaves and after its fill comes back (2.2).
+
+```mermaid
+flowchart LR
+    USER_107["user, desk, roles"]
+    ENT_107["EntitlementPreTradeCheck<br/>default deny,<br/>deny beats allow"]
+    AUDIT_107["EntitlementService.auditLog<br/>every decision, with its grant"]
+    GATE_107["HftRiskGate<br/>limits, kill switch"]
+    GW_107["HftOrderGateway"]
+    VENUE_107["venue adapter<br/>(FixSession 4.2 / 4.4 / 5.0 SP2,<br/>PaperTradingGateway, SBE)"]
+    FL_107["FillListener(s)<br/>onFill with venue exec id;<br/>a throwing listener is counted,<br/>not fatal"]
+    LFL_107["LedgerFillListener"]
+    LEDGER_107["PositionLedger<br/>refuses repeated exec ids"]
+    DROP_107["DropCopyReconciler"]
+    RTS_107["Rts22ReportBuilder<br/>RTS 22 fields, LEI / ISIN / MIC checks"]
+
+    USER_107 --> ENT_107
+    ENT_107 --> AUDIT_107
+    ENT_107 -->|allowed| GATE_107
+    GATE_107 --> GW_107
+    GW_107 --> VENUE_107
+    VENUE_107 -->|onFill| GW_107
+    GW_107 --> FL_107
+    FL_107 --> LFL_107
+    LFL_107 --> LEDGER_107
+    LEDGER_107 --> DROP_107
+    VENUE_107 -->|execution report| RTS_107
+```
+
+Entitlements answer "may this user trade this?" and the risk gate answers
+"is this order within limits?"; they are separate checks. Fills flow to the
+ledger only through a registered listener, so a gateway without one behaves
+as in 2.1. Busts and corrections are not handled. See LEARN section 17c and
+recipes 339, 340 and 342.
+
+---
+
+## 108. Capital and margin: FRTB SA and SIMM
+
+```mermaid
+flowchart TB
+    SENS_108["sensitivities s_k<br/>(caller computes)"]
+    WS_108["weighted WS_k = RW_k s_k<br/>(SIMM: x concentration CR_k)"]
+    KB_108["bucket K_b, S_b<br/>intra-bucket rho"]
+    AGG_108["across buckets, gamma_bc"]
+    SC_108["FrtbSa: LOW / MEDIUM / HIGH<br/>correlation scenarios, take the max"]
+    DRC_108["FrtbDrc + FrtbRrao"]
+    SBM_108["FRTB SA capital"]
+    CAL_108["SimmParameters<br/>calibration file (licensed)"]
+    PC_108["SimmCalculator: risk classes,<br/>psi within product class,<br/>product classes add"]
+    IM_108["SIMM initial margin"]
+
+    SENS_108 --> WS_108 --> KB_108 --> AGG_108
+    AGG_108 --> SC_108 --> SBM_108
+    DRC_108 --> SBM_108
+    CAL_108 --> WS_108
+    AGG_108 --> PC_108 --> IM_108
+```
+
+The two share the bucket-then-across-buckets shape. FRTB SA uses fixed
+regulatory weights and three correlation scenarios; SIMM takes its weights
+from a calibration file and has no scenarios. See LEARN sections 10o and
+10p and recipes 336 and 337.
 
 ---
 

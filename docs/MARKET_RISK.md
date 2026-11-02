@@ -208,14 +208,20 @@ library.
 
 ## Not implemented
 
-- FRTB standardised approach (sensitivities-based method, default risk charge,
-  residual risk add-on).
-- Non-modellable risk factor capital and the risk-factor eligibility test.
-- SIMM and CVA capital. SA-CCR (`risk.SaCcr`) has no basis or volatility hedging
-  sets, one margin agreement per netting set and no collateral haircuts.
-- xVA beyond CVA, unilateral DVA and wrong-way CVA in `credit.CvaApproximator`. The
-  exposure simulator (`credit.ExposureSimulator`) prices single-curve swaps and one FX
-  pair with a deterministic foreign rate.
+- Certification of the FRTB standardised approach (`risk.FrtbSa`, `FrtbDrc`,
+  `FrtbRrao`, styled after BCBS d457), securitisation, and the inputs left to the
+  caller: CSR inter-bucket correlations, GIRR inflation and basis correlations,
+  equity repo.
+- The risk-factor eligibility test. NMRF stress capital (`risk.FrtbNmrf`) aggregates
+  scenario charges the caller computes.
+- The official ISDA SIMM calibration and ISDA's unit tests (licensed);
+  `risk.simm` ships an illustrative calibration only. See [SIMM.md](SIMM.md).
+- CVA capital. SA-CCR (`risk.SaCcr`) haircuts follow Basel II paragraph 151, not the
+  CRE22 (2017) table.
+- xVA beyond CVA, DVA (unilateral and first-to-default bilateral) and wrong-way CVA
+  in `credit.CvaApproximator`. `credit.MultiCurrencyExposureSimulator` has multi-curve
+  swaps and several FX pairs with stochastic foreign rates, but no foreign-currency
+  swaps, no stochastic basis, and no wrong-way risk together with bilateral CVA.
 - Smile risk on the SVI, SSVI and local-volatility surfaces is not wired into the VaR
   engines; scenario revaluation on them is left to the caller.
 - A scenario or market-data store; scenarios are arrays supplied by the caller.

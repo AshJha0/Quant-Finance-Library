@@ -39,12 +39,30 @@ single-producer, single-consumer ring buffers.
      |                                               +-----------+-----+--------+
      v                                               |           |              |
    reports (HTML/PDF/XLSX/CSV),                 FixSession  PaperTrading   BinaryOrder
-   CLI, dashboard                                (FIX 4.4)   Gateway        Publisher (SBE)
+   CLI, dashboard                             (FIX 4.2/4.4/  Gateway        Publisher (SBE)
+                                                5.0 SP2)
 ```
 
 Execution reports come back the other way: the venue adapter calls the gateway's
 `onAck`, `onFill`, `onCanceled`, `onReplaced`, `onReject` and `onCancelReject`, which
 drive the order state machine and release the risk gate's reservations.
+
+From 2.2 the gateway also publishes each accepted fill to its registered
+`FillListener`s, with the venue's execution id:
+
+```
+   EntitlementPreTradeCheck --> HftRiskGate --> HftOrderGateway --> venue
+                                                     |  onFill(orderId, execId, ...)
+                                                     v
+                                               FillListener(s) --> LedgerFillListener
+                                                                        |
+                                                                        v
+                                                PositionLedger --> DropCopyReconciler
+   execution reports --> reporting.Rts22ReportBuilder --> TransactionReportSink
+```
+
+A listener that throws is counted in `fillListenerErrorCount` and the gateway
+carries on. Without a listener nothing changes from 2.1.
 
 ## Package map
 
@@ -53,21 +71,24 @@ drive the order state machine and release the risk gate's reservations.
 | `core` | OHLCV series on primitive arrays | `Bar`, `BarSeries` |
 | `stats` | Descriptive statistics, one definition each | `Stats` (mean, sample and population variance, covariance, Pearson, Hyndman-Fan type 7 and type 1 quantiles, median, midranks) |
 | `util` | Numerics and measurement | `MathUtils` (normal CDF by Cody's erfc algorithm), `LatencyRecorder`, `HiccupMonitor` |
-| `data` | Data in and out | `CsvBarLoader`, `HttpBarFetcher`, `SeriesAligner`, `CorporateActions`, `PointInTimeUniverse`, `UniverseCsvLoader`, `TickFileWriter`/`TickFileReader` (QFLT v2), `TickCapture`, `AsyncTickCapture` |
+| `data` | Data in and out | `CsvBarLoader`, `HttpBarFetcher`, `SeriesAligner`, `CorporateActions`, `CorporateEvents`, `CorporateEventPositions`, `PointInTimeUniverse`, `UniverseCsvLoader`, `TickFileWriter`/`TickFileReader` (QFLT v2), `TickCapture`, `AsyncTickCapture` |
 | `feed` | Live and multicast feeds | `WebSocketFeed`, `BinanceTradeParser`, `MoldUdp64Receiver` |
 | `sbe` | SBE-style binary codecs (schema 2) | `MessageHeader`, `Decimal64`, `TradeFlyweight`, `OrderFlyweight`, `QuoteFlyweight`, `BinaryMarketDataClient`, `BinaryOrderPublisher`, `BinaryOrderReceiver` |
-| `fix` | FIX 4.4 session and garbage-free codecs | `FixSession`, `FixSessionSchedule`, `FixSessionOptions`, `FileSessionStore` (CRC-32C journal), `FixMessage`, `FixOrderEncoder`, `FixExecReportView`, `FixExecReportView.ExecIdDeduplicator`, `FixMarketDataView` |
+| `fix` | FIX session (4.4 default, 4.2, 5.0 SP2) and garbage-free codecs | `FixSession`, `FixSessionSchedule`, `FixSessionOptions`, `FixVersion`, `FixDictionary`, `FixGroupDef`, `FixGroup`, `FileSessionStore` (CRC-32C journal), `FixMessage`, `FixOrderEncoder`, `FixExecReportView`, `FixExecReportView.ExecIdDeduplicator`, `FixMarketDataView` |
 | `marketdata` | Trading-lane transport and equities L3 | `HftMarketDataBus`, `TickRingBuffer`, `SymbolRegistry`, `ItchCodec`, `L3BookBuilder`, `Nbbo`; simpler `MarketDataProcessor`, `RingBuffer` |
 | `orderbook` | Matching engines and book analytics | `OrderBook` (readable reference), `HftOrderBook` (price ladder, pooled nodes, self-trade prevention), `AuctionBook` (opening and closing call auctions), `BookAnalytics` |
-| `trading` | Order entry and pre-trade risk | `HftRiskGate`, `HftOrderGateway`, `OrderStateMachine`, `OrderRingBuffer`, `OrderListener`, `HftQuoter`, `AutoHedger`, `OrderThrottle`, `LastLookGate`, `LoopbackVenue`, `PaperTradingGateway`, `TradingDashboard`, `ShardedTradingEngine`, `GlobalRiskAggregator`, `PositionLedger`, `DropCopyReconciler`, `LimitsConfig`, `LimitsManager` |
+| `trading` | Order entry and pre-trade risk | `HftRiskGate`, `HftOrderGateway`, `OrderStateMachine`, `OrderRingBuffer`, `OrderListener`, `HftQuoter`, `AutoHedger`, `OrderThrottle`, `LastLookGate`, `LoopbackVenue`, `PaperTradingGateway`, `TradingDashboard`, `ShardedTradingEngine`, `GlobalRiskAggregator`, `PositionLedger`, `FillListener`, `LedgerFillListener`, `DropCopyReconciler`, `LimitsConfig`, `LimitsManager` |
+| `entitlements` | Who may trade what, where and when | `EntitlementService`, `Grant`, `Permission`, `Decision`, `EntitlementPreTradeCheck` |
+| `reporting` | Regulatory transaction reports | `TransactionReport`, `TransactionReportSink`, `Rts22ReportBuilder`, `Rts22TransactionReport`, `ReportingIdentifiers` |
 | `indicators` | Technical indicators | `Indicators` (batch), `StreamingIndicators` (one update per tick) |
 | `pricing` | Option pricing and volatility surfaces | `BlackScholes`, `Black76`, `Bachelier`, `ImpliedVolatility`, `BinomialTree`, `Heston`, `SabrModel`, `VolSurface`, `BarrierOption`, `DigitalOption`, `TouchOption`, `AsianOption`, `QuantoOption`, `ExchangeOption`, `VarianceSwap`, `VannaVolga`, `HestonCos`, `HestonCalibrator`, `SviSlice`, `SsviSurface`, `SviSurface`, `TotalVarianceSurface`, `DupireLocalVol`, `LocalVolMonteCarlo`, `LocalVolPde`, `DividendTree`, `Autocallable`, `StructuredNotes`, `IncrementalGreeks`, `HigherOrderGreeks` |
-| `rates` | Fixed income | `YieldCurve` (single curve), `DiscountCurve`, `MultiCurveBootstrap`, `MultiCurveRisk`, curve instruments (`Deposit`, `Fra`, `RateFuture`, `OisSwap`, `InterestRateSwap`), `BondPricer`, `DayCount`, `BusinessCalendar`, `SwapPricer`, `RatesOptions`, `NelsonSiegel`, `Svensson`, `ShortRateModels`, `KeyRateDurations` |
-| `credit` | Credit curves, CDS and counterparty exposure | `CreditCurve`, `CdsPricer`, `IsdaCdsModel`, `IsdaCurve`, `CreditSpreads`, `ExposureSimulator`, `ExposureProfile`, `CvaApproximator` |
+| `rates` | Fixed income | `YieldCurve` (single curve), `DiscountCurve`, `MultiCurveBootstrap`, `MultiCurveRisk`, curve instruments (`Deposit`, `Fra`, `RateFuture`, `OisSwap`, `InterestRateSwap`), `BondPricer`, `DayCount`, `BusinessCalendar`, `HolidayCalendars`, `SwapPricer`, `RatesOptions`, `NelsonSiegel`, `Svensson`, `ShortRateModels`, `KeyRateDurations` |
+| `credit` | Credit curves, CDS and counterparty exposure | `CreditCurve`, `CdsPricer`, `IsdaCdsModel`, `IsdaCurve`, `CreditSpreads`, `ExposureSimulator`, `MultiCurrencyExposureSimulator`, `ExposureProfile`, `CvaApproximator` |
 | `fx` | FX conventions, instruments and e-FX structure | `CurrencyPair`, `SwapPointsCurve`, `FxSwap`, `Ndf`, `FxVolSurface`, `FixingRisk`, `VannaVolgaTouch`, `AggregatedBook`, `CrossRateEngine`, `FxTierBook`, `LpScorecard`, `LpRouter`, `SyntheticCross` |
 | `commodities`, `markets` | Futures curves; index and private-market analytics | `CommodityCurve`, `IndexConstruction`, `PrivateMarketAnalytics` |
 | `volatility` | Volatility models | `EwmaVolatility`, `Garch11`, `GjrGarch11`, `Egarch11` (maximum likelihood), `HarRv`, `RangeVolatility`, `VolatilityIndex`, `VolatilityDecomposition`, `InformationCriteria` |
-| `risk` | Market, credit and limit risk | `TailRisk`, `VarEngine`, `RiskMetrics`, `FrtbEs`, `PnlAttribution`, `VarBacktest`, `ExtremeValueTheory`, `StressTester`, `ComponentVar`, `CovarianceShrinkage`, `PsdMatrices`, `GaussianCopula`, `Dependence`, `Pca`, `PreTradeLimitChecker`, `CounterpartyExposureTracker`, `SaCcr`, `FactorRiskModel` |
+| `risk` | Market, credit and limit risk | `TailRisk`, `VarEngine`, `RiskMetrics`, `FrtbEs`, `PnlAttribution`, `VarBacktest`, `ExtremeValueTheory`, `StressTester`, `ComponentVar`, `CovarianceShrinkage`, `PsdMatrices`, `GaussianCopula`, `Dependence`, `Pca`, `PreTradeLimitChecker`, `CounterpartyExposureTracker`, `SaCcr`, `SaCcrHaircuts`, `FrtbSa`, `FrtbDrc`, `FrtbRrao`, `FrtbNmrf`, `FactorRiskModel` |
+| `risk.simm` | ISDA SIMM initial margin (calibration supplied by the caller) | `SimmCalculator`, `SimmParameters`, `CrifSensitivity`, `SimmResult` |
 | `crb` | Central risk book | `CentralRiskBook`, `InternalizationEngine`, `SkewedQuoter`, `HedgeOptimizer`, `CrbHedgeUniverse`, `CrbAutoHedger`, `CrbRouter`, `CrbPnlLedger` |
 | `hedging` | Hedging | `DeltaHedger`, `HedgingSimulator`, `GreekHedger`, `OptionsBook`, `MinimumVarianceHedge`, `FxHedger`, `PairsHedger`, `CointegrationTest`, `WhalleyWilmott` |
 | `optimization` | Portfolio construction | `QuadraticProgram` (active-set), `PortfolioOptimizer`, `ConstrainedPortfolioOptimizer`, `RiskParityOptimizer`, `BlackLitterman`, `NelderMead` |
@@ -117,7 +138,8 @@ drive the order state machine and release the risk gate's reservations.
 The library jar is the named module `com.quantfinlib`
 (`src/main/java/module-info.java`). It exports every package that was public in 2.0,
 the reference packages (`fix`, `sbe`, `feed`, `marketdata`, `orderbook`, `trading`,
-`util`) and the new `stats` package included. Exporting a package does not make it
+`util`), the `stats` package added in 2.1, and `risk.simm`, `entitlements` and
+`reporting` added in 2.2. Exporting a package does not make it
 stable; the tiers are those of [STABILITY.md](STABILITY.md).
 
 | Directive | Why |
@@ -170,20 +192,19 @@ input fault from any other failure.
 | `MalformedDataException` | `IllegalArgumentException` | A file or record that does not follow its format: `data.CsvBarLoader.parse`, `data.UniverseCsvLoader.parse` |
 | `ConfigurationException` | `IllegalArgumentException` | An invalid configuration or limit: `trading.LimitsConfig` |
 | `fix.FixParseException` | `IllegalArgumentException` | A malformed FIX message; predates the scheme and implements the marker |
+| `MalformedFileException` | `IOException` | A file with a bad magic number, version or structure (2.2): `data.TickFileReader`, `persist.Checkpoint`, `fix.FileSessionStore`, `execution.VenueScorecard`, `fx.LpScorecard` |
 | `data.TickFileReader.TruncatedTickFileException` | `IOException` | A tick file cut short; predates the scheme and implements the marker |
 
 Plain argument validation (a negative size, a null factory, a probability out of
 range) stays `IllegalArgumentException`. That is a programming error at the call
 site, not an input fault.
 
-Not converted in 2.1:
-
-- the `IOException` header checks in `data.TickFileReader` and the format checks in
-  `persist.Checkpoint`;
-- the `UncheckedIOException` persistence failures in `fix.FileSessionStore`.
-
-A library type there would have to be an `IOException` subtype; that is left for a
-later release.
+The `IOException` header and format checks in `data.TickFileReader`,
+`persist.Checkpoint`, `fix.FileSessionStore` and the two scorecards, left as plain
+`IOException`s in 2.1, throw `MalformedFileException` from 2.2. It is an
+`IOException`, so existing catch blocks still catch it. The `UncheckedIOException` persistence
+failures in `fix.FileSessionStore` (a failed write or force, not a bad format) are
+unchanged.
 
 ## Further reading
 

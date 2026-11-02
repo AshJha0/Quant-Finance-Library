@@ -26,7 +26,7 @@ The `Release` workflow (`.github/workflows/release.yml`) then runs on JDK 25:
 After a release, move the API compatibility baseline to it: set
 `api.baseline.version` in `pom.xml` and the version passed to
 `scripts/fetch-api-baseline.sh` in the `api-compat` job of `.github/workflows/ci.yml`
-to the version just released. Until then the gate compares against 2.0.0.
+to the version just released. The gate currently compares against 2.1.0.
 
 ## JitPack
 

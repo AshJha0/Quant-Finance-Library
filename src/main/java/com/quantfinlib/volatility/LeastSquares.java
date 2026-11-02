@@ -19,7 +19,9 @@ final class LeastSquares {
         private final double residualVariance;
 
         /**
-         * Creates the value; array and collection arguments are copied.
+         * Creates the value. The arrays are stored as given, not copied: this
+         * type is package-private and its callers hand over arrays they no
+         * longer touch. The accessors return the same arrays.
          *
          * @param beta coefficients
          * @param hacStdErrors Newey-West standard errors with {@code lags} lags
