@@ -2,52 +2,68 @@ package com.quantfinlib.fuzzing;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.Random;
-import net.jqwik.api.Arbitraries;
-import net.jqwik.api.Arbitrary;
+import java.util.SplittableRandom;
+import java.util.function.Consumer;
 
 /**
- * Byte-level mutation of a seed corpus for the structured fuzz tests (*FuzzTest). Each
- * generated input is a seed with one to eight random edits: flip a bit, overwrite a byte
- * with an interesting value, insert random bytes, delete a range, duplicate a range, or
- * truncate. The edits are driven by a jqwik-generated long, so a failing input is
- * reproducible from the jqwik seed printed with the failure.
+ * Seeded byte-level mutation of a seed corpus for the structured fuzz tests (*FuzzTest).
+ * Each case is, with probability 1/20 each, an unmodified seed or up to 256 random bytes;
+ * otherwise a seed with one to eight random edits: flip a bit, overwrite a byte with an
+ * interesting value, insert random bytes, delete a range, duplicate a range, or truncate.
  *
- * <p>This is mutation fuzzing without coverage feedback: it finds crashes on malformed
- * input (an exception outside a parser's documented contract, a hang), not deep
- * logic bugs. See the 3.1 handback for why Jazzer is not used.</p>
+ * <p>The number of cases is the system property {@code qfl.cases} (default 1000; the
+ * {@code fuzz} Maven profile raises it). Generation uses {@link SplittableRandom} with a
+ * fixed seed per test, and a failure is rethrown with the seed and case index, so it is
+ * reproducible. This is mutation fuzzing without coverage feedback: it finds crashes on
+ * malformed input (an exception outside a parser's documented contract), not deep logic
+ * bugs.</p>
  */
 public final class Mutations {
     private static final byte[] INTERESTING = {0, 1, (byte) 0x7f, (byte) 0x80, (byte) 0xff, '<', '>', '"', ',',
         '\n', '\r', '=', 1, '&', ';', '\\'};
 
+    /** Cases per fuzz test. */
+    public static final int CASES = Integer.getInteger("qfl.cases", 1000);
+
     private Mutations() {
     }
 
     /**
-     * Mutated copies of the seeds, plus the unmodified seeds and short random byte strings.
+     * Runs the target on {@link #CASES} inputs derived from the corpus.
      *
-     * @param seeds the corpus
-     * @return the arbitrary
+     * @param seed random seed (fixed per test)
+     * @param corpus the seed inputs
+     * @param target the code under test; it catches the exceptions its contract documents
      */
-    public static Arbitrary<byte[]> of(List<byte[]> seeds) {
-        Arbitrary<byte[]> mutated = Arbitraries.of(seeds).flatMap(s -> Arbitraries.longs()
-                .map(r -> mutate(s, new Random(r))));
-        Arbitrary<byte[]> random = Arbitraries.bytes().array(byte[].class).ofMaxSize(256);
-        return Arbitraries.frequencyOf(
-                net.jqwik.api.Tuple.of(1, Arbitraries.of(seeds)),
-                net.jqwik.api.Tuple.of(1, random),
-                net.jqwik.api.Tuple.of(18, mutated));
+    public static void run(long seed, List<byte[]> corpus, Consumer<byte[]> target) {
+        SplittableRandom rnd = new SplittableRandom(seed);
+        for (int i = 0; i < CASES; i++) {
+            byte[] input;
+            int pick = rnd.nextInt(20);
+            if (pick == 0) {
+                input = corpus.get(rnd.nextInt(corpus.size())).clone();
+            } else if (pick == 1) {
+                input = new byte[rnd.nextInt(257)];
+                fill(rnd, input);
+            } else {
+                input = mutate(corpus.get(rnd.nextInt(corpus.size())), rnd);
+            }
+            try {
+                target.accept(input);
+            } catch (RuntimeException | AssertionError e) {
+                throw new AssertionError("fuzz seed " + seed + " case " + i + ": " + e, e);
+            }
+        }
     }
 
     /**
-     * Applies one to eight random edits to a copy of the seed.
+     * Applies one to eight random edits to a copy of the input.
      *
      * @param seed the input
      * @param rnd the source of randomness
      * @return the mutated bytes
      */
-    public static byte[] mutate(byte[] seed, Random rnd) {
+    public static byte[] mutate(byte[] seed, SplittableRandom rnd) {
         byte[] b = seed.clone();
         int ops = 1 + rnd.nextInt(8);
         for (int i = 0; i < ops; i++) {
@@ -65,10 +81,9 @@ public final class Mutations {
                     }
                 }
                 case 2 -> {
-                    int p = n == 0 ? 0 : rnd.nextInt(n + 1);
                     byte[] ins = new byte[1 + rnd.nextInt(16)];
-                    rnd.nextBytes(ins);
-                    b = splice(b, p, 0, ins);
+                    fill(rnd, ins);
+                    b = splice(b, rnd.nextInt(n + 1), 0, ins);
                 }
                 case 3 -> {
                     if (n > 0) {
@@ -91,6 +106,12 @@ public final class Mutations {
             }
         }
         return b;
+    }
+
+    private static void fill(SplittableRandom rnd, byte[] b) {
+        for (int i = 0; i < b.length; i++) {
+            b[i] = (byte) rnd.nextInt(256);
+        }
     }
 
     private static byte[] splice(byte[] b, int at, int remove, byte[] insert) {
