@@ -50,6 +50,9 @@ jobs:
       - name: Compile COOKBOOK recipes against the build
         if: matrix.os == 'ubuntu-latest'
         run: python3 scripts/check-cookbook.py
+      - name: Check LEARN snippets, class names and links against the build
+        if: matrix.os == 'ubuntu-latest'
+        run: python3 scripts/check-learn.py
       - name: Coverage summary
         if: always() && hashFiles('target/site/jacoco/jacoco.csv') != ''
         run: |
