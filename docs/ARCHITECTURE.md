@@ -249,7 +249,7 @@ input fault from any other failure.
 | `ConfigurationException` | `IllegalArgumentException` | An invalid configuration or limit: `trading.LimitsConfig` |
 | `fix.FixParseException` | `IllegalArgumentException` | A malformed FIX message; predates the scheme and implements the marker |
 | `MalformedFileException` | `IOException` | A file with a bad magic number, version or structure (2.2): `marketdata.tick.TickFileReader`, `persist.Checkpoint`, `fix.FileSessionStore`, `execution.VenueScorecard`, `fx.LpScorecard` |
-| `data.TickFileReader.TruncatedTickFileException` | `IOException` | A tick file cut short; predates the scheme and implements the marker |
+| `marketdata.tick.TickFileReader.TruncatedTickFileException` | `IOException` | A tick file cut short; predates the scheme and implements the marker |
 
 Plain argument validation (a negative size, a null factory, a probability out of
 range) stays `IllegalArgumentException`. That is a programming error at the call

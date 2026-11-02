@@ -15,13 +15,15 @@ connectivity stack; see [docs/STABILITY.md](docs/STABILITY.md).
 
 ## Status
 
-- Version 3.0.0 (in preparation; the release is tagged after the round's gate).
+- Version 3.0.0.
   Requires Java 25 (LTS). 3.0 changes no number; it reduces the public API. The
   library splits into two artifacts (stable tier and low-latency lane), `reporting`
   becomes `regreporting`, and everything 2.4.0 deprecated for removal is gone.
   [docs/MIGRATION_3.0.md](docs/MIGRATION_3.0.md) lists every change.
-- At 2.4.0 the full suite (`./mvnw verify -Pfull`) ran 1,893 tests (5 skipped that
-  need optional external files or network: ISDA grids, ESMA XSDs, GLEIF).
+- At 3.0.0 the full suite (`./mvnw verify -Pfull`) runs 2,007 tests (core 1,382,
+  lowlatency 625); 7 are skipped without optional external files or network
+  (ISDA grids, ESMA XSDs, the SIX CFI list, GLEIF). CONTRIBUTING.md lists the
+  environment variables that turn them on.
 - Version 2.4 is additive over 2.3 and changes no result by default. It deprecated
   for removal everything 3.0 takes out and added busts and corrections in
   `PaperTradingGateway`, the FRTB default risk charge for securitisations, the
@@ -315,7 +317,7 @@ Benchmark method, environment and results are in [docs/BENCHMARKS.md](docs/BENCH
 | [GETTING_STARTED.md](docs/GETTING_STARTED.md) | Build, first backtest, paper trading, benchmarks, troubleshooting |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Package map, data flow, design rules |
 | [STABILITY.md](docs/STABILITY.md) | Stable APIs, reference implementations, versioning policy |
-| [MIGRATION_3.0.md](docs/MIGRATION_3.0.md) | Draft: what 3.0 removes or moves, and the 2.4 replacement for each |
+| [MIGRATION_3.0.md](docs/MIGRATION_3.0.md) | What 3.0 removes or moves, and the 2.4 replacement for each |
 | [MIGRATION_2.4.md](docs/MIGRATION_2.4.md) | 2.4 deprecations, new opt-in behaviour, unconfirmed readings |
 | [MIGRATION_2.3.md](docs/MIGRATION_2.3.md) | The removed SIMM package and the 2.3 result changes |
 | [MIGRATION_2.2.md](docs/MIGRATION_2.2.md) | The two 2.2 default changes and how to keep 2.1 behaviour |

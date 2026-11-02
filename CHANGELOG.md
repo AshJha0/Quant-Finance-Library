@@ -6,7 +6,7 @@ Entries for 1.x releases are archived in [docs/history/CHANGELOG-1.x.md](docs/hi
 
 ## [Unreleased]
 
-### 3.0.0 (in preparation)
+## [3.0.0] - 2026-11-02
 
 Major release: the public API gets smaller and the jar says what docs/STABILITY.md says. No number changes, apart from the rounding-level note on the exposure simulator below. Every change has a row in [docs/MIGRATION_3.0.md](docs/MIGRATION_3.0.md); the japicmp gate lists each intended break by name (owner decisions D1 to D9, 2026-11-02).
 
@@ -99,7 +99,7 @@ Major release: the public API gets smaller and the jar says what docs/STABILITY.
 
 ## [2.4.0] - 2026-11-02
 
-Minor release. No 2.3 public signature in a stable package is removed or changed (japicmp against 2.3.0), and no result changes unless you opt in. 2.4.0 deprecates for removal every member that 3.0 takes out, so compiling with `-Xlint:removal` lists the lines to change; [docs/MIGRATION_2.4.md](docs/MIGRATION_2.4.md) covers this release and [docs/MIGRATION_3.0.md](docs/MIGRATION_3.0.md) is the draft plan for 3.0.
+Minor release. No 2.3 public signature in a stable package is removed or changed (japicmp against 2.3.0), and no result changes unless you opt in. 2.4.0 deprecates for removal every member that 3.0 takes out, so compiling with `-Xlint:removal` lists the lines to change; [docs/MIGRATION_2.4.md](docs/MIGRATION_2.4.md) covers this release and [docs/MIGRATION_3.0.md](docs/MIGRATION_3.0.md) is the plan for 3.0.
 
 ### Added
 
