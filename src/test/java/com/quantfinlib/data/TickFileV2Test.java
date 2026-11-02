@@ -132,4 +132,14 @@ class TickFileV2Test {
             assertThrows(java.io.IOException.class, capture::close);
         }
     }
+
+    @Test
+    void aFileWithTheWrongMagicIsALibraryFault(@TempDir Path dir) throws Exception {
+        Path file = dir.resolve("junk.qflt");
+        java.nio.file.Files.write(file, new byte[] {1, 2, 3, 4, 5, 6, 7, 8});
+        var e = assertThrows(com.quantfinlib.core.MalformedFileException.class,
+                () -> TickFileReader.info(file));
+        org.junit.jupiter.api.Assertions.assertInstanceOf(
+                com.quantfinlib.core.QuantFinException.class, e);
+    }
 }

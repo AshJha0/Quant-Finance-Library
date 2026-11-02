@@ -121,7 +121,7 @@ public final class Checkpoint {
         public Writer section(String name, StateWriter body) throws IOException {
             if (sections.containsKey(name)) {
                 failed = true;
-                throw new IOException("duplicate checkpoint section: " + name);
+                throw new com.quantfinlib.core.MalformedFileException("duplicate checkpoint section: " + name);
             }
             ByteArrayOutputStream buf = new ByteArrayOutputStream();
             try {
@@ -206,18 +206,18 @@ public final class Checkpoint {
         private Reader(byte[] bytes, Path source) throws IOException {
             DataInputStream in = new DataInputStream(new ByteArrayInputStream(bytes));
             if (bytes.length < 8 || in.readInt() != MAGIC) {
-                throw new IOException(source + " is not a quantfinlib checkpoint");
+                throw new com.quantfinlib.core.MalformedFileException(source + " is not a quantfinlib checkpoint");
             }
             int version = in.readInt();
             if (version > FORMAT_VERSION) {
-                throw new IOException(source + " uses checkpoint format " + version
+                throw new com.quantfinlib.core.MalformedFileException(source + " uses checkpoint format " + version
                         + "; this build reads up to " + FORMAT_VERSION);
             }
             while (in.available() > 0) {
                 String name = in.readUTF();
                 int len = in.readInt();
                 if (len < 0 || len > in.available()) {
-                    throw new IOException(source + ": section '" + name
+                    throw new com.quantfinlib.core.MalformedFileException(source + ": section '" + name
                             + "' declares " + len + " bytes, " + in.available() + " remain");
                 }
                 byte[] payload = new byte[len];
@@ -241,7 +241,7 @@ public final class Checkpoint {
             DataInputStream in = new DataInputStream(new ByteArrayInputStream(payload));
             reader.read(in);
             if (in.available() > 0) {
-                throw new IOException("section '" + name + "': " + in.available()
+                throw new com.quantfinlib.core.MalformedFileException("section '" + name + "': " + in.available()
                         + " bytes left unread — writer/reader format mismatch");
             }
             return true;
@@ -266,7 +266,7 @@ public final class Checkpoint {
             throws IOException {
         int v = in.readByte();
         if (v != expected) {
-            throw new IOException(model + " state version " + v + " not supported"
+            throw new com.quantfinlib.core.MalformedFileException(model + " state version " + v + " not supported"
                     + " (this build reads version " + expected + ")");
         }
     }
@@ -287,7 +287,7 @@ public final class Checkpoint {
     public static void readDoublesInto(DataInput in, double[] a) throws IOException {
         int n = in.readInt();
         if (n != a.length) {
-            throw new IOException("checkpoint array has " + n + " entries, this instance has "
+            throw new com.quantfinlib.core.MalformedFileException("checkpoint array has " + n + " entries, this instance has "
                     + a.length + " — incompatible configuration");
         }
         for (int i = 0; i < n; i++) {
@@ -307,7 +307,7 @@ public final class Checkpoint {
     public static void readLongsInto(DataInput in, long[] a) throws IOException {
         int n = in.readInt();
         if (n != a.length) {
-            throw new IOException("checkpoint array has " + n + " entries, this instance has "
+            throw new com.quantfinlib.core.MalformedFileException("checkpoint array has " + n + " entries, this instance has "
                     + a.length + " — incompatible configuration");
         }
         for (int i = 0; i < n; i++) {

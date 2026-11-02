@@ -311,7 +311,7 @@ public final class VenueScorecard {
     public void readState(DataInput in) throws IOException {
         int v = in.readByte();
         if (v != 1 && v != 2) {
-            throw new IOException("VenueScorecard state version " + v
+            throw new com.quantfinlib.core.MalformedFileException("VenueScorecard state version " + v
                     + " not supported (this build reads versions 1-2)");
         }
         Checkpoint.readLongsInto(in, sent);

@@ -12,8 +12,9 @@ package com.quantfinlib.core;
  * working; code that wants to tell a library fault from any other failure
  * tests {@code e instanceof QuantFinException}. The implementations are
  * {@link WireProtocolException}, {@link MalformedDataException},
- * {@link ConfigurationException}, {@code fix.FixParseException} and
- * {@code data.TickFileReader.TruncatedTickFileException}.</p>
+ * {@link ConfigurationException}, {@code fix.FixParseException},
+ * {@code data.TickFileReader.TruncatedTickFileException} and
+ * {@link MalformedFileException}.</p>
  *
  * <p>Plain argument checks (a negative size, a null factory) stay
  * {@link IllegalArgumentException}: they are programming errors at the
