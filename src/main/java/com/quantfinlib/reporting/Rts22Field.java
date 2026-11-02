@@ -7,6 +7,16 @@ package com.quantfinlib.reporting;
  * regulation and the ESMA reporting guidelines (ESMA/2016/1452) for the content
  * rules of each field.
  *
+ * <p>Verified 2026-11-02 (published reference): all 65 numbers and names were
+ * checked one by one against Annex I, Table 2 of Delegated Regulation (EU)
+ * 2017/590 as adopted (legislation.gov.uk copy of the original EU text, rows 1 to
+ * 65; fields 17 to 24 are the seller mirror of fields 8 to 15). One label was
+ * wrong and is fixed: field 58 is the country of the branch <em>supervising</em>
+ * the person responsible for the investment decision. Each field's place in the
+ * ISO 20022 message is given by the ESMA technical reporting instructions
+ * (ESMA65-8-2356, section 6) and the auth.016.001.01 usage guideline
+ * (ESMAUG_Reporting_1.1.0); see {@link Rts22TransactionReport#toAuth016Xml()}.
+ *
  * <p>{@link #source()} says who fills the field in this library:
  * <ul>
  *   <li>{@link Source#LIBRARY}: derived by {@link Rts22ReportBuilder} from the
@@ -75,7 +85,7 @@ public enum Rts22Field {
     EXPIRY_DATE(55, "Expiry date", Source.FIRM),
     DELIVERY_TYPE(56, "Delivery type", Source.FIRM),
     INVESTMENT_DECISION_WITHIN_FIRM(57, "Investment decision within firm", Source.FIRM),
-    INVESTMENT_DECISION_BRANCH_COUNTRY(58, "Country of the branch responsible for the person making the investment decision", Source.FIRM),
+    INVESTMENT_DECISION_BRANCH_COUNTRY(58, "Country of the branch supervising the person responsible for the investment decision", Source.FIRM),
     EXECUTION_WITHIN_FIRM(59, "Execution within firm", Source.FIRM),
     EXECUTION_BRANCH_COUNTRY(60, "Country of the branch supervising the person responsible for the execution", Source.FIRM),
     WAIVER_INDICATOR(61, "Waiver indicator", Source.FIRM),

@@ -145,13 +145,14 @@
                 <executions>
                     <!-- Test sources are compiled into the com.quantfinlib module
                          (patched in by the plugin). The allocation probes use the
-                         management MXBeans, which the library itself does not need. -->
+                         management MXBeans, and Auth016XmlTest the JDK XML validator; the
+                         library itself needs neither. -->
                     <execution>
                         <id>default-testCompile</id>
                         <configuration>
                             <compilerArgs combine.children="append">
-                                <arg>--add-modules=java.management,jdk.management</arg>
-                                <arg>--add-reads=com.quantfinlib=java.management,jdk.management</arg>
+                                <arg>--add-modules=java.management,jdk.management,java.xml</arg>
+                                <arg>--add-reads=com.quantfinlib=java.management,jdk.management,java.xml</arg>
                             </compilerArgs>
                         </configuration>
                     </execution>
