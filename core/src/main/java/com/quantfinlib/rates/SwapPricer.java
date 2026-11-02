@@ -34,7 +34,16 @@ package com.quantfinlib.rates;
  * {@link InterestRateSwap} with real dates, day counts and schedules: the
  * floating leg is projected off the projection curve and both legs are
  * discounted on the discount (OIS) curve.</p>
+ *
+ * @deprecated since 3.1.0: the {@link YieldCurve} methods assume an annual
+ * fixed leg with {@code tau = 1}, a spot start and no payment lag. Use
+ * {@link VanillaSwap} with {@link FixedLeg}, {@link OvernightLeg} or
+ * {@link TermRateLeg} and a {@link LegConvention} per leg; the multi-curve
+ * overloads here delegate to {@link InterestRateSwap}, which can be called
+ * directly. The class stays through 3.x (release policy: no removals in 3.x)
+ * and its results are unchanged.
  */
+@Deprecated(since = "3.1.0")
 public final class SwapPricer {
 
     private SwapPricer() {
