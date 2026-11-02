@@ -35,8 +35,7 @@
  * and {@link com.quantfinlib.risk.FrtbNmrf} (FRTB standardised approach and
  * NMRF, styled after BCBS d457, not certified), and
  * {@link com.quantfinlib.risk.SaCcr} with
- * {@link com.quantfinlib.risk.SaCcrHaircuts} (BCBS 279). ISDA SIMM is in
- * the {@code risk.simm} subpackage.</p>
+ * {@link com.quantfinlib.risk.SaCcrHaircuts} (BCBS 279).</p>
  */
 @NullMarked
 package com.quantfinlib.risk;

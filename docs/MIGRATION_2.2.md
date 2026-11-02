@@ -13,7 +13,6 @@ behaviour. [CHANGELOG.md](../CHANGELOG.md) has the full list.
 |---|---|
 | Rates and credit | `rates.HolidayCalendars`; `credit.IsdaCdsModel.Conventions` and overloads taking it; `credit.MultiCurrencyExposureSimulator`; `CvaApproximator.bilateral`, `Bilateral` |
 | Counterparty and market capital | `SaCcrTrade.asBasis`, `asVolatility`; `SaCcr.HedgingSetType`, `oneMarginAgreementManyNettingSets`, `subNettingSets`, `SubNettingSet`; `risk.SaCcrHaircuts`; `risk.FrtbSa`, `FrtbDrc`, `FrtbRrao`, `FrtbNmrf` |
-| Initial margin | `risk.simm` package: `SimmCalculator`, `SimmParameters`, `CrifSensitivity`, `SimmResult`, `SimmAddOnResult` and enums |
 | FIX | `fix.FixVersion`, `FixDictionary`, `FixGroupDef`, `FixGroup`; `FixSessionOptions.withVersion`; `FixMessage.Builder.group` |
 | Controls and reporting | `entitlements` package (`EntitlementService`, `Grant`, `Permission`, `Action`, `Decision`, `EntitlementPreTradeCheck`); `reporting` package (`Rts22ReportBuilder`, `Rts22TransactionReport`, `Rts22Field`, `ReportingIdentifiers`, `TransactionReport`, `TransactionReportSink`) |
 | Backtesting and trading | `data.CorporateEvents`, `CorporateEventPositions`; `PortfolioBacktester.run(..., corporateEvents)`; `StrategyRunner.Sizing` and `run(..., Sizing)`; `Backtester.runWholeLots`; `trading.FillListener`, `LedgerFillListener`, `HftOrderGateway.addFillListener`, `fillListenerErrorCount`, `onFill(orderId, execId, ...)` |
@@ -69,15 +68,6 @@ if (o instanceof FixSessionOptions(var schedule, var next, var version)) { ... }
 
 A `null` version means FIX 4.4, so sessions behave exactly as in 2.1 unless you call
 `withVersion`.
-
-### SIMM vega amounts
-
-`risk.simm` is new in 2.2, so nothing changes for 2.1 code. One convention is worth
-knowing before you feed it a CRIF file. Equity, commodity and FX vega amounts are
-read as raw dV/dsigma, and the calculator applies the volatility weighting itself
-(ISDA SIMM methodology, section C.3). If your risk system already writes
-vol-weighted vega, set `Equity.vega.amountIsVolWeighted = 1` (and the same for
-`Commodity` and `FX`) in the calibration file. See [SIMM.md](SIMM.md).
 
 ## Behaviour notes
 

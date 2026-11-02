@@ -6,7 +6,15 @@ Entries for 1.x releases are archived in [docs/history/CHANGELOG-1.x.md](docs/hi
 
 ## [Unreleased]
 
+## [2.2.1] - 2026-11-02
+
+### Removed
+
+- risk.simm (SIMM-structured margin calculator) pending licensing review; ISDA requires a licence to use SIMM.
+
 ## [2.2.0] - 2026-11-02
+
+The SIMM items below were withdrawn in 2.2.1.
 
 Minor release. No 2.1 public signature is removed or changed, and the API-compatibility check now runs against 2.1.0. Two defaults change (`StrategyRunner` sizing, and one record gains a component); [docs/MIGRATION_2.2.md](docs/MIGRATION_2.2.md) says how to keep 2.1 behaviour.
 
@@ -18,7 +26,7 @@ Minor release. No 2.1 public signature is removed or changed, and the API-compat
 - `CvaApproximator.bilateral` and `Bilateral`: first-to-default CVA and DVA with independent defaults and a flat hazard per bucket.
 - `risk.SaCcr`: basis and volatility hedging sets (`SaCcrTrade.asBasis`, `asVolatility`, `SaCcr.HedgingSetType`), `oneMarginAgreementManyNettingSets`, `subNettingSets` and `SubNettingSet`. `risk.SaCcrHaircuts`: Basel II paragraph 151 supervisory haircuts with square-root-of-time scaling and the 8% currency-mismatch haircut.
 - `risk.FrtbSa` (sensitivities-based method: delta, vega and curvature under three correlation scenarios), `FrtbDrc` (non-securitisation default risk charge), `FrtbRrao` (residual risk add-on) and `FrtbNmrf` (MAR33 stress scenario capital). Styled after BCBS d457 and not certified; inputs left to the caller are marked in the javadoc.
-- `risk.simm`: `SimmCalculator`, loadable `SimmParameters`, `CrifSensitivity` CSV reader, `calculateWithAddOns`. Its structure is checked against the public ISDA SIMM methodology (v2.9+2606 formulas). Only an illustrative calibration ships; the official calibration and the ISDA unit tests are licensed by ISDA. See [docs/SIMM.md](docs/SIMM.md).
+- ~~`risk.simm`: `SimmCalculator`, loadable `SimmParameters`, `CrifSensitivity` CSV reader, `calculateWithAddOns`. Its structure is checked against the public ISDA SIMM methodology (v2.9+2606 formulas). Only an illustrative calibration ships; the official calibration and the ISDA unit tests are licensed by ISDA. See [docs/SIMM.md](docs/SIMM.md).~~ (removed in 2.2.1)
 - `fix`: `FixVersion` (FIX 4.2, 4.4, 5.0 SP2 over FIXT.1.1) selected by `FixSessionOptions.withVersion`, `FixDictionary`, `FixGroupDef`, `FixGroup`, `FixMessage.Builder.group` and repeating-group validation on receipt (session reject reasons 15 and 16).
 - `com.quantfinlib.entitlements`: `EntitlementService` (default deny, deny overrides allow, user, desk and role grants with validity windows, audit log), `EntitlementPreTradeCheck`.
 - `com.quantfinlib.reporting`: `Rts22ReportBuilder` and `Rts22TransactionReport` (MiFIR RTS 22 fields, CSV and XML for inspection), `ReportingIdentifiers` (LEI, ISIN, MIC checks), regime-neutral `TransactionReport` and `TransactionReportSink`.
@@ -31,7 +39,7 @@ Minor release. No 2.1 public signature is removed or changed, and the API-compat
 
 - `StrategyRunner.run` without a `Sizing` now trades whole shares on all three engines, so they agree fill for fill. Pass `Sizing.fractionalShares()` for the 2.1 bar engine.
 - `FixSessionOptions` has a third record component, `version`. The two-argument constructor remains and binary compatibility holds; record deconstruction patterns need the extra component.
-- SIMM equity, commodity and FX vega amounts are read as raw dV/dsigma, and the calculator applies the volatility weighting. Set `RC.vega.amountIsVolWeighted = 1` in the calibration when the CRIF already holds vol-weighted amounts.
+- ~~SIMM equity, commodity and FX vega amounts are read as raw dV/dsigma, and the calculator applies the volatility weighting. Set `RC.vega.amountIsVolWeighted = 1` in the calibration when the CRIF already holds vol-weighted amounts.~~ (removed in 2.2.1)
 - Format faults in tick files, checkpoints, FIX journals and scorecard state throw `MalformedFileException` instead of a plain `IOException`; existing `catch (IOException)` blocks still catch them.
 - The API-compatibility baseline is 2.1.0.
 
@@ -46,7 +54,7 @@ Minor release. No 2.1 public signature is removed or changed, and the API-compat
 
 ### Docs
 
-- New [docs/MIGRATION_2.2.md](docs/MIGRATION_2.2.md) and [docs/SIMM.md](docs/SIMM.md); COOKBOOK recipes 333 to 342; LEARN, ARCHITECTURE, DIAGRAMS, MARKET_RISK and STABILITY updated for the new packages.
+- New [docs/MIGRATION_2.2.md](docs/MIGRATION_2.2.md) and docs/SIMM.md (removed in 2.2.1); COOKBOOK recipes 333 to 342; LEARN, ARCHITECTURE, DIAGRAMS, MARKET_RISK and STABILITY updated for the new packages.
 - LEARN Part IV: stacked-colon sentences rewritten; a garbled passage in the iceberg answer repaired.
 - The API docs on GitHub Pages are built from the newest release tag.
 

@@ -10574,28 +10574,6 @@ caller and marked so in the javadoc: CSR inter-bucket correlations, GIRR
 inflation and basis correlations, equity repo, and securitisation. `FrtbNmrf`
 aggregates stress scenario charges for non-modellable risk factors (MAR33).
 
-## 337. SIMM from a CRIF file and a calibration file
-
-```java
-SimmParameters cal;
-try (Reader r = Files.newBufferedReader(Path.of("simm-calibration.properties"))) {
-    cal = SimmParameters.parse(r);              // your licensed ISDA calibration
-}
-List<CrifSensitivity> crif;
-try (Reader r = Files.newBufferedReader(Path.of("crif.csv"))) {
-    crif = CrifSensitivity.parseCsv(r);
-}
-SimmResult im = new SimmCalculator(cal).calculate(crif);
-SimmResult demo = new SimmCalculator(SimmParameters.illustrative()).calculate(List.of(
-    new CrifSensitivity(SimmProductClass.RATES_FX, "Risk_IRCurve", "USD", "1", "5y", "SOFR", 1_000_000)));
-```
-
-The calculator follows the structure of the public ISDA SIMM methodology, and
-the numbers come from the calibration file. `illustrative()` is a made-up
-calibration for tests and demos, and its label says so. Equity, commodity and FX
-vega amounts are read as raw dV/dsigma; set `RC.vega.amountIsVolWeighted = 1`
-when your CRIF already holds vol-weighted amounts. See [SIMM.md](SIMM.md).
-
 ## 338. FIX 4.2 or FIX 5.0 SP2, and repeating groups
 
 ```java

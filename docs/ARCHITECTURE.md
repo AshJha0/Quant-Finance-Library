@@ -88,7 +88,6 @@ carries on. Without a listener nothing changes from 2.1.
 | `commodities`, `markets` | Futures curves; index and private-market analytics | `CommodityCurve`, `IndexConstruction`, `PrivateMarketAnalytics` |
 | `volatility` | Volatility models | `EwmaVolatility`, `Garch11`, `GjrGarch11`, `Egarch11` (maximum likelihood), `HarRv`, `RangeVolatility`, `VolatilityIndex`, `VolatilityDecomposition`, `InformationCriteria` |
 | `risk` | Market, credit and limit risk | `TailRisk`, `VarEngine`, `RiskMetrics`, `FrtbEs`, `PnlAttribution`, `VarBacktest`, `ExtremeValueTheory`, `StressTester`, `ComponentVar`, `CovarianceShrinkage`, `PsdMatrices`, `GaussianCopula`, `Dependence`, `Pca`, `PreTradeLimitChecker`, `CounterpartyExposureTracker`, `SaCcr`, `SaCcrHaircuts`, `FrtbSa`, `FrtbDrc`, `FrtbRrao`, `FrtbNmrf`, `FactorRiskModel` |
-| `risk.simm` | ISDA SIMM initial margin (calibration supplied by the caller) | `SimmCalculator`, `SimmParameters`, `CrifSensitivity`, `SimmResult` |
 | `crb` | Central risk book | `CentralRiskBook`, `InternalizationEngine`, `SkewedQuoter`, `HedgeOptimizer`, `CrbHedgeUniverse`, `CrbAutoHedger`, `CrbRouter`, `CrbPnlLedger` |
 | `hedging` | Hedging | `DeltaHedger`, `HedgingSimulator`, `GreekHedger`, `OptionsBook`, `MinimumVarianceHedge`, `FxHedger`, `PairsHedger`, `CointegrationTest`, `WhalleyWilmott` |
 | `optimization` | Portfolio construction | `QuadraticProgram` (active-set), `PortfolioOptimizer`, `ConstrainedPortfolioOptimizer`, `RiskParityOptimizer`, `BlackLitterman`, `NelderMead` |
@@ -138,7 +137,7 @@ carries on. Without a listener nothing changes from 2.1.
 The library jar is the named module `com.quantfinlib`
 (`src/main/java/module-info.java`). It exports every package that was public in 2.0,
 the reference packages (`fix`, `sbe`, `feed`, `marketdata`, `orderbook`, `trading`,
-`util`), the `stats` package added in 2.1, and `risk.simm`, `entitlements` and
+`util`), the `stats` package added in 2.1, and `entitlements` and
 `reporting` added in 2.2. Exporting a package does not make it
 stable; the tiers are those of [STABILITY.md](STABILITY.md).
 

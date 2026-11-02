@@ -1648,37 +1648,6 @@ checking against the text; CSR inter-bucket correlations, GIRR inflation
 and basis correlations, equity repo and securitisation are left to the
 caller. Recipe 336.
 
-### 10p. ISDA SIMM initial margin
-
-Two dealers facing each other on uncleared derivatives post initial
-margin, and they need to agree the amount without trusting each other's
-models. SIMM is the shared recipe: both feed the same sensitivities, in
-the CRIF file format, through the same formulas with the same published
-calibration.
-
-Formally, SIMM has the same shape as the FRTB method above. Within a
-bucket, `K_b = sqrt( sum_k WS_k^2 + sum_{k != l} rho_kl f_kl WS_k WS_l )`
-with concentration factors `CR_k` folded into `WS_k = RW_k s_k CR_k`.
-Buckets combine with `gamma_bc`, risk classes within a product class with
-the `psi` matrix, and product classes add. Margin for a risk class is
-`delta + vega + curvature + base correlation` (ISDA SIMM methodology,
-public text, version 2.9+2606).
-
-Worked example (own computation). The curvature term rescales each vega
-by a function of option expiry: `SF(t) = 0.5 min(1, 14 / days)`. A
-two-week option gets `SF = 0.5`, a one-year option
-`0.5 x 14 / 365 = 0.0192`, so curvature is a short-dated effect.
-`SimmCalculator.scaling(1.0)` returns that 0.0192.
-
-*In this library:* `risk/simm/SimmCalculator.java` (`calculate`,
-`riskClassMargin`, `calculateWithAddOns`), `SimmParameters` (a
-calibration loaded from a key-value file), `CrifSensitivity`
-(`parseCsv`). Only `SimmParameters.illustrative()` ships, and it is
-not an ISDA calibration; the official numbers and ISDA's unit tests are
-licensed and must come from ISDA. Equity, commodity and FX vega amounts
-are raw dV/dsigma unless `RC.vega.amountIsVolWeighted = 1`. See
-`docs/SIMM.md` and recipe 337.
-
 ### 10q. Corporate events beyond splits and dividends
 
 A position is a number of shares of one ISIN, and corporate events
