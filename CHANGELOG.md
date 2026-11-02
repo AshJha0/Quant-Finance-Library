@@ -8,7 +8,7 @@ Entries for 1.x releases are archived in [docs/history/CHANGELOG-1.x.md](docs/hi
 
 ### Changed
 
-- Release policy: the "at most one minor release a month" rule is dropped. The other rules in [docs/STABILITY.md](docs/STABILITY.md) stay: no breaking changes in 3.x, a deprecation lives at least one minor release and three months, 4.0 no earlier than three months after 3.2.0, tags never move.
+- Release policy: the "at most one minor release a month" rule and the three-month waits (deprecation to removal, 3.2.0 to 4.0) are dropped. Kept in [docs/STABILITY.md](docs/STABILITY.md): no breaking changes within a major after its .0, a deprecation ships in at least one minor (with its replacement) before the major that removes it, a migration guide per major, tags never move.
 
 ## [3.1.0] - 2026-11-02
 

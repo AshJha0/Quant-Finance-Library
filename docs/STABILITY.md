@@ -154,14 +154,16 @@ The 2.x to 3.0 releases came too fast for anyone to depend on: six releases in a
 a day, and one deprecation that lived 45 minutes. What made that hard to depend on
 was the breaks and the short deprecation, not the number of releases, so from 3.1.0
 the project keeps these rules. Minor and patch releases ship when they are ready;
-there is no cap on how often. (3.1.0 briefly also capped minors at one a month; that
-rule was dropped on 2026-11-02.)
+there is no cap on how often. (3.1.0 also capped minors at one a month and required
+three months between a deprecation and its removal; both rules were dropped on
+2026-11-02.)
 
-- A deprecation lives for at least one minor release **and** three months before the
-  major that removes it. The changelog gives the earliest removal date.
-- 3.x has no breaking changes. New behaviour arrives as new classes, methods or
-  options; the old path stays and is deprecated.
-- The next major (4.0) ships no earlier than three months after 3.2.0. Its
-  planned module split is in [DESIGN_4.0.md](DESIGN_4.0.md).
+- A deprecation ships in at least one minor release, with its replacement already
+  available, before the major that removes it. The changelog names the release that
+  removes it.
+- A major version has no breaking changes after its .0 release. New behaviour arrives
+  as new classes, methods or options; the old path stays and is deprecated.
+- Each major has a migration guide listing every removal and its replacement. The
+  4.0 module split is planned in [DESIGN_4.0.md](DESIGN_4.0.md).
 - Tags are never moved. A release that fails after tagging is fixed by a new patch
   release.

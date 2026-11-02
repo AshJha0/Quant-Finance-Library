@@ -1,8 +1,8 @@
 # Design for 4.0: a narrower stable promise
 
 Status: design, written for 3.1.0. Nothing on this page changes 3.x behaviour. The
-rules in [STABILITY.md](STABILITY.md) govern when any of it may ship: a deprecation lives at least one minor release and three months, 3.x
-has no breaking changes, and 4.0 ships no earlier than three months after 3.2.0.
+rules in [STABILITY.md](STABILITY.md) govern when any of it may ship: each removal is deprecated, with its replacement, in at
+least one 3.x minor (3.2.0) before 4.0 removes it, and 3.x has no breaking changes.
 
 ## Why
 
