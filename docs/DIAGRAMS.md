@@ -2205,7 +2205,7 @@ flowchart LR
     subgraph INSTR52["stages 1-2: discovery + signals (per asset class)"]
         EQ52["Equities<br/>alpha.Factors<br/>markets.IndexConstruction<br/>pricing.DividendSchedule"]
         FX52["FX<br/>fx.SwapPointsCurve<br/>fx.FxVolSurface<br/>fx.CrossOp"]
-        RT52["Rates<br/>rates.YieldCurve<br/>rates.SwapPricer<br/>rates.NelsonSiegel"]
+        RT52["Rates<br/>rates.YieldCurve<br/>rates.VanillaSwap<br/>rates.NelsonSiegel"]
         CR52["Credit<br/>credit.CreditCurve<br/>credit.CdsPricer<br/>credit.CreditSpreads (z, basis)"]
         CM52["Commodities<br/>commodities.CommodityCurve<br/>(roll yield + implied carry)"]
     end
@@ -4277,7 +4277,7 @@ flowchart TD
     end
     INTERP_101["CurveInterpolation<br/>LOG_LINEAR_DISCOUNT or MONOTONE_CONVEX"]
     PAIR_101["CurvePair<br/>(discount, projection)"]
-    PRICE_101["SwapPricer / RatesOptions<br/>two-curve overloads"]
+    PRICE_101["VanillaSwap (FixedLeg + OvernightLeg / TermRateLeg)<br/>RatesOptions two-curve overloads"]
     RISK_101["MultiCurveRisk<br/>bucketedDv01 / keyRateDv01 / parallelDv01<br/>bump one quote, rebuild both"]
 
     DEP_101 --> B1_101
@@ -4294,10 +4294,13 @@ flowchart TD
     PAIR_101 --> PRICE_101
     PRICE_101 --> RISK_101
     RISK_101 -. "rebuild per bump" .-> B1_101
+    JAC_101["BootstrapJacobian (3.1)<br/>bucketedDv01 from one build<br/>implicit-function theorem"]
+    PAIR_101 --> JAC_101
 ```
 
 The dotted edge is the cost of two-curve risk: every bucket is two full
-bootstraps (up and down bump). An OIS quote moves both curves, because the
+bootstraps (up and down bump). `BootstrapJacobian` (3.1) avoids it: one
+build, then one linear solve (LEARN 10d.2). An OIS quote moves both curves, because the
 projection curve is solved against the discount curve; a 3M quote moves
 only the projection curve. See LEARN section 10d and COOKBOOK recipes 301
 and 302.

@@ -1224,6 +1224,113 @@ and `InterestRateSwap`, all implementing `CurveInstrument`;
 `bucketedDv01`, `keyRateDv01` with Ho 1992 hat weights, `parallelDv01`);
 two-curve overloads in `SwapPricer` and `RatesOptions.swaption` and
 `capFloor`. The single-curve methods are unchanged. Recipes 301 and 302.
+Since 3.1 a traded swap is better priced with the leg model below
+(`SwapPricer` is deprecated, `docs/MIGRATION_3.1.md`).
+
+#### 10d.1 Lookback, observation shift, lockout and payment lag
+
+The plain idea. An overnight-indexed coupon (SOFR, SONIA, ESTR) is the
+daily rate compounded over the period, so you only know it at the end of
+the period. That is awkward: the payer needs a few days to compute and pay.
+Four conventions buy that time, and they differ in which day's rate goes
+into the product and how many days it is weighted by.
+
+- **Payment lag** of P days: keep the coupon as is, pay it P business days
+  after the accrual end. Only the discount factor changes.
+- **Lookback** of L days: for each accrual day, use the rate published L
+  business days earlier, but weight it by the accrual day's own length
+  (a Friday still counts 3 days).
+- **Observation shift** of L days: move the whole observation window L
+  business days back and take both the rates and the day weights from the
+  shifted window. The compounded rate is annualised over the shifted
+  window's days, then applied to the accrual period's year fraction.
+- **Lockout** of k days: the rates for the last k business days are frozen
+  at the rate of the day before them.
+
+Formal statement (`rates/OvernightConvention.java`), with `r_i` the rate
+used for day i, `n_i` its weight in calendar days, `d` the day-count
+denominator (360 for ACT/360) and `N = sum_i n_i`:
+
+```
+R      = ( prod_i (1 + r_i n_i / d) - 1 ) * d / N
+coupon = (R + spread) * tau(accrualStart, accrualEnd)
+```
+
+Lookback and shift both use `r_i` = the rate L business days before day i;
+they differ in `n_i`: the accrual day's length (lookback) or the observed
+day's length (shift). With no convention and a single curve `P` for both
+forecasting and discounting, the product telescopes and the coupon times
+tau is `P(s)/P(e) - 1`, so an unlagged leg is worth `P(start) - P(end)`.
+
+Worked example. One accrual week Mon 2 Nov to Mon 9 Nov 2026 (weekends-only
+calendar, L = 2, k = 2). Accrual days Mon to Fri, weights 1, 1, 1, 1, 3.
+
+| accrual day | lookback: rate of, weight | shift: rate of, weight | lockout: rate of, weight |
+|---|---|---|---|
+| Mon 2 | Thu 29 Oct, 1 | Thu 29 Oct, 1 | Mon 2, 1 |
+| Tue 3 | Fri 30 Oct, 1 | Fri 30 Oct, 3 | Tue 3, 1 |
+| Wed 4 | Mon 2, 1 | Mon 2, 1 | Wed 4, 1 |
+| Thu 5 | Tue 3, 1 | Tue 3, 1 | Wed 4, 1 |
+| Fri 6 | Wed 4, 3 | Wed 4, 1 | Wed 4, 3 |
+
+The shifted window is Thu 29 Oct to Thu 5 Nov, 7 days, the same total as
+the accrual week here; the weekend has moved from Friday's weight onto Fri
+30 Oct's. Under lookback the rate is known two business days before the
+week ends; under lockout two days of the period have a known rate early.
+With a payment lag of 2 the coupon is paid Wed 11 Nov. Past fixings come
+from `FixingHistory`: every date before the valuation date must be there
+(a missing one throws), today's is optional.
+
+*Evidence.* Externally anchored: three seasoned SOFR swaps (lookback 2,
+shift 2, lockout 2, each with a 2-day payment lag, 111 published fixings)
+and a forward-starting front-stub swap match QuantLib 1.44 to 3e-12 in NPV
+and 1e-11 in fair rate (`QuantLibGoldenTest`, generator
+`scripts/quantlib-golden-sofr.py`; inputs are illustrative, not market
+data). Independent recomputation: `VanillaSwap` equals `OisSwap` and
+`InterestRateSwap` in their special cases to 1e-14 (`VanillaSwapTest`).
+
+*In this library:* `rates/LegConvention.java`, `FixedLeg`, `OvernightLeg`,
+`TermRateLeg`, `OvernightConvention`, `FixingHistory`, `VanillaSwap`.
+Recipes 104, 177 and 360.
+
+#### 10d.2 The analytic bootstrap Jacobian
+
+The plain idea. Bump-and-rebuild risk asks the bootstrap the same question
+n times. But the bootstrap already says how quotes and curve are tied: each
+instrument reprices to its quote. Differentiate that tie once and you get
+the curve's sensitivity to every quote from one linear solve.
+
+Formal statement. Let `Y` be the curve pillar values (minus log discount
+factors) and `I_k(Y)` the implied quote of instrument k. The bootstrap
+solves `I(Y) = q`. The implicit-function theorem gives
+`dY/dq = J^-1` with `J_kj = dI_k/dY_j`, so for a trade with value `V(Y)`
+
+```
+dV/dq = (dV/dY) J^-1,   equivalently solve  J^T z = (dV/dY)^T
+```
+
+and the per-quote DV01 is `z * 1bp`. `BootstrapJacobian.quoteJacobian`
+writes `J` in closed form per instrument type (deposits, FRAs, futures,
+OIS and IRS) through the interpolation weights `dY(t)/dY_j`; with two
+curves the matrix is block lower-triangular (OIS quotes move both curves,
+projection quotes only their own).
+
+Worked example. On log-linear discount interpolation, `-log P(t)` is linear
+between pillars, so the weight of `t = 3` between pillars at 2 and 4 is 0.5
+on each, and extrapolating to `t = 6` gives weights 2 and -1
+(`BootstrapJacobianTest.logLinearWeightsAreExact`).
+
+*Evidence.* Self-consistency: on log-linear curves the buckets equal
+`MultiCurveRisk`'s 1bp rebuild to 1e-6 of the largest bucket, and `J`
+equals a finite difference of the implied quotes to 1e-6. For
+`MONOTONE_CONVEX` the interpolation weights are numerical (stated in the
+javadoc; the piecewise zones have no clean closed form), and the buckets
+match a 1e-7 rebuild to 1e-4, while the 1bp rebuild is off by up to about
+10% in single buckets because it crosses zone kinks.
+
+*In this library:* `rates/BootstrapJacobian.java` (`quoteJacobian`,
+`bucketedDv01`, same contract and ordering as `MultiCurveRisk.bucketedDv01`).
+Recipe 359.
 
 ### 10e. The ISDA standard CDS model
 

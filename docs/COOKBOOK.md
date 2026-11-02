@@ -3727,33 +3727,48 @@ spreads.
 
 The missing middle between the curve (bootstrapped from par swaps) and
 `RatesOptions` (options ON forward swaps): the PV, par rate and DV01 of an
-actual position, in the single-curve world where the float leg is worth par
-at inception.
+actual position. Since 3.1 the leg model does this on dated schedules:
+`FixedLeg` and an `OvernightLeg` (or `TermRateLeg`) under a `LegConvention`,
+paired in a `VanillaSwap`. The old `SwapPricer` (annual tenors on a
+`YieldCurve`) is deprecated; see `docs/MIGRATION_3.1.md`.
 
 ```java
-double[] t = {1, 2, 3, 4, 5, 7, 10};
-double[] zeros = {0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05};
-YieldCurve curve = YieldCurve.ofZeroRates(t, zeros);
+static DiscountCurve flat(LocalDate val, double z) {    // continuously-compounded zero z
+    double[] t = {1, 2, 3, 4, 5, 7, 10};
+    double[] df = new double[t.length];
+    for (int i = 0; i < t.length; i++) df[i] = Math.exp(-z * t[i]);
+    return DiscountCurve.of(val, t, df, CurveInterpolation.LOG_LINEAR_DISCOUNT);
+}
 
-double par = SwapPricer.parRate(curve, 5);      // (1 - DF(5)) / annuity
-System.out.println(SwapPricer.payerPv(curve, 5, par));   // 0.0: an identity
+LocalDate val = LocalDate.of(2026, 11, 2);
+BusinessCalendar cal = BusinessCalendar.weekendsOnly();
+LocalDate spot = cal.addBusinessDays(val, 2), end = spot.plusYears(5);
+LegConvention annual = LegConvention.of(1, DayCount.ACT_360, cal, BusinessCalendar.Roll.MODIFIED_FOLLOWING);
+OvernightLeg floating = new OvernightLeg(spot, end, 0, annual,
+        OvernightConvention.IN_ARREARS, FixingHistory.empty());
+VanillaSwap swap = new VanillaSwap(new FixedLeg(spot, end, 0.04, annual), floating);
+
+DiscountCurve curve = flat(val, 0.05);
+double par = swap.parRate(curve, curve);
+VanillaSwap atPar = new VanillaSwap(swap.fixed().withRate(par), floating);
+System.out.println(atPar.payerPv(curve, curve));   // 0: an identity
 
 // Pay 4% fixed on a 5% curve: positive PV to the payer, per unit notional.
-double pv = SwapPricer.payerPv(curve, 5, 0.04);
-double dv01 = SwapPricer.dv01(curve, 5, 0.04);  // +1bp parallel zero shift
-double annuity = SwapPricer.annuity(curve, 5);
-System.out.printf("pv=%.5f  dv01=%.6f  annuity*1bp=%.6f%n",
-        pv, dv01, annuity * 1e-4);
+double pv = swap.payerPv(curve, curve);
+double dv01 = swap.payerPv(flat(val, 0.0501), flat(val, 0.0501)) - pv;  // +1bp parallel zero shift
+double annuity = swap.annuity(curve);
+System.out.printf("pv=%.5f  dv01=%.6f  annuity*1bp=%.6f%n", pv, dv01, annuity * 1e-4);
 ```
 
-A swap struck at the par rate must PV to zero: pinned at 1e-12, not
-approximately. The DV01 subtlety worth knowing: the bump hits the
-continuously-compounded zero curve, and the simple par rate is `e^z - 1`, so
-a 1bp zero shift moves the par rate by `e^z` bp; the measured DV01 is
-`annuity * e^z * 1bp` on a flat curve, about 5% above the naive
-`annuity * 1bp` at 5% rates (`AssetClassRoundTest` pins exactly this).
+A swap struck at the par rate must PV to zero (`VanillaSwapTest` pins it at
+1e-15). With no lookback, no payment lag and one curve for both legs, the
+overnight leg telescopes to `P(start) - P(end)`, so this swap equals the
+`OisSwap` curve instrument to 1e-14. The DV01 subtlety worth knowing: the
+bump hits the continuously-compounded zero curve, while the fixed rate is
+quoted simple ACT/360, so the measured DV01 is not exactly `annuity * 1bp`.
 Quoting risk without saying which curve you bumped is how two desks disagree
-about the same trade.
+about the same trade. For per-quote risk on a bootstrapped curve, see
+recipe 359.
 
 ## 105. Run private-markets analytics like an LP
 
@@ -5873,17 +5888,28 @@ rate means. Price one struck away from par, and its PV and DV01 fall
 straight out of the curve's annuity.
 
 ```java
-YieldCurve curve = YieldCurve.bootstrapAnnualParSwaps(
-        new int[]{1, 2, 3, 5, 7, 10}, new double[]{0.032, 0.0335, 0.0345, 0.036, 0.037, 0.038});
+LocalDate val = LocalDate.of(2026, 11, 2);
+BusinessCalendar cal = BusinessCalendar.weekendsOnly();
+BusinessCalendar.Roll mf = BusinessCalendar.Roll.MODIFIED_FOLLOWING;
+LocalDate spot = cal.addBusinessDays(val, 2);
+int[] years = {1, 2, 3, 5, 7, 10};
+double[] quotes = {0.032, 0.0335, 0.0345, 0.036, 0.037, 0.038};
+List<CurveInstrument> ois = new ArrayList<>();
+for (int i = 0; i < years.length; i++) {
+    ois.add(new OisSwap(spot, spot.plusYears(years[i]), quotes[i], 1, DayCount.ACT_360, cal, mf));
+}
+DiscountCurve curve = MultiCurveBootstrap.bootstrap(val, ois, CurveInterpolation.LOG_LINEAR_DISCOUNT);
 
-int tenor = 5;
-double par = SwapPricer.parRate(curve, tenor);      // the fair fixed rate: PV = 0 here
-double annuity = SwapPricer.annuity(curve, tenor);  // sum of discount factors
-
+LegConvention annual = LegConvention.of(1, DayCount.ACT_360, cal, mf);
+LocalDate end = spot.plusYears(5);
+OvernightLeg floating = new OvernightLeg(spot, end, 0, annual,
+        OvernightConvention.IN_ARREARS, FixingHistory.empty());
 // A swap struck 30bp through par: pay 3.30% fixed, receive floating.
-double pv = SwapPricer.payerPv(curve, tenor, 0.0330);
-double dv01 = SwapPricer.dv01(curve, tenor, 0.0330);
-System.out.printf("par %.4f  annuity %.4f  payerPV %.2f  DV01 %.4f%n", par, annuity, pv, dv01);
+VanillaSwap swap = new VanillaSwap(new FixedLeg(spot, end, 0.0330, annual), floating);
+double par = swap.parRate(curve, curve);      // the fair fixed rate: PV = 0 here (0.036, the 5y quote)
+double annuity = swap.annuity(curve);         // sum of accrual * discount factor
+double pv = swap.payerPv(curve, curve);
+System.out.printf("par %.4f  annuity %.4f  payerPV %.5f%n", par, annuity, pv);
 ```
 
 The par rate is the fixed coupon that makes the swap's PV zero: price a
@@ -8107,30 +8133,40 @@ embarrassing participation.
 A received-fixed swap earns two things even if rates never move: the fixed
 coupon minus the (lower, on an upward curve) floating it pays (carry) and
 the pull as the position rolls down the curve to shorter, higher-priced
-points; roll. `SwapPricer` gives the PV, par rate and DV01 to build both.
+points; roll. `VanillaSwap` gives the PV and par rate to build both.
 
 ```java
+static VanillaSwap ois(LocalDate spot, int years, double fixed, LegConvention c) {
+    LocalDate end = spot.plusYears(years);
+    return new VanillaSwap(new FixedLeg(spot, end, fixed, c), new OvernightLeg(spot, end, 0, c,
+            OvernightConvention.IN_ARREARS, FixingHistory.empty()));
+}
+
+LocalDate val = LocalDate.of(2026, 11, 2);
+BusinessCalendar cal = BusinessCalendar.weekendsOnly();
+LocalDate spot = cal.addBusinessDays(val, 2);
+LegConvention annual = LegConvention.of(1, DayCount.ACT_360, cal, BusinessCalendar.Roll.MODIFIED_FOLLOWING);
 double[] t = {1, 2, 3, 5, 7, 10};
 double[] zeros = {0.030, 0.032, 0.034, 0.036, 0.038, 0.040};   // upward curve
-YieldCurve curve = YieldCurve.ofZeroRates(t, zeros);
+double[] df = new double[t.length];
+for (int i = 0; i < t.length; i++) df[i] = Math.exp(-zeros[i] * t[i]);
+DiscountCurve curve = DiscountCurve.of(val, t, df, CurveInterpolation.LOG_LINEAR_DISCOUNT);
 
-double par5 = SwapPricer.parRate(curve, 5);
-double pv   = SwapPricer.payerPv(curve, 5, par5 - 0.005);      // receive-fixed 50bp above float
-double dv01 = SwapPricer.dv01(curve, 5, par5 - 0.005);
+double par5 = ois(spot, 5, 0.0, annual).parRate(curve, curve);
+VanillaSwap pos = ois(spot, 5, par5 - 0.005, annual);
+double pv = pos.receiverPv(curve, curve);                       // receive fixed, struck 50bp under par
 
 // Roll: the par rate 1y forward is the 4y par; the position rolls toward it.
-double roll1y = par5 - SwapPricer.parRate(curve, 4);
-System.out.printf("PV %.5f  DV01 %.6f  1y roll-down %.1f bp%n", pv, dv01, roll1y * 1e4);
+double roll1y = par5 - ois(spot, 4, 0.0, annual).parRate(curve, curve);
+System.out.printf("receiver PV %.5f  1y roll-down %.1f bp%n", pv, roll1y * 1e4);
 ```
 
 Carry-and-roll is the return to standing still: the part of a rates trade's
 P&L that shows up if the curve is unchanged tomorrow, and on a steep upward
-curve it is most of the ex-ante expected return. The DV01 subtlety worth
-knowing: the bump hits the continuously-compounded zero curve and the simple
-par rate is `e^z - 1`, so a 1bp zero shift moves the par rate by `e^z` bp;
-about 5% above the naive `annuity * 1bp` at these rates. A swap struck exactly
-at par PVs to zero, pinned as an identity, so `payerPv(curve, 5, par5)` is your
-smoke test.
+curve it is most of the ex-ante expected return. To size it per basis
+point, divide by the swap's DV01 (bump the curve and reprice, as in recipe
+104). A swap struck exactly at par PVs to zero, pinned as an identity, so
+`ois(spot, 5, par5, annual).payerPv(curve, curve)` is your smoke test.
 
 ## 250. Run an index-rebalance strategy
 
@@ -9894,8 +9930,8 @@ List<CurveInstrument> threeM = List.of(
         DayCount.ACT_360, cal, BusinessCalendar.Roll.MODIFIED_FOLLOWING));
 CurvePair c = MultiCurveRisk.buildCurves(val, ois, threeM, CurveInterpolation.MONOTONE_CONVEX);
 InterestRateSwap swap = (InterestRateSwap) threeM.get(2);
-double pv = SwapPricer.payerPv(c.discount(), c.projection(), swap);   // 0 to 1e-12
-double par = SwapPricer.parRate(c.discount(), c.projection(), swap);  // 0.0369
+double pv = swap.payerPv(c.discount(), c.projection());   // 0 to 1e-12
+double par = swap.parRate(c.discount(), c.projection());  // 0.0369
 ```
 
 The input swap reprices to zero because the bootstrap solved for exactly that.
@@ -11036,3 +11072,84 @@ appears, or RJCT once more than 7 calendar days have passed (ESMA65-8-2356
 paras 20, 28, 53 and 70 to 72). Any other error rejects at once. Use it to
 predict the authority's answer, and `StatusAdvice.parse` to read the real one:
 its `Rltd` header names the file the feedback is about (para 101).
+
+## 359. Per-quote DV01 without rebuilding the curve (3.1)
+
+`MultiCurveRisk.bucketedDv01` bumps each quote by 1bp and rebuilds the
+curves: 2n bootstraps for n quotes. `BootstrapJacobian` gets the same
+vector from one build, by the implicit-function theorem.
+
+```java
+LocalDate val = LocalDate.of(2026, 11, 2);
+BusinessCalendar cal = BusinessCalendar.weekendsOnly();
+BusinessCalendar.Roll mf = BusinessCalendar.Roll.MODIFIED_FOLLOWING;
+LocalDate spot = cal.addBusinessDays(val, 2);
+List<CurveInstrument> ois = List.of(
+    new Deposit(val, cal.addBusinessDays(val, 1), 0.038, DayCount.ACT_360),
+    new OisSwap(spot, spot.plusYears(1), 0.036, 1, DayCount.ACT_360, cal, mf),
+    new OisSwap(spot, spot.plusYears(5), 0.035, 1, DayCount.ACT_360, cal, mf),
+    new OisSwap(spot, spot.plusYears(10), 0.036, 1, DayCount.ACT_360, cal, mf));
+OisSwap trade = new OisSwap(spot, spot.plusYears(6), 0.035, 1, DayCount.ACT_360, cal, mf);
+ToDoubleBiFunction<DiscountCurve, DiscountCurve> pv = (d, p) -> trade.payerPv(d);
+
+double[] analytic = BootstrapJacobian.bucketedDv01(val, ois, List.of(), CurveInterpolation.LOG_LINEAR_DISCOUNT, pv);
+double[] rebuilt = MultiCurveRisk.bucketedDv01(val, ois, List.of(), CurveInterpolation.LOG_LINEAR_DISCOUNT, pv);
+```
+
+On log-linear curves the two agree to 1e-6 of the largest bucket
+(`BootstrapJacobianTest`). On `MONOTONE_CONVEX` they can differ by up to
+about 10% in single buckets: the 1bp rebuild crosses the kinks between the
+interpolator's shape zones, and the Jacobian (whose monotone-convex
+interpolation weights are taken numerically) agrees instead with a 1e-7
+rebuild to 1e-4. Pass a projection-instrument list as well and the vector
+covers both curves, OIS quotes first. The derivation is in LEARN, "The
+analytic bootstrap Jacobian".
+
+## 360. A seasoned SOFR swap: lookback, shift, lockout, payment lag (3.1)
+
+```java
+LocalDate val = LocalDate.of(2026, 11, 2);
+BusinessCalendar cal = BusinessCalendar.weekendsOnly();
+LegConvention sofr = new LegConvention(1, DayCount.ACT_360, cal, BusinessCalendar.Roll.MODIFIED_FOLLOWING,
+        BusinessCalendar.StubType.SHORT_FRONT, false, 2);          // 2-day payment lag
+FixingHistory published = FixingHistory.of(pastFixings);          // Map<LocalDate, Double>
+LocalDate start = LocalDate.of(2026, 5, 4), end = LocalDate.of(2031, 5, 4);
+
+OvernightLeg lookback = new OvernightLeg(start, end, 0, sofr, new OvernightConvention(2, false, 0), published);
+OvernightLeg shifted  = new OvernightLeg(start, end, 0, sofr, new OvernightConvention(2, true, 0), published);
+OvernightLeg lockout  = new OvernightLeg(start, end, 0, sofr, new OvernightConvention(0, false, 2), published);
+VanillaSwap swap = new VanillaSwap(new FixedLeg(start, end, 0.035, sofr), shifted);
+double npv = swap.payerPv(curve, curve);
+```
+
+Every fixing dated before the valuation date must be in the history (a
+missing one throws: a hole in the past is a data error, not something to
+forecast); today's fixing is used if present and forecast otherwise. The
+three conventions differ only in which day's rate is used and how it is
+weighted; LEARN, "Lookback, observation shift, lockout and payment lag",
+works one week through all three. The QuantLib 1.44 golden test prices three
+such seasoned swaps (lookback 2, shift 2, lockout 2, each with a 2-day
+payment lag) to within 3e-12 of QuantLib's NPV.
+
+## 361. Bond risk for a maturity between coupon dates (3.1)
+
+```java
+double years = 2.3;                                  // not a whole number of half-years
+boolean whole = BondPricer.isWholePeriods(2, years); // false: use the ...Exact functions
+double dirty = BondPricer.priceFromYieldExact(100, 0.05, 2, years, 0.045);
+double accrued = BondPricer.accruedInterestExact(100, 0.05, 2, years);
+double clean = dirty - accrued;
+double modDur = BondPricer.modifiedDurationExact(100, 0.05, 2, years, 0.045);
+double conv = BondPricer.convexityExact(100, 0.05, 2, years, 0.045);
+```
+
+The 3.0 functions (`priceFromYield`, `macaulayDuration`, ...) round the
+maturity to whole coupon periods. That is kept unchanged, and right for
+whole periods, but deprecated for anything else. The `...Exact` functions
+put coupons on the quasi-coupon grid counted back from maturity: 2.3 years
+semi-annual is 4.6 periods, five coupons, the first 0.6 periods away. On
+whole periods they equal the old functions to 1e-12; on an ACT/ACT ICMA bond
+they match QuantLib's dirty price and durations to 1e-10 and its convexity
+to 1e-9.
+`convexityAnalytic` is the closed form of the old `convexity` (same schedule)
+and matches it to 1e-6 relative.
