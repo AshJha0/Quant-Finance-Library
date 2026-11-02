@@ -96,6 +96,21 @@ class CatOfficialSchemaTest {
                 + "with a reason, to cat-official-schema-deltas.txt");
     }
 
+    /** The official layout (own construction): choices as one object, dataType alternatives. */
+    @Test
+    void readsOfficialLayout() throws IOException {
+        CatSchema s = CatSchema.parse("{\"version\":\"4.2.0\",\"choices\":{\"destinationType\":[\"E\",\"F\"]},"
+                + "\"eventDefinitions\":[{\"eventName\":\"MEOR\",\"fields\":[{\"name\":\"destination\","
+                + "\"dataType\":[\"Industry Member ID\",\"Exchange ID\"],\"JSONDataType\":\"STRING\","
+                + "\"required\":\"Optional\",\"position\":\"1\"},{\"name\":\"destinationType\",\"dataType\":"
+                + "\"Choice\",\"JSONDataType\":\"STRING\",\"required\":\"Optional\",\"position\":\"2\"}]}]}");
+        assertEquals("Industry Member ID|Exchange ID", s.fields("MEOR").get(0).dataType());
+        List<CatSchema.Issue> bad = s.validateLine("{\"type\":\"MEOR\",\"destinationType\":\"X\"}");
+        assertTrue(bad.stream().anyMatch(i -> i.ruleId().equals("CAT-S08")), bad.toString());
+        assertTrue(s.validateLine("{\"type\":\"MEOR\",\"destination\":\"XNYS\",\"destinationType\":\"E\"}")
+                .stream().noneMatch(i -> i.field().equals("destination")));
+    }
+
     /** The comparison itself, on a hand-made pair (own construction). */
     @Test
     void differencesFindsEachKind() throws IOException {

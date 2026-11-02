@@ -37,7 +37,10 @@ import java.util.regex.Pattern;
  * in the section 6.1.5.3 example. The names of the other two top-level members are not
  * printed; this class reads {@code choices} (objects with {@code name}, {@code values} and
  * optionally {@code eventNames}) and {@code dataTypes} (objects with {@code dataType},
- * {@code maxLength}, {@code precision}, {@code scale}), which is the library's reading. Data
+ * {@code maxLength}, {@code precision}, {@code scale}), which is the library's reading. Since
+ * 3.2.0 it also reads the official file's layout (seen in version 4.2.0): {@code version},
+ * {@code choices} as one object of name to values, and a dataType given as an array of
+ * alternatives (destination, senderIMID), any of which a value may match. Data
  * types are checked by the rules of Table 3 whatever the file says; a {@code dataTypes}
  * entry can only narrow a length. {@link #rules()} lists every check with its citation.</p>
  *
@@ -125,7 +128,8 @@ public final class CatSchema {
      * One field definition (section 6.1.5.2 item 2).
      *
      * @param name field name
-     * @param dataType CAT data type, for example {@code "Price"} or {@code "Text (64)"}
+     * @param dataType CAT data type, for example {@code "Price"} or {@code "Text (64)"}; since 3.2.0
+     *     alternatives given as a JSON array in the file are joined by {@code |}
      * @param jsonTypes allowed JSON types
      * @param required {@code Required}, {@code Conditional} or {@code Optional}
      * @param position CSV position
@@ -243,7 +247,7 @@ public final class CatSchema {
                 } catch (NumberFormatException e) {
                     throw new IOException("bad position for " + name + "." + fname, e);
                 }
-                fields.put(fname, new Field(fname, text(f.get("dataType"), "dataType of " + fname), jts,
+                fields.put(fname, new Field(fname, dataType(f.get("dataType"), fname), jts,
                         text(f.get("required"), "required of " + fname), p));
             }
             events.put(name, Collections.unmodifiableMap(fields));
@@ -253,7 +257,17 @@ public final class CatSchema {
         }
         Map<String, Set<String>> choices = new LinkedHashMap<>();
         Object ch = top.get("choices");
-        if (ch != null) {
+        if (ch instanceof Map<?, ?> byName) {
+            // the official file's layout: {"name": [values], ...}, not scoped to events
+            for (Map.Entry<?, ?> c : byName.entrySet()) {
+                String name = text(c.getKey(), "choice name");
+                Set<String> values = new LinkedHashSet<>();
+                for (Object v : list(c.getValue(), "values of " + name)) {
+                    values.add(v instanceof String x ? x : v.toString());
+                }
+                choices.put("*." + name, Collections.unmodifiableSet(values));
+            }
+        } else if (ch != null) {
             for (Object o : list(ch, "choices")) {
                 Map<?, ?> c = map(o, "choice");
                 String name = text(c.get("name"), "choice name");
@@ -439,8 +453,39 @@ public final class CatSchema {
         return "ARRAY";
     }
 
-    /** Returns null when {@code v} fits {@code dataType} (Table 3), else the reason. */
+    /**
+     * A field's dataType: a string, or (as in the official file, e.g. destination and
+     * senderIMID) an array of alternatives, held joined by {@code |}.
+     */
+    private static String dataType(Object o, String fname) throws IOException {
+        if (o instanceof List<?> l && !l.isEmpty()) {
+            List<String> alts = new ArrayList<>();
+            for (Object x : l) {
+                alts.add(text(x, "dataType of " + fname));
+            }
+            return String.join("|", alts);
+        }
+        return text(o, "dataType of " + fname);
+    }
+
+    /** Returns null when {@code v} fits one of the {@code |}-separated alternatives. */
     private String dataTypeProblem(String dataType, Object v) {
+        if (dataType.indexOf('|') < 0) {
+            return singleDataTypeProblem(dataType, v);
+        }
+        String first = null;
+        for (String alt : dataType.split("\\|")) {
+            String p = singleDataTypeProblem(alt, v);
+            if (p == null) {
+                return null;
+            }
+            first = first == null ? p : first;
+        }
+        return first;
+    }
+
+    /** Returns null when {@code v} fits {@code dataType} (Table 3), else the reason. */
+    private String singleDataTypeProblem(String dataType, Object v) {
         String s = v.toString();
         switch (dataType) {
             case "Price":

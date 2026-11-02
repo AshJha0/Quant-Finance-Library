@@ -3,3 +3,23 @@
 # fetches (CatOfficialSchemaTest). One key per line, as the test prints it (for example
 # MENO.fieldName.required), then a reason. Empty until the first nightly comparison has been
 # reviewed: an unreviewed difference fails the job.
+#
+# Reviewed 2026-11-02 against the official file version 4.2.0 (sha256 21c6e732...). All are
+# 4.1.0 r14 -> 4.2.0 spec changes, not transcription errors (the 17 destination/senderIMID
+# dataType errors this comparison found were fixed in the transcription instead).
+MENQ.RFQID  4.2.0 retires this MENQ RFQ field (retiredFieldPosition); 4.1.0 r14 Table 39 lists it
+MENQ.RFQFlag  4.2.0 retires this MENQ RFQ field (retiredFieldPosition); 4.1.0 r14 Table 39 lists it
+MENQ.bidRelativePrice  4.2.0 retires this MENQ RFQ field (retiredFieldPosition); 4.1.0 r14 Table 39 lists it
+MENQ.askRelativePrice  4.2.0 retires this MENQ RFQ field (retiredFieldPosition); 4.1.0 r14 Table 39 lists it
+MENQ.validUntilDuration  4.2.0 retires this MENQ RFQ field (retiredFieldPosition); 4.1.0 r14 Table 39 lists it
+MONQ  4.2.0 no longer defines this option or multi-leg quote event; 4.1.0 r14 does (Tables 85-89, 128-137)
+MORQ  4.2.0 no longer defines this option or multi-leg quote event; 4.1.0 r14 does (Tables 85-89, 128-137)
+MOQR  4.2.0 no longer defines this option or multi-leg quote event; 4.1.0 r14 does (Tables 85-89, 128-137)
+MOQC  4.2.0 no longer defines this option or multi-leg quote event; 4.1.0 r14 does (Tables 85-89, 128-137)
+MOQM  4.2.0 no longer defines this option or multi-leg quote event; 4.1.0 r14 does (Tables 85-89, 128-137)
+MLNQ  4.2.0 no longer defines this option or multi-leg quote event; 4.1.0 r14 does (Tables 85-89, 128-137)
+MLRQ  4.2.0 no longer defines this option or multi-leg quote event; 4.1.0 r14 does (Tables 85-89, 128-137)
+MLQS  4.2.0 no longer defines this option or multi-leg quote event; 4.1.0 r14 does (Tables 85-89, 128-137)
+MLQR  4.2.0 no longer defines this option or multi-leg quote event; 4.1.0 r14 does (Tables 85-89, 128-137)
+MLQC  4.2.0 no longer defines this option or multi-leg quote event; 4.1.0 r14 does (Tables 85-89, 128-137)
+MLQM  4.2.0 no longer defines this option or multi-leg quote event; 4.1.0 r14 does (Tables 85-89, 128-137)
