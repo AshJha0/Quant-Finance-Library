@@ -1,6 +1,7 @@
 package com.quantfinlib.regreporting.emir;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * The reports a trade repository has already accepted for one counterparty and one UTI, in
@@ -25,4 +26,20 @@ public interface UtiHistory {
      * @return the reports, empty when none has been accepted
      */
     List<EmirRefitReport> accepted(String counterpartyId, String uti);
+
+    /**
+     * The UTI under which a trade was first reported, for EMIR-VR-2001-03 (ESMA74-362-2683,
+     * sheet Validations_Cpty_derivative, row 26: "not allowed to change the content of this
+     * field once it is reported"). The trade key is the caller's own identity for the trade
+     * (see {@link EmirStatefulValidator#withTradeKey}). The default returns empty, so the rule
+     * is skipped for histories that do not keep trade keys.
+     *
+     * @param counterpartyId field 1.4
+     * @param tradeKey the caller's trade key
+     * @return the first UTI accepted for that trade, or empty
+     * @since 3.1.0
+     */
+    default Optional<String> firstUtiForTradeKey(String counterpartyId, String tradeKey) {
+        return Optional.empty();
+    }
 }

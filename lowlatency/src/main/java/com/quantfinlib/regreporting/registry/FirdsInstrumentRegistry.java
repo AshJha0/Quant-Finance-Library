@@ -114,6 +114,9 @@ public final class FirdsInstrumentRegistry implements InstrumentRegistry {
         return r == null ? Optional.empty() : Optional.ofNullable(r.commodityDerivative());
     }
 
+    private static final java.util.regex.Pattern DECLARED = java.util.regex.Pattern.compile(
+            "^\\s*<\\?xml[^>]*?encoding\\s*=\\s*[\"']([A-Za-z0-9._:-]+)[\"']");
+
     private static final class Builder {
         private final Map<String, String> names = new HashMap<>();
         private final Map<String, String> cfis = new HashMap<>();
@@ -125,7 +128,7 @@ public final class FirdsInstrumentRegistry implements InstrumentRegistry {
             f.setProperty(XMLInputFactory.SUPPORT_DTD, false);
             f.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
             try {
-                XMLStreamReader r = f.createXMLStreamReader(in);
+                XMLStreamReader r = quietReader(f, in);
                 try {
                     parse(r);
                 } finally {
@@ -134,6 +137,43 @@ public final class FirdsInstrumentRegistry implements InstrumentRegistry {
             } catch (XMLStreamException e) {
                 throw new IOException("FIRDS parse error: " + e.getMessage(), e);
             }
+        }
+
+        /**
+         * Opens the stream through a reporting {@link java.nio.charset.CharsetDecoder}, so a
+         * malformed byte sequence surfaces as an {@link IOException} instead of the JDK parser
+         * printing {@code [Fatal Error]} to stderr before it throws. The charset is the one the
+         * XML declaration names, UTF-8 by default (XML 1.0, section 4.3.3). A UTF-16 byte order
+         * mark falls back to the parser's own detection, as before 3.1.0.
+         */
+        private static XMLStreamReader quietReader(XMLInputFactory f, InputStream raw)
+                throws IOException, XMLStreamException {
+            java.io.BufferedInputStream in = new java.io.BufferedInputStream(raw);
+            in.mark(256);
+            byte[] head = in.readNBytes(256);
+            in.reset();
+            if (head.length >= 2 && ((head[0] == (byte) 0xFE && head[1] == (byte) 0xFF)
+                    || (head[0] == (byte) 0xFF && head[1] == (byte) 0xFE))) {
+                return f.createXMLStreamReader(in);
+            }
+            java.nio.charset.Charset cs = java.nio.charset.StandardCharsets.UTF_8;
+            String decl = new String(head, java.nio.charset.StandardCharsets.ISO_8859_1);
+            java.util.regex.Matcher m = DECLARED.matcher(decl);
+            if (m.find()) {
+                try {
+                    cs = java.nio.charset.Charset.forName(m.group(1));
+                } catch (IllegalArgumentException e) {
+                    throw new IOException("FIRDS parse error: unsupported encoding " + m.group(1), e);
+                }
+            }
+            if (head.length >= 3 && head[0] == (byte) 0xEF && head[1] == (byte) 0xBB && head[2] == (byte) 0xBF
+                    && cs.equals(java.nio.charset.StandardCharsets.UTF_8)) {
+                in.skipNBytes(3);
+            }
+            java.nio.charset.CharsetDecoder d = cs.newDecoder()
+                    .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT);
+            return f.createXMLStreamReader(new java.io.InputStreamReader(in, d));
         }
 
         private void parse(XMLStreamReader r) throws XMLStreamException, IOException {

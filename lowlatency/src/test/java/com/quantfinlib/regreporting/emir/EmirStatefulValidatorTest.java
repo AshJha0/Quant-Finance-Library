@@ -186,7 +186,7 @@ class EmirStatefulValidatorTest {
     @Test
     void catalogueCitesTheWorkbook() {
         List<RuleProvenance> rules = EmirStatefulValidator.rules();
-        assertEquals(15, rules.size());
+        assertEquals(28, rules.size());
         for (RuleProvenance p : rules) {
             assertTrue(p.citation().startsWith("ESMA74-362-2683"), p.id());
             assertTrue(p.id().startsWith("EMIR-VR-"), p.id());

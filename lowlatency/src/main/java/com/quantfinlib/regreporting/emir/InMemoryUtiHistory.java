@@ -5,6 +5,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.function.Function;
 
 /**
  * A {@link UtiHistory} held in memory, keyed by (field 1.4, field 2.1). Not thread-safe;
@@ -18,10 +20,23 @@ import java.util.Objects;
  */
 public final class InMemoryUtiHistory implements UtiHistory {
     private final Map<String, List<EmirRefitReport>> byKey = new HashMap<>();
+    private final Map<String, String> firstUti = new HashMap<>();
+    private final Function<EmirRefitReport, String> tradeKey;
 
-    /** Creates an empty history. */
+    /** Creates an empty history that keeps no trade keys (EMIR-VR-2001-03 is then skipped). */
     public InMemoryUtiHistory() {
-        // empty
+        this(r -> "");
+    }
+
+    /**
+     * Creates an empty history that also remembers the first UTI per trade key, for
+     * EMIR-VR-2001-03. Pass the same function to {@link EmirStatefulValidator#withTradeKey}.
+     *
+     * @param tradeKey maps a report to the caller's trade key; blank means no key
+     * @since 3.1.0
+     */
+    public InMemoryUtiHistory(Function<EmirRefitReport, String> tradeKey) {
+        this.tradeKey = Objects.requireNonNull(tradeKey, "tradeKey");
     }
 
     /**
@@ -34,6 +49,15 @@ public final class InMemoryUtiHistory implements UtiHistory {
     public void accept(EmirRefitReport report) {
         Objects.requireNonNull(report, "report");
         byKey.computeIfAbsent(key(cpty(report), report.reference()), k -> new ArrayList<>()).add(report);
+        String t = tradeKey.apply(report);
+        if (t != null && !t.isEmpty()) {
+            firstUti.putIfAbsent(key(cpty(report), t), report.reference());
+        }
+    }
+
+    @Override
+    public Optional<String> firstUtiForTradeKey(String counterpartyId, String key) {
+        return Optional.ofNullable(firstUti.get(key(counterpartyId, key)));
     }
 
     @Override

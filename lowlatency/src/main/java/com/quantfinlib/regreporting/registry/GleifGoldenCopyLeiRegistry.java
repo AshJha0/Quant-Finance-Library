@@ -29,6 +29,12 @@ import java.util.Optional;
  * golden-copy file (intra-day delta of 2026-11-02 08:00) and the entity status values
  * ACTIVE, INACTIVE and NULL against the LEI-CDF 3.1 XSD (published reference). Dates carry
  * a {@code Z} or {@code +01:00} offset and are converted to their UTC date.</p>
+ *
+ * <p>Since 3.1.0 the optional column {@code Entity.EntityCategory} is read into
+ * {@link LeiRecord#entityCategory()}, for the EMIR "LEI shall pertain to a legal entity and
+ * not a branch" rules. The column name and the values GENERAL, SOLE_PROPRIETOR, FUND and
+ * RESIDENT_GOVERNMENT_ENTITY were seen in the same real intra-day file; BRANCH is from the
+ * LEI-CDF 3.1 XSD ({@code EntityCategoryTypeEnum}).</p>
  */
 public final class GleifGoldenCopyLeiRegistry implements LeiRegistry {
     private final Map<String, LeiRecord> records;
@@ -72,6 +78,7 @@ public final class GleifGoldenCopyLeiRegistry implements LeiRegistry {
         int iInitial = Csv.optional(h, "Registration.InitialRegistrationDate");
         int iUpdated = Csv.optional(h, "Registration.LastUpdateDate");
         int iEntity = Csv.optional(h, "Entity.EntityStatus");
+        int iCategory = Csv.optional(h, "Entity.EntityCategory");
         Map<String, LeiRecord> m = new HashMap<>();
         Map<String, LeiValidity> v = new HashMap<>();
         for (List<String> row = Csv.next(in); row != null; row = Csv.next(in)) {
@@ -80,7 +87,7 @@ public final class GleifGoldenCopyLeiRegistry implements LeiRegistry {
                 continue;
             }
             LeiStatus status = LeiStatus.parse(Csv.get(row, iStatus));
-            m.put(lei, new LeiRecord(lei, Csv.get(row, iName), status));
+            m.put(lei, new LeiRecord(lei, Csv.get(row, iName), status, Csv.get(row, iCategory)));
             if (iInitial >= 0 || iUpdated >= 0 || iEntity >= 0) {
                 // Only INACTIVE marks the entity inactive; a blank or other value keeps 2.4 behaviour.
                 boolean active = !"INACTIVE".equalsIgnoreCase(Csv.get(row, iEntity));
