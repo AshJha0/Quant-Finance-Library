@@ -1,5 +1,6 @@
 package com.quantfinlib.reporting;
 
+import com.quantfinlib.reporting.registry.CfiCodeRegistry;
 import com.quantfinlib.reporting.registry.CodeRegistry;
 import com.quantfinlib.reporting.registry.InstrumentRegistry;
 import com.quantfinlib.reporting.registry.LeiRegistry;
@@ -119,7 +120,9 @@ final class EsmaReferenceRules {
         Predicate<String> cfiCodes = refs.cfiCodes();
         String cfi43 = v(INSTRUMENT_CLASSIFICATION);
         if (cfiCodes != null && !cfi43.isEmpty() && !cfiCodes.test(cfi43)) {
-            err("CON-430", "field 43 CFI " + cfi43 + " is not allowed by ISO 10962:2015");
+            String why = cfiCodes instanceof CfiCodeRegistry table ? table.problem(cfi43).map(s -> " (" + s + ")")
+                    .orElse("") : "";
+            err("CON-430", "field 43 CFI " + cfi43 + " is not allowed by ISO 10962" + why);
         }
         InstrumentRegistry instruments = refs.instruments();
         if (instruments != null) {

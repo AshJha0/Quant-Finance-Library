@@ -274,7 +274,9 @@ public final class Rts22TransactionReport implements TransactionReport {
      *       CDS), CON-640 (commodity flag) and, since 3.0.0, CON-331 (no percentage price
      *       for a debt instrument traded in units).</li>
      *   <li>CFI table ({@code refs.cfiCodes()}, since 3.0.0): CON-430 (field 43 allowed by
-     *       ISO 10962:2015). The table is caller input; ISO does not publish it freely.</li>
+     *       ISO 10962). The table is caller input, usually a
+     *       {@link com.quantfinlib.reporting.registry.CfiCodeRegistry} loaded from your copy
+     *       of the SIX code list; it is ISO copyright and not shipped.</li>
      * </ul>
      * An NCA pends CON-411 and CON-471 for up to 7 days before rejecting; this method
      * reports them at once and says so in the message; {@link Rts22StatusTracker} runs

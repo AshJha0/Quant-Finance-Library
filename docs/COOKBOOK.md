@@ -10900,8 +10900,10 @@ String file = Rts22TransactionReport.toSubmissionXml(List.of(rep),
 `validateWithReferenceData` runs the ESMA content rules that need registries,
 for example that a counterparty LEI was not retired on the trading date (CON-160
 accepts a lapsed LEI) and that the ISIN was admitted on the venue. With the 3.0
-loaders the dated rules run too. CON-430 runs when you pass your ISO 10962 table
-with `refs.withCfiCodes(cfiSet::contains)`. `toSubmissionXml` writes the head.003
+loaders the dated rules run too. CON-430 runs when you pass an ISO 10962 table:
+`refs.withCfiCodes(CfiCodeRegistry.fromSixXlsx(Path.of("cfi-20210507-current.xlsx")))`
+reads the code list SIX publishes as maintenance agency and checks each attribute
+letter against its group. The file is ISO copyright, so download your own copy. `toSubmissionXml` writes the head.003
 envelope with the head.001 header (sender LEI, authority country, file id,
 creation time to the second) around auth.016 (ESMA65-8-2356 paras 124 to 132).
 Recipe 355 covers the pending workflow and the feedback file.

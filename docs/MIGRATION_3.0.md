@@ -322,6 +322,6 @@ results, not just imports.
 | `validateEsmaRules` | adds CON-330, CON-410, CON-470 | Fix the report, or filter the code if you knowingly send it |
 | `new MicRecord(mic, op, name, status)` | still compiles; canonical form has country, category, creation and expiry date | Record patterns with four components must list eight |
 | `new InstrumentRecord(isin, name, cfi, venues)` | still compiles; canonical form adds admission windows and the commodity flag | Same for record patterns |
-| `new ReferenceData(leis, ins, mics, ccys, ctys, preEuro)` | still compiles; canonical form adds `cfiCodes` for CON-430 | Supply your ISO 10962 table with `withCfiCodes` to run CON-430 |
+| `new ReferenceData(leis, ins, mics, ccys, ctys, preEuro)` | still compiles; canonical form adds `cfiCodes` for CON-430 | Load your copy of the SIX ISO 10962 workbook with `CfiCodeRegistry.fromSixXlsx` and pass it to `withCfiCodes` to run CON-430 |
 | Field 33 or 51 percentage, yield or basis points could not be written | `PCTG:`, `YLD:`, `BSPS:` prefixes (`PriceNotation`) | Only if you price bonds in percent |
 | CON-023 to CON-025, pending workflow, auth.031 not available | `Rts22StatusTracker`, `StatusAdvice`, `BusinessHeader` | Optional; seed the tracker with `restore` from your store of accepted reports |

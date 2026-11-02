@@ -2512,8 +2512,9 @@ rules), `toSubmissionXml`, and in `reporting/registry/` the types
 `ReferenceData`, `LeiValidity` and `CodeRegistry`, plus dated default methods on
 the three registries. Since 3.0 the shipped GLEIF, FIRDS and ISO 10383 loaders
 also read dates, country, SI category and the commodity flag when the file has
-those columns, so every rule runs on the public files. CON-430 needs an ISO
-10962 table, which you supply. Recipe 353.
+those columns, so every rule runs on the public files. CON-430 needs the ISO
+10962 table: `CfiCodeRegistry.fromSixXlsx` reads your copy of the SIX code list
+and checks the four attribute letters group by group. Recipe 353.
 
 ### 17h. Pending reports, field 2 history and the feedback file
 

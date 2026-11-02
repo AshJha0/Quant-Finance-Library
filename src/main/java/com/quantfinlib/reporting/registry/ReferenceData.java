@@ -15,9 +15,9 @@ import java.util.function.Predicate;
  * @param countries ISO 3166 list (CON-071, CON-080 and the other country rules)
  * @param preEuroCurrencies legacy currencies that the rules for fields 31, 44 and 45 also
  *        accept (null means none)
- * @param cfiCodes the CFI codes allowed by ISO 10962:2015, for CON-430 (null skips the
- *        rule). The ISO 10962 tables are licensed by ISO and not shipped, so the caller
- *        supplies the test, for example a set lookup built from their own copy.
+ * @param cfiCodes the CFI codes allowed by ISO 10962, for CON-430 (null skips the rule).
+ *        The table is ISO copyright and not shipped; load your own copy of the SIX code
+ *        list with {@link CfiCodeRegistry#fromSixXlsx(java.nio.file.Path)}, or pass any test.
  * @since 2.4.0 ({@code cfiCodes} since 3.0.0)
  */
 public record ReferenceData(LeiRegistry leis, InstrumentRegistry instruments, MicRegistry mics,
