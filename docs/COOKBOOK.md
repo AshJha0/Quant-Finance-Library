@@ -10989,13 +10989,13 @@ has the full table.
 <dependency>
   <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
   <artifactId>quant-finance-library</artifactId>
-  <version>v3.1.0</version>
+  <version>v3.2.0</version>
 </dependency>
 <!-- trading lane; brings the stable tier with it -->
 <dependency>
   <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
   <artifactId>quant-finance-library-lowlatency</artifactId>
-  <version>v3.1.0</version>
+  <version>v3.2.0</version>
 </dependency>
 ```
 
@@ -11500,7 +11500,7 @@ types.
 ## 424. Checking JSON lines against the CAT schema (3.1)
 
 ```java
-CatSchema schema = CatSchema.bundledSubset();    // library transcription of 19 event tables
+CatSchema schema = CatSchema.bundledSubset();    // library transcription of the event tables
 // CatSchema schema = CatSchema.load(Path.of("IM_Schema_4.1.0.json"));  // the official file
 Instant t = Instant.parse("2026-03-02T14:30:00Z");
 CatEvent meno = CatEventBuilder.newOrder()
@@ -11560,3 +11560,165 @@ passed 256 fills. The cost is 36 bytes per order of capacity, so size
 `maxOrders` to the book you expect, not to the largest number you can type. The
 API and the trades delivered are unchanged.
 
+
+## 470. EMIR: fields 2.1 to 2.4 must differ (3.2)
+
+```java
+String lei = "5493001KJTIIGC8Y1R12";
+EmirRefitReport newt = EmirRefitReportBuilder.of(EmirActionType.NEWT, EmirEventType.NOVA)
+    .reportingTimestamp(java.time.Instant.parse("2026-03-02T10:00:00Z"))
+    .counterparties(lei, "529900T8BM49AURSDO55", true)
+    .uti(lei + "TRADE0002")
+    .priorUti(lei + "TRADE0002")            // 2.3, copied by mistake from 2.1
+    .build();
+List<String> problems = EmirStatefulValidator.create().validate(newt);
+// EMIR-VR-2001-04: field 2.1 ... equals field 2.3
+// EMIR-VR-2003-05: field 2.3 ... equals field 2.1
+```
+
+Rows 26 to 29 of the ESMA workbook each say the code in one of fields 2.1 (UTI),
+2.2 (report tracking number), 2.3 (prior UTI) and 2.4 (subsequent position UTI)
+"shall be different from" the other three. Since 3.2 the builder sets 2.2 to 2.4
+with `reportTrackingNumber`, `priorUti` and `subsequentPositionUti`, and the
+stateful validator checks every given pair, with no state source needed. A clash
+is reported from both sides, under each field's own code. Blank fields are not
+compared. `EmirRefitReport.validate()` is unchanged.
+
+## 471. EMIR: the client code rules under column AD's codes (3.2)
+
+```java
+String lei = "5493001KJTIIGC8Y1R12";
+EmirRefitReport r = EmirRefitReportBuilder.of(EmirActionType.NEWT, EmirEventType.TRAD)
+    .reportingTimestamp(java.time.Instant.parse("2026-03-02T10:00:00Z"))
+    .counterparties(lei, "CLIENT0001", false)   // natural person, code lacks the 1.4 prefix
+    .uti(lei + "TRADE0003")
+    .build();
+List<String> asBefore = EmirStatefulValidator.create().validate(r);                       // EMIR-VR-1009-07: ...
+List<String> asColumnAd = EmirStatefulValidator.create().withColumnAdCodes().validate(r); // EMIR-VR-1009-08: ...
+```
+
+Row 13 of the workbook prints its last four conditions with two numbers each
+("6 5." to "9 8.") but lists nine codes in column AD. The library has always
+used the second number for 1009-05 to -07. Under column AD the same checks are
+1009-06, -07 and -08, and 1009-08 is the client code prefix rule.
+`withColumnAdCodes()` rewrites those three prefixes and changes nothing else. The
+AD reading is the library's (it already takes 1009-09 from AD).
+## 480. Any Table 60/61 option event: child order, internal route, allocation (3.2)
+
+```java
+Instant t = Instant.parse("2026-03-02T14:30:00Z");
+String osi = "AAPL  260320C00150000";
+CatEvent child = CatEventBuilder.start(CatEventType.MOCO)       // Table 76
+    .reporter("FRMA", "R7").orderKey("C-1", t).eventTimestamp(t).optionId(osi)
+    .field("parentOrderKeyDate", "20260302 093000.000000000").field("parentOrderID", "O-1")
+    .sidePriceQty("B", new BigDecimal("2.15"), new BigDecimal("5"))
+    .field("orderType", "LMT").field("timeInForce", "DAY=20260302").field("tradingSession", "REG")
+    .field("openCloseIndicator", "O")
+    .build();
+List<String> problems = child.validate();                 // []
+CatEventFamily f = CatEventType.MOCO.family();             // CHILD_ORDER
+List<String> need = CatEventType.MOPA.requiredFields();    // allocationKeyDate, allocationID, ...
+```
+
+`start` puts the common fields and the type's required fields in place, blank,
+so `validate()` names whatever you forgot ("missing parentOrderID"). The 47 types
+added in 3.2 are record-checked only; `CatLinkageChecker` skips them.
+[LEARN 17m](learn/04-technology.md#17m-the-rest-of-tables-60-and-61-and-the-official-schema-32).
+
+## 481. Price and choice rules per table (3.2)
+
+```java
+Instant t = Instant.parse("2026-03-02T14:30:00Z");
+CatEvent quote = CatEventBuilder.start(CatEventType.MOQR)       // Table 87
+    .reporter("FRMA", "R8").eventTimestamp(t).optionId("AAPL  260320C00150000")
+    .quoteKey("Q-1", t).field("receivedQuoteID", "RQ-1").field("receiverIMID", "FRMA")
+    .field("RFQID", "RFQ-1").field("senderType", "E")
+    .build();
+List<String> v = quote.validate();
+// [senderType must be one of [F, N, S] (Table 87 seq 23)]
+```
+
+CAT-R22 applies the price sentences each table prints (not negative; required
+with LMT; blank with MKT); a multi-leg net price may be negative. CAT-R23 checks
+initiator, senderType (order or quote list), priceType and the MOFA
+fulfillmentLinkType. Every message names the table and seq.
+
+## 482. The official CAT schema in the nightly job (3.2)
+
+```java
+CatSchema official = CatSchema.load(Path.of(System.getenv("QFL_CAT_SCHEMA")));
+String version = official.version();                       // "4.2.0" in November 2026
+List<CatSchema.Issue> issues = official.validateLines(Files.readAllLines(Path.of("out.json")));
+```
+
+The official file is public on catnmsplan.com but its terms reserve
+redistribution, so it is fetched at nightly time from its public URL, checked
+against the SHA-256 in `scripts/reference-files.sha256`, and never committed.
+`CatOfficialSchemaTest` compares it with the bundled transcription field by
+field; accepted differences live in `cat-official-schema-deltas.txt`.
+
+## 483. Check a whole day of CAT events, all 66 types (3.2)
+
+The plain idea: a day's file can hold any of the 66 event types, so check it in
+three passes that each answer one question. Is each line well formed (schema)? Does
+each event follow its own table (record rules)? Do the events that link to each other
+find their parents (linkage)?
+
+Formally: `CatSchema.validateLines` applies CAT-S01 to S09 line by line,
+`CatEvent.validate()` applies the record rules (CAT-R01 to R23, each only where the
+type's table prints it), and `CatLinkageChecker.check` applies CAT-LK01 to LK05 over the
+whole list. Linkage covers the 19 types of 3.1; the 47 types added in 3.2 are checked by
+the first two passes only.
+
+```java
+List<CatEvent> day = List.of();                            // your day's events
+CatSchema schema = CatSchema.bundledSubset();              // 66 event definitions
+List<String> lines = new ArrayList<>();
+Map<CatEventFamily, Integer> failedByFamily = new EnumMap<>(CatEventFamily.class);
+for (CatEvent e : day) {
+    lines.add(schema.toJson(e));
+    if (!e.validate().isEmpty()) {
+        failedByFamily.merge(e.type().family(), 1, Integer::sum);
+    }
+}
+List<CatSchema.Issue> wellFormed = schema.validateLines(lines);
+List<CatLinkageChecker.Issue> links = CatLinkageChecker.check(day, "FRMA");
+int known = CatEventType.values().length;                   // 66
+```
+
+Worked example: a day with one MOCO child order that leaves out parentOrderID fails
+the second pass with "missing parentOrderID" and counts once under `CHILD_ORDER`; the
+first pass reports the same gap as CAT-S05 ("missing required field parentOrderID") on
+line 1, and the third
+pass says nothing, because MOCO is not linkage-checked. Grouping failures by family
+tells you which desk process to look at first. Several files of one day: use
+`CatLinkageChecker.checkFiles` (recipe 423) so keys opened in one file count in another.
+[LEARN 17m](learn/04-technology.md#17m-the-rest-of-tables-60-and-61-and-the-official-schema-32).
+
+## 484. Move from `data.*` loaders to `io.*` (the 3.2 deprecation path)
+
+The plain idea: in 4.0 the three file and HTTP loaders leave the stable jar for
+`quant-finance-library-io`. 3.2 already ships them under their 4.0 package, so you can
+change the import now, while both work, and the 4.0 upgrade becomes a dependency change.
+
+Formally: `data.CsvBarLoader`, `data.HttpBarFetcher` and `data.UniverseCsvLoader` are
+`@Deprecated(since = "3.2.0", forRemoval = true)` and delegate to `io.CsvBarLoader`,
+`io.HttpBarFetcher` and `io.UniverseCsvLoader`, which have the same methods. Results are
+identical. The rest of `data` (`PointInTimeUniverse`, the corporate-action classes,
+`SeriesAligner`) stays where it is.
+
+```java
+import com.quantfinlib.io.CsvBarLoader;
+import com.quantfinlib.io.UniverseCsvLoader;
+
+BarSeries bars = CsvBarLoader.load(Path.of("bars.csv"), "SPY");
+PointInTimeUniverse universe = UniverseCsvLoader.load(Path.of("universe.csv"));
+```
+
+Worked example: compile with `javac -Xlint:removal` (Maven:
+`<compilerArgs><arg>-Xlint:removal</arg></compilerArgs>`). Every use of the old class
+is reported as "[removal] CsvBarLoader in com.quantfinlib.data has been deprecated and
+marked for removal" (the import line itself is not). Change the import to `io`,
+recompile, and the warnings go. On 4.0 add the
+`quant-finance-library-io` dependency and `requires com.quantfinlib.io;`
+([MIGRATION_4.0](MIGRATION_4.0.md) row 4).

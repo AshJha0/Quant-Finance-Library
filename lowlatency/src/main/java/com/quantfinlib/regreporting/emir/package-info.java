@@ -35,8 +35,13 @@
  * EMIR-VR-2044-04, EMIR-VR-2045-02/03/06/07/08 and EMIR-VR-2153-06/08 in their "reported for
  * that UTI" form.</p>
  *
- * <p><b>Still not checked</b>, by either validator: EMIR-VR-1009-08 (client code prefix) and
- * EMIR-VR-2001-04 (2.1 against 2.2 to 2.4), whose fields this package does not populate;
+ * <p><b>Added in 3.2.0</b>: the builder sets fields 2.2 to 2.4
+ * ({@code reportTrackingNumber}, {@code priorUti}, {@code subsequentPositionUti}) and the
+ * stateful validator checks EMIR-VR-2001-04, 2002-02, 2003-05 and 2004-04 (the four codes
+ * differ). {@code withColumnAdCodes()} reports the row 13 client code rules under column AD's
+ * numbering, where the prefix rule is EMIR-VR-1009-08.</p>
+ *
+ * <p><b>Still not checked</b>, by either validator:
  * third-country regulated markets in EMIR-VR-1003-01 (equivalence is not in ISO 10383).
  * Fields outside the populated subset (margins, collateral, leg 2, schedules, packages) are
  * not checked.</p>

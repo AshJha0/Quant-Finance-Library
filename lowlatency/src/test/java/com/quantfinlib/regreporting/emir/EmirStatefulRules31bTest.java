@@ -223,7 +223,7 @@ class EmirStatefulRules31bTest {
     @Test
     void catalogueListsTheNewRules() {
         List<String> ids = EmirStatefulValidator.rules().stream().map(RuleProvenance::id).toList();
-        assertEquals(28, ids.size());
+        assertEquals(30, ids.size());
         for (String id : List.of("EMIR-VR-1003-01", "EMIR-VR-2001-03", "EMIR-VR-2153-06", "EMIR-VR-2153-08",
                 "EMIR-VR-2045-07", "EMIR-VR-1008-02")) {
             assertTrue(ids.contains(id), id);

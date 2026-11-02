@@ -41,6 +41,7 @@ unless the matching environment variable is set:
 | `QFL_ESMA_HEAD003_XSD` | ISO 20022 head.003 (business file header) XSD | envelope validation in `Auth016EnvelopeTest` and `StatusAdviceTest` |
 | `QFL_ESMA_AUTH031_XSD` | ESMA auth.031.001.01 XSD | feedback-file validation in `StatusAdviceTest` |
 | `QFL_SIX_CFI_XLSX` | SIX ISO 10962 CFI code list (xlsx) | full-list check in `CfiCodeRegistryTest` |
+| `QFL_CAT_SCHEMA` | official CAT IM schema JSON (catnmsplan.com; not redistributable) | field-by-field comparison in `CatOfficialSchemaTest` |
 | `QFL_NETWORK_TESTS=1` | (flag) | live GLEIF API call in `RegistryTest` |
 
 Reference tests call `ReferenceFiles.require(...)`, which skips when the file is

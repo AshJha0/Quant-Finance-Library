@@ -28,10 +28,11 @@
  * linkage across several files ({@code CatLinkageChecker.checkFiles}), and a
  * dependency-free check of JSON record lines against a CAT schema file in the section
  * 6.1.5.2 layout ({@link com.quantfinlib.regreporting.cat.CatSchema}; the bundled schema is
- * the library's transcription, not the official file). Still not covered: the other option
- * and multi-leg events of Tables 60 and 61 (internal routes, child orders, quote lifecycle,
- * allocations, effective events, modification and cancel requests), Name/Value Pair and
- * side-detail contents, CAIS, and reference data.</p>
+ * the library's transcription, not the official file). Since 3.2.0 the other 47 option and
+ * multi-leg events of Tables 60 and 61 are built ({@code CatEventBuilder.start}) and checked
+ * record by record, grouped by {@link com.quantfinlib.regreporting.cat.CatEventFamily}; their
+ * linkage is not checked yet. Still not covered: equity events other than MENO, MENOS, MEOR,
+ * MENQ, MEOT and MEOF, Name/Value Pair and side-detail contents, CAIS, and reference data.</p>
  *
  * <p><b>3.0 notice.</b> Renamed to {@code com.quantfinlib.regreporting.cat} in 3.0
  * (the {@code report} and {@code reporting} names were one letter apart with

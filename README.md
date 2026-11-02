@@ -15,27 +15,36 @@ connectivity stack; see [docs/STABILITY.md](docs/STABILITY.md).
 
 ## Status
 
-- Version 3.1.0. Requires Java 25 (LTS). 3.1 is additive over 3.0: a
-  convention-driven swap leg model (payment lag, lookback, observation shift,
-  lockout, stubs) checked against QuantLib, an analytic bootstrap Jacobian, exact
-  bond accrual between coupon dates, the Basel VaR traffic light, stateful EMIR
-  Refit rules (28, including GLEIF branch tests, the venue MIC and dates held
-  for a UTI), CAT option lifecycle, multi-leg and supplement events with linkage
-  across files and a schema check, allocation-regression tests for every
-  "allocation-free" claim, and nightly reference, fuzz and mutation checks. The
-  bundled CAT schema is the library's own transcription of the PDF
-  specification, not the official CAT schema file.
-  [docs/MIGRATION_3.1.md](docs/MIGRATION_3.1.md) and [CHANGELOG.md](CHANGELOG.md)
-  list every change.
-- At 3.1.0 the full suite (`./mvnw verify -Pfull`) runs 2,164 tests (core 1,464,
-  lowlatency 700). 8 are skipped: 7 need optional external files or the network
-  (ISDA grids, ESMA XSDs, the SIX CFI list, GLEIF), and one regenerates a golden
-  file on request. CONTRIBUTING.md lists the environment variables that turn them
-  on; the nightly workflow fetches the ISDA grids and ESMA XSDs and fails if those
-  tests skip.
-- Release rules from 3.1.0: no breaking changes in 3.x, and a deprecation lives at least one minor release and three
-  months before a major removes it ([docs/STABILITY.md](docs/STABILITY.md)). The
-  planned 4.0 module split is in [docs/DESIGN_4.0.md](docs/DESIGN_4.0.md).
+- Version 4.0.0. Requires Java 25 (LTS). 4.0 is the module split announced in 3.2.0:
+  the stable jar now requires only `java.base`; `io` and `report` move to the new
+  `quant-finance-library-io`, `dsl` to the new `quant-finance-library-research`, `rfq`,
+  `marketdata.tick` and `backtest.tick` to the low-latency jar, and `cli` and
+  `backtest.strategies` to its `examples` classifier jar. Everything 3.x deprecated for
+  removal is gone, including `SwapPricer`. No number changes.
+  [docs/MIGRATION_4.0.md](docs/MIGRATION_4.0.md) lists every move and removal with the
+  import and dependency to change.
+- Version 3.2.0. Requires Java 25 (LTS). 3.2 is additive over 3.1: all 66 CAT
+  option and multi-leg event types of Tables 60 and 61 (47 new) with their table
+  rules, a nightly comparison with the official CAT schema file (which found and
+  fixed 17 transcription errors), EMIR Refit fields 2.2 to 2.4 with rule 2001-04
+  and its siblings (30 stateful rules), and the 4.0 replacements: `io.*` for the
+  `data` loaders and `marketdata.AggregatedBook`. The old types are deprecated for
+  removal in 3.2 and removed in 4.0. [CHANGELOG.md](CHANGELOG.md) lists every change.
+- At 3.2.0 the full suite (`./mvnw verify -Pfull`) runs 2,187 tests (core 1,467,
+  lowlatency 720). 9 are skipped: 8 need optional external files or the
+  network (ISDA grids, ESMA XSDs, the official CAT schema, the SIX CFI list,
+  GLEIF), and one regenerates a golden file on request. CONTRIBUTING.md lists the
+  environment variables that turn them on; the nightly workflow fetches the ISDA
+  grids, ESMA XSDs and CAT schema and fails if those tests skip.
+- Release rules: no breaking changes within a major after its .0, and a
+  deprecation ships in at least one minor release, with its replacement, before
+  the major that removes it ([docs/STABILITY.md](docs/STABILITY.md)). The 4.0
+  module split and its reasons are in [docs/DESIGN_4.0.md](docs/DESIGN_4.0.md).
+- Version 3.1 added a convention-driven swap leg model checked against QuantLib,
+  an analytic bootstrap Jacobian, exact bond accrual between coupon dates, the
+  Basel VaR traffic light, stateful EMIR Refit rules, CAT option lifecycle and
+  multi-leg events with linkage across files, and allocation-regression tests.
+  [docs/MIGRATION_3.1.md](docs/MIGRATION_3.1.md).
 - Build integrity: each release attaches a CycloneDX SBOM per jar, and CI checks
   that two clean builds give identical jar hashes. CI tests on Java 25 on
   Ubuntu, Windows and macOS; Java 25 is the only supported JDK. See
@@ -370,8 +379,8 @@ Benchmark method, environment and results are in [docs/BENCHMARKS.md](docs/BENCH
 | [GETTING_STARTED.md](docs/GETTING_STARTED.md) | Build, first backtest, paper trading, benchmarks, troubleshooting |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Package map, data flow, design rules |
 | [STABILITY.md](docs/STABILITY.md) | Stable APIs, reference implementations, versioning policy |
-| [DESIGN_4.0.md](docs/DESIGN_4.0.md) | The planned 4.0 module split, its reasons and schedule |
-| [MIGRATION_4.0.md](docs/MIGRATION_4.0.md) | The 4.0 moves and removals, one row each with its dependency snippet |
+| [DESIGN_4.0.md](docs/DESIGN_4.0.md) | The 4.0 module split, its reasons and schedule |
+| [MIGRATION_4.0.md](docs/MIGRATION_4.0.md) | What 4.0 moves or removes, the 3.2 replacement and the dependency for each |
 | [MIGRATION_3.1.md](docs/MIGRATION_3.1.md) | The 3.1 deprecations (`SwapPricer`, non-integral `BondPricer` use) and their replacements |
 | [MIGRATION_3.0.md](docs/MIGRATION_3.0.md) | What 3.0 removes or moves, and the 2.4 replacement for each |
 | [MIGRATION_2.4.md](docs/MIGRATION_2.4.md) | 2.4 deprecations, new opt-in behaviour, unconfirmed readings |

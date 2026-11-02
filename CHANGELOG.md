@@ -6,9 +6,40 @@ Entries for 1.x releases are archived in [docs/history/CHANGELOG-1.x.md](docs/hi
 
 ## [Unreleased]
 
-### Changed
+## [3.2.0] - 2026-11-02
+
+Minor release, additive over 3.1.0: no public member is removed, no signature changes, and no existing result changes unless noted under Fixed. japicmp against the released 3.0.0 jars: semver MINOR for both modules, no allow-list. It is the last 3.x release before 4.0.0, which follows it directly and removes everything deprecated for removal here; [docs/MIGRATION_4.0.md](docs/MIGRATION_4.0.md) lists each move with its new dependency.
+
+#### Added
+
+- EMIR: `EmirRefitReportBuilder.reportTrackingNumber` (field 2.2), `priorUti` (2.3) and `subsequentPositionUti` (2.4); each sets its key only when called, so existing reports keep the same `fields()`. `EmirStatefulValidator` checks EMIR-VR-2001-04 and its siblings 2002-02, 2003-05 and 2004-04 (fields 2.1 to 2.4 hold different codes where given; blank fields are not compared; applied by `create()`). `withColumnAdCodes()` (opt-in) reports the 1.4/1.9, 72-character and client-code-prefix checks under the column AD codes 1009-06/07/08 of ESMA74-362-2683 sheet Validations_Cpty_derivative row 13 instead of the column AC codes 1009-05/06/07; the AD mapping is the library's reading. Recipes 470 and 471, LEARN 17i.
+- CAT: the 47 remaining event types of Tables 60 and 61 of the CAT IM Technical Specifications v4.1.0 r14 (26 simple option, 21 multi-leg; 66 types in all), `CatEventType.family()` and the `CatEventFamily` enum (12 values, from the columns of Tables 60/61), `CatEventBuilder.start(CatEventType)`, rules CAT-R22 (price sentences as each table prints them) and CAT-R23 (initiator, senderType for order and quote events, priceType, MOFA fulfillmentLinkType; Appendix G), and `CatEvent.CHECKED_AGAINST_TABLES_60_61`. The bundled schema transcription covers all 66 types (19 before). `CatLinkageChecker` skips the new types. Recipes 480 to 483, LEARN 17m and 17n.
+- CAT: `CatOfficialSchemaTest` compares the transcription with the official CAT IM schema JSON field by field (dataType, JSONDataType, required); accepted differences are listed with a reason in `cat-official-schema-deltas.txt` (16 entries, all 4.1.0 r14 to 4.2.0 spec changes).
+- `com.quantfinlib.io` (core): `CsvBarLoader`, `HttpBarFetcher` and `UniverseCsvLoader`, the 4.0 home of the `data` loaders. `com.quantfinlib.marketdata.AggregatedBook` (lowlatency), the 4.0 home of `fx.AggregatedBook`. A "Moves in 4.0" paragraph in each affected `package-info`, and [docs/MIGRATION_4.0.md](docs/MIGRATION_4.0.md).
+- `scripts/cat-transcription/`: the scripts that regenerate the bundled CAT schema from `pdftotext -raw` output of the specification (the specification is not committed).
+
+#### Changed
 
 - Release policy: the "at most one minor release a month" rule and the three-month waits (deprecation to removal, 3.2.0 to 4.0) are dropped. Kept in [docs/STABILITY.md](docs/STABILITY.md): no breaking changes within a major after its .0, a deprecation ships in at least one minor (with its replacement) before the major that removes it, a migration guide per major, tags never move.
+- `EmirStatefulValidator.rules()` lists 30 entries (28 in 3.1). `CatEvent.rules()` lists 23 (21 in 3.1). CAT-R13, R14 and R21 also reach the new types through `isOption()` and `isMultiLeg()`; results for the 3.1 types are unchanged.
+- `CatSchema.version()` reads the top-level `version` member when `schemaVersion` is absent, and `CatSchema.parse` also reads the official file's layout (`choices` as one object; a `dataType` given as an array of alternatives, a value passing if it matches any of them).
+- [docs/DESIGN_4.0.md](docs/DESIGN_4.0.md) is revised. An import scan of `core/src/main` showed that moving `microstructure`, `execution`, `persist`, `screener`, `ml` and parts of `data` out of core would make core require a module that requires it, a cycle JPMS rejects; those packages stay in the stable jar. The evidence and the revised move table are in DESIGN_4.0 under "What changed from the 3.1 design".
+
+#### Deprecated
+
+All for removal in 4.0.0 (MIGRATION_4.0 gives the replacement and its dependency):
+
+- `data.CsvBarLoader`, `data.HttpBarFetcher` and `data.UniverseCsvLoader`, `@Deprecated(since = "3.2.0", forRemoval = true)`; they delegate to the `io` classes of the same name, so results are unchanged.
+- `fx.AggregatedBook`, `@Deprecated(since = "3.2.0", forRemoval = true)`; use `marketdata.AggregatedBook` in the lowlatency jar.
+- `rates.SwapPricer` is now `forRemoval = true` (deprecated since 3.1.0); use `VanillaSwap` (MIGRATION_3.1 section 1).
+
+#### Fixed
+
+- CAT transcription: 17 `destination` and `senderIMID` fields (Tables 18, 64 to 70, 79, 81, 102, 104, 106, 107, 122, 124 and 139) print "Industry Member ID / Exchange ID" in a cell that wraps over two lines, and the 3.1 transcription kept only the first type. They now accept either. The comparison with the official schema found them; regenerating from the fixed script found one more, MLQS `destination` (Table 132 seq 12), which 4.2.0 no longer defines.
+
+#### CI
+
+- The nightly reference-files job also fetches the official CAT IM schema (version 4.2.0) from catnmsplan.com, checks it against the SHA-256 pinned in `scripts/reference-files.sha256` and runs `CatOfficialSchemaTest` with `QFL_REQUIRE_REFERENCE_FILES=true`. The file is not committed: the site's legal notice reserves redistribution.
 
 ## [3.1.0] - 2026-11-02
 
