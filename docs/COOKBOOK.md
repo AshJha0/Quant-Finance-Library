@@ -10872,8 +10872,9 @@ floored at zero; buckets add up (MAR22.33, 22.35). CTP buckets can be negative,
 and a net-short bucket counts at half (MAR22.45, published example). Risk weights
 come from SEC-SA (`kA`, `secSaRiskWeight`) or the one-year SEC-ERBA table
 (`erbaRiskWeight`); a SEC-IRBA weight you pass in yourself. The 8% factor in
-`drcRiskWeight` is the library's reading: the Basel text does not print it
-(unconfirmed).
+`drcRiskWeight` is the library's reading: MAR22 does not print it, but
+RBC20.1(3) (8.0% of RWA), MAR20.1 (x12.5) and CRE41.4 footnote 211 ("risk
+weight times 8%") all point the same way.
 
 ## 352. Securitisation collateral and the no-ratings haircut table
 
@@ -10889,7 +10890,7 @@ The 2006 table has no such row, so the same call with `Table.BASEL_II_2006`
 throws. `Table.CRE22_NO_EXTERNAL_RATINGS` is CRE22.50, for jurisdictions that do
 not use external ratings: debt is classed by issuer risk weight or seniority
 instead, through `haircut10DayNoExternalRatings` (published reference). Fund
-haircuts are left to you.
+units: recipe 357.
 
 ## 353. ESMA reference-data rules and the submission file
 
@@ -10966,3 +10967,29 @@ double bid = SyntheticCross.syntheticBid(CrossOp.MULTIPLY, 1.0848, 1.0850, 151.2
 while `SyntheticCross`, which takes the same enum, stayed in `fx`. The engine call
 is unchanged apart from the type name:
 `engine.addCross("EURUSD", "USDJPY", "EURJPY", CrossOp.MULTIPLY, listener)`.
+
+## 357. Securitisation edge cases and fund haircuts (3.0)
+
+```java
+double ka = FrtbDrcSecuritisation.kAPartlyUnknownW(0.10, 97, 3);   // 0.127 (CRE41.9)
+double rw = FrtbDrcSecuritisation.juniorUnratedFloor(
+    FrtbDrcSecuritisation.secSaRiskWeight(ka, 0.0, 0.15, false, false, false),
+    0.60);                                                              // CRE41.15
+double[] tranches = FrtbDrcSecuritisation.decomposeIndex(100,
+    new double[]{0, 0.03, 0.07}, new double[]{0.03, 0.07, 1});         // 3, 4, 93 (MAR22.28)
+double[] left = FrtbDrcSecuritisation.offsetByReplication(0.10, 0.15, 50,
+    new double[]{0.10, 0.12}, new double[]{0.12, 0.15},
+    new double[]{-20, -30});                                            // 0, 0 (MAR22.39(3))
+double hFund = SaCcrHaircuts.fundHaircut10DayMandate(0.04, 0.20);      // 0.20
+double hLta = SaCcrHaircuts.fundHaircut10DayLookThrough(
+    new double[]{0.6, 0.4}, new double[]{0.20, 0.04});                 // 0.136
+```
+
+If more than 5% of the pool has unknown delinquency status,
+`kAPartlyUnknownW` throws: the tranche takes 1250% (CRE41.10). The
+thickness split in `decomposeIndex` is the library's reading of
+"proportionately"; names decomposed this way must leave the
+non-securitisation DRC (MAR22.28). Fund haircuts follow the "UCITS/mutual
+funds" row of CRE22.49 and CRE22.50; whether the fund is eligible at all
+(daily price, mandate limited to eligible instruments, CRE22.34(6)) you
+check yourself.

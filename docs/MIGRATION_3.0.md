@@ -356,6 +356,14 @@ conventions, and every package name other than `reporting` and the types in
 section 8. The stable package list in `docs/STABILITY.md` is the 2.x list minus
 `util` and `backtest.StrategyRunner`, plus `marketdata.tick`.
 
+Additions in the stable `risk` package need no migration: new methods on
+`FrtbDrcSecuritisation` (`kAPartlyUnknownW`, `secSaPermittedWithUnknownW`,
+`juniorUnratedFloor`, `decomposeIndex`, `offsetByReplication`,
+`checkSingleNameDecomposition`) and on `SaCcrHaircuts`
+(`fundHaircut10DayMandate`, `fundHaircut10DayLookThrough`). If you applied
+CRE41.9, CRE41.15 or the fund-haircut rule yourself before calling the 2.4
+methods, you can drop that code; results for the same inputs are the same.
+
 ## 12. How the breaks are checked
 
 `./mvnw -Papi-compat -DskipTests verify` compares the stable module with the

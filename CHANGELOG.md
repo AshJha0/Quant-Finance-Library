@@ -10,7 +10,16 @@ Entries for 1.x releases are archived in [docs/history/CHANGELOG-1.x.md](docs/hi
 
 Major release: the public API gets smaller and the jar says what docs/STABILITY.md says. No number changes, apart from the rounding-level note on the exposure simulator below. Every change has a row in [docs/MIGRATION_3.0.md](docs/MIGRATION_3.0.md); the japicmp gate lists each intended break by name (owner decisions D1 to D9, 2026-11-02).
 
-#### Changed (breaking)
+#### Added
+
+- `fx.CrossOp`, the stable home of the former `CrossRateEngine.Op`.
+- `LowLatencyModuleDescriptorTest`; `ExposureSimulatorFoldTest`; `CliSampleStrategiesTest`.
+- `risk.FrtbDrcSecuritisation.kAPartlyUnknownW` and `secSaPermittedWithUnknownW`: K_A when the delinquency status is unknown for up to 5% of the pool (CRE41.9); above 5% the method throws, since CRE41.10 requires 1250% (published reference).
+- `risk.FrtbDrcSecuritisation.juniorUnratedFloor`: an unrated junior tranche under rated seniors takes no less than the next more senior rated weight (CRE41.15, published reference).
+- `risk.FrtbDrcSecuritisation.decomposeIndex`, `offsetByReplication` and `checkSingleNameDecomposition`: decomposition offsets of MAR22.28, MAR22.30(1)-(3) and MAR22.39(2)-(3) (published reference; the thickness split for "decomposed proportionately" is the library's reading).
+- `risk.SaCcrHaircuts.fundHaircut10DayMandate` and `fundHaircut10DayLookThrough`: UCITS and mutual fund haircuts from the CRE22.49 and CRE22.50 tables (published reference; value weights in the look-through average are the library's reading).
+
+#### Changed
 
 - Two artifacts and two JPMS modules. `quant-finance-library` (module `com.quantfinlib`, source tree `core/`) holds the stable tier; `quant-finance-library-lowlatency` (module `com.quantfinlib.lowlatency`, tree `lowlatency/`) holds the reference tier and `requires transitive com.quantfinlib`. It exports `trading`, `marketdata`, `orderbook`, `fix`, `sbe`, `feed`, `entitlements`, `regreporting` (with `cat`, `emir`, `registry`) and `util`. The root POM is now the parent `quant-finance-library-parent`; `jitpack.yml` publishes both modules (JitPack group `com.github.AshJha0.Quant-Finance-Library`). The `examples` jar is a classifier of the low-latency artifact.
 - The stable module no longer requires `jdk.httpserver` or `java.xml`; both moved to the low-latency module (`trading.TradingDashboard`, the FIRDS parser). `ModuleDescriptorTest` runs `jdeps` on the stable classes to check it.
@@ -20,8 +29,13 @@ Major release: the public API gets smaller and the jar says what docs/STABILITY.
 - `ExposureSimulator` folded into `MultiCurrencyExposureSimulator` (D4). Its trade terms are now `MultiCurrencyExposureSimulator.SwapTerms`, `FxForwardTerms` and `Csa`, with the same components and validation. A zero-pair market (or one pair with foreign rate vol 0) reproduces the 2.4 single-currency results path for path from the same seed to a relative 1e-12; `ExposureSimulatorFoldTest` pins EE, ENE, PFE and wrong-way CVA against values printed by the 2.4.0 code (largest observed relative difference 6.7e-14). Own test against the previous release's output.
 - `fix.FileSessionStore` no longer imports the v1 layout (`seqnums.dat`, `messages.dat`) on open (D8): it starts a fresh journal and leaves the v1 files untouched. Migrate with a 2.4 release first.
 - japicmp now compares each module with the released 2.4.0 jar. The stable module fails the build on any binary-incompatible change except those listed by name in `core/pom.xml`, each commented with its MIGRATION_3.0 section; the low-latency module is reported only.
+- `FrtbDrcSecuritisation.drcRiskWeight`: the 8% conversion is still not printed in MAR22, but its evidence class moves from unconfirmed to library reading, with the reasons in the javadoc (RBC20.1(3), MAR20.1, CRE41.4 footnote 211, MAR22.34(3)). Results unchanged.
 
 #### Removed
+
+- The import of the v1 FIX journal layout when `fix.FileSessionStore` opens a directory (see Changed).
+
+#### Deprecated in 2.4, now gone
 
 - `util.MathUtils` (D9; use `stats.Stats`, `SpecialFunctions`, `LinearAlgebra`, `Numerics`).
 - The ignored-seed constructors `PortfolioOptimizer(double[], double[][], long)` and `ConstrainedPortfolioOptimizer(double[], double[][], long)`.
@@ -30,10 +44,13 @@ Major release: the public API gets smaller and the jar says what docs/STABILITY.
 - `backtest.strategies.EmaCrossStrategy`, `RsiStrategy`, `MacdStrategy`, `BollingerBandsStrategy` (D3); copies stay in `examples.strategies`, and `cli` keeps package-private copies so `--strategy ema|rsi|macd|bollinger` still works. `SmaCrossStrategy` stays.
 - `examples.FixJournalMigration` (it needs the 2.x v1 import; run the 2.4 one).
 
-#### Added
+#### Fixed
 
-- `fx.CrossOp`, the stable home of the former `CrossRateEngine.Op`.
-- `LowLatencyModuleDescriptorTest`; `ExposureSimulatorFoldTest`; `CliSampleStrategiesTest`.
+- None in this section yet.
+
+#### Not done
+
+- None in this section yet.
 
 ## [2.4.0] - 2026-11-02
 

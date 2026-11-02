@@ -1771,8 +1771,14 @@ gives `H` = 6% and `C = 1,000 x (1 - 0.06 - 0.08) = 860`; CRE22.49 gives
 default, `Table.CRE22`, and since 2.4 `Table.CRE22_NO_EXTERNAL_RATINGS` with
 `haircut10DayNoExternalRatings` for CRE22.50) and `risk/SaCcr.subNettingSets`.
 Securitisation collateral uses the CRE22.49 securitisation rows (2.4) and is
-refused under the 2006 table, which has none. Fund haircuts are left to the
-caller. Recipes 335 and 352.
+refused under the 2006 table, which has none. Since 3.0 fund units take
+`fundHaircut10DayMandate` (the highest haircut the mandate allows) or
+`fundHaircut10DayLookThrough` (value-weighted average of the holdings, when
+the bank may look through), both from the "UCITS/mutual funds" row of
+CRE22.49 and CRE22.50 (published reference). Example: a fund that may hold
+main-index equities (20%) and A-rated 3-year bonds (4%) takes 20% by
+mandate; holding 60/40 and looked through it takes
+`0.6 x 0.20 + 0.4 x 0.04 = 13.6%`. Recipes 335, 352 and 355.
 
 ### 10u. Default risk charge for securitisations
 
@@ -1794,9 +1800,12 @@ be negative, and `DRC = max(sum_b (max(DRC_b, 0) + 0.5 min(DRC_b, 0)), 0)`
 maturity (MAR22.34(1), 22.42), from SEC-SA (CRE41) or SEC-ERBA (CRE42). The
 banking-book weight is a multiple of exposure that already contains the 8%
 capital ratio; the library multiplies by 8% to get a weight per unit of JTD.
-The Basel text does not print that step, so treat it as the library's reading
-(unconfirmed). It is the reading under which a 1250% weight gives a charge
-equal to the market value, the fair-value cap of MAR22.34(3).
+MAR22 does not print that step, so it is the library's reading, and the
+reasons are printed elsewhere in the framework: RBC20.1(3) sets total capital
+at 8.0% of RWA, MAR20.1 turns market-risk capital into RWA by x12.5, and
+CRE41.4 footnote 211 converts a risk weight to capital as "risk weight times
+8%". It is also the reading under which a 1250% weight gives a charge equal
+to the market value, the fair-value cap of MAR22.34(3).
 
 Worked example (own test, `FrtbDrcSecuritisationTest`). In the RMBS Europe
 bucket, a long of 100 with a 90% banking-book weight (DRC weight 7.2%) and a
@@ -1808,9 +1817,29 @@ example).
 *In this library:* `risk/FrtbDrcSecuritisation.java` (`grossJtd`,
 `netTranche`, `nthToDefaultAttachment`, `kA`, `secSaRiskWeight`,
 `erbaRiskWeight`, `drcRiskWeight`, `nonCtpTotal`, `ctpTotal`). Left to the
-caller: SEC-IRBA weights, an unknown delinquency ratio W (CRE41.9), CRE41.15,
-and decomposing index and nth-to-default positions (MAR22.28, 22.30, 22.39).
-Recipe 351.
+caller: SEC-IRBA weights and the valuation model behind a single-name
+decomposition.
+
+Since 3.0 (published reference, CRE41 and MAR22 text on disk):
+
+- Unknown delinquency status. If W is unknown for no more than 5% of the pool
+  by EAD, `kAPartlyUnknownW` charges that part at 100%:
+  `K_A = (EAD_known / EAD_total) x K_A_known + EAD_unknown / EAD_total`
+  (CRE41.9). Above 5% the tranche takes 1250% (CRE41.10), and the method
+  throws so that the case cannot slip through. With 3% unknown and
+  `K_A_known = 0.10`, `K_A = 0.97 x 0.10 + 0.03 = 0.127`.
+- Unrated junior tranche under rated seniors. `juniorUnratedFloor` keeps its
+  SEC-SA weight at or above the next more senior rated tranche (CRE41.15).
+- Decomposition. `decomposeIndex` splits an index position into tranches that
+  span 0 to 100%, each getting its thickness share (MAR22.28; "proportionately"
+  read as by thickness, the split under which the tranches add back to the
+  index). `offsetByReplication` offsets a tranche against sub-tranches that
+  tile it (MAR22.30(1), 22.39(3)): long 50 in 10-15% against shorts of 20 in
+  10-12% and 30 in 12-15% leaves nothing. `checkSingleNameDecomposition`
+  refuses exotic structures and single-name amounts that do not add up to the
+  tranche value (MAR22.39(2)).
+
+Recipes 351 and 355.
 
 ### 11. Backtesting without fooling yourself
 
