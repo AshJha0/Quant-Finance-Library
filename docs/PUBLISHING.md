@@ -20,13 +20,18 @@ The `Release` workflow (`.github/workflows/release.yml`) then runs on JDK 25:
   its leading `v` differs from it. Nothing is published in that case; delete the tag,
   fix the version, and tag again.
 - It runs `./mvnw verify` (tests and coverage check).
-- It creates a GitHub release with generated notes and attaches the jars from
-  `target/`: the library, `-examples`, `-sources` and `-javadoc`.
+- It creates a GitHub release with generated notes and attaches the jars of both
+  modules: `core/target/quant-finance-library-*.jar` (library, `-sources`,
+  `-javadoc`) and `lowlatency/target/quant-finance-library-lowlatency-*.jar` (library,
+  `-examples`, `-sources`, `-javadoc`).
 
 After a release, move the API compatibility baseline to it: set
-`api.baseline.version` in `pom.xml` and the version passed to
+`api.baseline.version` in the parent `pom.xml` and the version passed to
 `scripts/fetch-api-baseline.sh` in the `api-compat` job of `.github/workflows/ci.yml`
-to the version just released. The gate currently compares against 2.1.0.
+to the version just released. The gate currently compares against 2.4.0, the last
+single-jar release; after 3.0.0 is tagged, the baseline needs one jar per module
+(the fetch script and `api.baseline.jar` take the artifact name), and the 3.0
+allow-list in `core/pom.xml` is emptied.
 
 ## JitPack
 
@@ -41,16 +46,19 @@ JitPack builds from a tag on request, so a release is usable without further set
 </repositories>
 
 <dependency>
-  <groupId>com.github.AshJha0</groupId>
-  <artifactId>Quant-Finance-Library</artifactId>
-  <version>v2.1.0</version>
+  <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
+  <artifactId>quant-finance-library</artifactId>   <!-- or quant-finance-library-lowlatency -->
+  <version>v3.0.0</version>
 </dependency>
 ```
 
-JitPack must build with JDK 25. If its default JDK is older, the first request for a
-tag fails in the enforcer check. A `jitpack.yml` at the repository root that selects
-a JDK 25 build image fixes that; check JitPack's documentation for the current image
-name.
+Since 3.0 the build is multi-module, so JitPack names the group
+`com.github.AshJha0.Quant-Finance-Library` and publishes each module under its own
+artifactId (2.x was `com.github.AshJha0:Quant-Finance-Library`). Check a JitPack
+build of a test tag before the release tag.
+
+JitPack must build with JDK 25; `jitpack.yml` at the repository root selects
+`openjdk25` and runs `./mvnw install` on the reactor, which installs both modules.
 
 ## Maven Central (not yet set up)
 

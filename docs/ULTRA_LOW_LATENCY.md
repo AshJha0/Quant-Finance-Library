@@ -18,7 +18,7 @@ its own.
 | Busy-spin waiting | bus and gateway threads, when constructed with `busySpin = true` | `Thread.onSpinWait` hand-off instead of park and unpark, at the cost of a core per thread. |
 | Platform stall measurement | `util.HiccupMonitor` | Separates GC, safepoint and scheduler pauses from code latency. `HiccupMonitor.spinning(...)` samples with a busy `nanoTime` loop; the default park mode is limited by the OS timer, which is coarse on Windows. |
 | Allocation-free histogram | `util.LatencyRecorder` | Log-linear buckets after HdrHistogram (Tene 2012): exact below 128 ns, then 128 sub-buckets per power of two. Percentiles are upper bounds of the bucket that holds the rank, clamped to the observed min and max. |
-| Replay | `data.TickCapture`, `AsyncTickCapture`, `TickFileReader` | The same input across runs, so performance comparisons are not confounded by market noise. |
+| Replay | `marketdata.TickCapture`, `AsyncTickCapture`, `marketdata.tick.TickFileReader` | The same input across runs, so performance comparisons are not confounded by market noise. |
 
 ## 2. Order lifecycle
 
@@ -263,7 +263,7 @@ symbol-routing facade. A symbol can be registered on several shards;
 - The hot-path views read only the repeating groups they need (NoMDEntries, a count of
   NoPartyIDs); they do not expose party or leg contents in place.
 - Order audit trails for regulators. Entitlement checks (`entitlements`) and RTS 22
-  reports (`reporting`) exist; drop-copy reconciliation
+  reports (`regreporting`) exist; drop-copy reconciliation
   (`trading.DropCopyReconciler`) compares fills the caller supplies, and nothing
   connects a drop-copy session.
 - Reopening an order after a bust in `HftOrderGateway` (`PaperTradingGateway` simulates

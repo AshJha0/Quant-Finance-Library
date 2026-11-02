@@ -7,7 +7,7 @@ import java.util.Arrays;
  * half-life decay factor and an allocation-free paired sort.
  *
  * <p>Added in 2.4.0 as the home of these helpers from
- * {@code util.MathUtils}, which is removed in 3.0; behaviour is unchanged.</p>
+ * {@code util.MathUtils} (removed in 3.0); behaviour is unchanged.</p>
  *
  * @since 2.4.0
  */

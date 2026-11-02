@@ -3,6 +3,15 @@
 The library has three kinds of code, and they come with different promises. This page
 says which package is which and how versions are numbered from 2.0.0 onward.
 
+Since 3.0 the tiers are the Maven modules, so the jar you depend on tells you the
+promise:
+
+| Tier | Artifact | JPMS module | Source tree |
+|---|---|---|---|
+| Stable | `quant-finance-library` | `com.quantfinlib` | `core/` |
+| Reference | `quant-finance-library-lowlatency` | `com.quantfinlib.lowlatency` (`requires transitive com.quantfinlib`) | `lowlatency/` |
+| Examples | `quant-finance-library-lowlatency`, classifier `examples` | not a module export | `lowlatency/src/main/java/com/quantfinlib/examples` |
+
 ## Stable research and risk APIs
 
 These packages are the library's main purpose. Their public classes and methods are
@@ -11,8 +20,8 @@ documented error.
 
 | Area | Packages (under `com.quantfinlib`) |
 |---|---|
-| Data and series | `core` (including the exception types), `data` (CSV loading, alignment, corporate actions, point-in-time universes), `stats`, `util.MathUtils` (deprecated for removal in 2.4.0; goes in 3.0) |
-| Pricing and instruments | `pricing`, `rates`, `credit`, `fx` (conventions, curves, instruments, volatility surface), `commodities`, `markets` |
+| Data and series | `core` (including the exception types and, since 3.0, the order `Side`), `data` (CSV loading, alignment, corporate actions, point-in-time universes), `marketdata.tick` (the QFLT tick-file reader and writer, since 3.0), `stats` |
+| Pricing and instruments | `pricing`, `rates`, `credit`, `fx` (conventions, curves, instruments, volatility surface; `CrossOp` since 3.0), `commodities`, `markets` |
 | Risk | `risk`, `crb`, `volatility`, `hedging` |
 | Portfolio and research | `optimization`, `alpha`, `backtest` and its subpackages, `indicators`, `simulation`, `ml`, `screener`, `dsl` |
 | Execution research | `microstructure`, `execution`, `regulatory`, `rfq` |
@@ -22,12 +31,13 @@ Types added in 2.1 in these packages are stable on the same terms: in `rates`,
 `DiscountCurve`, `MultiCurveBootstrap`, `MultiCurveRisk`, `CurvePair` and the curve
 instruments (`CurveInstrument`, `Deposit`, `Fra`, `RateFuture`, `OisSwap`,
 `InterestRateSwap`); in `credit`, `IsdaCdsModel`, `IsdaCurve`, `ExposureSimulator`
-and `ExposureProfile`; in `risk`, `SaCcr`, `SaCcrTrade` and `FactorRiskModel`; in
+(folded into `MultiCurrencyExposureSimulator` in 3.0) and `ExposureProfile`; in `risk`, `SaCcr`, `SaCcrTrade` and `FactorRiskModel`; in
 `pricing`, `SviSlice`, `SsviSurface`, `SviSurface`, `TotalVarianceSurface`,
 `DupireLocalVol`, `LocalVolMonteCarlo`, `LocalVolPde`, `HestonCos`,
 `HestonCalibrator` and `DividendTree`; `fx.VannaVolgaTouch`; in `alpha`,
-`AlphaRiskModels`, `AlphaCombiner`, `BacktestAttribution` and `CapacityCurve`; and
-`backtest.StrategyRunner`; the `stats` package (`Stats`); and in `core` the exception
+`AlphaRiskModels`, `AlphaCombiner`, `BacktestAttribution` and `CapacityCurve`;
+`backtest.StrategyRunner` (in the reference tier as `trading.StrategyRunner` since
+3.0, because its paper engine is the lane's paper gateway); the `stats` package (`Stats`); and in `core` the exception
 types `QuantFinException`, `WireProtocolException`, `MalformedDataException` and
 `ConfigurationException`. Types added in 2.2 are stable on the same terms:
 `rates.HolidayCalendars`; in `credit`, `IsdaCdsModel.Conventions`,
@@ -37,10 +47,11 @@ types `QuantFinException`, `WireProtocolException`, `MalformedDataException` and
 `core.MalformedFileException`. Which exception type a site throws is part of its documented
 behaviour; the message text is not.
 
-The jar is the named module `com.quantfinlib`, and it exports the reference packages
-as well as the stable ones. The module descriptor does not change the tiers on this
-page. Adding a package to the exports is a minor change; removing one is a major
-change.
+The stable jar is the named module `com.quantfinlib`. It exports exactly the
+packages in the table above, plus `internal` to `com.quantfinlib.lowlatency` only
+(shared helpers, not API). Adding a package to the exports is a minor change;
+removing one is a major change. Up to 2.4 one jar exported both tiers and the tier
+was set by this page alone.
 
 Within these packages, stability covers method signatures, record components and
 documented behaviour (conventions, units, default parameters). It does not cover
@@ -58,18 +69,17 @@ audit trails, operational tooling).
 | Package | What it is |
 |---|---|
 | `trading` | Risk gate, order gateway, order state machine, quoter, auto hedger, paper venue, sharding; from 2.1 `PositionLedger`, `DropCopyReconciler`, `LimitsConfig` and `LimitsManager`; from 2.2 `FillListener` and `LedgerFillListener`; from 2.4 paper-gateway busts and corrections |
-| `marketdata` | Ring buffers, market-data bus, ITCH 5.0 codec, L3 book builder, NBBO |
+| `marketdata` | Ring buffers, market-data bus, ITCH 5.0 codec, L3 book builder, NBBO; since 3.0 the bus recorders `TickCapture` and `AsyncTickCapture` and the streaming `CrossRateEngine` |
 | `orderbook` | Reference matching engine (`OrderBook`), price-ladder engine (`HftOrderBook`) and call auctions (`AuctionBook`, from 2.1) |
 | `fix` | FIX 4.4 session (4.2 and 5.0 SP2 from 2.2; the hot-path encoder and views in all three from 2.3), journal store, garbage-free encoders and views; from 2.1 session schedules (`FixSessionSchedule`, `FixSessionOptions`); from 2.2 FIX 4.2 and 5.0 SP2 (`FixVersion`) and repeating groups (`FixDictionary`, `FixGroupDef`, `FixGroup`) |
 | `entitlements` | Entitlement service and pre-trade check (2.2) |
-| `reporting` | MiFIR RTS 22 transaction report builder and identifier checks (2.2); auth.016 output and data-only ESMA rules (2.3); reference-data rules and the head.001/head.003 submission envelope (2.4) |
-| `reporting.registry` | GLEIF, FIRDS and ISO 10383 reference data and a checking sink (2.3) |
-| `reporting.cat` | CAT order events as JSON lines (2.3); indicative, not certified |
-| `reporting.emir` | EMIR Refit core fields, UTI and action/event pairing (2.3); indicative, not checked against Regulation 2022/1860 |
+| `regreporting` (`reporting` up to 2.4) | MiFIR RTS 22 transaction report builder and identifier checks (2.2); auth.016 output and data-only ESMA rules (2.3); reference-data rules and the head.001/head.003 submission envelope (2.4) |
+| `regreporting.registry` | GLEIF, FIRDS and ISO 10383 reference data and a checking sink (2.3) |
+| `regreporting.cat` | CAT order events as JSON lines (2.3); indicative, not certified |
+| `regreporting.emir` | EMIR Refit core fields, UTI and action/event pairing (2.3); indicative, not checked against Regulation 2022/1860 |
 | `sbe` | SBE-style binary codecs (schema 2) and channel adapters |
 | `feed` | WebSocket feed, MoldUDP64 receiver |
-| `data` tick files | `TickFileWriter`, `TickFileReader`, `TickCapture`, `AsyncTickCapture` |
-| `util` measurement | `LatencyRecorder`, `HiccupMonitor` |
+| `util` | `LatencyRecorder`, `HiccupMonitor`, `IdleStrategy`, `NanoClock`, `ThreadPlacement` |
 
 The versioning policy applies to these packages too, with one exception: a minor
 release may change a wire or file format (SBE schema, QFLT tick file, FIX journal)
@@ -78,18 +88,20 @@ keeps reading the previous version, and is listed under "Changed" in the changel
 
 ## How compatibility is checked
 
-Compatibility is checked by japicmp against the released 2.1.0 jar
+Compatibility is checked by japicmp against the released 2.4.0 jar
 (`./mvnw -Papi-compat -DskipTests verify` after `scripts/fetch-api-baseline.sh`; the
-CI job is `API compatibility`). The stable packages fail the build on any
-binary-incompatible change. The reference packages are compared and reported in
-`target/japicmp/api-all.html` but do not fail it. The package list lives in the
-`api-compat` profile of `pom.xml` and matches the stable table above, with the tick
-file classes of `data` excluded.
+CI job is `API compatibility`). Every package of the stable module fails the build on
+a binary-incompatible change (`core/pom.xml`, profile `api-compat`; report
+`core/target/japicmp/api-stable.html`). For 3.0 only, the intended breaks are listed
+one by one as `<exclude>` entries, each commented with its row in
+[MIGRATION_3.0.md](MIGRATION_3.0.md); any break not on that list fails the build.
+After 3.0.0 is tagged the baseline moves to 3.0.0 and the list is emptied. The
+reference module is compared and reported in
+`lowlatency/target/japicmp/api-lowlatency.html` but does not fail the build.
 
 Stable packages are `@NullMarked` (JSpecify 1.0): unannotated parameters and return
 values are non-null, and a member that accepts or returns null says so with
-`@Nullable`. `util` (where only `MathUtils` is stable, and it is deprecated for removal in 2.4.0) and the reference packages are
-not marked. JSpecify is a compile-time, optional dependency, so the library still
+`@Nullable`. The reference packages are not marked. JSpecify is a compile-time, optional dependency, so the library still
 has no runtime dependencies; a module that reads the annotations should declare
 `requires static org.jspecify;`.
 
@@ -99,9 +111,10 @@ reported, not enforced.
 
 ## Examples
 
-`com.quantfinlib.examples` holds demos and hand-written benchmarks. It ships in the
-separate `examples` jar, not in the library jar, and carries no compatibility
-promise. Benchmark output formats can change in any release.
+`com.quantfinlib.examples` holds demos, hand-written benchmarks and the sample
+strategies (`examples.strategies`). It is compiled with the low-latency module and
+ships in that artifact's separate `examples` jar, not in either library jar, and
+carries no compatibility promise. Benchmark output formats can change in any release.
 
 ## Versioning policy from 2.0.0
 
@@ -127,10 +140,10 @@ Things that are not part of the public API and can change in any release:
   values;
 - the Java version requirement, which only moves in a major release.
 
-The public surface is larger than it needs to be: some types are public only so
-that other packages can reach them. Reducing it is a breaking change and is planned
-for 3.0; 2.x keeps every public type of 2.0.
+3.0 reduced the public surface: the reference tier moved to its own artifact,
+helpers that were public only so other packages could reach them moved to the
+non-exported `internal` package, and everything deprecated for removal in 2.4.0 was
+deleted. [MIGRATION_3.0.md](MIGRATION_3.0.md) lists each item and its replacement.
 
 Deprecated API is marked with `@Deprecated` and stays for at least one minor release
-before removal in the next major. 2.4.0 deprecates for removal everything 3.0 takes
-out; [MIGRATION_3.0.md](MIGRATION_3.0.md) lists each item and its replacement.
+before removal in the next major.

@@ -5,7 +5,7 @@ package com.quantfinlib.stats;
  * incomplete beta function and the Student-t distribution function.
  *
  * <p>Added in 2.4.0 as the home of these functions from
- * {@code util.MathUtils}, which is removed in 3.0. The code is moved, not
+ * {@code util.MathUtils} (removed in 3.0). The code was moved, not
  * rewritten, so every value is bit-identical to 2.3.</p>
  *
  * @since 2.4.0

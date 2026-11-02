@@ -1,18 +1,21 @@
 # Migrating to 3.0
 
-Status: draft, published with 2.4.0. 3.0 is not released yet. Everything below
-is the owner-signed 3.0 API plan (decisions
-D1 to D9, 2026-11-02). 2.4.0 already deprecates every member that 3.0 removes,
-so compiling against 2.4.0 with `-Xlint:removal` lists every line you need to
-change. Nothing in 2.4.0 changes a result.
+Status: implemented for 3.0.0 (owner-signed plan, decisions D1 to D9,
+2026-11-02). 2.4.0 deprecated every member that 3.0 removes, so compiling
+against 2.4.0 with `-Xlint:removal` lists most lines you need to change; the
+package moves in sections 7 and 8 show up as import errors instead. 3.0 changes
+no result, apart from the rounding-level exposure note in section 6.
 
 ## 1. Who needs to read this
 
-If you use only the research, pricing and risk packages and never call
-`util.MathUtils`, you probably have nothing to do. Compile against 2.4.0: no
-`removal` warnings means no work. If you use the trading lane (`trading`,
-`fix`, `marketdata`, `orderbook`, `sbe`, `feed`, `entitlements`, `reporting`)
-you change one dependency line; if you use `reporting` you also change imports.
+If you use only the research, pricing and risk packages, never call
+`util.MathUtils` and never name `orderbook.Side`, you probably have nothing to
+do: compile against 2.4.0, and no `removal` warnings means no work. If you pass
+an order side to `execution`, `backtest`, `microstructure`, `regulatory` or
+`risk`, change one import (section 8). If you use the trading lane (`trading`,
+`fix`, `marketdata`, `orderbook`, `sbe`, `feed`, `entitlements`, `reporting`,
+`util`) you change one dependency line; if you use `reporting` you also change
+imports.
 
 ## 2. Dependency change: the low-latency artifact
 
@@ -22,11 +25,12 @@ trading lane) ships as a second artifact.
 
 | Artifact (3.0) | JPMS module | Contents |
 |---|---|---|
-| `quant-finance-library` | `com.quantfinlib` | stable packages (31), no `jdk.httpserver` |
-| `quant-finance-library-lowlatency` | `com.quantfinlib.lowlatency`, `requires transitive com.quantfinlib` | `trading`, `marketdata`, `orderbook`, `fix`, `sbe`, `feed`, `entitlements`, `regreporting` (+ `cat`, `emir`, `registry`), the latency helpers of `util`, the tick-file types |
+| `quant-finance-library` | `com.quantfinlib` | the stable packages (33 exported, `marketdata.tick` included), no `jdk.httpserver`; `internal` exported only to the low-latency module |
+| `quant-finance-library-lowlatency` | `com.quantfinlib.lowlatency`, `requires transitive com.quantfinlib` | `trading`, `marketdata`, `orderbook`, `fix`, `sbe`, `feed`, `entitlements`, `regreporting` (+ `cat`, `emir`, `registry`), `util` (the latency and threading helpers); the `examples` classifier jar |
 
-Package names do not change (D2), except `reporting` (section 7) and the tick
-files (section 8). Before and after, Maven:
+Package names do not change (D2), except `reporting` (section 7) and the few
+types in section 8. Before and after, Maven (JitPack names the group
+`com.github.<user>.<repo>` for a multi-module build):
 
 ```xml
 <!-- 2.x: one artifact -->
@@ -36,11 +40,18 @@ files (section 8). Before and after, Maven:
   <version>2.4.0</version>
 </dependency>
 
+<!-- 3.0, research users: the stable artifact -->
+<dependency>
+  <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
+  <artifactId>quant-finance-library</artifactId>
+  <version>v3.0.0</version>
+</dependency>
+
 <!-- 3.0, lane users: the low-latency artifact pulls in the main one -->
 <dependency>
-  <groupId>com.github.AshJha0</groupId>
+  <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
   <artifactId>quant-finance-library-lowlatency</artifactId>
-  <version>3.0.0</version>
+  <version>v3.0.0</version>
 </dependency>
 ```
 
@@ -53,30 +64,14 @@ requires com.quantfinlib;
 requires com.quantfinlib.lowlatency;   // reads com.quantfinlib transitively
 ```
 
-The groupId follows whatever the README install snippet uses at release time.
-
-**Build status in 2.4.0.** 2.4.0 does not publish the second artifact. A
-classifier jar of the lane packages was considered and rejected: the same
-classes would sit in two jars, which is a split-package error on the module
-path, and a classifier cannot carry its own `module-info`. Producing a real
-`quant-finance-library-lowlatency` needs the Maven build split into two modules
-(a parent POM, two `module-info.java` files, the japicmp, SpotBugs, JaCoCo and
-JitPack configuration per module). That is phase 2 of the plan, done once on
-`release/3.0`:
-
-1. Parent POM `quant-finance-library-parent` (packaging `pom`) holding today's
-   plugin management and profiles; modules `core` (artifactId
-   `quant-finance-library`) and `lowlatency` (artifactId
-   `quant-finance-library-lowlatency`).
-2. `git mv` the lane packages and their tests into `lowlatency/src`. Tests in
-   the stable module that touch lane types move with them or get a test-scope
-   dependency (the proposal lists this as a risk).
-3. `jdk.httpserver` moves to the lowlatency `module-info`; check with
-   `jdeps --check com.quantfinlib` that the stable module no longer needs it.
-4. `jitpack.yml` builds both modules; verify a JitPack build of a test tag
-   before the release tag (the proposal's main risk).
-5. japicmp per module against 2.4.0, with every intended break listed by an
-   `<exclude>` that points to its row in this file.
+The build is a parent POM (`quant-finance-library-parent`) with two modules,
+`core/` (artifact `quant-finance-library`) and `lowlatency/` (artifact
+`quant-finance-library-lowlatency`). Each has its own `module-info.java`, JaCoCo
+gate and japicmp profile; `jitpack.yml` installs both. `jdk.httpserver` (behind
+`trading.TradingDashboard`) and `java.xml` (the FIRDS parser) are required only by
+the low-latency module; `ModuleDescriptorTest` runs `jdeps` on the stable classes
+and fails if `jdk.httpserver` appears. If you used the 2.x `examples` jar, it is
+now the `examples` classifier of the low-latency artifact.
 
 ## 3. Everything removed, moved or renamed
 
@@ -88,15 +83,27 @@ JitPack configuration per module). That is phase 2 of the plan, done once on
 | `VenueQuote(String, double, long, double, long, double, long, boolean)` | canonical 9-argument constructor | yes | 5 |
 | `ExposureSimulator.Market`, `Market.ratesOnly`, `ExposureSimulator.simulate` | `MultiCurrencyExposureSimulator.Market` and `simulate` | yes | 6 |
 | `MultiCurrencyExposureSimulator.Market.fromLegacy` | build the `Market` directly | yes | 6 |
-| `ExposureSimulator.Swap`, `.FxForward`, `.Csa` | nested records of `MultiCurrencyExposureSimulator`, same components | no (see 6) | 6 |
-| `backtest.strategies.EmaCrossStrategy`, `RsiStrategy`, `MacdStrategy`, `BollingerBandsStrategy` | `examples.strategies.*` in the `examples` jar (copy into your code) | yes | 9 |
+| `ExposureSimulator.Swap`, `.FxForward`, `.Csa` | `MultiCurrencyExposureSimulator.SwapTerms`, `.FxForwardTerms`, `.Csa`, same components | no (see 6) | 6 |
+| `backtest.strategies.EmaCrossStrategy`, `RsiStrategy`, `MacdStrategy`, `BollingerBandsStrategy` | `examples.strategies.*` in the `examples` jar (copy into your code); `cli` keeps private copies | yes | 9 |
 | `backtest.strategies.SmaCrossStrategy` | unchanged (D3) | no | |
 | package `com.quantfinlib.reporting` (+ `.cat`, `.emir`, `.registry`) | `com.quantfinlib.regreporting` (+ same subpackages), lowlatency artifact | notice in package-info | 7 |
 | lane packages listed in section 2 | lowlatency artifact, same names | notice in package-info | 2 |
-| `data.TickFileWriter`, `TickFileReader`, `TickCapture`, `AsyncTickCapture` | lowlatency artifact, planned package `com.quantfinlib.marketdata.tick` | notice in package-info | 8 |
+| `data.TickFileWriter`, `TickFileReader` | `com.quantfinlib.marketdata.tick.TickFileWriter`, `TickFileReader`, main artifact | notice in package-info | 8 |
+| `data.TickCapture`, `AsyncTickCapture` | `com.quantfinlib.marketdata.TickCapture`, `AsyncTickCapture`, lowlatency artifact | notice in package-info | 8 |
+| `orderbook.Side` | `com.quantfinlib.core.Side`, main artifact, same constants and methods | no | 8 |
+| `backtest.StrategyRunner` (+ nested `Engine`, `Sizing`, `Fill`, `Run`) | `com.quantfinlib.trading.StrategyRunner`, lowlatency artifact | no | 8 |
+| `fx.CrossRateEngine` | `com.quantfinlib.marketdata.CrossRateEngine`, lowlatency artifact | no | 8 |
+| `fx.CrossRateEngine.Op` | `com.quantfinlib.fx.CrossOp`, main artifact | no | 8 |
 | `util.LatencyRecorder`, `HiccupMonitor`, `IdleStrategy`, `NanoClock`, `ThreadPlacement` | lowlatency artifact, package `util` unchanged | notice in package-info | 2 |
-| `util.ValueArrays`, `util.Immutable` | non-exported internal package of the main module | notice in package-info | 8 |
+| `util.ValueArrays`, `util.Immutable` | `com.quantfinlib.internal`, not exported (only to the low-latency module) | notice in package-info | 8 |
 | `fix.FileSessionStore` reading the v1 layout (`seqnums.dat`, `messages.dat`) | not read; migrate with 2.4 first | notice in class javadoc | 10 |
+| `examples.FixJournalMigration` (2.4 examples jar) | not in the 3.0 examples jar; run the 2.4 one | no | 10 |
+
+The rows marked "no" in the third column are moves that 2.4.0 could not
+deprecate in place: the type keeps its name and members but changes package,
+because its 2.x package stays in one module while the type depends on the other,
+and one package cannot live in two modules. The proposal did not list them; they
+came out of the module split and are explained in section 8.
 
 ## 4. MathUtils to the stats package, method by method
 
@@ -195,6 +202,7 @@ import com.quantfinlib.credit.MultiCurrencyExposureSimulator.Curve;
 import com.quantfinlib.credit.MultiCurrencyExposureSimulator.Domestic;
 var mkt = new MultiCurrencyExposureSimulator.Market(
         new Domestic(Curve.of(usdCurve), 0.03, 0.01), List.of(), new double[][]{{1}});
+// swap is now a MultiCurrencyExposureSimulator.SwapTerms, csa a MultiCurrencyExposureSimulator.Csa
 ExposureProfile p = MultiCurrencyExposureSimulator.simulate(mkt,
         List.of(new MultiCurrencyExposureSimulator.Swap(swap, null)), List.of(), csa, times, 20_000, 7L);
 ```
@@ -209,16 +217,21 @@ var mkt = new MultiCurrencyExposureSimulator.Market(
 // forwards: new MultiCurrencyExposureSimulator.FxForward(0, fwdTerms)
 ```
 
-What changes in the numbers: the multi-currency engine reproduces the 2.1
+What changes in the numbers: the multi-currency engine reproduces the 2.4
 single-currency results to rounding, path for path, from the same seed, not
-bit for bit (own test: `MultiCurrencyExposureSimulatorTest`, which compares the
-two engines). Expect differences in the last digits only.
+bit for bit. `ExposureSimulatorFoldTest` pins it: the expected values are the
+EE, ENE, 95 % PFE and wrong-way CVA printed by the 2.4.0 `ExposureSimulator`
+(tag `r24-base`) for a one-pair market with a swap, an FX forward and a CSA
+(2,000 paths, seed 11) and for a rates-only market (1,000 paths, seed 3); the
+3.0 engine must match each to a relative 1e-12. The largest relative difference
+seen when the values were taken was 6.7e-14, on a PFE; expected exposures agreed
+to about 5e-15. Evidence class: own test against the previous release's output.
 
-The trade-term records `ExposureSimulator.Swap`, `FxForward` and `Csa` are not
+The trade-term records `ExposureSimulator.Swap`, `FxForward` and `Csa` were not
 deprecated in 2.x, because the multi-currency API takes them as parameters and
-a replacement would need a parallel set of overloads. In 3.0 they become nested
-records of `MultiCurrencyExposureSimulator` with the same components, so the
-change is an import:
+a replacement would have needed a parallel set of overloads. In 3.0 they are
+nested records of `MultiCurrencyExposureSimulator` with the same components and
+the same validation, so the change is a rename:
 
 ```java
 // 2.x
@@ -227,9 +240,9 @@ ExposureSimulator.Swap swap = new ExposureSimulator.Swap(1e7, 0.035, true, 0, 5,
 MultiCurrencyExposureSimulator.SwapTerms swap = new MultiCurrencyExposureSimulator.SwapTerms(1e7, 0.035, true, 0, 5, 2);
 ```
 
-The 3.0 names (`SwapTerms`, `FxForwardTerms`, `Csa`) avoid a clash with the
-existing nested `Swap` and `FxForward` wrappers; they are the plan, to be
-confirmed in phase 2.
+The names `SwapTerms` and `FxForwardTerms` avoid a clash with the existing
+nested `Swap` and `FxForward` wrappers (a swap with its projection curve, a
+forward with its pair index); `Csa` keeps its name.
 
 ## 7. Renamed package: reporting to regreporting (D7)
 
@@ -253,23 +266,52 @@ sed -i 's/com\.quantfinlib\.reporting\b/com.quantfinlib.regreporting/g' $(git ls
 
 ## 8. Types that change package
 
-The tick-file types leave `data`, because the rest of `data` stays in the main
-module and one package cannot live in two modules. Planned home:
-`com.quantfinlib.marketdata.tick` in the low-latency artifact.
+The plain idea: a package lives in exactly one module. Where a 2.x package
+stays in the main module but one of its types depends on the trading lane (or a
+lane package holds a type the stable packages need), that type moves to a
+package on the right side of the line. Members do not change.
+
+| 2.x | 3.0 | Artifact | Why |
+|---|---|---|---|
+| `data.TickFileWriter`, `data.TickFileReader` | `marketdata.tick.TickFileWriter`, `TickFileReader` | main | the stable tick backtester (`backtest.tick.TickBacktester`) reads this format, so it cannot leave the main artifact; it leaves `data` to sit with the other tick types |
+| `data.TickCapture`, `data.AsyncTickCapture` | `marketdata.TickCapture`, `AsyncTickCapture` | lowlatency | they record the market-data bus |
+| `orderbook.Side` | `core.Side` | main | `execution`, `backtest`, `microstructure`, `regulatory` and `risk` take a side in their signatures |
+| `backtest.StrategyRunner` | `trading.StrategyRunner` | lowlatency | its `PAPER` engine is the lane's `PaperTradingGateway` |
+| `fx.CrossRateEngine` | `marketdata.CrossRateEngine` | lowlatency | it runs on the market-data bus |
+| `fx.CrossRateEngine.Op` | `fx.CrossOp` | main | `fx.SyntheticCross` takes it |
+| `util.ValueArrays`, `util.Immutable` | `internal.ValueArrays`, `internal.Immutable` | main, not exported | used by `core`, `fx`, `rates`, `risk`, `ml`, `optimization`; implementation helpers, not API |
+
+The tick-file reader and writer were planned for `marketdata.tick` in the
+low-latency artifact. They stay in the main artifact because the stable tick
+backtester depends on them; `marketdata.tick` is a package of the main module
+even though `marketdata` is a package of the low-latency one (JPMS treats the two
+names as unrelated). The QFLT format keeps its reference-tier rule: a minor
+release may bump the format version to fix a correctness problem, and keeps
+reading the old version.
 
 ```java
 // 2.x
 import com.quantfinlib.data.TickFileWriter;
-// 3.0 (planned)
+import com.quantfinlib.orderbook.Side;
+import com.quantfinlib.backtest.StrategyRunner;
+// 3.0
 import com.quantfinlib.marketdata.tick.TickFileWriter;
+import com.quantfinlib.core.Side;
+import com.quantfinlib.trading.StrategyRunner;     // lowlatency artifact
 ```
 
-`util.ValueArrays` and `util.Immutable` are used by stable packages (`core`,
-`fx`, `rates`, `risk`, `ml`, `optimization`), so they cannot move to the
-low-latency artifact. The plan is a non-exported `com.quantfinlib.internal`
-package in the main module; they leave the public API. This corrects the
-proposal, which listed them with the lane helpers. If you use `ValueArrays`,
-copy the few lines you need.
+```sh
+sed -i -E 's/com\.quantfinlib\.orderbook\.Side\b/com.quantfinlib.core.Side/g;
+           s/com\.quantfinlib\.data\.(TickFileWriter|TickFileReader)\b/com.quantfinlib.marketdata.tick.\1/g;
+           s/com\.quantfinlib\.data\.(TickCapture|AsyncTickCapture)\b/com.quantfinlib.marketdata.\1/g;
+           s/com\.quantfinlib\.backtest\.StrategyRunner\b/com.quantfinlib.trading.StrategyRunner/g;
+           s/com\.quantfinlib\.fx\.CrossRateEngine\.Op\b/com.quantfinlib.fx.CrossOp/g;
+           s/com\.quantfinlib\.fx\.CrossRateEngine\b/com.quantfinlib.marketdata.CrossRateEngine/g' $(git ls-files '*.java')
+```
+
+Code in the `orderbook` package itself used `Side` without an import and now
+needs one; code that wrote `CrossRateEngine.Op.MULTIPLY` becomes
+`CrossOp.MULTIPLY`. If you used `ValueArrays`, copy the few lines you need.
 
 ## 9. Sample strategies (D3)
 
@@ -286,8 +328,8 @@ import com.mycompany.strategies.RsiStrategy;
 ```
 
 The CLI (`cli.Main --strategy ema|rsi|macd|bollinger`) uses the four samples.
-In 3.0 the CLI keeps those names with private copies inside `cli`, so command
-lines keep working; only the public types go.
+In 3.0 the CLI keeps those names with package-private copies inside `cli`, so
+command lines keep working; only the public types went.
 
 ## 10. Format note: FIX session store v1 layout (D8)
 
@@ -304,9 +346,21 @@ java -cp quant-finance-library-2.4.0.jar:quant-finance-library-2.4.0-examples.ja
 ```
 
 (use `;` as the class-path separator on Windows). Running it twice is harmless.
+The command is in the 2.4 examples jar only: it relies on the 2.x import, which
+3.0 no longer has.
 
 ## 11. What does not change
 
 Numbers (apart from the rounding-level exposure note in section 6),
-conventions, the stable package list in `docs/STABILITY.md`, and every package
-name other than `reporting` and the tick-file types.
+conventions, and every package name other than `reporting` and the types in
+section 8. The stable package list in `docs/STABILITY.md` is the 2.x list minus
+`util` and `backtest.StrategyRunner`, plus `marketdata.tick`.
+
+## 12. How the breaks are checked
+
+`./mvnw -Papi-compat -DskipTests verify` compares the stable module with the
+2.4.0 jar and fails on any binary-incompatible change that is not listed. The
+list is the `<excludes>` block of `core/pom.xml`: one entry per removed or moved
+type and per method whose signature changed because `Side` moved, each commented
+with the section of this file that explains it. The low-latency module is
+compared and reported only (`lowlatency/target/japicmp`).

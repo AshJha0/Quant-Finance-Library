@@ -12,10 +12,10 @@
  * {@link com.quantfinlib.entitlements.EntitlementPreTradeCheck} adapts this to
  * the order path so a pre-trade gate can call it before its own limit checks.
  *
- * <p><b>3.0 notice.</b> This package moves to the separate artifact
- * {@code quant-finance-library-lowlatency} (module {@code com.quantfinlib.lowlatency})
- * in 3.0; the package name is unchanged, so only your dependency changes,
- * not your imports. See docs/MIGRATION_3.0.md.</p>
+ * <p>Since 3.0 this package is in the artifact
+ * {@code quant-finance-library-lowlatency} (module {@code com.quantfinlib.lowlatency});
+ * the package name did not change, so a 2.x user changes the dependency, not the
+ * imports. See docs/MIGRATION_3.0.md.</p>
  */
 @NullMarked
 package com.quantfinlib.entitlements;

@@ -1316,7 +1316,7 @@ at two years is about 1.67 and EPE about 1.30. A counterparty curve at
 wrong-way CVA is about 0.146. Under a zero-threshold CSA with a 10-day
 margin period, EPE falls to about 0.23 and CVA to about 0.015.
 
-*In this library:* `credit/ExposureSimulator.java` (`simulate` over
+*In this library:* `credit/MultiCurrencyExposureSimulator.java` (`simulate` over
 `Swap`s and `FxForward`s with an optional `Csa`), `credit/ExposureProfile.java`
 (`expectedExposure`, `expectedNegativeExposure`, `pfe`, `epe`), and
 `credit/CvaApproximator.java` (`cva`, `dva`, `cvaWrongWay`, and
@@ -1825,7 +1825,7 @@ cluster on exactly the trades that were about to be profitable). The
 strategies you tried before finding this one.
 
 *In this library:* `backtest/` (bar-level, execution-aware, tick-level with
-queue positions, last look), `backtest/validation/`, `data/TickCapture` and
+queue positions, last look), `backtest/validation/`, `marketdata/TickCapture` and
 replay for deterministic tick-level history. Two defaults matter:
 `BacktestConfig.defaults()` charges 1 bp commission and 3 bp slippage and
 fills orders at the next bar's open (`BacktestConfig.frictionless()`
@@ -1893,7 +1893,7 @@ bar engine, which buys `cash/price` shares, fractions included, and then
 agrees with the others only when `cash/price` is whole at every entry. Costs, spreads, limit orders and queue models differ by
 engine and are outside the contract.
 
-*In this library:* `backtest/StrategyRunner.java` (`run(Engine,
+*In this library:* `trading/StrategyRunner.java` (`run(Engine,
 strategy, tape, capital, workDir)` with `Engine.BAR_BACKTESTER`,
 `TICK_BACKTESTER` and `PAPER_GATEWAY`; `writeTape` writes the bars as a
 tick file with one print per bar at the close). Recipe 324.
@@ -2407,7 +2407,7 @@ transaction report and checks the LEI, ISIN and MIC check digits.
 *In this library:* `fix/FixVersion.java`, `FixDictionary.java`,
 `FixGroupDef.java`, `FixGroup.java`, `FixSessionOptions.withVersion`;
 `entitlements/`; `trading/FillListener.java`, `LedgerFillListener.java`;
-`reporting/`. Section 17f covers the hot-path encoder in all three
+`regreporting/`. Section 17f covers the hot-path encoder in all three
 versions, 17d busts and corrections, and 17e the auth.016 message and the
 reference-data lookups. Recipes 338, 339, 340 and 342.
 
@@ -2461,8 +2461,8 @@ action TERM and event TRAD fails `validate()`, because TERM only pairs with ETRM
 *In this library:* `Rts22TransactionReport.toAuth016Xml` and
 `validateEsmaRules` (about 45 data-only rules; the ESMA XSD is checked in
 tests only when `QFL_ESMA_XSD` is set, since it cannot be redistributed),
-`reporting/registry/` (GLEIF golden copy and API, FIRDS FULINS, ISO 10383,
-`ReferenceDataChecker`), `reporting/cat/` and `reporting/emir/`. CAT and
+`regreporting/registry/` (GLEIF golden copy and API, FIRDS FULINS, ISO 10383,
+`ReferenceDataChecker`), `regreporting/cat/` and `regreporting/emir/`. CAT and
 EMIR are indicative and not certified; EMIR has not been checked against
 Regulation 2022/1860 field by field. Section 17g covers the ESMA rules that
 need reference data and the submission envelope (2.4). Swap legs are not
@@ -2508,7 +2508,7 @@ counterparty LEI has status RETIRED in the fixture registry fails CON-160 for
 field 16; with status LAPSED it passes, because CON-160 accepts a lapsed LEI.
 
 *In this library:* `Rts22TransactionReport.validateWithReferenceData` (36 CON
-rules), `toSubmissionXml`, and in `reporting/registry/` the types
+rules), `toSubmissionXml`, and in `regreporting/registry/` the types
 `ReferenceData`, `LeiValidity` and `CodeRegistry`, plus dated default methods on
 the three registries. The shipped GLEIF, FIRDS and ISO 10383 loaders do not
 parse dates, country or venue flags, so with them only the status checks run.
@@ -2573,12 +2573,31 @@ Worth studying as a checklist for your own projects:
 
 ### 20. Modules and exceptions
 
-A Java module is a jar that says what it offers and what it needs. This library's
-`module-info.java` names the module `com.quantfinlib`, exports its packages, and
-requires `java.net.http`, `jdk.httpserver` and, at compile time only,
-`org.jspecify`. Code on the module path writes `requires com.quantfinlib;`; code on
-the class path ignores the descriptor. The demos in `com.quantfinlib.examples` are
-not exported and live in a separate jar.
+A Java module is a jar that says what it offers and what it needs. Since 3.0 the
+library is two modules, and the split is the stability promise. The stable one,
+`com.quantfinlib` (artifact `quant-finance-library`), holds pricing, risk, research
+and backtesting. The reference one, `com.quantfinlib.lowlatency` (artifact
+`quant-finance-library-lowlatency`), holds the trading lane: order books, FIX and
+SBE, feeds, the market-data bus, gateways and regulatory reporting.
+
+Formally: the low-latency module `requires transitive com.quantfinlib`, so anything
+that reads it also reads the stable module, and dependencies run one way only. A
+package belongs to exactly one module, which is why a few types changed package in
+3.0: the order side became `core.Side` because stable `execution` and `backtest`
+signatures use it, while `StrategyRunner` moved to `trading` because its paper
+engine is a lane class. The stable module exports a helper package, `internal`, to
+the lane module alone (a qualified export); to everyone else it does not exist. The
+stable module needs only `java.net.http`; `jdk.httpserver` and `java.xml` are lane
+needs, and a test runs `jdeps` on the stable classes to keep it that way.
+
+Worked example. A research project writes `requires com.quantfinlib;` and gets
+`pricing`, `risk` and `backtest`; trying to import `com.quantfinlib.trading` fails
+at compile time, because that package is not in the module it reads. A trading
+project writes `requires com.quantfinlib.lowlatency;` and can import both
+`trading.HftOrderGateway` and `core.Side` with no second line. On the class path
+neither descriptor matters; put both jars on it. The demos in
+`com.quantfinlib.examples` are not exported and ship in the low-latency artifact's
+`examples` jar.
 
 Exceptions follow one rule: a fault in external input (a broken FIX or SBE frame, a
 malformed CSV file, a bad limits file) throws a library type, and that type extends
@@ -2599,8 +2618,8 @@ See [ARCHITECTURE.md](ARCHITECTURE.md#exception-policy).
 ```bash
 git clone https://github.com/AshJha0/Quant-Finance-Library && cd Quant-Finance-Library
 ./mvnw package                     # needs JDK 25; builds and runs the default test suite
-java -cp target/classes com.quantfinlib.examples.QuickStartDemo
-java -cp target/classes com.quantfinlib.examples.LiveTradingDemo   # live Binance ticks, paper trading, browser dashboard
+java -cp core/target/classes:lowlatency/target/classes com.quantfinlib.examples.QuickStartDemo
+java -cp core/target/classes:lowlatency/target/classes com.quantfinlib.examples.LiveTradingDemo   # live Binance ticks, paper trading, browser dashboard
 ```
 
 **Read code in this order** (each step uses the previous ones):
@@ -2713,7 +2732,8 @@ end with this library's classes. Q1001-Q1058 cover the newer areas:
 two-curve rates and standard CDS, counterparty exposure and SA-CCR,
 arbitrage-free smiles, exotics and numerics, factor risk and alpha
 construction, and trading operations. All class paths are relative to
-`src/main/java/com/quantfinlib/`.
+`core/src/main/java/com/quantfinlib/` for the stable packages and
+`lowlatency/src/main/java/com/quantfinlib/` for the trading lane.
 
 ---
 
@@ -4740,7 +4760,7 @@ exposure leg -- what the dependence multiplies),
 `risk/GaussianCopula.java` and `risk/Dependence.java` (the joint-
 tail machinery), and `credit/CvaApproximator.cvaWrongWay`, which prices
 the wrong-way overlay with a Gaussian copula on the exposure simulated by
-`credit/ExposureSimulator.java` (Part I section 10f).
+`credit/MultiCurrencyExposureSimulator.java` (Part I section 10f).
 
 ### 81. "Explain a margin spiral to me like I'm the CFO -- then tell me why prudent risk management at each firm made it worse."
 
@@ -6189,8 +6209,8 @@ order over hash maps silently break determinism), and the log is the
 system of record so its persistence and shipping become the hard
 engineering.
 
-*In this library:* `data/TickCapture.java` and
-`data/TickFileReader.java` (capture and deterministic replay of the
+*In this library:* `marketdata/TickCapture.java` and
+`marketdata/tick/TickFileReader.java` (capture and deterministic replay of the
 input stream), `persist/Checkpoint.java` (snapshot + replay-from
 recovery), `trading/OrderRingBuffer.java` (the ordered single-consumer
 input spine), `docs/ULTRA_LOW_LATENCY.md` (the architecture argument).
@@ -6561,8 +6581,8 @@ incident report; a stalled trading loop is a P&L event. Keep the
 blocking, simpler variant for research sessions where nothing downstream
 is trading.
 
-*In this library:* `data/TickCapture.java` (synchronous, documented as
-fine for capture-only sessions) vs `data/AsyncTickCapture.java` (ring
+*In this library:* `marketdata/TickCapture.java` (synchronous, documented as
+fine for capture-only sessions) vs `marketdata/AsyncTickCapture.java` (ring
 buffer, dedicated writer thread, `droppedTicks` counter -- the javadoc
 states the drop policy and why).
 
@@ -6585,9 +6605,9 @@ a magic number so you never misparse a foreign file, a version byte so
 the format can evolve, and framed records so a torn final write is
 detectable rather than corrupting.
 
-*In this library:* `data/TickFileWriter.java` -- magic `"QFLT"`
+*In this library:* `marketdata/tick/TickFileWriter.java` -- magic `"QFLT"`
 (`0x51464C54`) plus version byte, then framed records (~28 bytes/tick per
-`data/TickCapture.java`); `data/TickFileReader.java` is the replay side.
+`marketdata/TickCapture.java`); `marketdata/tick/TickFileReader.java` is the replay side.
 
 ### 146. "What does 'deterministic tick replay' actually require, end to end?"
 
@@ -6607,8 +6627,8 @@ validated against the exact history that broke. A desk that has this
 fixes incidents in hours from a tick file; a desk that does not writes
 "could not reproduce" in the postmortem.
 
-*In this library:* `data/TickCapture.java` ("replay the session
-deterministically with `TickFileReader`"), `data/TickFileReader.java`,
+*In this library:* `marketdata/TickCapture.java` ("replay the session
+deterministically with `TickFileReader`"), `marketdata/tick/TickFileReader.java`,
 and the determinism argument for the engine side in `docs/LEARN.md`
 (Q130, the LMAX-style sequencer).
 
@@ -7687,9 +7707,9 @@ up front: lossless ordered capture, bit-exact serialization, and a
 decision path with no hidden inputs -- which is why replay is an
 architecture, not a feature you add later.
 
-*In this library:* the full chain -- `data/TickCapture.java` /
-`data/AsyncTickCapture.java` (lossless capture, with a drop
-counter), `data/TickFileWriter.java` / `data/TickFileReader.java`
+*In this library:* the full chain -- `marketdata/TickCapture.java` /
+`marketdata/AsyncTickCapture.java` (lossless capture, with a drop
+counter), `marketdata/tick/TickFileWriter.java` / `marketdata/tick/TickFileReader.java`
 (bit-exact QFLT round-trip), and the determinism argument for the
 engine in `docs/LEARN.md` Q130.
 
@@ -7937,7 +7957,7 @@ MarketDataIncrementalRefresh (35=X).
 
 *In this library:* `fix/FixMarketDataView.java` decodes both halves --
 35=W snapshots (entries implicitly NEW) and 35=X incrementals carrying
-MDUpdateAction(279) new/change/delete. `data/TickFileWriter.java` bakes
+MDUpdateAction(279) new/change/delete. `marketdata/tick/TickFileWriter.java` bakes
 the same "state before deltas" contract into the QFLT format, where a symbol
 definition must precede the first tick that references it.
 
@@ -8187,7 +8207,7 @@ schemaId, version; schema version 2), each flyweight declares its
 `TEMPLATE_ID`, `BLOCK_LENGTH` (the body) and `ENCODED_LENGTH` (the whole
 message), and the readers skip unknown templates by block length, stop
 on a foreign schema id, and still decode version-1 frames.
-`data/TickFileWriter.java` writes a magic plus an explicit version byte
+`marketdata/tick/TickFileWriter.java` writes a magic plus an explicit version byte
 (now 2) at the head of every QFLT file, so the reader can refuse or adapt
 before parsing a single record; version-1 files are still read.
 
@@ -8213,7 +8233,7 @@ in production networks.
 *In this library:* `fix/FixDecoder.java` is exactly this incremental
 framer ("feed raw socket bytes in any fragmentation, poll complete
 validated FixMessages out ... message boundaries are exact regardless of
-TCP segmentation"); `data/TickFileWriter.java` uses type-byte framing
+TCP segmentation"); `marketdata/tick/TickFileWriter.java` uses type-byte framing
 with fixed-size records on the file side.
 
 ### 209. "Design a file format for capturing tick sessions for deterministic replay."
@@ -8239,11 +8259,11 @@ replaying garbage; and record which clock the timestamps came from
 (exchange epoch time or a local monotonic clock) with one instant
 anchored on both, so monotonic timestamps can be placed on the calendar.
 
-*In this library:* `data/TickFileWriter.java` -- magic "QFLT", version
+*In this library:* `marketdata/tick/TickFileWriter.java` -- magic "QFLT", version
 2 header with a clock domain (`TickFileWriter.ClockDomain`) and an
 epoch/monotonic anchor, records grouped in about 64 KiB CRC-32C blocks,
 TYPE_SYMBOL/TYPE_TICK framing, the defineSymbol-before-write contract,
-and a force to the device on close; `data/AsyncTickCapture.java` is the
+and a force to the device on close; `marketdata/AsyncTickCapture.java` is the
 off-thread writer around it.
 
 ### 210. "A single byte corrupts in an incoming FIX BodyLength. What happens to a naive decoder, and how do you harden it?"
@@ -8958,7 +8978,7 @@ downstream stays single-writer and allocation-free to keep replay exact.
 
 *In this library:* the determinism half is the design of the whole hot
 path -- `marketdata/TickRingBuffer.java` hands one consumer a totally
-ordered stream, `data/TickFileWriter.java` captures sequenced sessions
+ordered stream, `marketdata/tick/TickFileWriter.java` captures sequenced sessions
 for exact replay, and the single-writer discipline in
 `marketdata/L3BookBuilder.java`/`HftMarketDataBus.java` is precisely
 what makes replaying a sequenced stream reproduce identical state.
@@ -8983,7 +9003,7 @@ the counter. The counter is the contract: zero means the capture is
 complete; nonzero tells you exactly how much to distrust, and alerting
 on it converts silent loss into an operations event.
 
-*In this library:* the javadoc of `data/AsyncTickCapture.java` argues
+*In this library:* the javadoc of `marketdata/AsyncTickCapture.java` argues
 this policy verbatim ("ticks are dropped from the capture -- counted in
 droppedTicks, never blocking the consumer. A recording gap you can see
 beats latency you can't explain"). A writer failure such as a full disk
@@ -9013,7 +9033,7 @@ are one decision, not two.
 
 *In this library:* `marketdata/TickRingBuffer.java` rounds capacity up
 to a power of two and documents the strided sequences (head and tail on
-separate cache lines) and acquire/release publication; `data/AsyncTickCapture.java` does this
+separate cache lines) and acquire/release publication; `marketdata/AsyncTickCapture.java` does this
 exact arithmetic in its javadoc ("capacity 1M ~ 28 MB ~ several seconds
 of a busy feed").
 
@@ -12064,7 +12084,7 @@ assumption, it is an enforced equilibrium -- and checking it is both a
 data-quality test (a stale leg shows up as a phantom arbitrage) and,
 rarely, a genuine opportunity detector.
 
-*In this library:* `fx/CrossRateEngine.java` -- `Op.MULTIPLY`/`Op.DIVIDE`
+*In this library:* `marketdata/CrossRateEngine.java` -- `Op.MULTIPLY`/`Op.DIVIDE`
 streaming composition on the tick path (delivered via `TickListener`, not
 re-published onto the single-producer bus; the javadoc explains why);
 the static one-shot math and the consistency check live in
@@ -12090,7 +12110,7 @@ negative inputs as "unpriced" and returns NaN rather than a signal.
 `syntheticBid`, `buySavings` with the documented NaN/zero/negative guard
 (including the divide-by-zero infinity case, and the note that zero is
 what an empty `FxTierBook` tier reads as); leg rates stream from
-`fx/CrossRateEngine.java`.
+`marketdata/CrossRateEngine.java`.
 
 ### 356. "The market forward disagrees with the deposit-implied forward. Free money?"
 
@@ -16392,9 +16412,9 @@ iteration-order-dependent collections in the decision path. Every one
 of those is also the prevention: code that replays deterministically is
 code whose Tuesday bugs cost one morning, not one week.
 
-*In this library:* `data/TickFileReader.java` (deterministic,
+*In this library:* `marketdata/tick/TickFileReader.java` (deterministic,
 allocation-free replay; tick counts for bisection),
-`data/TickCapture.java` (why the file existed at all),
+`marketdata/TickCapture.java` (why the file existed at all),
 `backtest/tick/TickBacktester.java` (the ready-made replay harness when
 the strategy fits its interface).
 
@@ -16418,8 +16438,8 @@ replays of the same file disagree with each other, the bug is pure code
 nondeterminism and is now trivially bisectable. The discipline that
 falls out: log decisions, not just P&L, and diff at the decision layer.
 
-*In this library:* `data/AsyncTickCapture.java` (`droppedTicks` -- rule
-out the file first), `data/TickFileReader.java` (replay twice, the
+*In this library:* `marketdata/AsyncTickCapture.java` (`droppedTicks` -- rule
+out the file first), `marketdata/tick/TickFileReader.java` (replay twice, the
 cheapest nondeterminism detector), `backtest/tick/TickBacktester.java`
 (the fill model whose assumptions you must not confuse with bugs).
 
@@ -16450,10 +16470,10 @@ die silently. `isHealthy()` turns false, `failure()` holds the
 exception and `close()` rethrows it, so a capture that stopped writing
 at 10:02 is visible the same morning.
 
-*In this library:* `data/AsyncTickCapture.java` (`droppedTicks`, the
+*In this library:* `marketdata/AsyncTickCapture.java` (`droppedTicks`, the
 counted-never-blocking publish, the ring-sizing note, `isHealthy` and
 `failure`),
-`data/TickCapture.java` (the synchronous alternative and its trade).
+`marketdata/TickCapture.java` (the synchronous alternative and its trade).
 
 ### 517. "A new symbol started trading at 11am and the desk subscribed it mid-session. Is the capture file still valid?"
 
@@ -16475,9 +16495,9 @@ the desk subscribed at 11:00 but the symbol opened at 09:30, the
 permanently. The capture is a faithful record of what you saw, which is
 not always what happened.
 
-*In this library:* `data/TickFileWriter.java` (TYPE_SYMBOL framing,
+*In this library:* `marketdata/tick/TickFileWriter.java` (TYPE_SYMBOL framing,
 idempotent `defineSymbol`, "definitions may appear anywhere before the
-first tick that references them"), `data/TickFileReader.java`
+first tick that references them"), `marketdata/tick/TickFileReader.java`
 (`onSymbol` delivered in stream position).
 
 ### 518. "When do you replay a capture at recorded pace, and when at full speed? The team is arguing."
@@ -16501,7 +16521,7 @@ that layer only reproduces paced. The practical protocol: logic bugs
 full speed, timing bugs paced at 1.0, demos paced at whatever the
 audience enjoys.
 
-*In this library:* `data/TickFileReader.java` (`replay` vs
+*In this library:* `marketdata/tick/TickFileReader.java` (`replay` vs
 `replayPaced` -- speed multiplier, the 10 s gap cap, "for live-like
 feeds into the HFT bus").
 
@@ -16554,8 +16574,8 @@ corruption. Postmortem line: capture files are a persistence format
 with all the compatibility obligations that implies, and format bumps
 get the same release discipline as database migrations.
 
-*In this library:* `data/TickFileWriter.java` (magic + version byte in
-the header), `data/TickFileReader.java` (the refusal you hit, versus
+*In this library:* `marketdata/tick/TickFileWriter.java` (magic + version byte in
+the header), `marketdata/tick/TickFileReader.java` (the refusal you hit, versus
 the corrupt-record and truncated-file errors it also distinguishes).
 
 ### 521. "The overnight box lost power mid-save. This morning: is the checkpoint corrupt, and how do you find out safely?"
@@ -16659,11 +16679,11 @@ and a file you half-trust is worse than a file cut short. Then the real work: fi
 bytes -- check the capture host's logs for the crash, and whether the
 file was copied mid-write by a backup job, the classic culprit.
 
-*In this library:* `data/TickFileReader.java` (bad magic and
+*In this library:* `marketdata/tick/TickFileReader.java` (bad magic and
 unsupported version as `IOException`; truncation, checksum mismatch and
 corrupt record type as `TruncatedTickFileException` with
 `ticksDelivered`),
-`data/TickFileWriter.java` (the rewrite target for the salvage pass).
+`marketdata/tick/TickFileWriter.java` (the rewrite target for the salvage pass).
 
 ### 525. "Replay of the capture through the tick backtester shows your passive order filling; prod did not fill. Bug?"
 
@@ -16969,7 +16989,7 @@ component to saturate.
 
 *In this library:* `util/LatencyRecorder.java` (count/sum/max plus
 percentiles, the raw material), `util/HiccupMonitor.java` (which
-capacity is platform-reclaimable), `data/TickFileReader.java`
+capacity is platform-reclaimable), `marketdata/tick/TickFileReader.java`
 (`replayPaced` at 3.0, the direct 3x experiment).
 
 ### 536. "Your p99 is being quoted to a client. How much error is in that number, and where does it come from?"
@@ -17576,7 +17596,7 @@ writer thread behind its own ring.
 
 *In this library:* `marketdata/HftMarketDataBus.java` --
 `ringFullCount()` (the javadoc says it counts attempts, not losses) and `processedCount()`;
-`data/TickCapture.java` (the stall warning) vs `data/AsyncTickCapture.java`.
+`marketdata/TickCapture.java` (the stall warning) vs `marketdata/AsyncTickCapture.java`.
 
 ### 558. "The ring is full in a fast market. Spin, drop, or block -- argue the choices."
 
@@ -17625,9 +17645,9 @@ trading bus, capture must be the async variant, because synchronous
 capture puts disk latency on the consumer thread -- the recorder must
 never become the incident.
 
-*In this library:* `data/TickCapture.java` / `data/AsyncTickCapture.java`
-(recording), `data/TickFileReader.java` -- `replay` and `replayPaced`;
-format in `data/TickFileWriter.java`.
+*In this library:* `marketdata/TickCapture.java` / `marketdata/AsyncTickCapture.java`
+(recording), `marketdata/tick/TickFileReader.java` -- `replay` and `replayPaced`;
+format in `marketdata/tick/TickFileWriter.java`.
 
 ### 560. "During the halt reopen the quote stream is a firehose. What should be conflated and what must not be?"
 
@@ -18294,8 +18314,8 @@ captures" is its own incident. Magic-plus-version costs five
 bytes per file and converts silent misparse (the worst failure
 in data tooling) into a one-line error with an obvious fix.
 
-*In this library:* `data/TickFileWriter.java` -- `MAGIC` ("QFLT")
-and `VERSION` (2) written first; `data/TickFileReader.java`; checks
+*In this library:* `marketdata/tick/TickFileWriter.java` -- `MAGIC` ("QFLT")
+and `VERSION` (2) written first; `marketdata/tick/TickFileReader.java`; checks
 magic, accepts versions 1 and 2 (version 1 has no clock-domain header
 and no block checksums) and rejects anything else before reading any
 record.
@@ -19989,7 +20009,7 @@ prevent: "optimizing" a regression the machine caused; you will
 succeed, ship noise as a win, and the next thermal mood will
 un-ship it.
 
-*In this library:* `util/HiccupMonitor.java`, `data/TickCapture.java`
+*In this library:* `util/HiccupMonitor.java`, `marketdata/TickCapture.java`
 (fixed replayable workload), `docs/ULTRA_LOW_LATENCY.md` (measurement
 discipline, safepoint log correlation), `docs/BENCHMARKS.md` (run-to-run
 spread).
@@ -20044,7 +20064,7 @@ choice, not a law.
 
 *In this library:* `docs/ULTRA_LOW_LATENCY.md` (JIT deoptimization
 -- "warm up every code path first, as the benchmarks do"),
-`data/TickCapture.java` + `trading/PaperTradingGateway.java` (the
+`marketdata/TickCapture.java` + `trading/PaperTradingGateway.java` (the
 replay-through-real-pipeline machinery).
 
 ### 649. "A new hire asks why the Monte Carlo engine 'isn't ultra-low-latency like the quoter.' Give the two-lane speech."
@@ -25615,7 +25635,7 @@ single-writer contract. Chain downstream logic off the listener exactly as
 off a native symbol; the cross still gets a dense id for the registry and
 gateway.
 
-*In this library:* `fx/CrossRateEngine.java` -- `addCross(legA, legB,
+*In this library:* `marketdata/CrossRateEngine.java` -- `addCross(legA, legB,
 crossSymbol, Op, listener)`, `Op.multiply`/`divide`, and the emit-on-both-legs
 logic; static one-shot math lives in `pricing/TriangularArbitrage`.
 
@@ -27175,7 +27195,7 @@ with an exponent and the FIX encoder takes a price mantissa and decimal count,
 so what goes to the venue reproduces exactly, and rounding errors in prices
 are how you fail audits. (Inside the process the bus carries doubles, and the
 venue book converts to integer ticks on entry.) (2) **Deterministic
-session replay**: `data/TickCapture.java` records every tick through the bus so
+session replay**: `marketdata/TickCapture.java` records every tick through the bus so
 `TickFileReader` replays the identical event sequence run after run, chosen over
 lossy sampling that would be cheaper to write. (3) Model-based equivalence tests demand the fast
 order book and the readable one reach identical state on identical inputs: the
@@ -27616,7 +27636,7 @@ off and its exposure grows like `sqrt(t)` all the way to maturity. With
 the library's example (100 notional, 3.2% fixed, 1% rate vol), EE at two
 years is about 1.67 and EPE over five years about 1.30.
 
-*In this library:* `credit/ExposureSimulator.java` (`Swap`, `FxForward`,
+*In this library:* `credit/MultiCurrencyExposureSimulator.java` (`Swap`, `FxForward`,
 `simulate`), `credit/ExposureProfile.java` (`expectedExposure`,
 `discountedExpectedExposure`, `pfe`, `epe`).
 
@@ -27630,7 +27650,7 @@ amount add a fixed slice on top. In the library example a 10-day margin
 period cuts EPE from about 1.30 to about 0.23 and CVA from about 0.083
 to about 0.015: much smaller, but not zero.
 
-*In this library:* `ExposureSimulator.Csa(threshold, minimumTransfer,
+*In this library:* `MultiCurrencyExposureSimulator.Csa(threshold, minimumTransfer,
 marginPeriodYears)`; the simulator lags the collateral by the margin
 period on each path.
 
@@ -28839,7 +28859,7 @@ the code returns the deterministic limits rather than NaN.
   compositions that cover every triangulation (EURUSD * USDJPY = EURJPY;
   EURUSD / GBPUSD = EURGBP). Compose bid with ask per leg direction: a
   mid-based cross hides the double spread you pay.
-  `fx/CrossRateEngine.java`, `pricing/TriangularArbitrage.java`
+  `marketdata/CrossRateEngine.java`, `pricing/TriangularArbitrage.java`
   (impliedCrossMid); Clark (2011), chapter 1.
 - `edge = max(ac.bid - ab.ask * bc.ask, ab.bid * bc.bid - ac.ask)` (each
   path in bp of its own buy-leg cost). Triangular arbitrage on dealable
@@ -29023,7 +29043,7 @@ the code returns the deterministic limits rather than NaN.
   (`JpmcdsCdsContingentLegPV`, `JpmcdsFeeLegPV`); O'Kane (2008), ch. 6.
 - `P(t,T) = P(0,T)/P(0,t) exp((V(t,T) - V(0,T) + V(0,t))/2 - B(t,T) x(t))`.
   Hull-White bond price on a simulated path, used to revalue swaps for
-  exposure. `credit/ExposureSimulator.java`; Brigo and Mercurio (2006),
+  exposure. `credit/MultiCurrencyExposureSimulator.java`; Brigo and Mercurio (2006),
   eq. 3.39.
 - `CVA = LGD sum_i E[D(0,t_i) E(t_i)] (PD(t_i) - PD(t_{i-1}))`;
   `DVA` the same with own default and negative exposure. Unilateral;

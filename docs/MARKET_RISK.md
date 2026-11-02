@@ -21,7 +21,7 @@ numbers for losses.
 |---|---|
 | Equity, FX and commodity bars | `data.CsvBarLoader`, `data.HttpBarFetcher`, `core.BarSeries` |
 | Live streams | `feed.WebSocketFeed`, `marketdata.HftMarketDataBus`, `fix.FixMarketDataView` (35=W/X) |
-| Tick history | `data.TickFileWriter`/`TickFileReader` (QFLT), `data.TickCapture` |
+| Tick history | `marketdata.tick.TickFileWriter`/`TickFileReader` (QFLT), `marketdata.TickCapture` (low-latency artifact) |
 | Yield curves | `rates.YieldCurve` (zero rates; `bootstrapAnnualParSwaps` from annual par swaps, single curve); `rates.MultiCurveBootstrap` (OIS discount and projection curves) with `rates.MultiCurveRisk` for bucketed, key-rate and parallel DV01 |
 | Implied volatility | `pricing.VolSurface`, `fx.FxVolSurface` (delta-quoted) |
 | FX forwards and swap points | `fx.SwapPointsCurve`, `pricing.ForwardCurve` |

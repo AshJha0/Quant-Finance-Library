@@ -38,7 +38,7 @@ options.
 Or without writing code at all:
 
 ```bash
-java -jar target/quant-finance-library-*.jar backtest --csv bars.csv --symbol EURUSD \
+java -jar core/target/quant-finance-library-*.jar backtest --csv bars.csv --symbol EURUSD \
      --strategy sma --fast 20 --slow 50 --out report.html
 ```
 
@@ -124,15 +124,16 @@ double smileVol = new VannaVolga(pillar.strikesCopy(), pillar.volsCopy(), 0.045,
 
 ```bash
 ./mvnw -q -DskipTests compile
-java -cp target/classes com.quantfinlib.examples.LiveTradingDemo
+java -cp core/target/classes:lowlatency/target/classes com.quantfinlib.examples.LiveTradingDemo
 # then open http://localhost:8080 for live positions, P&L, fills, latency
 ```
 
 Real Binance trades feed a streaming EMA crossover, which trades on a paper
 venue shown on a dashboard bound to the loopback interface. Swap the
 strategy body in `LiveTradingDemo` for your own logic. The demos ship in the
-separate `examples` jar, not in the library jar, so run them from
-`target/classes` or that jar.
+separate `examples` jar of the low-latency artifact, not in either library
+jar, so run them from `core/target/classes:lowlatency/target/classes` (`;` on
+Windows) or that jar.
 
 ## 7. The fast-lane hot path (quote a market)
 
@@ -1491,21 +1492,21 @@ The `cli.Main` entry point runs backtests, walk-forward validation and market re
 
 ```bash
 # Backtest: strategies sma|ema|rsi|macd|bollinger, HTML tear sheet optional.
-java -jar target/quant-finance-library-*.jar backtest \
+java -jar core/target/quant-finance-library-*.jar backtest \
      --csv bars.csv --symbol EURUSD \
      --strategy bollinger --period 20 --k 2.0 \
      --capital 250000 --out bt.html
 
 # RSI variant has its own knobs:
-java -jar target/quant-finance-library-*.jar backtest --csv bars.csv --symbol EURUSD \
+java -jar core/target/quant-finance-library-*.jar backtest --csv bars.csv --symbol EURUSD \
      --strategy rsi --period 14 --oversold 30 --overbought 70
 
 # Walk-forward: re-optimize an SMA grid per train window, score unseen bars only.
-java -jar target/quant-finance-library-*.jar walkforward --csv bars.csv --symbol EURUSD \
+java -jar core/target/quant-finance-library-*.jar walkforward --csv bars.csv --symbol EURUSD \
      --train 252 --test 63 --fast 5,10,20 --slow 40,60 --out wf.html
 
 # Market snapshot report: technicals, price chart, drawdown.
-java -jar target/quant-finance-library-*.jar report --csv bars.csv --symbol EURUSD \
+java -jar core/target/quant-finance-library-*.jar report --csv bars.csv --symbol EURUSD \
      --out market.html
 ```
 
@@ -2614,9 +2615,9 @@ sor.register("EXCH_B", 1);
 sor.register("DARK_X", 2);
 
 var venues = List.of(
-        new VenueQuote("EXCH_A", 99.99, 9_000, 100.01, 10_000, 0.3, 120_000, false),
-        new VenueQuote("EXCH_B", 99.99, 7_000, 100.01, 8_000, 0.3, 80_000, false),
-        new VenueQuote("DARK_X", 99.99, 0, 100.01, 0, 0.1, 200_000, true));
+        new VenueQuote("EXCH_A", 99.99, 9_000, 100.01, 10_000, 0.3, 120_000, false, quoteTimeNanos),
+        new VenueQuote("EXCH_B", 99.99, 7_000, 100.01, 8_000, 0.3, 80_000, false, quoteTimeNanos),
+        new VenueQuote("DARK_X", 99.99, 0, 100.01, 0, 0.1, 200_000, true, quoteTimeNanos));
 
 var plan = sor.route(Side.BUY, 12_000, venues);
 for (var leg : plan.lit()) {
@@ -5007,9 +5008,9 @@ sor.register("EXCH_B", 1);
 sor.register("DARK_X", 2);
 
 var venues = List.of(
-        new VenueQuote("EXCH_A", 99.99, 9_000, 100.01, 10_000, 0.3, 120_000, false),
-        new VenueQuote("EXCH_B", 99.99, 7_000, 100.01, 8_000, 0.3, 80_000, false),
-        new VenueQuote("DARK_X", 99.99, 0, 100.01, 0, 0.1, 200_000, true));
+        new VenueQuote("EXCH_A", 99.99, 9_000, 100.01, 10_000, 0.3, 120_000, false, quoteTimeNanos),
+        new VenueQuote("EXCH_B", 99.99, 7_000, 100.01, 8_000, 0.3, 80_000, false, quoteTimeNanos),
+        new VenueQuote("DARK_X", 99.99, 0, 100.01, 0, 0.1, 200_000, true, quoteTimeNanos));
 
 AdaptiveSor.RoutingDecision plan = sor.route(Side.BUY, 12_000, venues);
 for (var leg : plan.lit()) {
@@ -5762,7 +5763,7 @@ System.out.printf("implied cross mid %.4f, edge %.2f bps, tradeable %b%n",
 
 // Streaming: keep the synthetic cross live off leg ticks (consumer thread):
 // CrossRateEngine engine = new CrossRateEngine(bus);
-// engine.addCross("EURUSD", "USDJPY", "EURJPY", CrossRateEngine.Op.MULTIPLY, listener);
+// engine.addCross("EURUSD", "USDJPY", "EURJPY", CrossOp.MULTIPLY, listener);
 ```
 
 The implied cross is `EURUSD * USDJPY` for legs sharing the middle
@@ -8789,7 +8790,7 @@ quietly pausing.
 # Size the heap for startup/setup allocation only, then forbid collection.
 java -XX:+UnlockExperimentalVMOptions -XX:+UseEpsilonGC -Xms8g -Xmx8g \
      -XX:+AlwaysPreTouch \
-     -cp target/classes com.quantfinlib.examples.HftOrderBenchmark
+     -cp core/target/classes:lowlatency/target/classes com.quantfinlib.examples.HftOrderBenchmark
 ```
 
 ```java
@@ -8858,10 +8859,10 @@ bars, and its `run(String[])` entry returns an exit code instead of calling
 `System.exit`: so a nightly job can assert on it.
 
 ```bash
-java -jar target/quant-finance-library-*.jar backtest --csv bars.csv --symbol EURUSD \
+java -jar core/target/quant-finance-library-*.jar backtest --csv bars.csv --symbol EURUSD \
      --strategy bollinger --period 20 --k 2.0 --capital 250000 --out bt.html
 
-java -jar target/quant-finance-library-*.jar walkforward --csv bars.csv --symbol EURUSD \
+java -jar core/target/quant-finance-library-*.jar walkforward --csv bars.csv --symbol EURUSD \
      --train 252 --test 63 --fast 5,10,20 --slow 40,60 --out wf.html
 ```
 
@@ -9300,7 +9301,8 @@ while (block.find()) {
     Files.writeString(dir.resolve("Block" + n++ + ".java"), src);
 }
 javax.tools.JavaCompiler javac = javax.tools.ToolProvider.getSystemJavaCompiler();
-List<String> args = new ArrayList<>(List.of("-cp", "target/classes", "-d", dir.toString()));
+String cp = "core/target/classes" + File.pathSeparator + "lowlatency/target/classes";
+List<String> args = new ArrayList<>(List.of("-cp", cp, "-d", dir.toString()));
 try (var files = Files.list(dir)) {
     files.filter(p -> p.toString().endsWith(".java")).forEach(p -> args.add(p.toString()));
 }
@@ -9969,10 +9971,13 @@ YieldCurve curve = YieldCurve.ofZeroRates(new double[]{1, 2, 5, 10},
     new double[]{0.030, 0.031, 0.032, 0.033});
 double[] dates = new double[20];                 // quarterly, strictly positive
 for (int i = 0; i < dates.length; i++) dates[i] = 0.25 * (i + 1);
-ExposureProfile profile = ExposureSimulator.simulate(
-    ExposureSimulator.Market.ratesOnly(curve, 0.05, 0.01),
-    List.of(new ExposureSimulator.Swap(100, 0.032, true, 0, 5, 1)), List.of(),
-    new ExposureSimulator.Csa(0, 0, 10 / 250.0), dates, 10_000, 42L);
+// rates only: a domestic Hull-White rate, no FX pairs
+MultiCurrencyExposureSimulator.Market market = new MultiCurrencyExposureSimulator.Market(
+    new MultiCurrencyExposureSimulator.Domestic(MultiCurrencyExposureSimulator.Curve.of(curve), 0.05, 0.01), List.of(), new double[][]{{1}});
+MultiCurrencyExposureSimulator.SwapTerms payer = new MultiCurrencyExposureSimulator.SwapTerms(100, 0.032, true, 0, 5, 1);
+ExposureProfile profile = MultiCurrencyExposureSimulator.simulate(market,
+    List.of(new MultiCurrencyExposureSimulator.Swap(payer, null)), List.of(),
+    new MultiCurrencyExposureSimulator.Csa(0, 0, 10 / 250.0), dates, 10_000, 42L);
 CreditCurve cpty = CreditCurve.bootstrap(new int[]{1, 3, 5},
     new double[]{0.010, 0.012, 0.015}, 0.4, curve);
 double cva = CvaApproximator.cva(profile, cpty, 0.6);
@@ -9989,11 +9994,9 @@ probability in each bucket times loss given default.
 ## 306. Wrong-way CVA and unilateral DVA
 
 ```java
-// dates, cpty and curve as in recipe 305; no CSA this time
-ExposureProfile bare = ExposureSimulator.simulate(
-    ExposureSimulator.Market.ratesOnly(curve, 0.05, 0.01),
-    List.of(new ExposureSimulator.Swap(100, 0.032, true, 0, 5, 1)), List.of(),
-    null, dates, 10_000, 42L);
+// dates, cpty, curve, market and payer as in recipe 305; no CSA this time
+ExposureProfile bare = MultiCurrencyExposureSimulator.simulate(market,
+    List.of(new MultiCurrencyExposureSimulator.Swap(payer, null)), List.of(), null, dates, 10_000, 42L);
 CreditCurve own = CreditCurve.bootstrap(new int[]{1, 3, 5},
     new double[]{0.006, 0.007, 0.008}, 0.4, curve);
 double independent = CvaApproximator.cva(bare, cpty, 0.6);
@@ -10514,9 +10517,9 @@ MultiCurrencyExposureSimulator.Market market = new MultiCurrencyExposureSimulato
 double[] dates = new double[20];
 for (int i = 0; i < dates.length; i++) dates[i] = 0.25 * (i + 1);
 ExposureProfile p = MultiCurrencyExposureSimulator.simulate(market,
-    List.of(new MultiCurrencyExposureSimulator.Swap(new ExposureSimulator.Swap(100, 0.039, true, 0, 5, 1),
+    List.of(new MultiCurrencyExposureSimulator.Swap(new MultiCurrencyExposureSimulator.SwapTerms(100, 0.039, true, 0, 5, 1),
         MultiCurrencyExposureSimulator.Curve.of(usdProj))),
-    List.of(new MultiCurrencyExposureSimulator.FxForward(0, new ExposureSimulator.FxForward(50, 1.10, 2))),
+    List.of(new MultiCurrencyExposureSimulator.FxForward(0, new MultiCurrencyExposureSimulator.FxForwardTerms(50, 1.10, 2))),
     null, dates, 10_000, 42L);
 CvaApproximator.Bilateral b = CvaApproximator.bilateral(p, cpty, 0.6, own, 0.6);
 double adjustment = b.total();
@@ -10525,8 +10528,10 @@ double adjustment = b.total();
 The swap discounts on the domestic curve and projects on its own curve, which
 is a fixed basis between the two. Each foreign currency has its own Hull-White
 rate and an FX spot with the quanto drift that keeps forwards arbitrage-free.
-`Market.fromLegacy` turns a 2.1 `ExposureSimulator.Market` into this form and
-reproduces its results. `bilateral` charges CVA only on the paths where the
+A market with no pairs (or one pair whose foreign rate vol is 0) is the
+single-currency case that the 2.x `ExposureSimulator` covered; 3.0 folded that
+class in here and reproduces its results to rounding (docs/MIGRATION_3.0.md
+section 6). `bilateral` charges CVA only on the paths where the
 counterparty defaults first and DVA only where we default first, with the two
 defaults independent and the hazard flat within each bucket.
 
@@ -10734,7 +10739,7 @@ after a bust. For busts in paper trading see recipe 350.
 ```java
 List<MultiCurrencyExposureSimulator.ForeignSwap> eurSwaps = List.of(
     new MultiCurrencyExposureSimulator.ForeignSwap(0,
-        new ExposureSimulator.Swap(100, 0.026, true, 0, 5, 1),
+        new MultiCurrencyExposureSimulator.SwapTerms(100, 0.026, true, 0, 5, 1),
         MultiCurrencyExposureSimulator.Curve.of(eur)));
 MultiCurrencyExposureSimulator.BasisFactor basis =
     new MultiCurrencyExposureSimulator.BasisFactor(0.1, 0.002, new double[]{0.3, 0, 0});
@@ -10905,7 +10910,7 @@ creation time to the second) around auth.016 (ESMA65-8-2356 paras 124 to 132).
 CON-330, CON-331, CON-430, the seven-day pending workflow and auth.031 feedback
 are not implemented.
 
-## 354. Moving off MathUtils
+## 354. Moving off MathUtils (removed in 3.0)
 
 ```java
 double z = SpecialFunctions.normInv(0.99);
@@ -10915,6 +10920,49 @@ double rho = Stats.pearsonOrZero(x, y);      // MathUtils.correlation: 0 at zero
 double beta = Numerics.decayFactor(dtNanos, halfLifeNanos);
 ```
 
-`util.MathUtils` is deprecated for removal in 2.4.0. Every method delegates to
-one of these, so the switch changes no result. docs/MIGRATION_3.0.md section 4
+`util.MathUtils` was deprecated in 2.4.0 and removed in 3.0. In 2.4 every method
+delegated to one of these, so the switch changes no result. docs/MIGRATION_3.0.md section 4
 has the full table.
+
+## 355. Depending on the 3.0 artifacts
+
+```xml
+<!-- stable tier: pricing, risk, research, backtesting -->
+<dependency>
+  <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
+  <artifactId>quant-finance-library</artifactId>
+  <version>v3.0.0</version>
+</dependency>
+<!-- trading lane; brings the stable tier with it -->
+<dependency>
+  <groupId>com.github.AshJha0.Quant-Finance-Library</groupId>
+  <artifactId>quant-finance-library-lowlatency</artifactId>
+  <version>v3.0.0</version>
+</dependency>
+```
+
+```
+module my.desk {
+    requires com.quantfinlib.lowlatency;   // reads com.quantfinlib transitively
+}
+```
+
+Pick the stable artifact if you never touch `trading`, `marketdata`, `orderbook`,
+`fix`, `sbe`, `feed`, `entitlements`, `regreporting` or `util`. The order side is
+`core.Side` in both, so an execution study and a gateway share one enum.
+docs/MIGRATION_3.0.md lists every type that moved.
+
+## 356. A synthetic cross with `CrossOp`
+
+```java
+// EUR/JPY from EUR/USD and USD/JPY: legs share the middle currency
+double ask = SyntheticCross.syntheticAsk(CrossOp.MULTIPLY, 1.0848, 1.0850, 151.20, 151.23);
+double bid = SyntheticCross.syntheticBid(CrossOp.MULTIPLY, 1.0848, 1.0850, 151.20, 151.23);
+// ask = 1.0850 * 151.23 = 164.08455, bid = 1.0848 * 151.20 = 164.02176
+```
+
+`CrossOp` was `CrossRateEngine.Op` until 2.4. It became a stable top-level type in
+3.0 because the streaming engine moved to `marketdata` in the low-latency artifact
+while `SyntheticCross`, which takes the same enum, stayed in `fx`. The engine call
+is unchanged apart from the type name:
+`engine.addCross("EURUSD", "USDJPY", "EURJPY", CrossOp.MULTIPLY, listener)`.

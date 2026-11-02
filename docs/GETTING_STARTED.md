@@ -27,27 +27,30 @@ cd Quant-Finance-Library
 ```
 
 `verify` compiles with `-Xlint:all`, runs the default test set, checks line coverage
-(the build fails below 90 % overall or 80 % in any package) and packages three jars in
-`target/`:
+(the build fails below 90 % overall or 80 % in any package, per module) and packages
+the jars. Since 3.0 the build has two modules, `core/` and `lowlatency/`:
 
 | Jar | Contents |
 |---|---|
-| `quant-finance-library-<version>.jar` | The library. Its manifest main class is the command line, `com.quantfinlib.cli.Main`. |
-| `quant-finance-library-<version>-examples.jar` | Demos and hand-written benchmarks (`com.quantfinlib.examples`). |
-| `-sources.jar`, `-javadoc.jar` | Sources and API documentation. |
+| `core/target/quant-finance-library-<version>.jar` | The stable library. Its manifest main class is the command line, `com.quantfinlib.cli.Main`. |
+| `lowlatency/target/quant-finance-library-lowlatency-<version>.jar` | The trading lane (`trading`, `marketdata`, `orderbook`, `fix`, `sbe`, `feed`, `entitlements`, `regreporting`, `util`). |
+| `lowlatency/target/quant-finance-library-lowlatency-<version>-examples.jar` | Demos, hand-written benchmarks and sample strategies (`com.quantfinlib.examples`). |
+| `-sources.jar`, `-javadoc.jar` | Sources and API documentation, per module. |
 
-For a faster loop while editing, `./mvnw -DskipTests compile` builds `target/classes`
-only.
+For a faster loop while editing, `./mvnw -DskipTests compile` builds
+`core/target/classes` and `lowlatency/target/classes` only.
 
-The library jar is the named module `com.quantfinlib`. From your own modular code,
-add `requires com.quantfinlib;` to `module-info.java`; on the class path nothing is
+The stable jar is the named module `com.quantfinlib` and the lane jar
+`com.quantfinlib.lowlatency`. From your own modular code, add
+`requires com.quantfinlib;` (or `requires com.quantfinlib.lowlatency;`, which reads
+the stable module transitively) to `module-info.java`; on the class path nothing is
 needed. The examples jar has no module descriptor, so run the demos on the class
-path, for example
-`java -cp quant-finance-library-2.4.0.jar:quant-finance-library-2.4.0-examples.jar com.quantfinlib.examples.QuickStartDemo`
+path with both library jars, for example
+`java -cp quant-finance-library-3.0.0.jar:quant-finance-library-lowlatency-3.0.0.jar:quant-finance-library-lowlatency-3.0.0-examples.jar com.quantfinlib.examples.QuickStartDemo`
 (use `;` as the separator on Windows).
 
 Two invalid-input behaviours changed in 2.1. `Stats.quantile` (formerly
-`MathUtils.percentile`, deprecated in 2.4.0) throws
+`MathUtils.percentile`, removed in 3.0) throws
 `IllegalArgumentException` for a probability outside [0, 1] or NaN, and the range
 means and standard deviations throw `IndexOutOfBoundsException` for a bad range. Bad
 input files and configuration throw `MalformedDataException` or
@@ -76,7 +79,7 @@ date,open,high,low,close,volume
 Run a moving-average crossover and write an HTML report:
 
 ```bash
-java -jar target/quant-finance-library-*.jar backtest \
+java -jar core/target/quant-finance-library-*.jar backtest \
     --csv bars.csv --symbol SPY --strategy sma --fast 10 --slow 30 \
     --capital 100000 --out report.html
 ```
@@ -90,25 +93,26 @@ Two more commands use the same CSV input:
 
 ```bash
 # Walk-forward: optimise the SMA windows on 252 bars, test on the next 63, roll forward.
-java -jar target/quant-finance-library-*.jar walkforward \
+java -jar core/target/quant-finance-library-*.jar walkforward \
     --csv bars.csv --symbol SPY --train 252 --test 63 --fast 5,10,20 --slow 40,60 \
     --out walkforward.html
 
 # Market report: price chart, drawdown from peak and an indicator summary.
-java -jar target/quant-finance-library-*.jar report --csv bars.csv --symbol SPY --out market.html
+java -jar core/target/quant-finance-library-*.jar report --csv bars.csv --symbol SPY --out market.html
 ```
 
-`java -jar target/quant-finance-library-*.jar help` prints the usage. The exit code
+`java -jar core/target/quant-finance-library-*.jar help` prints the usage. The exit code
 is 0 on success, 1 for a usage error and 2 when the run fails. If your shell does
 not expand the `*`, write the full jar name.
 
 ## 4. Library tour and paper-trading demo
 
-Both demos live in the examples jar and also in `target/classes` after a compile.
+Both demos live in the examples jar and also in `lowlatency/target/classes` after a
+compile (they need `core/target/classes` on the class path too).
 
 ```bash
 ./mvnw -DskipTests compile
-java -cp target/classes com.quantfinlib.examples.QuickStartDemo
+java -cp core/target/classes:lowlatency/target/classes com.quantfinlib.examples.QuickStartDemo
 ```
 
 `QuickStartDemo` runs offline. It walks through indicators, backtesting, risk,
@@ -116,7 +120,7 @@ optimisation, pricing, fixed income and a risk-gated paper-trading session on
 synthetic data.
 
 ```bash
-java -cp target/classes com.quantfinlib.examples.LiveTradingDemo
+java -cp core/target/classes:lowlatency/target/classes com.quantfinlib.examples.LiveTradingDemo
 ```
 
 `LiveTradingDemo` needs internet access. It subscribes to the public Binance trade
@@ -137,9 +141,9 @@ a platform hiccup summary:
 
 ```bash
 ./mvnw -DskipTests compile
-java -Xms512m -Xmx512m -XX:+AlwaysPreTouch -cp target/classes \
+java -Xms512m -Xmx512m -XX:+AlwaysPreTouch -cp core/target/classes:lowlatency/target/classes \
     com.quantfinlib.examples.HftLatencyBenchmark
-java -Xms512m -Xmx512m -XX:+AlwaysPreTouch -cp target/classes \
+java -Xms512m -Xmx512m -XX:+AlwaysPreTouch -cp core/target/classes:lowlatency/target/classes \
     com.quantfinlib.examples.HftOrderBenchmark
 ```
 
@@ -199,8 +203,9 @@ it with the thread dump Surefire prints.
 from a Windows share). Run `chmod +x mvnw`, or `sh mvnw verify`.
 
 **`ClassNotFoundException: com.quantfinlib.examples...`** when running from the
-library jar. Demos are not in the library jar; use `target/classes` or the
-`-examples` jar.
+library jar. Demos are not in either library jar; use
+`core/target/classes:lowlatency/target/classes` or the `-examples` jar of the
+low-latency artifact.
 
 **`LiveTradingDemo` prints connection errors.** The demo needs outbound access to the
 Binance WebSocket endpoint. Corporate proxies and some regions block it. The feed

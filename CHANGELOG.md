@@ -6,6 +6,35 @@ Entries for 1.x releases are archived in [docs/history/CHANGELOG-1.x.md](docs/hi
 
 ## [Unreleased]
 
+### 3.0.0 (in preparation)
+
+Major release: the public API gets smaller and the jar says what docs/STABILITY.md says. No number changes, apart from the rounding-level note on the exposure simulator below. Every change has a row in [docs/MIGRATION_3.0.md](docs/MIGRATION_3.0.md); the japicmp gate lists each intended break by name (owner decisions D1 to D9, 2026-11-02).
+
+#### Changed (breaking)
+
+- Two artifacts and two JPMS modules. `quant-finance-library` (module `com.quantfinlib`, source tree `core/`) holds the stable tier; `quant-finance-library-lowlatency` (module `com.quantfinlib.lowlatency`, tree `lowlatency/`) holds the reference tier and `requires transitive com.quantfinlib`. It exports `trading`, `marketdata`, `orderbook`, `fix`, `sbe`, `feed`, `entitlements`, `regreporting` (with `cat`, `emir`, `registry`) and `util`. The root POM is now the parent `quant-finance-library-parent`; `jitpack.yml` publishes both modules (JitPack group `com.github.AshJha0.Quant-Finance-Library`). The `examples` jar is a classifier of the low-latency artifact.
+- The stable module no longer requires `jdk.httpserver` or `java.xml`; both moved to the low-latency module (`trading.TradingDashboard`, the FIRDS parser). `ModuleDescriptorTest` runs `jdeps` on the stable classes to check it.
+- Package `reporting` renamed `regreporting` (D7), subpackages included; types and members unchanged.
+- Types that changed package because their 2.x package and their dependencies ended up in different modules (MIGRATION_3.0 section 8): `orderbook.Side` to `core.Side`; `data.TickFileWriter` and `TickFileReader` to `marketdata.tick` (main artifact, since the stable tick backtester reads the format); `data.TickCapture` and `AsyncTickCapture` to `marketdata`; `backtest.StrategyRunner` to `trading.StrategyRunner`; `fx.CrossRateEngine` to `marketdata.CrossRateEngine`, with its nested `Op` now the stable top-level `fx.CrossOp`.
+- `util.ValueArrays` and `util.Immutable` moved to the non-exported package `com.quantfinlib.internal` (exported only to the low-latency module); `Immutable` is no longer `@Documented`.
+- `ExposureSimulator` folded into `MultiCurrencyExposureSimulator` (D4). Its trade terms are now `MultiCurrencyExposureSimulator.SwapTerms`, `FxForwardTerms` and `Csa`, with the same components and validation. A zero-pair market (or one pair with foreign rate vol 0) reproduces the 2.4 single-currency results path for path from the same seed to a relative 1e-12; `ExposureSimulatorFoldTest` pins EE, ENE, PFE and wrong-way CVA against values printed by the 2.4.0 code (largest observed relative difference 6.7e-14). Own test against the previous release's output.
+- `fix.FileSessionStore` no longer imports the v1 layout (`seqnums.dat`, `messages.dat`) on open (D8): it starts a fresh journal and leaves the v1 files untouched. Migrate with a 2.4 release first.
+- japicmp now compares each module with the released 2.4.0 jar. The stable module fails the build on any binary-incompatible change except those listed by name in `core/pom.xml`, each commented with its MIGRATION_3.0 section; the low-latency module is reported only.
+
+#### Removed
+
+- `util.MathUtils` (D9; use `stats.Stats`, `SpecialFunctions`, `LinearAlgebra`, `Numerics`).
+- The ignored-seed constructors `PortfolioOptimizer(double[], double[][], long)` and `ConstrainedPortfolioOptimizer(double[], double[][], long)`.
+- The 8-argument `execution.VenueQuote` constructor (it made a quote that could never go stale).
+- `ExposureSimulator` with `Market`, `Market.ratesOnly` and `simulate`; `MultiCurrencyExposureSimulator.Market.fromLegacy`.
+- `backtest.strategies.EmaCrossStrategy`, `RsiStrategy`, `MacdStrategy`, `BollingerBandsStrategy` (D3); copies stay in `examples.strategies`, and `cli` keeps package-private copies so `--strategy ema|rsi|macd|bollinger` still works. `SmaCrossStrategy` stays.
+- `examples.FixJournalMigration` (it needs the 2.x v1 import; run the 2.4 one).
+
+#### Added
+
+- `fx.CrossOp`, the stable home of the former `CrossRateEngine.Op`.
+- `LowLatencyModuleDescriptorTest`; `ExposureSimulatorFoldTest`; `CliSampleStrategiesTest`.
+
 ## [2.4.0] - 2026-11-02
 
 Minor release. No 2.3 public signature in a stable package is removed or changed (japicmp against 2.3.0), and no result changes unless you opt in. 2.4.0 deprecates for removal every member that 3.0 takes out, so compiling with `-Xlint:removal` lists the lines to change; [docs/MIGRATION_2.4.md](docs/MIGRATION_2.4.md) covers this release and [docs/MIGRATION_3.0.md](docs/MIGRATION_3.0.md) is the draft plan for 3.0.

@@ -14,11 +14,11 @@
  * Output is a field map, not ISO 20022 auth.030 XML, and has not been validated against the
  * ESMA XSD or the ESMA validation rules.</p>
  *
- * <p><b>3.0 notice.</b> Renamed to {@code com.quantfinlib.regreporting.emir} in 3.0
+ * <p>Renamed from {@code reporting} to {@code com.quantfinlib.regreporting.emir} in 3.0
  * (the {@code report} and {@code reporting} names were one letter apart with
  * unrelated meanings), and moved with the rest of the reference tier to the
  * separate artifact {@code quant-finance-library-lowlatency}. Types and members
- * are unchanged; update the import. See docs/MIGRATION_3.0.md.</p>
+ * did not change; a 2.x user updates the import. See docs/MIGRATION_3.0.md.</p>
  */
 @NullMarked
 package com.quantfinlib.regreporting.emir;

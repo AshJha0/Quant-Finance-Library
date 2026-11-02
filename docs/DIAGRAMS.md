@@ -2204,7 +2204,7 @@ door of the market.
 flowchart LR
     subgraph INSTR52["stages 1-2: discovery + signals (per asset class)"]
         EQ52["Equities<br/>alpha.Factors<br/>markets.IndexConstruction<br/>pricing.DividendSchedule"]
-        FX52["FX<br/>fx.SwapPointsCurve<br/>fx.FxVolSurface<br/>fx.CrossRateEngine"]
+        FX52["FX<br/>fx.SwapPointsCurve<br/>fx.FxVolSurface<br/>fx.CrossOp"]
         RT52["Rates<br/>rates.YieldCurve<br/>rates.SwapPricer<br/>rates.NelsonSiegel"]
         CR52["Credit<br/>credit.CreditCurve<br/>credit.CdsPricer<br/>credit.CreditSpreads (z, basis)"]
         CM52["Commodities<br/>commodities.CommodityCurve<br/>(roll yield + implied carry)"]
@@ -4311,9 +4311,9 @@ once; independent CVA, DVA and the wrong-way overlay all read it.
 
 ```mermaid
 flowchart LR
-    subgraph MKT102["ExposureSimulator.Market"]
+    subgraph MKT102["MultiCurrencyExposureSimulator.Market"]
         HW_102["Hull-White short rate<br/>(mean reversion, vol)"]
-        FX_102["FX lognormal<br/>(optional, one pair)"]
+        FX_102["FX lognormal<br/>(zero or more pairs)"]
     end
     TRADES_102["Swaps and FxForwards"]
     CSA_102["Csa<br/>threshold, MTA, margin period"]
@@ -4591,9 +4591,9 @@ flowchart LR
     FILL_110["execution"]
     RTS_110["Rts22ReportBuilder<br/>validate, validateEsmaRules,<br/>validateWithReferenceData (2.4)"]
     SUB_110["toSubmissionXml (2.4)<br/>head.003 envelope, head.001 header,<br/>auth.016 payload"]
-    CAT_110["reporting.cat<br/>CatEventBuilder (MENO/MEOR/MEOT/MEOF)"]
-    EMIR_110["reporting.emir<br/>EmirRefitReportBuilder"]
-    CHK_110["reporting.registry<br/>ReferenceDataChecker"]
+    CAT_110["regreporting.cat<br/>CatEventBuilder (MENO/MEOR/MEOT/MEOF)"]
+    EMIR_110["regreporting.emir<br/>EmirRefitReportBuilder"]
+    CHK_110["regreporting.registry<br/>ReferenceDataChecker"]
     REG_110["GLEIF golden copy or API,<br/>FIRDS FULINS, ISO 10383 MIC"]
     SINK_110["TransactionReportSink<br/>(e.g. CatJsonLinesSink)"]
 
