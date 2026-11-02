@@ -22,10 +22,10 @@ import java.util.Optional;
  * and {@code EXPIRY DATE} (dates as {@code yyyyMMdd} or {@code yyyy-MM-dd}). The optional
  * columns feed {@link #country}, {@link #isSystematicInternaliser} (category {@code SINT})
  * and the date test in {@link #isActiveOn}, which the ESMA rules CON-072, CON-162, CON-360
- * (MIC active on the trading date), CON-411 and CON-610 (EEA venue or SI) need. The
- * column names follow the registration authority's CSV layout as the library understands
- * it; the ISO 10383 file is not on disk, so they were checked only against a hand-made
- * fixture (own test, unconfirmed). A file without the optional columns loads as in 2.4.</p>
+ * (MIC active on the trading date), CON-411 and CON-610 (EEA venue or SI) need. All column
+ * names and the {@code yyyyMMdd} date format were checked against the header of the real
+ * ISO 10383 CSV and the Release 2.0 factsheet (published reference; a five-row extract of
+ * the file is a test fixture). A file without the optional columns loads as in 2.4.</p>
  */
 public final class Iso10383MicRegistry implements MicRegistry {
     private final Map<String, MicRecord> records;

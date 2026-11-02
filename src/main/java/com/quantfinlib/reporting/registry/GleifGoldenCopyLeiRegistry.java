@@ -25,8 +25,10 @@ import java.util.Optional;
  * <p>Since 3.0.0 the optional columns {@code Registration.InitialRegistrationDate},
  * {@code Registration.LastUpdateDate} and {@code Entity.EntityStatus} are read when present,
  * so {@link #validityOn} returns the dates and entity status that the ESMA LEI rules
- * (CON-040 to CON-270) test. The GLEIF CDF specification is not on disk; the three column
- * names are the library's understanding of the golden-copy header (unconfirmed).</p>
+ * (CON-040 to CON-270) test. The column names were checked against the header of a real
+ * golden-copy file (intra-day delta of 2026-11-02 08:00) and the entity status values
+ * ACTIVE, INACTIVE and NULL against the LEI-CDF 3.1 XSD (published reference). Dates carry
+ * a {@code Z} or {@code +01:00} offset and are converted to their UTC date.</p>
  */
 public final class GleifGoldenCopyLeiRegistry implements LeiRegistry {
     private final Map<String, LeiRecord> records;

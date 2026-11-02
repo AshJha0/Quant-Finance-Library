@@ -3,6 +3,8 @@ package com.quantfinlib.reporting.registry;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -87,8 +89,10 @@ final class Csv {
     }
 
     /**
-     * Parses a date written {@code yyyy-MM-dd}, {@code yyyyMMdd}, or an ISO date-time whose
-     * first ten characters are the date (time and zone ignored). Empty gives null.
+     * Parses a date written {@code yyyy-MM-dd}, {@code yyyyMMdd}, or an ISO date-time. A
+     * date-time with a zone or offset is converted to its UTC date (the GLEIF golden copy
+     * mixes {@code Z} and {@code +01:00} values; ESMA reference data is in UTC); one without
+     * a zone keeps its own date. Empty gives null.
      */
     static @Nullable LocalDate date(String s) throws IOException {
         String t = s.trim();
@@ -99,7 +103,14 @@ final class Csv {
             if (t.length() == 8 && t.chars().allMatch(Character::isDigit)) {
                 return LocalDate.parse(t, DateTimeFormatter.BASIC_ISO_DATE);
             }
-            return LocalDate.parse(t.length() > 10 ? t.substring(0, 10) : t);
+            if (t.length() > 10) {
+                try {
+                    return OffsetDateTime.parse(t).withOffsetSameInstant(ZoneOffset.UTC).toLocalDate();
+                } catch (DateTimeParseException noZone) {
+                    return LocalDate.parse(t.substring(0, 10));
+                }
+            }
+            return LocalDate.parse(t);
         } catch (DateTimeParseException e) {
             throw new IOException("unparsable date '" + s + "'", e);
         }

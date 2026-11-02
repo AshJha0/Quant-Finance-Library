@@ -25,8 +25,8 @@ import org.jspecify.annotations.Nullable;
  * non-200 status or an I/O failure throws {@link UncheckedIOException}. A malformed LEI is
  * rejected locally without a call. Since 3.0.0 {@link #validityOn} also extracts
  * {@code registration.initialRegistrationDate}, {@code registration.lastUpdateDate} and
- * the entity status for the ESMA LEI rules; the GLEIF API documentation is not on disk,
- * so these field names are the library's understanding of the JSON layout (unconfirmed). The live call is covered by a test that runs only with
+ * the entity status for the ESMA LEI rules. The field names were checked against a real
+ * API record (LEI 506700GE1G29325QX363, kept as a test fixture; published reference). The live call is covered by a test that runs only with
  * {@code QFL_NETWORK_TESTS=1}; parsing is covered offline by a local HTTP server test.</p>
  */
 public final class GleifApiLeiRegistry implements LeiRegistry {

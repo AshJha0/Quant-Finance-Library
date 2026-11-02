@@ -19,10 +19,10 @@ import org.junit.jupiter.api.Test;
 
 /**
  * The 3.0 loader columns: GLEIF dates and entity status, FIRDS admission windows and the
- * commodity flag, ISO 10383 country, category and dates. The column and element names are
- * the library's understanding of the published layouts; the GLEIF, FIRDS and ISO 10383
- * specifications are not on disk, so these fixtures are hand-made (own test, unconfirmed
- * names). The rules the data feeds are cited where they are used.
+ * commodity flag, ISO 10383 country, category and dates. Hand-made fixtures that use the
+ * real column and element names (checked against the files and schemas listed in
+ * {@code RealSampleLoaderTest}); they cover edge cases the real extracts do not. The rules
+ * the data feeds are cited where they are used.
  */
 class ReferenceDataLoaderDatesTest {
     private static final LocalDate D = LocalDate.of(2026, 11, 2);
@@ -33,6 +33,9 @@ class ReferenceDataLoaderDatesTest {
         assertEquals(D, Csv.date("20261102"));
         assertEquals(D, Csv.date("2026-11-02T00:00:00Z"));
         assertEquals(D, Csv.date(" 2026-11-02T23:59:59+02:00 "));
+        assertEquals(D.minusDays(1), Csv.date("2026-11-02T00:30:00+01:00"), "offset converted to the UTC date");
+        assertEquals(D, Csv.date("2026-11-02T00:30:00"), "no zone: own date");
+        assertThrows(IOException.class, () -> Csv.date("2026-11-0xT00:30:00"));
         assertNull(Csv.date(""));
         assertNull(Csv.date("   "));
         assertThrows(IOException.class, () -> Csv.date("02/11/2026"));

@@ -34,10 +34,13 @@ import org.jspecify.annotations.Nullable;
  * derivative indicator that CON-640 tests) and, per venue, {@code AdmssnApprvlDtByIssr},
  * {@code ReqForAdmssnDt}, {@code FrstTradDt} and {@code TermntnDt}. The instrument is taken
  * to be in the reference data for a venue from the earliest of the first three dates to the
- * termination date, both inclusive. That window is the library's reading of "present in
- * reference data for the trading date" (CON-411, CON-471): ESMA's FIRDS reporting
- * instructions are not on disk, so the element names and the choice of start date are
- * unconfirmed. A venue with none of the dates is present on every date, as in 2.4.</p>
+ * termination date, both inclusive. The element names were checked against the FULINS
+ * schema auth.017.001.02_ESMAUG_FULINS_1.1.0 (ESMA65-8-9654, schema set 1.2.1; published
+ * reference). The inclusive end is published reference too: the termination date "is the
+ * last day when the instrument is still traded" (ESMA65-11-1193 v2.1, section 2.3.4.2.12).
+ * The start is the library's reading: FIRDS carries an instrument from the request for
+ * admission onward (ESMA65-11-1193, description of the full file), so the earliest of the three dates is used.
+ * A venue with none of the dates is present on every date, as in 2.4.</p>
  */
 public final class FirdsInstrumentRegistry implements InstrumentRegistry {
     private final Map<String, InstrumentRecord> records;

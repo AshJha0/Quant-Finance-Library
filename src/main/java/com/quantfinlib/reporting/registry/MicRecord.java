@@ -63,10 +63,11 @@ public record MicRecord(String mic, String operatingMic, String name, MicStatus 
 
     /**
      * Whether the MIC was in force on a date. With a creation or expiry date on the record,
-     * the MIC is in force from the creation date up to the day before the expiry date. Reading
-     * the expiry date as the first day the code is no longer valid is the library's reading;
-     * the ISO 10383 text is not on disk (unconfirmed). Without either date the current status
-     * decides, as in 2.4.
+     * the MIC is in force from the creation date up to the day before the expiry date. The
+     * ISO 10383 Release 2.0 factsheet says the expiry date "is populated when the MIC is
+     * deactivated" (published reference); that the MIC is no longer valid on that day itself
+     * is the library's reading, since the factsheet does not say whether the day counts.
+     * Without either date the current status decides, as in 2.4.
      *
      * @param date the date
      * @return true if in force on that date
