@@ -35,6 +35,8 @@ public final class CatEventBuilder {
             .withZone(EASTERN);
 
     private final Map<String, String> f = new LinkedHashMap<>();
+    private final StringBuilder legs = new StringBuilder();
+    private int legCount;
 
     private CatEventBuilder(CatEventType type) {
         for (String k : CatEvent.COMMON_FIELDS) {
@@ -108,6 +110,167 @@ public final class CatEventBuilder {
      */
     public static CatEventBuilder newOptionQuote() {
         return new CatEventBuilder(CatEventType.MONQ);
+    }
+
+    /**
+     * Starts a new order supplement (MENOS) event (section 4.2, Table 17).
+     *
+     * @return the builder
+     * @since 3.1.0
+     */
+    public static CatEventBuilder newOrderSupplement() {
+        return new CatEventBuilder(CatEventType.MENOS);
+    }
+
+    /**
+     * Starts an option order supplement (MONOS) event (section 5.1.2, Table 63).
+     *
+     * @return the builder
+     * @since 3.1.0
+     */
+    public static CatEventBuilder optionOrderSupplement() {
+        return new CatEventBuilder(CatEventType.MONOS);
+    }
+
+    /**
+     * Starts an option order accepted (MOOA) event (section 5.1.4, Table 70).
+     *
+     * @return the builder
+     * @since 3.1.0
+     */
+    public static CatEventBuilder optionAccepted() {
+        return new CatEventBuilder(CatEventType.MOOA);
+    }
+
+    /**
+     * Starts an option order modified (MOOM) event (section 5.1.7, Table 79). For a new Order Key, set priorOrderKeyDate and priorOrderID (seq 9-10) with {@link #field(String, String)}.
+     *
+     * @return the builder
+     * @since 3.1.0
+     */
+    public static CatEventBuilder optionModified() {
+        return new CatEventBuilder(CatEventType.MOOM);
+    }
+
+    /**
+     * Starts an option order cancelled (MOOC) event (section 5.1.9, Table 83).
+     *
+     * @return the builder
+     * @since 3.1.0
+     */
+    public static CatEventBuilder optionCancelled() {
+        return new CatEventBuilder(CatEventType.MOOC);
+    }
+
+    /**
+     * Starts an option trade (MOOT) event (section 5.1.11, Table 90).
+     *
+     * @return the builder
+     * @since 3.1.0
+     */
+    public static CatEventBuilder optionTrade() {
+        return new CatEventBuilder(CatEventType.MOOT);
+    }
+
+    /**
+     * Starts an option order fulfillment (MOOF) event (section 5.1.12.1, Table 92).
+     *
+     * @return the builder
+     * @since 3.1.0
+     */
+    public static CatEventBuilder optionFulfillment() {
+        return new CatEventBuilder(CatEventType.MOOF);
+    }
+
+    /**
+     * Starts a multi-leg new order (MLNO) event (section 5.2.1, Table 100). Add legs with {@link #optionLeg} and {@link #equityLeg}.
+     *
+     * @return the builder
+     * @since 3.1.0
+     */
+    public static CatEventBuilder multiLegNewOrder() {
+        return new CatEventBuilder(CatEventType.MLNO);
+    }
+
+    /**
+     * Starts a multi-leg order route (MLOR) event (section 5.2.2, Table 102). Legs are restated (Table 103).
+     *
+     * @return the builder
+     * @since 3.1.0
+     */
+    public static CatEventBuilder multiLegRoute() {
+        return new CatEventBuilder(CatEventType.MLOR);
+    }
+
+    /**
+     * Starts a multi-leg order cancelled (MLOC) event (section 5.2.7, Table 126).
+     *
+     * @return the builder
+     * @since 3.1.0
+     */
+    public static CatEventBuilder multiLegCancelled() {
+        return new CatEventBuilder(CatEventType.MLOC);
+    }
+
+    /**
+     * Starts a multi-leg order supplement (MLOS) event (section 5.2.9, Table 139).
+     *
+     * @return the builder
+     * @since 3.1.0
+     */
+    public static CatEventBuilder multiLegSupplement() {
+        return new CatEventBuilder(CatEventType.MLOS);
+    }
+
+    /**
+     * Adds an option leg to legDetails (Table 101 seq 32.n.1 to 32.n.6). The builder writes
+     * legDetails as a JSON array and, if numberOfLegs is still blank, sets it to the number of
+     * legs added.
+     *
+     * @param osi the leg's 21-character OSI symbol (32.n.3)
+     * @param side B or S (32.n.5)
+     * @param ratio legRatioQuantity (32.n.6)
+     * @param openClose openCloseIndicator (32.n.4), or an empty string when not required
+     * @return this
+     * @since 3.1.0
+     */
+    public CatEventBuilder optionLeg(String osi, String side, BigDecimal ratio, String openClose) {
+        legs.append(legCount++ == 0 ? "" : ",").append("{\"optionID\":").append(jsonString(osi));
+        if (!openClose.isEmpty()) {
+            legs.append(",\"openCloseIndicator\":").append(jsonString(openClose));
+        }
+        legs.append(",\"side\":").append(jsonString(side)).append(",\"legRatioQuantity\":")
+                .append(ratio.stripTrailingZeros().toPlainString()).append('}');
+        return this;
+    }
+
+    /**
+     * Adds an equity leg to legDetails (Table 101 seq 32.n.2, 32.n.5, 32.n.6); see
+     * {@link #optionLeg}.
+     *
+     * @param symbol the stock symbol (32.n.2)
+     * @param side B, SL, SS or SX (32.n.5)
+     * @param ratio legRatioQuantity (32.n.6)
+     * @return this
+     * @since 3.1.0
+     */
+    public CatEventBuilder equityLeg(String symbol, String side, BigDecimal ratio) {
+        legs.append(legCount++ == 0 ? "" : ",").append("{\"symbol\":").append(jsonString(symbol))
+                .append(",\"side\":").append(jsonString(side)).append(",\"legRatioQuantity\":")
+                .append(ratio.stripTrailingZeros().toPlainString()).append('}');
+        return this;
+    }
+
+    private static String jsonString(String v) {
+        StringBuilder sb = new StringBuilder("\"");
+        for (int i = 0; i < v.length(); i++) {
+            char c = v.charAt(i);
+            if (c == '"' || c == '\\') {
+                sb.append('\\');
+            }
+            sb.append(c);
+        }
+        return sb.append('"').toString();
     }
 
     /**
@@ -256,6 +419,14 @@ public final class CatEventBuilder {
      * @return the event
      */
     public CatEvent build() {
+        if (legCount > 0) {
+            Map<String, String> out = new LinkedHashMap<>(f);
+            out.put("legDetails", "[" + legs + "]");
+            if (out.getOrDefault("numberOfLegs", "").isEmpty()) {
+                out.put("numberOfLegs", Integer.toString(legCount));
+            }
+            return new CatEvent(out);
+        }
         return new CatEvent(f);
     }
 
