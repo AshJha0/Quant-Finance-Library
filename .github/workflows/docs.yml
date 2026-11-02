@@ -27,7 +27,7 @@ jobs:
           java-version: '25'
           cache: maven
       - name: Generate javadoc
-        run: ./mvnw -B --no-transfer-progress -DskipTests javadoc:javadoc
+        run: ./mvnw -B --no-transfer-progress -DskipTests -Djacoco.skip=true package
       - name: Assemble site
         run: |
           mkdir -p _site/api
