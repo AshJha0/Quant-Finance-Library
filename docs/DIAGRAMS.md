@@ -4654,7 +4654,7 @@ as one key space; `check` on file B alone reports all four children.
 Multi-leg orders (MLNO, MLOR, MLOC, MLOS) chain the same way on a key without
 a symbol. Recipes 420 to 424.
 
-## 22. CI, nightly and release gates
+## 112. CI, nightly and release gates
 
 Three workflows, each answering a different question: is this change safe to
 merge (CI), does the library still match its outside references (nightly), and
@@ -4690,7 +4690,7 @@ tags are never moved) is in [PUBLISHING.md](PUBLISHING.md).
 
 ---
 
-## 23. The 4.0 module plan: what moves where
+## 113. The 4.0 module plan: what moves where
 
 Design only; 3.x ships none of these moves. Solid arrows are `requires`; the
 dashed arrows show where 3.x packages go. Details and dates are in

@@ -60,6 +60,68 @@ out of memory shows the path never needed the collector.
 (`execution/HftSorTest.java` is one). The pattern is about ten lines and
 you will recognise it everywhere afterwards.
 
+### 13b. Proving an allocation-free claim (3.1)
+
+**The plain idea.** A hot-path method that allocates makes garbage, and garbage
+eventually makes a collector pause at a time you did not choose. So the library's
+javadoc says which methods allocate nothing. A sentence in a javadoc is only a
+promise, though. From 3.1 each such sentence has a test that counts the bytes the
+method allocates and fails if the count is not zero in steady state.
+
+**The formal statement.** HotSpot keeps, for every thread, the number of heap bytes
+that thread has allocated since it started. `com.sun.management.ThreadMXBean`
+exposes it as `getCurrentThreadAllocatedBytes()`. For an operation `op`, the test:
+
+1. calls `op` W = 50,000 times, so the JIT compiles it and escape analysis has run;
+2. reads the counter, calls `op` N = 10,000 times, reads the counter again;
+3. repeats step 2 up to five times and keeps the smallest difference B;
+4. passes when B <= 256 bytes.
+
+The tolerance is safe because the smallest Java object is 16 bytes (a 12-byte header
+rounded up to 8-byte alignment). An `op` that allocates even once per call adds at
+least 16 * N = 160,000 bytes to every batch, more than 600 times the tolerance. What
+the tolerance absorbs is a one-off event in a batch: a deoptimisation that turns
+scalar-replaced objects back into heap objects, or a late compilation. Because the
+test counts bytes and not time, a slow or busy machine changes how long it takes but
+not whether it passes, so it runs in the default build.
+
+Two cautions. First, the test measures one thread. For a component that does its
+work on its own thread (`BinaryMarketDataClient`'s reader, `HiccupMonitor`'s
+sampler), the test finds that thread and reads its counter by id. Second, the test
+proves "allocation-free after warm-up under C2". It says nothing about the first
+calls, which run in the interpreter, where escape analysis does not exist.
+
+**Worked example.** `HftOrderBook` buffers the trades of one incoming order before it
+delivers them, so a sink never sees a half-updated book. In 3.0 the buffer started at
+256 fills and doubled with `Arrays.copyOf` when a sweep needed more. A market order
+that swept 1,000 resting orders therefore copied five arrays twice: four `long[]`
+and one `int[]` of 512 entries (about 18 KB) when it passed 256 fills, and about 36 KB
+more at 512. The javadoc still
+said "zero-allocation".
+
+3.1 sizes the buffer to `maxOrders` in the constructor. One incoming order cannot
+produce more fills than there are resting orders. Every fill either empties a resting
+order, whose slot is only reused after matching ends, or partly fills it, and then
+the incoming order is used up. So `maxOrders` is an upper bound and the buffer never
+has to grow. The test `hftOrderBookSweepOfOneThousandRestingOrders` rests 1,000 sell
+orders on 50 levels, sends one market buy that fills all of them, and refills the
+book on every call. Over 10,000 such sweeps it stays within the 256-byte tolerance, so no sweep allocates. The cost is 36 bytes of memory
+per order of capacity, paid once.
+
+The same exercise found one false claim. `feed.BinanceTradeParser` said "no allocation
+beyond the result", but it builds substrings and lookup keys for every message. The
+javadoc now says it is not garbage-free and should stay off the hot path, and its
+test checks that it does allocate. A second claim held only by luck:
+`ShortRateModels` said "allocation-free per call", but its Hull-White functions read a
+`YieldCurve` whose `TreeMap<Double, Double>` lookup boxes the tenor. C2 removed the
+boxes in a plain test run and kept them once JaCoCo instrumented the code, about 400
+bytes per call. The claim now covers only the Vasicek and CIR functions. The lesson:
+an allocation-free claim that depends on escape analysis is not a claim, and the
+coverage build is a useful second JIT environment to test it in.
+
+Recipe: COOKBOOK 450 (running the tests, testing your own code) and 451 (sizing the
+book).
+
 ### 14. Data structures for speed
 
 **Arrays of primitives beat objects.** A `double[]` is one contiguous block
@@ -522,16 +584,235 @@ never links to an equity order) and fails CAT-LK02; two MENOs with O-1 both fail
 CAT-LK01.
 
 *In this library:* `regreporting/emir/EmirStatefulValidator` (opt-in; it runs
-`EmirRefitReport.validate()` first and then the 15 stateful rules for whichever
+`EmirRefitReport.validate()` first and then the stateful rules (28 catalogue entries in 3.1) for whichever
 sources it was given, so a missing source skips its rules), `UtiHistory`,
 `InMemoryUtiHistory`, `CurrencyRegistry`; `regreporting/cat/CatLinkageChecker`
-and the event types MENQ, MONO, MOOR and MONQ (rules CAT-R13 to CAT-R16). Still
-not checked: the GLEIF branch tests (`LeiRecord` has no entity category),
-EMIR-VR-1003-01 (venue MIC), 1008-02, 1009-08, 2001-03/04, 2042-03,
-2045-03/06/07/08 and 2153-06/08; for CAT the other option lifecycle events,
-multi-leg and supplement events, linkage across files, reference data and the
-JSON schema. The checker is batch-local, so pass a whole day's events for a
-firm. Recipes 364 and 365.
+and the event types MENQ, MONO, MOOR and MONQ (rules CAT-R13 to CAT-R16).
+Still not checked for EMIR: 1009-08 (client code prefix) and 2001-04 (2.1 against 2.2 to
+2.4), whose fields this package does not populate, and third-country regulated markets in
+1003-01. For CAT the option lifecycle, multi-leg and supplement events, linkage across
+files and the schema gate came later in 3.1 (17j to 17l); still not checked are the other
+events of Tables 60 and 61, reference data and the official schema file. `check` is
+batch-local, so pass a whole day's events for a firm, or use `checkFiles`. Recipes 364 and 365.
+
+#### Branches, venues, a changed UTI, and dates the repository remembers (3.1)
+
+**The plain idea.** Four more EMIR checks need something the single report does not hold.
+Is the counterparty a branch rather than a legal entity? Was the trade done on a regulated
+market, so that no one else is responsible for reporting it? Has the firm quietly given an
+existing trade a new UTI? And does today's report agree with the dates the repository
+already holds for that UTI: maturity, early termination, execution time? A branch is a
+fact in GLEIF. A regulated market is a fact in ISO 10383. The dates live in the earlier
+reports. A changed UTI needs one more thing: an identity for the trade other than the UTI
+itself.
+
+**Formal statement.** ESMA74-362-2683, sheet Validations_Cpty_derivative, columns AC
+(conditions) and AD (codes). Evidence class: published reference for each rule text,
+library reading where marked.
+
+- Rows 6, 7, 8, 13 (EMIR-VR-1002-04, 1003-05, 1004-04, 1009-04): "The LEI shall pertain to a
+  legal entity and not a branch." The test is `LeiRecord.entityCategory()` equal to `BRANCH`.
+  That value comes from the LEI-CDF 3.1 XSD (EntityCategoryTypeEnum). The golden-copy loader
+  reads `Entity.EntityCategory`. The column name, and the values GENERAL, SOLE_PROPRIETOR, FUND
+  and RESIDENT_GOVERNMENT_ENTITY, were seen in the real intra-day file of 2026-11-02 08:00.
+  The API loader reads `entity.category`. An unknown category skips the test.
+- Row 7, condition 1 (EMIR-VR-1003-01): 1.3 is populated unless 2.41 is a regulated market
+  (or an equivalent third-country market) at the time of conclusion. When 2.41 is such a
+  market, 1.3 is blank. *Library reading:* we treat a venue as a regulated market when its
+  ISO 10383 market category is `RMKT`, its country is in the EEA, and it is active on the date
+  of 2.42. We cannot tell whether a non-EEA `RMKT` counts as equivalent from ISO 10383, so the
+  rule is skipped for it.
+- Row 26, condition 3 (EMIR-VR-2001-03): the UTI may not change once reported. *Library
+  device:* the history is keyed by (1.4, UTI), so the caller supplies a trade key. The
+  validator compares the report's UTI with the first UTI accepted under that key
+  (`UtiHistory.firstUtiForTradeKey`).
+- Rows 12, 67, 69, 70, 186: 1008-02 (1.8 unchanged), 2042-03 (MODI keeps 2.42), 2044-04 and
+  2045-08 (REVI after a non-EROR report), 2045-02/03/06/07 (early termination against the
+  history), 2153-06 (CORR event date not before 2.42), 2153-08 (event date not after the
+  2.44 and 2.45 "reported for that UTI"). Where the current report leaves a date blank, it
+  is taken from the latest accepted report that carried it. A REVI resets 2.45.
+- Row 186's column AC numbers its last two conditions "6 7." and "7 8.". Column AD has
+  2153-01 to -08, so we take the codes from AD (library reading, as for 1009-09).
+
+**Worked example** (own test, `EmirStatefulRules31bTest.earlyTerminationDateRow70`). The
+history holds a NEWT with 2.42 = 2026-03-02T10:00Z and 2.44 = 2031-03-04, then a TERM with
+2.45 = 2026-03-02.
+
+- A CORR that leaves 2.45 blank fails EMIR-VR-2045-07: the trade was terminated and not
+  revived, so the correction must restate the termination date.
+- A REVI that carries 2.45 = 2026-03-02 fails EMIR-VR-2045-08: the previous report was a
+  TERM, not an EROR.
+- Once a REVI is accepted, the same CORR passes.
+- Before the TERM, a MODI with 2.45 = 2026-03-02 fails EMIR-VR-2045-06: 2.45 may first
+  appear only on a TERM.
+
+**What it does not prove.** The rule texts are transcribed, and every case is our own
+construction. No trade repository's response has been compared. The EEA reading of
+"regulated market" is ours. A firm whose trade key is not stable across systems will see
+false EMIR-VR-2001-03 failures.
+
+*In this library:* `EmirStatefulValidator.withLeiRegistry`, `withMicRegistry` and
+`withTradeKey`; `LeiRecord.entityCategory()` and `isBranch()`;
+`InMemoryUtiHistory(Function)`; `UtiHistory.firstUtiForTradeKey`. The builder key for 2.41
+is `venueOfExecution`. Recipes 400 to 403.
+
+### 17j. An option order's life after the new-order event (3.1)
+
+An option order does not stop at "new" and "routed". A desk can receive it from another
+firm instead of creating it, change its price, cancel part of it, and fill a customer from
+it. CAT wants each of those steps as its own event, and it wants every step to say which
+order it belongs to. The order is named by its Order Key, and an event that changes the
+order either keeps the key or moves the order to a new key and says which key it came
+from.
+
+Formally (published reference):
+
+- **Accepted (MOOA, section 5.1.4, Table 70).** This is the event a firm reports when the
+  order came from another CAT reporter. A MONO is for orders the firm received from a
+  customer or originated itself (section 5.1.1). Like a MONO, a MOOA opens an Order Key:
+  orderKeyDate, CATReporterIMID, optionID, orderID (the Table 70 linkage list). Its
+  required fields include receiverIMID, senderIMID and senderType (seq 15 to 17). For order
+  events, senderType is E, F or O (Appendix G).
+- **Modified (MOOM, section 5.1.7, Table 79).** The required fields add initiator (seq 22;
+  C for the customer, F for the firm, Appendix G) and leavesQty (seq 27, Real Quantity).
+  The firm may give the modified order a new key. If it does, seq 9 and 10
+  (priorOrderKeyDate, priorOrderID) name the key it replaces.
+- **Cancelled (MOOC, section 5.1.9, Table 83).** cancelQty and leavesQty (seq 13, 14) are
+  Real Quantity; initiator is required (seq 15).
+- **Trade (MOOT, Table 90) and fulfillment (MOOF, Table 92).** These open a Trade Key or
+  Fulfillment Key on optionID. A MOOF uses the option values of fulfillmentLinkType: O,
+  OS or OE. The equity values are FOR, Y, YE, YP and YS (Appendix G).
+- **Prices.** A price on MOOA, MOOM, MOOT and MOOF must not be negative (Table 70 seq 21,
+  Table 79 seq 24, Table 90 seq 15, Table 92 seq 13). On MOOA and MOOM it is required
+  with LMT and blank with MKT.
+
+The linkage rule the library adds is CAT-LK05: a MOOM or MOOC must find the order it acts
+on. A MOOM with a prior key is looked up under the prior key, and its own key is then open
+for later events. That last point is the library's reading of the Table 79 linkage list.
+
+Worked example (own test, `CatLifecycleMultiLegTest.modifiedWithNewOrderKeyTable79`):
+
+1. A MONO opens O-1 at 09:30:00 Eastern.
+2. A MOOM at 09:31 has priorOrderKeyDate "20260302 093000.000000000" and priorOrderID O-1,
+   and opens O-2.
+3. A MOOR keyed O-2 at 09:31 links to the MOOM.
+
+Checked together, the three events give no issue. Drop the MONO and the MOOM fails
+CAT-LK05. The route still links, because the MOOM opened O-2.
+
+*In this library:* `regreporting/cat/CatEventBuilder` (`optionAccepted`, `optionModified`,
+`optionCancelled`, `optionTrade`, `optionFulfillment`), rules CAT-R17, CAT-R18 and CAT-R20 in
+`CatEvent.rules()`, and CAT-LK05 in `CatLinkageChecker.rules()`. Recipes 420 and 421.
+
+### 17k. Multi-leg orders and supplements (3.1)
+
+A spread, such as buying one call and selling another, is one order with several legs. CAT
+reports it as one multi-leg event, with the legs listed inside it. The event as a whole has
+no single instrument, so it has no symbol. Its price is the net price of the package, and
+that can be a credit. Sometimes the list does not fit, or a detail such as the account's
+FDID is only known later. The firm then sends a supplement: a small event with the same
+Order Key that adds what was missing.
+
+Formally (published reference):
+
+- **Multi-leg new order (MLNO, Table 100).** It has no symbol or optionID field. Seq 8,
+  underlying, is optional. numberOfLegs (seq 30, Whole Quantity) and legDetails (seq 32)
+  are required.
+- **Legs (Table 101).** Each leg gives exactly one of symbol (32.n.2) and optionID
+  (32.n.3), a side (32.n.5) and a legRatioQuantity (32.n.6, Real Quantity).
+  openCloseIndicator (32.n.4) must be blank on an equity leg. The side is B or S on an
+  option leg and B, SL, SS or SX on an equity leg (Appendix G).
+- **Price.** The net price may be positive, negative or zero; debits are positive and
+  credits negative (seq 16). priceType (PU, TC or TS) is required when orderType is LMT
+  (seq 31).
+- **The multi-leg Order Key** is orderKeyDate, CATReporterIMID, orderID, with no symbol
+  (the Table 100 linkage list). MLOR (Table 102) restates the legs (Table 103). MLOC
+  (Table 126) cancels the order. MLOS (Table 139) carries the legs that did not fit. All
+  three link to the MLNO through that key.
+- **Supplements.** MENOS (section 4.2, Table 17) supplements a MENO. MONOS (section 5.1.2,
+  Table 63) supplements a MONO; the library also accepts a MOOA as its parent. MLOS
+  supplements an MLNO. Section 4.2 gives a common case: an order on an account whose FDID
+  does not exist yet is reported with firmDesignatedID "PENDING", and the FDID follows in
+  the supplement.
+
+Two readings are the library's own. The first: legDetails may hold fewer legs than
+numberOfLegs, because the rest can come on an MLOS (the note under Table 101), but never
+more. The second: a supplement with no parent is an error (CAT-LK04). The specification
+says what a supplement is for; it does not print the rejection.
+
+Worked example (own test, `CatLifecycleMultiLegTest.multiLegTables100To102And126`):
+
+1. An MLNO with a long AAPL 150 call and a short AAPL 140 put, ratio 1:1, priceType PU and
+   price -0.35 (a credit) validates clean. The builder sets numberOfLegs to 2.
+2. Add an equity leg with side SL and numberOfLegs 3, and it still validates.
+3. Set numberOfLegs to 1 instead, and the event fails: three legs is more than one.
+4. A leg that names both a symbol and an optionID fails "exactly one of symbol and
+   optionID".
+
+*In this library:* `CatEventBuilder.multiLegNewOrder`, `multiLegRoute`,
+`multiLegCancelled`, `multiLegSupplement`, `newOrderSupplement`, `optionOrderSupplement`,
+`optionLeg` and `equityLeg`; `CatEventType.isMultiLeg()` and `isSupplement()`; rules
+CAT-R19 and CAT-R21, and CAT-LK04. Recipe 422.
+
+### 17l. Linkage across files, and the schema gate (3.1)
+
+CAT checks a submission in two passes. The first pass looks at each record on its own: is
+it one well-formed JSON line, does it name a known event, are its fields known, present and
+of the right type? The second pass links records by key. Keys belong to the firm, not to
+a file, so the second pass sees every file the firm has sent. An order sent this morning
+and its route sent this afternoon in another file still link. The same key used in two
+files is still a duplicate.
+
+Formally:
+
+- **The schema (sections 6.1.5 to 6.1.5.3).** The schema is a JSON file. Its
+  eventDefinitions give each field a name, dataType, JSONDataType, required flag and CSV
+  position, as in the printed MECO example. It also lists the data types and the choice
+  values.
+- **The record rules (sections 6.1.2.1 and 6.1.2.2).** A record is one line of at most
+  8190 bytes, holding standard JSON with no new-line inside. Conditional and optional
+  fields without a value are omitted.
+- **Data types (Table 3).** Table 3 sets the value rules and prints examples that pass and
+  fail. Numeric (6,4) accepts 0999999.99990, because leading zeros of the whole part and
+  trailing zeros of the fraction do not count, and refuses 1.12345 and 10. (a trailing
+  point). Real Quantity must not have trailing decimal zeros, so 500.0 fails. A timestamp
+  is a string 'YYYYMMDD HHMMSS.CCCNNNNNN', with a space or T in the middle, or Unsigned
+  nanoseconds since the epoch.
+- **Key scope (section 2.6.1, Table 5).** Keys are unique per CATReporterIMID, which is
+  the scope of the cross-file check. These are published references.
+
+The library's readings are three:
+
+- The names of the dataTypes and choices members of the schema file are not printed.
+- An unknown field is refused (CAT-S04).
+- Table 3 prints minutes and seconds as 01 to 59, but its own examples use 00, so 00 to
+  59 is accepted.
+
+Worked examples:
+
+1. **The section 6.1.2.2 record.** Section 6.1.2.2 prints a one-line MENO repair record.
+   Against the library's transcription of Table 16 it has one problem: it leaves out
+   representativeInd, which seq 33 marks R (CAT-S05). This is a printed example
+   disagreeing with the table it illustrates. The library reports it rather than relax
+   the rule.
+2. **Fixing it.** Add `"representativeInd":"N"` and the record passes. Write
+   `"price":"10.01"` as a string and it fails CAT-S06, because a Price is a JSON NUMBER.
+3. **Two files** (own test, `CatLifecycleMultiLegTest.crossFileLinkage`). File A holds a
+   MONO and file B holds its MOOR and a MOOC. File B checked alone gives CAT-LK02 and
+   CAT-LK05. `checkFiles(List.of(a, b))` gives none. Adding a file C with a second MONO
+   of the same key gives CAT-LK01 in files A and C.
+
+*In this library:* `regreporting/cat/CatSchema`:
+
+- `bundledSubset()` returns the library's transcription of the nineteen supported event
+  tables. It is not the official file.
+- `load(Path)` reads the official file.
+- `validateLine` and `validateLines` run the record checks, rules CAT-S01 to CAT-S09.
+- `toJson(CatEvent)` writes typed JSON. `CatEvent.toJson()` still writes every value as
+  a string.
+
+`CatLinkageChecker.checkFiles` with `Batch` and `FileIssue` is the cross-file check. The
+JSON reader is package-private and has no dependency. Recipes 423 and 424.
 
 ### 18. Scaling out and staying safe
 
@@ -625,6 +906,22 @@ Worth studying as a checklist for your own projects:
   promise zero drops. Tests encode what the platform can actually
   guarantee.
 
+### 19b. Can I trust the jar I downloaded? (3.1)
+Plain idea: if the same source always produces the same bytes, anyone can rebuild a
+release and compare. A mismatch means the jar was not built from that source.
+
+Formal statement: with `project.build.outputTimestamp` fixed, `./mvnw -DskipTests
+package` on JDK 25 at tag `vX.Y.Z` yields jars whose SHA-256 equals the published
+ones. `scripts/check-reproducible.sh` checks the weaker in-repo property (two clean
+builds, same hashes) on every PR.
+
+Worked example (2026-11-02, Windows, JDK 25.0.5): two clean builds gave identical
+hashes for all 7 jars, e.g. core jar `5d1a6064...a0d9`. Evidence class:
+self-consistency (same machine twice); a cross-OS rebuild is the next check.
+
+The SBOM (`*-sbom.cdx.json` on each release) lists what the jar depends on at
+runtime: for core only `jspecify` (annotations), for lowlatency core plus `jspecify`.
+
 ### 20. Modules and exceptions
 
 A Java module is a jar that says what it offers and what it needs. Since 3.0 the
@@ -662,6 +959,29 @@ type is an interface, `core.QuantFinException`, and
 `e instanceof QuantFinException` tells an input fault from a bug. A bad argument
 from the caller, such as a negative size, stays a plain `IllegalArgumentException`.
 See [ARCHITECTURE.md](../ARCHITECTURE.md#exception-policy).
+
+### 20b. Where the library is going: the 4.0 design (3.1)
+
+`docs/DESIGN_4.0.md` is the plan for the next major release. The plain idea: the
+stable jar should promise only what one maintainer can check, and a pricing user
+should not get an HTTP client. Formally, 4.0 narrows the stable module to the pricing,
+rates, credit, risk, stats, volatility and hedging hierarchy and its shared types. It
+moves I/O (`data`, `persist`, `report`) to an incubating `-io` module and research
+tools (`screener`, `dsl`, `ml`) to `-research`. Hot-lane code (`HftSor`,
+`AggregatedBook`, the microstructure simulators, `rfq`, `marketdata.tick`) goes to the
+low-latency module, and `cli` and the toy strategies go to examples. Package names
+stay the same, so most users change a dependency, not an import.
+
+None of this can be `@Deprecated` in 3.x. Java modules forbid one package in two
+jars, so there is no new home to point at until 4.0 exists, and "deprecated" would
+wrongly say the API is going away. The move is announced in the design page, in
+`package-info` javadoc from 3.2, and in a MIGRATION_4.0.md. By the release policy
+4.0 ships no earlier than three months after 3.2.0.
+
+Meanwhile 3.1 split the three largest classes internally. `Indicators`,
+`MultiCurrencyExposureSimulator` and `FixSession` are now facades over package-private
+classes, with identical public signatures (checked with japicmp against 3.0.0) and
+the unchanged test suite passing.
 
 ---
 

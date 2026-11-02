@@ -11410,7 +11410,7 @@ the prior key and opens its own, so the cancel above links to B-2, not B-1.
 Without the prior fields a MOOM acts on its own key. A modify or cancel with
 no order behind it is CAT-LK05. Single-record rules: senderType E, F or O,
 initiator C or F (CAT-R17), cancelQty and leavesQty as Real Quantity
-(CAT-R18), price not negative and LMT/MKT presence (CAT-R20). LEARN 17j.
+(CAT-R18), price not negative and LMT/MKT presence (CAT-R20). [LEARN 17j](learn/04-technology.md#17j-an-option-orders-life-after-the-new-order-event-31).
 
 ## 421. CAT option trade and option fulfillment (3.1)
 
@@ -11524,7 +11524,7 @@ zeros, so `500.0` fails), the choice values (S08) and no empty values (S09).
 `CatSchema.toJson` for a file you will submit. The bundled schema is not the
 official file, which CAT publishes on its website; `load` reads that file in
 the section 6.1.5.2 layout. Name/Value Pair and multi-dimensional array
-contents are checked only for their JSON type. LEARN 17k.
+contents are checked only for their JSON type. [LEARN 17k](learn/04-technology.md#17k-multi-leg-orders-and-supplements-31).
 
 ## 450. Checking an "allocation-free" claim yourself (3.1)
 
@@ -11542,7 +11542,7 @@ absorbs one-off events such as a deoptimisation. To test your own hot path, copy
 `AllocationProbe` from `core/src/test/java/com/quantfinlib/alloc` and call
 `AllocationProbe.assertAllocationFree("my claim", i -> handler.onTick(prices[i & 1023]))`.
 Build the inputs outside the lambda, or the test measures your test fixture.
-LEARN: Phase D notes (allocation tests).
+[LEARN 13b](learn/04-technology.md#13b-proving-an-allocation-free-claim-31).
 
 ## 451. Sizing `HftOrderBook` for large sweeps (3.1)
 

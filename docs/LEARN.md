@@ -117,6 +117,7 @@ land on the entry, one click from the section.
 ### <a id="part-ii--the-technology"></a>[Part II — The Technology](learn/04-technology.md#part-ii--the-technology)
 - <a id="12-the-latency-ladder-or-what-a-nanosecond-buys"></a>[12. The latency ladder, or: what a nanosecond buys](learn/04-technology.md#12-the-latency-ladder-or-what-a-nanosecond-buys)
 - <a id="13-garbage-collection-and-why-we-allocate-nothing"></a>[13. Garbage collection, and why we allocate nothing](learn/04-technology.md#13-garbage-collection-and-why-we-allocate-nothing)
+- [13b. Proving an allocation-free claim (3.1)](learn/04-technology.md#13b-proving-an-allocation-free-claim-31)
 - <a id="14-data-structures-for-speed"></a>[14. Data structures for speed](learn/04-technology.md#14-data-structures-for-speed)
 - <a id="15-threads-and-the-memory-model-in-plain-words"></a>[15. Threads and the memory model, in plain words](learn/04-technology.md#15-threads-and-the-memory-model-in-plain-words)
 - <a id="16-measuring-latency"></a>[16. Measuring latency](learn/04-technology.md#16-measuring-latency)
@@ -129,9 +130,15 @@ land on the entry, one click from the section.
 - <a id="17g-esma-rules-that-need-reference-data-and-the-file-you-send"></a>[17g. ESMA rules that need reference data, and the file you send](learn/04-technology.md#17g-esma-rules-that-need-reference-data-and-the-file-you-send)
 - <a id="17h-pending-reports-field-2-history-and-the-feedback-file"></a>[17h. Pending reports, field 2 history and the feedback file](learn/04-technology.md#17h-pending-reports-field-2-history-and-the-feedback-file)
 - <a id="17i-emir-rules-that-need-state-and-cat-linkage-keys-31"></a>[17i. EMIR rules that need state, and CAT linkage keys (3.1)](learn/04-technology.md#17i-emir-rules-that-need-state-and-cat-linkage-keys-31)
+  - [Branches, venues, a changed UTI, and dates the repository remembers (3.1)](learn/04-technology.md#branches-venues-a-changed-uti-and-dates-the-repository-remembers-31)
+- [17j. An option order's life after the new-order event (3.1)](learn/04-technology.md#17j-an-option-orders-life-after-the-new-order-event-31)
+- [17k. Multi-leg orders and supplements (3.1)](learn/04-technology.md#17k-multi-leg-orders-and-supplements-31)
+- [17l. Linkage across files, and the schema gate (3.1)](learn/04-technology.md#17l-linkage-across-files-and-the-schema-gate-31)
 - <a id="18-scaling-out-and-staying-safe"></a>[18. Scaling out and staying safe](learn/04-technology.md#18-scaling-out-and-staying-safe)
 - <a id="19-how-this-codebase-tests-itself"></a>[19. How this codebase tests itself](learn/04-technology.md#19-how-this-codebase-tests-itself)
+- [19b. Can I trust the jar I downloaded? (3.1)](learn/04-technology.md#19b-can-i-trust-the-jar-i-downloaded-31)
 - <a id="20-modules-and-exceptions"></a>[20. Modules and exceptions](learn/04-technology.md#20-modules-and-exceptions)
+- [20b. Where the library is going: the 4.0 design (3.1)](learn/04-technology.md#20b-where-the-library-is-going-the-40-design-31)
 
 ### <a id="part-iii--your-learning-path"></a>[Part III — Your learning path](learn/05-learning-path.md#part-iii--your-learning-path)
 

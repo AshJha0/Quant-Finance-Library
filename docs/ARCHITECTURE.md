@@ -297,7 +297,7 @@ no allow-list: 3.x makes no breaking changes ([STABILITY.md](STABILITY.md)).
 existing release, or a tag name already released from another commit), then
 `ci` (the reusable `ci.yml`) and `docs` (javadoc build), then `release`, which
 attaches the jars and dispatches `docs.yml` on `main`. The checklist is in
-[PUBLISHING.md](PUBLISHING.md); diagram 22 in [DIAGRAMS.md](DIAGRAMS.md).
+[PUBLISHING.md](PUBLISHING.md); diagram 112 in [DIAGRAMS.md](DIAGRAMS.md).
 
 Loaders bound what they read (zip entries, inflated bytes, line lengths); the
 per-loader limits are in [INPUT_LIMITS.md](INPUT_LIMITS.md).
