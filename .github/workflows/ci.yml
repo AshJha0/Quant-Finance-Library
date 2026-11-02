@@ -82,10 +82,11 @@ jobs:
         run: bash scripts/check-reproducible.sh
 
   api-compat:
-    # Binary compatibility against the released 3.0.0 core jar (japicmp). Fails on
-    # an incompatible change in the stable module (docs/STABILITY.md) that is
-    # has no allow-list (3.x makes no breaking changes); the low-latency module is
-    # reported in api-lowlatency.html only.
+    # Binary compatibility against the released 3.2.0 jars (japicmp). 4.0 is a
+    # major release: the report (api-stable) says MAJOR, and the gate
+    # (api-stable-gate) excludes exactly the break list of docs/MIGRATION_4.0.md
+    # and fails on any other incompatible change in the stable module. The
+    # low-latency module is reported in api-lowlatency.html only.
     name: API compatibility
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -96,15 +97,15 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
-      - name: Fetch the 3.0.0 baseline jars
-        run: bash scripts/fetch-api-baseline.sh 3.0.0
-      - name: Compare against 3.0.0
+      - name: Fetch the 3.2.0 baseline jars
+        run: bash scripts/fetch-api-baseline.sh 3.2.0
+      - name: Compare against 3.2.0
         run: ./mvnw -B --no-transfer-progress -Papi-compat -DskipTests -Dmaven.javadoc.skip verify
       - name: Summary
         if: always() && hashFiles('core/target/japicmp/api-stable.md') != ''
         run: |
           {
-            echo '## API changes in the stable module since 3.0.0'
+            echo '## API changes in the stable module since 3.2.0'
             cat core/target/japicmp/api-stable.md
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload reports

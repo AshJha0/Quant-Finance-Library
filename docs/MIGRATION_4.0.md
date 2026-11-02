@@ -1,8 +1,8 @@
 # Migrating to 4.0
 
 Status: implemented for 4.0.0. 3.2.0 announced every change below; 4.0.0 follows
-3.2.0 directly and makes them. japicmp against 3.0.0 reports MAJOR, and its gate run
-excludes exactly the rows below (core/pom.xml, execution `api-stable-gate`). The design and its reasons are in
+3.2.0 directly and makes them. japicmp against the 3.2.0 jars reports MAJOR, and its
+gate run excludes exactly the rows below (core/pom.xml, execution `api-stable-gate`). The design and its reasons are in
 [DESIGN_4.0.md](DESIGN_4.0.md). On 3.2.0, compiling with `-Xlint:removal` lists every
 line that uses a type 4.0 removes, and each of those has a replacement you can switch to
 on 3.2.0 already.
@@ -58,7 +58,7 @@ Package names unchanged. Add the lowlatency dependency (snippet in row 2) and
 `requires com.quantfinlib.lowlatency;`. That module requires the stable module
 transitively, so nothing else changes.
 
-### 4. `data.CsvBarLoader`, `data.HttpBarFetcher`, `data.UniverseCsvLoader` become `io.*`
+### 4. `data.CsvBarLoader`, `data.HttpBarFetcher`, `data.UniverseCsvLoader` become `io.*`, and `io` moves to `-io`
 
 ```xml
 <dependency>
@@ -75,7 +75,9 @@ import com.quantfinlib.data.CsvBarLoader;
 import com.quantfinlib.io.CsvBarLoader;
 ```
 
-Same for the other two. `module-info.java`: `requires com.quantfinlib.io;`. The rest of
+Same for the other two. In 3.2.0 the `io` package shipped inside the stable jar so that
+you could switch imports early; in 4.0.0 it lives in the `-io` jar, so code that already
+imports `io.*` changes only its dependency. `module-info.java`: `requires com.quantfinlib.io;`. The rest of
 `data` (`PointInTimeUniverse`, `CorporateActions`, `CorporateEvents`,
 `CorporateEventPositions`, `SeriesAligner`) stays in the stable jar.
 
