@@ -425,7 +425,7 @@ public final class CatEvent implements TransactionReport {
 
     private static String legText(Map<?, ?> leg, String k) {
         Object o = leg.get(k);
-        return o == null || o == CatJson.NULL ? "" : o.toString();
+        return o == null || CatJson.NULL.equals(o) ? "" : o.toString();
     }
 
     private void checkQuote(List<String> out) {

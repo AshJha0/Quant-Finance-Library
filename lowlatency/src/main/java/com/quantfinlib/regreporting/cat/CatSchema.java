@@ -391,7 +391,7 @@ public final class CatSchema {
 
     private void checkValue(int n, String event, Field f, Object v, List<Issue> out) {
         String name = f.name();
-        if (v == CatJson.NULL || "".equals(v)) {
+        if (CatJson.NULL.equals(v) || "".equals(v)) {
             out.add(new Issue(n, name, "CAT-S09", name + " has no value; omit it"));
             return;
         }

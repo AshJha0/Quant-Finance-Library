@@ -132,7 +132,7 @@ class LaneAllocationClaimsTest {
                     if (!v.wrap(m, 0, m.length)) {
                         throw new AssertionError("wrap failed");
                     }
-                    long acc = v.entryCount() + (v.isSnapshot() ? 1 : 0) + v.declaredEntries();
+                    long acc = (long) v.entryCount() + (v.isSnapshot() ? 1 : 0) + v.declaredEntries();
                     for (int e = 0; e < v.entryCount(); e++) {
                         acc += v.pxMantissa(e) + v.pxDecimals(e) + v.size(e) + v.type(e)
                                 + v.action(e);
