@@ -1,7 +1,7 @@
 package com.quantfinlib.backtest;
 
 import com.quantfinlib.risk.RiskMetrics;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Stats;
 
 /**
  * Benchmark-relative performance — the numbers an allocator actually asks
@@ -84,22 +84,22 @@ public final class BenchmarkComparison {
                 throw new IllegalArgumentException("non-finite return at period " + i);
             }
         }
-        double varB = MathUtils.variance(benchmark);
+        double varB = Stats.sampleVariance(benchmark);
         if (!(varB > 0)) {
             throw new IllegalArgumentException("benchmark returns carry no variance");
         }
 
         double beta = RiskMetrics.beta(strategy, benchmark);
-        double meanS = MathUtils.mean(strategy);
-        double meanB = MathUtils.mean(benchmark);
+        double meanS = Stats.mean(strategy);
+        double meanB = Stats.mean(benchmark);
         double alpha = (meanS - beta * meanB) * periodsPerYear;
 
         double[] active = new double[n];
         for (int i = 0; i < n; i++) {
             active[i] = strategy[i] - benchmark[i];
         }
-        double activeAnn = MathUtils.mean(active) * periodsPerYear;
-        double te = MathUtils.stdDev(active) * Math.sqrt(periodsPerYear);
+        double activeAnn = Stats.mean(active) * periodsPerYear;
+        double te = Stats.sampleStdDev(active) * Math.sqrt(periodsPerYear);
         double ir = te > 0 ? activeAnn / te : 0;
 
         double upS = 0, upB = 0, downS = 0, downB = 0;

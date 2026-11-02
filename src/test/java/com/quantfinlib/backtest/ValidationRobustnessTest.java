@@ -1,5 +1,6 @@
 package com.quantfinlib.backtest;
 
+import com.quantfinlib.stats.Stats;
 import com.quantfinlib.backtest.validation.OverfitProbability;
 import com.quantfinlib.backtest.validation.PurgedKFold;
 import com.quantfinlib.risk.RiskMetrics;
@@ -81,7 +82,7 @@ class ValidationRobustnessTest {
             r[t][1] = -0.01;
         }
         OverfitProbability.Result res =
-                OverfitProbability.cscv(r, 4, com.quantfinlib.util.MathUtils::mean);
+                OverfitProbability.cscv(r, 4, Stats::mean);
         assertEquals(6, res.combinations());
         assertEquals(0.0, res.pbo(), 0.0);
         for (double lambda : res.logitsCopy()) {
@@ -102,7 +103,7 @@ class ValidationRobustnessTest {
             r[t][1] = -r[t][0];
         }
         OverfitProbability.Result res =
-                OverfitProbability.cscv(r, 4, com.quantfinlib.util.MathUtils::mean);
+                OverfitProbability.cscv(r, 4, Stats::mean);
         assertEquals(6, res.combinations());
         assertEquals(1.0, res.pbo(), 0.0);
     }

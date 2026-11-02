@@ -1,5 +1,6 @@
 package com.quantfinlib.microstructure;
 
+import com.quantfinlib.stats.Numerics;
 /**
  * Streaming order-flow signals for short-horizon execution decisions: the
  * three imbalances an execution engine reads before crossing a spread.
@@ -181,7 +182,7 @@ public final class FlowSignals {
         return value * decayFactor(lastTime, now);
     }
 
-    // Same half-life algebra as MathUtils.decayFactor, kept local with tau
+    // Same half-life algebra as Numerics.decayFactor, kept local with tau
     // (= halfLife/ln2) precomputed in the constructor: one divide per event
     // on this hot path instead of a multiply and a divide.
     private double decayFactor(long lastTime, long now) {

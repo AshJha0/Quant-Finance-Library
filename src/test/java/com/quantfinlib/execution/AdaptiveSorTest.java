@@ -11,6 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@SuppressWarnings("removal") // exercises 2.x API deprecated for removal in 2.4.0
 class AdaptiveSorTest {
 
     private static final long US = 1_000L;    // one microsecond in nanos

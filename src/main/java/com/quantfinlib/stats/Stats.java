@@ -286,4 +286,56 @@ public final class Stats {
             throw new IllegalArgumentException("p must be in [0, 1], got " + p);
         }
     }
+
+    /**
+     * Pearson correlation with a zero convention. Unlike {@link #pearson}, which returns NaN,
+     * this returns 0 when either series has zero dispersion; callers such as
+     * {@code risk.CorrelationMatrix} rely on that convention.
+     *
+     * @since 2.4.0
+     */
+    public static double pearsonOrZero(double[] a, double[] b) {
+        double sa = sampleStdDev(a), sb = sampleStdDev(b);
+        if (sa == 0 || sb == 0) {
+            return 0;
+        }
+        return sampleCovariance(a, b) / (sa * sb);
+    }
+
+    /**
+     * Population skewness m3 / m2^1.5; 0 when the data have no dispersion.
+     *
+     * @since 2.4.0
+     */
+    public static double skewness(double[] v) {
+        double m = mean(v);
+        double m2 = 0, m3 = 0;
+        for (double x : v) {
+            double d = x - m;
+            m2 += d * d;
+            m3 += d * d * d;
+        }
+        m2 /= v.length;
+        m3 /= v.length;
+        return m2 == 0 ? 0 : m3 / Math.pow(m2, 1.5);
+    }
+
+    /**
+     * Population kurtosis m4 / m2^2 (3 for a normal distribution, not excess);
+     * 0 when the data have no dispersion.
+     *
+     * @since 2.4.0
+     */
+    public static double kurtosis(double[] v) {
+        double m = mean(v);
+        double m2 = 0, m4 = 0;
+        for (double x : v) {
+            double d = x - m;
+            m2 += d * d;
+            m4 += d * d * d * d;
+        }
+        m2 /= v.length;
+        m4 /= v.length;
+        return m2 == 0 ? 0 : m4 / (m2 * m2);
+    }
 }

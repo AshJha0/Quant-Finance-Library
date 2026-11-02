@@ -1,6 +1,7 @@
 package com.quantfinlib.pricing;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.LinearAlgebra;
+import com.quantfinlib.stats.SpecialFunctions;
 
 /**
  * SABR stochastic volatility model: the Hagan, Kumar, Lesniewski and
@@ -182,7 +183,7 @@ public final class SabrModel {
         double v = impliedVol(f, k, t, alpha, beta, rho, nu);
         double sv = v * Math.sqrt(t);
         double d1 = Math.log(f / k) / sv + 0.5 * sv;
-        return f * MathUtils.normCdf(d1) - k * MathUtils.normCdf(d1 - sv);
+        return f * SpecialFunctions.normCdf(d1) - k * SpecialFunctions.normCdf(d1 - sv);
     }
 
     // ------------------------------------------------------------------ LM
@@ -230,7 +231,7 @@ public final class SabrModel {
                 }
                 double[] dx;
                 try {
-                    dx = MathUtils.solveLinear(lhs, rhs);
+                    dx = LinearAlgebra.solveLinear(lhs, rhs);
                 } catch (RuntimeException e) {
                     lambda *= 10;
                     continue;

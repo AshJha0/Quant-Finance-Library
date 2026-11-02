@@ -1,7 +1,7 @@
 package com.quantfinlib.optimization;
 
 import com.quantfinlib.risk.PsdMatrices;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.LinearAlgebra;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -129,7 +129,11 @@ public final class PortfolioOptimizer {
     /**
      * Kept for source compatibility: the solver is deterministic and the
      * seed is ignored.
+     *
+     * @deprecated since 2.4.0, removed in 3.0; the seed has no effect. Use
+     *     {@link #PortfolioOptimizer(double[], double[][])}.
      */
+    @Deprecated(since = "2.4.0", forRemoval = true)
     public PortfolioOptimizer(double[] expectedReturns, double[][] covariance, long seed) {
         this(expectedReturns, covariance);
     }
@@ -273,11 +277,11 @@ public final class PortfolioOptimizer {
     }
 
     private double volatilityOf(double[] w) {
-        return Math.sqrt(Math.max(0, MathUtils.quadraticForm(w, covariance)));
+        return Math.sqrt(Math.max(0, LinearAlgebra.quadraticForm(w, covariance)));
     }
 
     private Allocation toAllocation(double[] w, double riskFreeRate) {
-        double ret = MathUtils.dot(expectedReturns, w);
+        double ret = LinearAlgebra.dot(expectedReturns, w);
         double vol = volatilityOf(w);
         double sharpe = vol == 0 ? 0 : (ret - riskFreeRate) / vol;
         return new Allocation(w, ret, vol, sharpe);

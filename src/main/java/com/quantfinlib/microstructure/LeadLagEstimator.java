@@ -1,5 +1,6 @@
 package com.quantfinlib.microstructure;
 
+import com.quantfinlib.stats.SpecialFunctions;
 import com.quantfinlib.persist.Checkpoint;
 
 import java.io.DataInput;
@@ -63,7 +64,7 @@ public final class LeadLagEstimator {
         this.maxLag = maxLag;
         this.alpha = alpha;
         double perTest = 1 - Math.pow(0.95, 1.0 / maxLag);
-        this.criticalZ = com.quantfinlib.util.MathUtils.normInv(1 - perTest / 2);
+        this.criticalZ = SpecialFunctions.normInv(1 - perTest / 2);
         this.leaderRing = new double[maxLag + 1];
         int n = maxLag + 1;
         this.meanLead = new double[n];

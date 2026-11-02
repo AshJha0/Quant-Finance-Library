@@ -1,5 +1,6 @@
 package com.quantfinlib.crb;
 
+import com.quantfinlib.stats.SpecialFunctions;
 import com.quantfinlib.pricing.BlackScholes;
 import com.quantfinlib.pricing.BlackScholes.OptionType;
 import org.junit.jupiter.api.Test;
@@ -172,7 +173,7 @@ class CrbBookTest {
         double[][] cov = {{dailyVar}};
         CentralRiskBook.CrbReport report = book.report(cov, 0.99);
 
-        double z = com.quantfinlib.util.MathUtils.normInv(0.99);
+        double z = SpecialFunctions.normInv(0.99);
         double sigma = Math.sqrt(dailyVar);
         assertEquals(z * 2_000_000 * sigma, report.var(), 1e-6,
                 "the netted book's VaR runs on 2M, not 18M");

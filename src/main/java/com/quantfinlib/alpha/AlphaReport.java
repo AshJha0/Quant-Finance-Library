@@ -2,7 +2,7 @@ package com.quantfinlib.alpha;
 
 import com.quantfinlib.backtest.PerformanceAnalytics;
 import com.quantfinlib.backtest.PerformanceMetrics;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Stats;
 
 import java.util.List;
 import java.util.Locale;
@@ -800,8 +800,8 @@ public final class AlphaReport {
         double[] out = new double[returns.length];
         java.util.Arrays.fill(out, 0, window - 1, Double.NaN);
         for (int i = window - 1; i < returns.length; i++) {
-            double mean = MathUtils.mean(returns, i - window + 1, i + 1);
-            double sd = MathUtils.stdDevSample(returns, i - window + 1, i + 1);
+            double mean = Stats.mean(returns, i - window + 1, i + 1);
+            double sd = Stats.sampleStdDev(returns, i - window + 1, i + 1);
             out[i] = sd == 0 ? 0 : mean / sd * Math.sqrt(periodsPerYear);
         }
         return out;

@@ -1,7 +1,9 @@
 package com.quantfinlib.volatility;
 
 import com.quantfinlib.optimization.NelderMead;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.LinearAlgebra;
+import com.quantfinlib.stats.SpecialFunctions;
+import com.quantfinlib.stats.Stats;
 
 /**
  * Shared maximum-likelihood machinery for the GARCH family.
@@ -190,7 +192,7 @@ final class GarchEstimation {
         double[][] inv;
         try {
             com.quantfinlib.risk.PsdMatrices.choleskyPsd(info);
-            inv = MathUtils.inverse(info);
+            inv = LinearAlgebra.inverse(info);
         } catch (RuntimeException notPd) {
             return new double[][]{se, robust};
         }
@@ -243,12 +245,12 @@ final class GarchEstimation {
                 throw new IllegalArgumentException("returns must be finite");
             }
         }
-        double mean = MathUtils.mean(returns);
+        double mean = Stats.mean(returns);
         double[] r = new double[returns.length];
         for (int i = 0; i < r.length; i++) {
             r[i] = returns[i] - mean;
         }
-        if (!(MathUtils.variance(r) > 0)) {
+        if (!(Stats.sampleVariance(r) > 0)) {
             throw new IllegalArgumentException("returns carry no variance");
         }
         return r;
@@ -290,7 +292,7 @@ final class GarchEstimation {
         if (Double.isNaN(nu)) {
             return 0;
         }
-        return MathUtils.logGamma(0.5 * (nu + 1)) - MathUtils.logGamma(0.5 * nu)
+        return SpecialFunctions.logGamma(0.5 * (nu + 1)) - SpecialFunctions.logGamma(0.5 * nu)
                 - 0.5 * Math.log(Math.PI * (nu - 2));
     }
 

@@ -1,6 +1,6 @@
 package com.quantfinlib.alpha;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Stats;
 
 /**
  * Fama-MacBeth (1973, J. Political Economy 81(3)) cross-sectional
@@ -274,8 +274,8 @@ public final class FamaMacBeth {
             for (int t = 0; t < used; t++) {
                 series[t] = lambdas[t][k];
             }
-            double mean = MathUtils.mean(series);
-            double se = MathUtils.stdDev(series) / Math.sqrt(used);
+            double mean = Stats.mean(series);
+            double se = Stats.sampleStdDev(series) / Math.sqrt(used);
             int lag = NeweyWest.lagFor(series, horizon);
             double tHac = NeweyWest.tStat(series, lag);
             if (k == 0) {

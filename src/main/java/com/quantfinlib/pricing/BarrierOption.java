@@ -1,7 +1,7 @@
 package com.quantfinlib.pricing;
 
 import com.quantfinlib.pricing.BlackScholes.OptionType;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.SpecialFunctions;
 
 /**
  * Continuously monitored single-barrier options: all eight in/out, up/down,
@@ -131,7 +131,7 @@ public final class BarrierOption {
     }
 
     private static double n(double x) {
-        return MathUtils.normCdf(x);
+        return SpecialFunctions.normCdf(x);
     }
 
     /** Down-and-in call, no rebate. Throws if the barrier is at or above spot. */

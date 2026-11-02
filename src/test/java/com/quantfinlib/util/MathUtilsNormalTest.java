@@ -1,5 +1,6 @@
 package com.quantfinlib.util;
 
+import com.quantfinlib.stats.SpecialFunctions;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -50,7 +51,7 @@ class MathUtilsNormalTest {
     @Test
     void cdfMatchesHighPrecisionReferenceToDoublePrecision() {
         for (double[] row : CDF) {
-            double got = MathUtils.normCdf(row[0]);
+            double got = SpecialFunctions.normCdf(row[0]);
             double rel = Math.abs(got - row[1]) / row[1];
             assertTrue(rel < 1e-15 || Math.abs(got - row[1]) <= Math.ulp(row[1]),
                     "x=" + row[0] + " got " + got + " want " + row[1] + " rel " + rel);
@@ -59,37 +60,37 @@ class MathUtilsNormalTest {
 
     @Test
     void cdfEdgeCases() {
-        assertTrue(Double.isNaN(MathUtils.normCdf(Double.NaN)));
-        assertEquals(0.0, MathUtils.normCdf(Double.NEGATIVE_INFINITY));
-        assertEquals(1.0, MathUtils.normCdf(Double.POSITIVE_INFINITY));
-        assertEquals(0.0, MathUtils.normCdf(-41));
+        assertTrue(Double.isNaN(SpecialFunctions.normCdf(Double.NaN)));
+        assertEquals(0.0, SpecialFunctions.normCdf(Double.NEGATIVE_INFINITY));
+        assertEquals(1.0, SpecialFunctions.normCdf(Double.POSITIVE_INFINITY));
+        assertEquals(0.0, SpecialFunctions.normCdf(-41));
         // Never negative and monotone across the region boundaries.
         double prev = 0;
         for (double x = -39; x <= 9; x += 0.03125) {
-            double v = MathUtils.normCdf(x);
+            double v = SpecialFunctions.normCdf(x);
             assertTrue(v >= prev, "not monotone at " + x);
             prev = v;
         }
         // Symmetry where both sides are representable.
         for (double x = 0; x < 8; x += 0.37) {
-            assertEquals(1.0, MathUtils.normCdf(x) + MathUtils.normCdf(-x), 2e-16);
+            assertEquals(1.0, SpecialFunctions.normCdf(x) + SpecialFunctions.normCdf(-x), 2e-16);
         }
     }
 
     @Test
     void inverseRoundTripsAndMatchesKnownQuantiles() {
-        assertEquals(1.959963984540054, MathUtils.normInv(0.975), 1e-15);
-        assertEquals(2.3263478740408408, MathUtils.normInv(0.99), 1e-15);
-        assertEquals(-2.3263478740408408, MathUtils.normInv(0.01), 1e-15);
-        assertEquals(0.0, MathUtils.normInv(0.5), 1e-16);
+        assertEquals(1.959963984540054, SpecialFunctions.normInv(0.975), 1e-15);
+        assertEquals(2.3263478740408408, SpecialFunctions.normInv(0.99), 1e-15);
+        assertEquals(-2.3263478740408408, SpecialFunctions.normInv(0.01), 1e-15);
+        assertEquals(0.0, SpecialFunctions.normInv(0.5), 1e-16);
         double[] ps = {1e-300, 1e-100, 1e-20, 1e-10, 1e-5, 0.01, 0.02425, 0.3, 0.7, 0.975};
         for (double p : ps) {
-            double x = MathUtils.normInv(p);
-            assertEquals(p, MathUtils.normCdf(x), p * 1e-13, "p=" + p);
+            double x = SpecialFunctions.normInv(p);
+            assertEquals(p, SpecialFunctions.normCdf(x), p * 1e-13, "p=" + p);
         }
         for (double q : new double[] {1e-10, 1e-6, 0.01}) {
-            double x = MathUtils.normInv(1 - q);
-            assertEquals(q, MathUtils.normCdf(-x), q * 1e-6, "1-q, q=" + q);
+            double x = SpecialFunctions.normInv(1 - q);
+            assertEquals(q, SpecialFunctions.normCdf(-x), q * 1e-6, "1-q, q=" + q);
         }
     }
 }

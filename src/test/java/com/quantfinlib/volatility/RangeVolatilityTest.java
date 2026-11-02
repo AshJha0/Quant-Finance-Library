@@ -1,7 +1,7 @@
 package com.quantfinlib.volatility;
 
 import com.quantfinlib.core.BarSeries;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Stats;
 import org.junit.jupiter.api.Test;
 
 import java.util.Random;
@@ -142,8 +142,8 @@ class RangeVolatilityTest {
             }
             c2c[b] = Math.sqrt(sum / (len - 1) * PPY);
         }
-        double parkStd = MathUtils.stdDev(park);
-        double c2cStd = MathUtils.stdDev(c2c);
+        double parkStd = Stats.sampleStdDev(park);
+        double c2cStd = Stats.sampleStdDev(c2c);
         assertTrue(parkStd < c2cStd,
                 "Parkinson std " + parkStd + " must beat close-to-close " + c2cStd);
     }

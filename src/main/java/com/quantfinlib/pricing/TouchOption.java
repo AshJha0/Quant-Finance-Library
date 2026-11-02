@@ -1,6 +1,6 @@
 package com.quantfinlib.pricing;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.SpecialFunctions;
 
 /**
  * One-touch and no-touch options (pay-at-expiry) under continuously
@@ -48,12 +48,12 @@ public final class TouchOption {
         double drift = m * timeYears;
         if (h > 0) {
             // Upper barrier: reflect around +h.
-            return MathUtils.normCdf((-h + drift) / sq)
-                    + Math.exp(2 * m * h / (vol * vol)) * MathUtils.normCdf((-h - drift) / sq);
+            return SpecialFunctions.normCdf((-h + drift) / sq)
+                    + Math.exp(2 * m * h / (vol * vol)) * SpecialFunctions.normCdf((-h - drift) / sq);
         }
         // Lower barrier: mirror image.
-        return MathUtils.normCdf((h - drift) / sq)
-                + Math.exp(2 * m * h / (vol * vol)) * MathUtils.normCdf((h + drift) / sq);
+        return SpecialFunctions.normCdf((h - drift) / sq)
+                + Math.exp(2 * m * h / (vol * vol)) * SpecialFunctions.normCdf((h + drift) / sq);
     }
 
     /** Pays {@code payout} at expiry if the barrier traded at any point. */
@@ -122,9 +122,9 @@ public final class TouchOption {
         double logHs = Math.log(barrier / spot);
         double eta = barrier < spot ? 1 : -1;
         double z = logHs / sq + lambda * sq;
-        double a = Math.exp((mu + lambda) * logHs) * MathUtils.normCdf(eta * z);
+        double a = Math.exp((mu + lambda) * logHs) * SpecialFunctions.normCdf(eta * z);
         double b = Math.exp((mu - lambda) * logHs)
-                * MathUtils.normCdf(eta * z - 2 * eta * lambda * sq);
+                * SpecialFunctions.normCdf(eta * z - 2 * eta * lambda * sq);
         return payout * (a + b);
     }
 
@@ -178,10 +178,10 @@ public final class TouchOption {
         double p = 0;
         for (int n = -DOUBLE_TOUCH_SERIES_TERMS; n <= DOUBLE_TOUCH_SERIES_TERMS; n++) {
             double twoNl = 2 * n * l;
-            double t1 = MathUtils.normCdf((l - x + twoNl - mt) / s)
-                    - MathUtils.normCdf((twoNl - x - mt) / s);
-            double t2 = MathUtils.normCdf((l + x + twoNl - mt) / s)
-                    - MathUtils.normCdf((x + twoNl - mt) / s);
+            double t1 = SpecialFunctions.normCdf((l - x + twoNl - mt) / s)
+                    - SpecialFunctions.normCdf((twoNl - x - mt) / s);
+            double t2 = SpecialFunctions.normCdf((l + x + twoNl - mt) / s)
+                    - SpecialFunctions.normCdf((x + twoNl - mt) / s);
             // Skip exactly-zero brackets so a huge exponential cannot make 0 * inf = NaN.
             if (t1 != 0) {
                 p += Math.exp(-2 * a * n * l) * t1;

@@ -1,6 +1,6 @@
 package com.quantfinlib.volatility;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Stats;
 
 /**
  * HAR-RV (Corsi's Heterogeneous AutoRegressive realized-volatility
@@ -169,8 +169,8 @@ public final class HarRv {
         }
         Params p = fit.params();
         double d = Math.log(realizedVariance[n - 1]);
-        double w = Math.log(MathUtils.mean(realizedVariance, n - WEEK, n));
-        double m = Math.log(MathUtils.mean(realizedVariance, n - MONTH, n));
+        double w = Math.log(Stats.mean(realizedVariance, n - WEEK, n));
+        double m = Math.log(Stats.mean(realizedVariance, n - MONTH, n));
         double y = p.intercept() + p.betaDaily() * d + p.betaWeekly() * w + p.betaMonthly() * m;
         return Math.exp(y + 0.5 * fit.residualVariance());
     }
@@ -196,8 +196,8 @@ public final class HarRv {
         double[] y = new double[rows];
         for (int t = MONTH - 1, i = 0; t < n - 1; t++, i++) {
             double d = rv[t];
-            double w = MathUtils.mean(rv, t - WEEK + 1, t + 1);
-            double m = MathUtils.mean(rv, t - MONTH + 1, t + 1);
+            double w = Stats.mean(rv, t - WEEK + 1, t + 1);
+            double m = Stats.mean(rv, t - MONTH + 1, t + 1);
             x[i][0] = 1;
             x[i][1] = log ? Math.log(d) : d;
             x[i][2] = log ? Math.log(w) : w;
@@ -220,8 +220,8 @@ public final class HarRv {
             throw new IllegalArgumentException("need >= " + MONTH + " observations to forecast");
         }
         double d = realizedVariance[n - 1];
-        double w = MathUtils.mean(realizedVariance, n - WEEK, n);
-        double m = MathUtils.mean(realizedVariance, n - MONTH, n);
+        double w = Stats.mean(realizedVariance, n - WEEK, n);
+        double m = Stats.mean(realizedVariance, n - MONTH, n);
         return Math.max(0, p.intercept()
                 + p.betaDaily() * d + p.betaWeekly() * w + p.betaMonthly() * m);
     }

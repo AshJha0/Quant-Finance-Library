@@ -1,6 +1,6 @@
 package com.quantfinlib.ml;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Stats;
 import com.quantfinlib.util.ValueArrays;
 
 import java.util.SplittableRandom;
@@ -241,9 +241,9 @@ public final class RegimeDetector {
         for (int t = 0; t < n; t++) {
             abs[t] = Math.abs(returns[t]);
         }
-        double median = MathUtils.percentile(abs, 0.5);
-        double mean = MathUtils.mean(returns);
-        double sampleVar = Math.max(MathUtils.variance(returns), 1e-14);
+        double median = Stats.quantile(abs, 0.5);
+        double mean = Stats.mean(returns);
+        double sampleVar = Math.max(Stats.sampleVariance(returns), 1e-14);
         double lowVar = 0, highVar = 0;
         int lowCount = 0, highCount = 0;
         for (int t = 0; t < n; t++) {

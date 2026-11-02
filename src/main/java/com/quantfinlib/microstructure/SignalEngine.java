@@ -1,7 +1,7 @@
 package com.quantfinlib.microstructure;
 
 import com.quantfinlib.pricing.FairValueEngine;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Numerics;
 
 /**
  * The unified streaming signal engine: one multi-symbol, hot-lane component
@@ -117,7 +117,7 @@ public final class SignalEngine {
         for (int s = 0; s < symbolCount; s++) {
             flow[s] = new FlowSignals(config.flowHalfLifeNanos());
         }
-        this.microprice = MathUtils.nanArray(symbolCount);
+        this.microprice = Numerics.nanArray(symbolCount);
         this.prevMid = new double[symbolCount];
         this.prevMidTime = new long[symbolCount];
         this.fastEma = new double[symbolCount];
@@ -166,17 +166,17 @@ public final class SignalEngine {
             if (dt > 0) {
                 double dtSec = dt * 1e-9;
                 // Momentum: time-aware EMAs (decay by elapsed time).
-                double aFast = 1 - MathUtils.decayFactor(dt, config.fastHalfLifeNanos());
-                double aSlow = 1 - MathUtils.decayFactor(dt, config.slowHalfLifeNanos());
+                double aFast = 1 - Numerics.decayFactor(dt, config.fastHalfLifeNanos());
+                double aSlow = 1 - Numerics.decayFactor(dt, config.slowHalfLifeNanos());
                 fastEma[symbolId] += aFast * (mid - fastEma[symbolId]);
                 slowEma[symbolId] += aSlow * (mid - slowEma[symbolId]);
                 // Volatility: EWMA of squared return per second (prevMid is
                 // guaranteed dealable by the gap gate above).
                 double r = (mid - prevMid[symbolId]) / prevMid[symbolId];
-                double aVol = 1 - MathUtils.decayFactor(dt, config.volHalfLifeNanos());
+                double aVol = 1 - Numerics.decayFactor(dt, config.volHalfLifeNanos());
                 varRatePerSec[symbolId] += aVol * (r * r / dtSec - varRatePerSec[symbolId]);
                 // Liquidity: spread, depth, arrival gap.
-                double aLiq = 1 - MathUtils.decayFactor(dt, config.liquidityHalfLifeNanos());
+                double aLiq = 1 - Numerics.decayFactor(dt, config.liquidityHalfLifeNanos());
                 spreadEwma[symbolId] += aLiq * ((ask - bid) - spreadEwma[symbolId]);
                 depthEwma[symbolId] += aLiq * ((bidSize + askSize) - depthEwma[symbolId]);
                 gapEwmaNanos[symbolId] += aLiq * (dt - gapEwmaNanos[symbolId]);
@@ -311,7 +311,7 @@ public final class SignalEngine {
         if (depth <= 0) {
             return 0;
         }
-        return MathUtils.clamp(flow[symbolId].ofi() / depth, -1, 1);
+        return Numerics.clamp(flow[symbolId].ofi() / depth, -1, 1);
     }
 
     /**
@@ -323,7 +323,7 @@ public final class SignalEngine {
         if (vol <= 0) {
             return 0;
         }
-        return MathUtils.clamp(momentum(symbolId) / (vol * sqrtFastHorizonSec), -1, 1);
+        return Numerics.clamp(momentum(symbolId) / (vol * sqrtFastHorizonSec), -1, 1);
     }
 
     public int symbolCount() {

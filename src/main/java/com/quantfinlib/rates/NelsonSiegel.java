@@ -1,6 +1,6 @@
 package com.quantfinlib.rates;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.LinearAlgebra;
 
 /**
  * Nelson-Siegel yield-curve fit — the parametric answer to "what shape is
@@ -103,7 +103,7 @@ public final class NelsonSiegel {
             }
             double[] beta;
             try {
-                beta = MathUtils.solveLinear(xtx, xty);
+                beta = LinearAlgebra.solveLinear(xtx, xty);
             } catch (IllegalArgumentException singular) {
                 continue; // degenerate node (e.g. all tenors << lambda); skip
             }

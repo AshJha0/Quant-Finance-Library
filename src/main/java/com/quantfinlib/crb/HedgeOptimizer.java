@@ -1,6 +1,6 @@
 package com.quantfinlib.crb;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.LinearAlgebra;
 
 /**
  * Cost-aware minimum-variance hedging of the central risk book's
@@ -223,7 +223,7 @@ public final class HedgeOptimizer {
             }
             double[] x;
             try {
-                x = MathUtils.solveLinear(a, rhs);
+                x = LinearAlgebra.solveLinear(a, rhs);
             } catch (RuntimeException singular) {
                 return null;
             }
@@ -270,7 +270,7 @@ public final class HedgeOptimizer {
 
     /** Portfolio stdev of an exposure vector under Σ — the risk being cut. */
     public static double risk(double[] exposures, double[][] covariance) {
-        return Math.sqrt(Math.max(0, MathUtils.quadraticForm(exposures, covariance)));
+        return Math.sqrt(Math.max(0, LinearAlgebra.quadraticForm(exposures, covariance)));
     }
 
     private static double matVecRow(double[][] cov, double[] e, int row) {

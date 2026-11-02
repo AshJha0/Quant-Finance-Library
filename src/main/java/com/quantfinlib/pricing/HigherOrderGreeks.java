@@ -1,6 +1,6 @@
 package com.quantfinlib.pricing;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.SpecialFunctions;
 
 /**
  * The second-order Greeks a vol book actually hedges with — analytic
@@ -47,7 +47,7 @@ public final class HigherOrderGreeks {
         double sqrtT = Math.sqrt(timeYears);
         double d1 = d1(spot, strike, rate, carry, vol, timeYears);
         double d2 = d1 - vol * sqrtT;
-        return -Math.exp(-carry * timeYears) * MathUtils.normPdf(d1) * d2 / vol;
+        return -Math.exp(-carry * timeYears) * SpecialFunctions.normPdf(d1) * d2 / vol;
     }
 
     /** Volga (vomma) ∂²V/∂σ²: vega convexity. Same for calls and puts. */
@@ -60,7 +60,7 @@ public final class HigherOrderGreeks {
         double d1 = d1(spot, strike, rate, carry, vol, timeYears);
         double d2 = d1 - vol * sqrtT;
         double vega = spot * Math.exp(-carry * timeYears)
-                * MathUtils.normPdf(d1) * sqrtT;
+                * SpecialFunctions.normPdf(d1) * sqrtT;
         return vega * d1 * d2 / vol;
     }
 
@@ -84,7 +84,7 @@ public final class HigherOrderGreeks {
         double sqrtT = Math.sqrt(timeYears);
         double d1 = (Math.log(spot1 / spot2) + 0.5 * sigmaHat * sigmaHat * timeYears)
                 / (sigmaHat * sqrtT);
-        return -MathUtils.normPdf(d1) / (spot2 * sigmaHat * sqrtT);
+        return -SpecialFunctions.normPdf(d1) / (spot2 * sigmaHat * sqrtT);
     }
 
     private static double d1(double spot, double strike, double rate, double carry,

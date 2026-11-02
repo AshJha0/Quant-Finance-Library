@@ -1,6 +1,6 @@
 package com.quantfinlib.optimization;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.LinearAlgebra;
 import com.quantfinlib.util.ValueArrays;
 
 /**
@@ -122,7 +122,7 @@ public final class BlackLitterman {
         if (marketWeights.length != n) {
             throw new IllegalArgumentException("market weights must have one entry per asset");
         }
-        double[] pi = MathUtils.matVec(covariance, marketWeights);
+        double[] pi = LinearAlgebra.matVec(covariance, marketWeights);
         for (int i = 0; i < pi.length; i++) {
             pi[i] *= riskAversion;
         }
@@ -205,10 +205,10 @@ public final class BlackLitterman {
             }
             double[] resid = new double[k];
             for (int v = 0; v < k; v++) {
-                resid[v] = q[v] - MathUtils.dot(p[v], equilibriumReturns);
+                resid[v] = q[v] - LinearAlgebra.dot(p[v], equilibriumReturns);
             }
-            double[] z = MathUtils.solveLinear(sMat, resid);
-            double[][] sInv = MathUtils.inverse(sMat);
+            double[] z = LinearAlgebra.solveLinear(sMat, resid);
+            double[][] sInv = LinearAlgebra.inverse(sMat);
             for (int i = 0; i < n; i++) {
                 for (int v = 0; v < k; v++) {
                     mean[i] += tsPt[i][v] * z[v];
@@ -251,7 +251,7 @@ public final class BlackLitterman {
             if (p[v].length != n) {
                 throw new IllegalArgumentException("pick row " + v + " has wrong length");
             }
-            omega[v] = tau * MathUtils.quadraticForm(p[v], covariance);
+            omega[v] = tau * LinearAlgebra.quadraticForm(p[v], covariance);
         }
         return omega;
     }

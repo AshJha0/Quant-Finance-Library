@@ -1,6 +1,6 @@
 package com.quantfinlib.hedging;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.LinearAlgebra;
 
 /**
  * Greek-neutralization: solves the hedge quantities that flatten a
@@ -67,7 +67,7 @@ public final class GreekHedger {
                 m[g][j] = greekOf(instruments[j], g);
             }
         }
-        return MathUtils.solveLinear(m, target);
+        return LinearAlgebra.solveLinear(m, target);
     }
 
     /** Residual portfolio Greeks after applying the hedge quantities (for verification). */

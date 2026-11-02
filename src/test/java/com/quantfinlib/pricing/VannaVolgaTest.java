@@ -1,5 +1,6 @@
 package com.quantfinlib.pricing;
 
+import com.quantfinlib.stats.SpecialFunctions;
 import com.quantfinlib.fx.FxVolSurface;
 import com.quantfinlib.pricing.BlackScholes.OptionType;
 import org.junit.jupiter.api.Test;
@@ -102,8 +103,8 @@ class VannaVolgaTest {
     void wingsBeyondTenDeltaAreFlatOrSmoothlyContinued() {
         double fwd = S * Math.exp((R - Q) * T);
         double sv = VOLS[1] * Math.sqrt(T);
-        double k10c = fwd * Math.exp(-com.quantfinlib.util.MathUtils.normInv(0.10) * sv + 0.5 * sv * sv);
-        double k10p = fwd * Math.exp(-com.quantfinlib.util.MathUtils.normInv(0.90) * sv + 0.5 * sv * sv);
+        double k10c = fwd * Math.exp(-SpecialFunctions.normInv(0.10) * sv + 0.5 * sv * sv);
+        double k10p = fwd * Math.exp(-SpecialFunctions.normInv(0.90) * sv + 0.5 * sv * sv);
         // Call wing: vol rising outward is continued linearly in log-strike,
         // so the extension is exactly linear in ln K.
         double v0 = vv.impliedVol(S, k10c);

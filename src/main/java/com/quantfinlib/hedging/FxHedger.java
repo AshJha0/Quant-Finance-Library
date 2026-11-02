@@ -1,6 +1,6 @@
 package com.quantfinlib.hedging;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Stats;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -39,11 +39,11 @@ public final class FxHedger {
      * @param fxReturns           returns of the foreign currency vs base
      */
     public static double optimalHedgeRatio(double[] unhedgedReturnsBase, double[] fxReturns) {
-        double var = MathUtils.variance(fxReturns);
+        double var = Stats.sampleVariance(fxReturns);
         if (var == 0) {
             return 0;
         }
-        return MathUtils.covariance(unhedgedReturnsBase, fxReturns) / var;
+        return Stats.sampleCovariance(unhedgedReturnsBase, fxReturns) / var;
     }
 
     /** Return series with a fraction {@code hedgeRatio} of the FX exposure hedged away. */

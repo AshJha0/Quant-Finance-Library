@@ -1,6 +1,6 @@
 package com.quantfinlib.risk;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.LinearAlgebra;
 import com.quantfinlib.util.ValueArrays;
 
 import java.util.LinkedHashMap;
@@ -243,8 +243,8 @@ public final class PortfolioRiskAnalyzer {
      * sum to 1 for a non-degenerate portfolio.
      */
     public Map<String, Double> riskContributions(double[][] covariance) {
-        double[] covW = MathUtils.matVec(covariance, weights);
-        double portVar = MathUtils.dot(weights, covW);
+        double[] covW = LinearAlgebra.matVec(covariance, weights);
+        double portVar = LinearAlgebra.dot(weights, covW);
         Map<String, Double> rc = new LinkedHashMap<>();
         for (int a = 0; a < symbols.length; a++) {
             rc.put(symbols[a], portVar == 0 ? 0 : weights[a] * covW[a] / portVar);

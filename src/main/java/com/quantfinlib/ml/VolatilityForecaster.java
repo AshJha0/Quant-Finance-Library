@@ -1,6 +1,6 @@
 package com.quantfinlib.ml;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Stats;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -44,7 +44,7 @@ public final class VolatilityForecaster {
         List<Double> ys = new ArrayList<>();
         for (int t = LOOKBACK; t + horizon <= returns.length; t++) {
             xs.add(features(returns, t));
-            ys.add(MathUtils.stdDevSample(returns, t, t + horizon));
+            ys.add(Stats.sampleStdDev(returns, t, t + horizon));
         }
         if (xs.size() < 30) {
             throw new IllegalArgumentException(
@@ -139,7 +139,7 @@ public final class VolatilityForecaster {
             if (t < split) {
                 continue;
             }
-            double target = MathUtils.stdDevSample(returns, t, t + horizon);
+            double target = Stats.sampleStdDev(returns, t, t + horizon);
             double fModel = Math.max(0, m.model.predict(features(returns, t)));
             double fEwma = Math.sqrt(raw / mass);
             double fHar = Math.sqrt(com.quantfinlib.volatility.HarRv.forecast(
@@ -155,11 +155,11 @@ public final class VolatilityForecaster {
 
     /** Feature vector computed from returns strictly before index t. */
     private static double[] features(double[] returns, int t) {
-        double vol5 = MathUtils.stdDevSample(returns, t - 5, t);
-        double vol10 = MathUtils.stdDevSample(returns, t - 10, t);
-        double vol21 = MathUtils.stdDevSample(returns, t - LOOKBACK, t);
-        double mom5 = MathUtils.mean(returns, t - 5, t);
-        double mom21 = MathUtils.mean(returns, t - LOOKBACK, t);
+        double vol5 = Stats.sampleStdDev(returns, t - 5, t);
+        double vol10 = Stats.sampleStdDev(returns, t - 10, t);
+        double vol21 = Stats.sampleStdDev(returns, t - LOOKBACK, t);
+        double mom5 = Stats.mean(returns, t - 5, t);
+        double mom21 = Stats.mean(returns, t - LOOKBACK, t);
         double lastAbs = Math.abs(returns[t - 1]);
         double maxAbs5 = 0;
         for (int i = t - 5; i < t; i++) {

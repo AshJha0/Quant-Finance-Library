@@ -1,5 +1,6 @@
 package com.quantfinlib.volatility;
 
+import com.quantfinlib.stats.LinearAlgebra;
 /**
  * Ordinary least squares by Householder QR on column-scaled regressors, with
  * Newey-West (1987) heteroskedasticity- and autocorrelation-consistent
@@ -191,7 +192,7 @@ final class LeastSquares {
                 }
             }
         }
-        double[][] inv = com.quantfinlib.util.MathUtils.inverse(xtx);
+        double[][] inv = LinearAlgebra.inverse(xtx);
         double[][] s = new double[k][k];
         for (int l = 0; l <= lags; l++) {
             double w = l == 0 ? 1 : 1 - l / (lags + 1.0);

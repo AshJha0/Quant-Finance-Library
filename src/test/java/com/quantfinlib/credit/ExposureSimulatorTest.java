@@ -1,7 +1,7 @@
 package com.quantfinlib.credit;
 
 import com.quantfinlib.rates.YieldCurve;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.SpecialFunctions;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -17,6 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * exact, and E[D V] is the time-0 value at every date (martingale).
  * Monte Carlo checks allow four standard errors.
  */
+@SuppressWarnings("removal") // exercises 2.x API deprecated for removal in 2.4.0
 class ExposureSimulatorTest {
 
     private static final double A = 0.05;
@@ -46,7 +47,7 @@ class ExposureSimulatorTest {
     private static double zbp(double t, double s, double strike) {
         double sp = SIG * Math.sqrt((1 - Math.exp(-2 * A * t)) / (2 * A)) * bFn(s - t);
         double h = Math.log(p0(s) / (p0(t) * strike)) / sp + sp / 2;
-        return strike * p0(t) * MathUtils.normCdf(-h + sp) - p0(s) * MathUtils.normCdf(-h);
+        return strike * p0(t) * SpecialFunctions.normCdf(-h + sp) - p0(s) * SpecialFunctions.normCdf(-h);
     }
 
     /** P(t,T) given x(t) under HW (for the Jamshidian strike). */
@@ -134,7 +135,7 @@ class ExposureSimulatorTest {
             double fwdRate = s0 * fgn().discountFactor(3) / p0(3);
             double sd = vol * Math.sqrt(t);
             double d1 = (Math.log(fwdRate / k) + 0.5 * sd * sd) / sd;
-            double ref = 100 * p0(3) * (fwdRate * MathUtils.normCdf(d1) - k * MathUtils.normCdf(d1 - sd));
+            double ref = 100 * p0(3) * (fwdRate * SpecialFunctions.normCdf(d1) - k * SpecialFunctions.normCdf(d1 - sd));
             assertEquals(ref, prof.discountedExpectedExposure(i),
                     4 * prof.discountedExpectedExposureStdError(i), "t=" + t);
         }

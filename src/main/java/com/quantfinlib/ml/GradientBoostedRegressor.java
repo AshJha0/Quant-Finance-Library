@@ -1,5 +1,6 @@
 package com.quantfinlib.ml;
 
+import com.quantfinlib.stats.Numerics;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -56,7 +57,7 @@ public final class GradientBoostedRegressor {
                 keys[i] = x[i][f];
                 orders[f][i] = i;
             }
-            com.quantfinlib.util.MathUtils.pairSort(keys, orders[f]);
+            Numerics.pairSort(keys, orders[f]);
         }
         double[] residual = new double[n];
         for (int r = 0; r < rounds; r++) {

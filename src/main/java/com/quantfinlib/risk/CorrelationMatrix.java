@@ -1,6 +1,6 @@
 package com.quantfinlib.risk;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Stats;
 
 /**
  * Correlation and covariance matrices from a returns matrix laid out as
@@ -17,7 +17,7 @@ public final class CorrelationMatrix {
         for (int i = 0; i < n; i++) {
             m[i][i] = 1.0;
             for (int j = i + 1; j < n; j++) {
-                double c = MathUtils.correlation(returns[i], returns[j]);
+                double c = Stats.pearsonOrZero(returns[i], returns[j]);
                 m[i][j] = c;
                 m[j][i] = c;
             }
@@ -30,7 +30,7 @@ public final class CorrelationMatrix {
         double[][] m = new double[n][n];
         for (int i = 0; i < n; i++) {
             for (int j = i; j < n; j++) {
-                double c = MathUtils.covariance(returns[i], returns[j]);
+                double c = Stats.sampleCovariance(returns[i], returns[j]);
                 m[i][j] = c;
                 m[j][i] = c;
             }

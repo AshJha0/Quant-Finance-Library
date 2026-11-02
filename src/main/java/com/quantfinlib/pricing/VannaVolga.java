@@ -1,5 +1,6 @@
 package com.quantfinlib.pricing;
 
+import com.quantfinlib.stats.SpecialFunctions;
 import com.quantfinlib.pricing.BlackScholes.OptionType;
 
 /**
@@ -121,9 +122,9 @@ public final class VannaVolga {
         double forward = spot * Math.exp((rate - carry) * timeYears);
         double sv = vols[1] * Math.sqrt(timeYears);
         double kLo = Math.min(strikes[0], forward
-                * Math.exp(-com.quantfinlib.util.MathUtils.normInv(1 - WING_DELTA) * sv + 0.5 * sv * sv));
+                * Math.exp(-SpecialFunctions.normInv(1 - WING_DELTA) * sv + 0.5 * sv * sv));
         double kHi = Math.max(strikes[2], forward
-                * Math.exp(-com.quantfinlib.util.MathUtils.normInv(WING_DELTA) * sv + 0.5 * sv * sv));
+                * Math.exp(-SpecialFunctions.normInv(WING_DELTA) * sv + 0.5 * sv * sv));
         if (strike >= kLo && strike <= kHi) {
             return rawVol(spot, strike, forward);
         }

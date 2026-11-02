@@ -1,6 +1,6 @@
 package com.quantfinlib.alpha;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.LinearAlgebra;
 
 /**
  * Turnover-penalised, constrained mean-variance optimiser solved by ADMM.
@@ -234,7 +234,7 @@ public final class TurnoverAwareOptimizer {
         }
         double[][] inv;
         try {
-            inv = MathUtils.inverse(kkt);
+            inv = LinearAlgebra.inverse(kkt);
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException("equality rows are linearly dependent; drop the "
                     + "redundant ones (" + e.getMessage() + ")", e);
@@ -286,10 +286,10 @@ public final class TurnoverAwareOptimizer {
             turnover += Math.abs(z[i] - previous[i]);
             obj += alpha[i] * z[i];
         }
-        obj -= lambda * MathUtils.quadraticForm(z, covariance) + kappa * turnover;
+        obj -= lambda * LinearAlgebra.quadraticForm(z, covariance) + kappa * turnover;
         double resid = 0;
         for (double[] row : equality) {
-            resid = Math.max(resid, Math.abs(MathUtils.dot(row, z)));
+            resid = Math.max(resid, Math.abs(LinearAlgebra.dot(row, z)));
         }
         return new Result(z, turnover / 2, obj, resid, it, converged);
     }

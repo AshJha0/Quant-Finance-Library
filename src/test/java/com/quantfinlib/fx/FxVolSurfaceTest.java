@@ -1,6 +1,6 @@
 package com.quantfinlib.fx;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.SpecialFunctions;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -32,7 +32,7 @@ class FxVolSurfaceTest {
     private static double forwardDelta(double f, double k, double vol, double t, boolean call) {
         double sv = vol * Math.sqrt(t);
         double d1 = Math.log(f / k) / sv + 0.5 * sv;
-        return call ? MathUtils.normCdf(d1) : -MathUtils.normCdf(-d1);
+        return call ? SpecialFunctions.normCdf(d1) : -SpecialFunctions.normCdf(-d1);
     }
 
     @Test
@@ -107,7 +107,7 @@ class FxVolSurfaceTest {
         double sv = ATM * Math.sqrt(T);
         double k = FxVolSurface.strikeForDelta(F, ATM, T, 0.25, true, true);
         double d2 = Math.log(F / k) / sv - 0.5 * sv;
-        assertEquals(0.25, (k / F) * MathUtils.normCdf(d2), 1e-9);
+        assertEquals(0.25, (k / F) * SpecialFunctions.normCdf(d2), 1e-9);
         // Premium adjustment lowers the call strike for the same delta.
         double kUnadj = FxVolSurface.strikeForDelta(F, ATM, T, 0.25, true, false);
         assertTrue(k < kUnadj);
@@ -116,7 +116,7 @@ class FxVolSurfaceTest {
         // Put side round-trips too.
         double kp = FxVolSurface.strikeForDelta(F, ATM, T, -0.25, false, true);
         double d2p = Math.log(F / kp) / sv - 0.5 * sv;
-        assertEquals(-0.25, -(kp / F) * MathUtils.normCdf(-d2p), 1e-9);
+        assertEquals(-0.25, -(kp / F) * SpecialFunctions.normCdf(-d2p), 1e-9);
     }
 
     @Test
@@ -152,7 +152,7 @@ class FxVolSurfaceTest {
         for (int i = 0; i <= 200_000; i++) {
             double k = lo * Math.pow(hi / lo, i / 200_000.0);
             double d2 = Math.log(F / k) / sv - 0.5 * sv;
-            double v = (k / F) * MathUtils.normCdf(d2);
+            double v = (k / F) * SpecialFunctions.normCdf(d2);
             if (v > bestVal) {
                 bestVal = v;
             }
@@ -160,7 +160,7 @@ class FxVolSurfaceTest {
         double target = bestVal - 1e-5; // just inside the true peak
         double k = FxVolSurface.strikeForDelta(F, ATM, T, target, true, true);
         double d2 = Math.log(F / k) / sv - 0.5 * sv;
-        assertEquals(target, (k / F) * MathUtils.normCdf(d2), 1e-6);
+        assertEquals(target, (k / F) * SpecialFunctions.normCdf(d2), 1e-6);
     }
 
     // ---------------------------------------------------- broker strangle (F45)
@@ -169,8 +169,8 @@ class FxVolSurfaceTest {
         double sv = vol * Math.sqrt(t);
         double d1 = Math.log(f / k) / sv + 0.5 * sv;
         double d2 = d1 - sv;
-        return call ? f * MathUtils.normCdf(d1) - k * MathUtils.normCdf(d2)
-                : k * MathUtils.normCdf(-d2) - f * MathUtils.normCdf(-d1);
+        return call ? f * SpecialFunctions.normCdf(d1) - k * SpecialFunctions.normCdf(d2)
+                : k * SpecialFunctions.normCdf(-d2) - f * SpecialFunctions.normCdf(-d1);
     }
 
     @Test
@@ -237,7 +237,7 @@ class FxVolSurfaceTest {
                 FxVolSurface.DeltaConvention.SPOT_PREMIUM_ADJUSTED, dfF);
         double sv = ATM * Math.sqrt(T);
         double d2 = Math.log(F / kpa) / sv - 0.5 * sv;
-        assertEquals(-0.25, -dfF * (kpa / F) * MathUtils.normCdf(-d2), 1e-12);
+        assertEquals(-0.25, -dfF * (kpa / F) * SpecialFunctions.normCdf(-d2), 1e-12);
 
         FxVolSurface s = FxVolSurface.builder()
                 .atmConvention(FxVolSurface.AtmConvention.FORWARD)

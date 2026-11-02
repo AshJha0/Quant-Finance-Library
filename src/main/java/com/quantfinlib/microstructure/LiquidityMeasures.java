@@ -1,6 +1,6 @@
 package com.quantfinlib.microstructure;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Stats;
 
 /**
  * Liquidity estimated from bars alone — the estimators for every
@@ -54,7 +54,7 @@ public final class LiquidityMeasures {
             d[i] = prices[i + 1] - prices[i];
         }
         // cov(Δp_t, Δp_{t−1}) over the n−1 adjacent pairs.
-        double mean = MathUtils.mean(d);
+        double mean = Stats.mean(d);
         double cov = 0;
         for (int i = 1; i < n; i++) {
             cov += (d[i] - mean) * (d[i - 1] - mean);

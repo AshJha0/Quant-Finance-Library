@@ -1,6 +1,7 @@
 package com.quantfinlib.alpha;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.SpecialFunctions;
+import com.quantfinlib.stats.Stats;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -251,7 +252,7 @@ public final class AlphaValidation {
         for (int i = 0; i < oos.length; i++) {
             oos[i] = oosSeries.get(i);
         }
-        double oosMean = oos.length == 0 ? Double.NaN : MathUtils.mean(oos);
+        double oosMean = oos.length == 0 ? Double.NaN : Stats.mean(oos);
         double oosT = oos.length < 3 ? Double.NaN
                 : NeweyWest.tStat(oos, NeweyWest.automaticLag(oos));
         return new WalkForwardResult(List.copyOf(folds), isWeighted / isWeight, oosMean, oos,
@@ -263,8 +264,8 @@ public final class AlphaValidation {
         if (n < 2 || se <= 0) {
             return 0;
         }
-        return se * ((1 - EULER_GAMMA) * MathUtils.normInv(1 - 1.0 / n)
-                + EULER_GAMMA * MathUtils.normInv(1 - 1.0 / (n * Math.E)));
+        return se * ((1 - EULER_GAMMA) * SpecialFunctions.normInv(1 - 1.0 / n)
+                + EULER_GAMMA * SpecialFunctions.normInv(1 - 1.0 / (n * Math.E)));
     }
 
     /** Evaluation dates: startIndex, stepping by horizon, forward window in-sample. */
@@ -423,7 +424,7 @@ public final class AlphaValidation {
             int to = b == k - 1 ? ctx.bars() : from + blockLen;
             ics[b] = meanIc(ctx, factor, from, to, horizon);
         }
-        return new CrossValidationResult(ics, MathUtils.mean(ics), MathUtils.stdDev(ics));
+        return new CrossValidationResult(ics, Stats.mean(ics), Stats.sampleStdDev(ics));
     }
 
     // ------------------------------------------------------------------

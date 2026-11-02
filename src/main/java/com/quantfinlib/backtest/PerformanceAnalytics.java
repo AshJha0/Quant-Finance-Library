@@ -1,7 +1,7 @@
 package com.quantfinlib.backtest;
 
 import com.quantfinlib.risk.RiskMetrics;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Stats;
 
 import java.util.List;
 
@@ -27,7 +27,7 @@ public final class PerformanceAnalytics {
             rets[i - 1] = equity[i] / equity[i - 1] - 1;
         }
 
-        double annReturn = rets.length == 0 ? 0 : MathUtils.mean(rets) * periodsPerYear;
+        double annReturn = rets.length == 0 ? 0 : Stats.mean(rets) * periodsPerYear;
         double annVol = rets.length == 0 ? 0 : RiskMetrics.annualizedVolatility(rets, periodsPerYear);
         double sharpe = rets.length == 0 ? 0 : RiskMetrics.sharpeRatio(rets, 0, periodsPerYear);
         double sortino = rets.length == 0 ? 0 : RiskMetrics.sortinoRatio(rets, 0, periodsPerYear);

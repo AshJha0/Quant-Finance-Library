@@ -1,7 +1,7 @@
 package com.quantfinlib.execution;
 
 import com.quantfinlib.orderbook.Side;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Numerics;
 
 /**
  * The dynamic benchmark execution algorithm: one stateful executor that
@@ -449,7 +449,7 @@ public final class BenchmarkExecutor {
                 u *= 1.0 / (1 + m.volatility());
             }
         }
-        return MathUtils.clamp(u, 0.25, 4.0);
+        return Numerics.clamp(u, 0.25, 4.0);
     }
 
     // ------------------------------------------------------------------
@@ -513,6 +513,6 @@ public final class BenchmarkExecutor {
     }
 
     private static double clamp01(double x) {
-        return MathUtils.clamp(x, 0, 1);
+        return Numerics.clamp(x, 0, 1);
     }
 }

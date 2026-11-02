@@ -1,7 +1,7 @@
 package com.quantfinlib.hedging;
 
 import com.quantfinlib.pricing.BlackScholes.OptionType;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.SpecialFunctions;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -35,7 +35,7 @@ class CarryAndBandsTest {
                 1.0, 0.0, q, 0.2, path, 1.0, DeltaHedger.Config.every(0));
         // Held delta at t0: e^{-qT} N(d1), d1 = (r - q + sigma^2/2) T / sigma.
         double d1 = (0 - q + 0.02) / 0.2;
-        double delta = Math.exp(-q) * MathUtils.normCdf(d1);
+        double delta = Math.exp(-q) * SpecialFunctions.normCdf(d1);
         double carryCash = delta * 100 * Math.expm1(q);
         double expected = rep.premium() - delta * 100 + carryCash + delta * 100 - rep.payoff();
         assertEquals(expected, rep.finalPnl(), 1e-9);

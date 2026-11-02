@@ -1,6 +1,6 @@
 package com.quantfinlib.alpha;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Stats;
 
 import java.util.Locale;
 
@@ -282,8 +282,8 @@ public final class SignalEvaluator {
                     + horizon + "; extend the sample or shrink the horizon");
         }
         double[] icArr = java.util.Arrays.copyOf(icBuf, n);
-        double mean = MathUtils.mean(icArr);
-        double std = MathUtils.stdDev(icArr);
+        double mean = Stats.mean(icArr);
+        double std = Stats.sampleStdDev(icArr);
         int lag = NeweyWest.lagFor(icArr, horizon);
         double naive = std == 0 ? 0 : mean / (std / Math.sqrt(n));
         double acf = n > horizon + 1 ? NeweyWest.autocorrelation(icArr, horizon) : Double.NaN;
@@ -606,7 +606,7 @@ public final class SignalEvaluator {
                 k++;
             }
         }
-        return MathUtils.correlation(ranks(xs), ranks(ys));
+        return Stats.pearsonOrZero(ranks(xs), ranks(ys));
     }
 
     /**

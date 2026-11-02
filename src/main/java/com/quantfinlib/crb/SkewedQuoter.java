@@ -1,6 +1,6 @@
 package com.quantfinlib.crb;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Numerics;
 
 /**
  * Inventory-skewed two-way pricing — the central risk book's quoting
@@ -63,7 +63,7 @@ public final class SkewedQuoter {
         if (!Double.isFinite(inventory)) {
             throw new IllegalArgumentException("inventory must be finite");
         }
-        double load = MathUtils.clamp(inventory / inventoryLimit, -1, 1);
+        double load = Numerics.clamp(inventory / inventoryLimit, -1, 1);
         double skewBps = -load * skewFraction * halfSpreadBps;
         double bid = mid * (1 + (-halfSpreadBps + skewBps) / 1e4);
         double ask = mid * (1 + (halfSpreadBps + skewBps) / 1e4);

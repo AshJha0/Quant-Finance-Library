@@ -1,6 +1,6 @@
 package com.quantfinlib.risk;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.SpecialFunctions;
 import org.junit.jupiter.api.Test;
 
 import java.util.Random;
@@ -26,7 +26,7 @@ class RiskAllocationTest {
         ComponentVar.Allocation a = ComponentVar.allocate(w, cov, 0.99);
 
         double sigma = Math.sqrt(4400);
-        double z = MathUtils.normInv(0.99);
+        double z = SpecialFunctions.normInv(0.99);
         assertEquals(z * sigma, a.portfolioVar(), 1e-9);
         assertEquals(100 * z * 6 / sigma, a.components(0), 1e-9);
         assertEquals(200 * z * 19 / sigma, a.components(1), 1e-9);
@@ -56,7 +56,7 @@ class RiskAllocationTest {
         // Incremental VaR of the hedge: closing it moves sigma 10 -> 20,
         // so the "risk removed" is negative.
         double incr = ComponentVar.incremental(w, cov, 0.99, 1);
-        double z = MathUtils.normInv(0.99);
+        double z = SpecialFunctions.normInv(0.99);
         assertEquals(z * 10 - z * 20, incr, 1e-9);
         assertTrue(incr < 0);
     }

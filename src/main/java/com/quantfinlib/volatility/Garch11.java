@@ -1,6 +1,6 @@
 package com.quantfinlib.volatility;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Stats;
 
 /**
  * GARCH(1,1) volatility model (Bollerslev 1986, J. Econometrics 31, 307-327):
@@ -152,7 +152,7 @@ public final class Garch11 {
      */
     public static Fit estimate(double[] returns, Innovation innovation) {
         double[] r = GarchEstimation.demean(returns);
-        double var = MathUtils.variance(r);
+        double var = Stats.sampleVariance(r);
         boolean t = innovation == Innovation.STUDENT_T;
         Model model = new Model(var, t);
         double[][] starts = {
@@ -234,9 +234,9 @@ public final class Garch11 {
      * sample variance of the demeaned returns (the same backcast the fit uses).
      */
     public static double[] conditionalVariances(double[] returns, Params params) {
-        double mean = MathUtils.mean(returns);
+        double mean = Stats.mean(returns);
         double[] h = new double[returns.length];
-        h[0] = MathUtils.variance(returns);
+        h[0] = Stats.sampleVariance(returns);
         for (int t = 1; t < returns.length; t++) {
             double x = returns[t - 1] - mean;
             h[t] = params.omega() + params.alpha() * x * x + params.beta() * h[t - 1];
@@ -253,7 +253,7 @@ public final class Garch11 {
         if (horizon < 1) {
             throw new IllegalArgumentException("horizon must be >= 1");
         }
-        double mean = MathUtils.mean(returns);
+        double mean = Stats.mean(returns);
         double[] h = conditionalVariances(returns, params);
         double lastR = returns[returns.length - 1] - mean;
         double next = params.omega() + params.alpha() * lastR * lastR

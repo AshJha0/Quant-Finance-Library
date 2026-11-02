@@ -1,6 +1,6 @@
 package com.quantfinlib.pricing;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.SpecialFunctions;
 
 /**
  * Two-asset closed forms: Margrabe's exchange option and Kirk's spread
@@ -64,7 +64,7 @@ public final class ExchangeOption {
         double d1 = (Math.log(s1 / s2) + (q2 - q1 + 0.5 * variance) * timeYears)
                 / (sigma * sqrtT);
         double d2 = d1 - sigma * sqrtT;
-        return f1 * MathUtils.normCdf(d1) - f2 * MathUtils.normCdf(d2);
+        return f1 * SpecialFunctions.normCdf(d1) - f2 * SpecialFunctions.normCdf(d2);
     }
 
     /**
@@ -103,7 +103,7 @@ public final class ExchangeOption {
         double d1 = (Math.log(f1 / (f2 + strike)) + 0.5 * variance * timeYears)
                 / (sigma * sqrtT);
         double d2 = d1 - sigma * sqrtT;
-        return df * (f1 * MathUtils.normCdf(d1) - (f2 + strike) * MathUtils.normCdf(d2));
+        return df * (f1 * SpecialFunctions.normCdf(d1) - (f2 + strike) * SpecialFunctions.normCdf(d2));
     }
 
     private static void requirePositive(double v, String name) {

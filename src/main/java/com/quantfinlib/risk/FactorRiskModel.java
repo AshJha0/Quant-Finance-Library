@@ -1,6 +1,7 @@
 package com.quantfinlib.risk;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.LinearAlgebra;
+import com.quantfinlib.stats.Numerics;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -209,7 +210,7 @@ public final class FactorRiskModel {
         double[][] f = new double[t][];
         double[][] u = new double[t][];
         for (int r = 0; r < t; r++) {
-            u[r] = MathUtils.nanArray(n);
+            u[r] = Numerics.nanArray(n);
             f[r] = regress(returns[r], z[r], sectors, s, caps[r], u[r]);
         }
 
@@ -259,7 +260,7 @@ public final class FactorRiskModel {
         if (caps.length != n || live.length != n || !(limit > 0)) {
             throw new IllegalArgumentException("inputs must align and limit must be > 0");
         }
-        double[] out = MathUtils.nanArray(n);
+        double[] out = Numerics.nanArray(n);
         boolean[] has = new boolean[n];
         for (int i = 0; i < n; i++) {
             if (live[i]) {
@@ -350,7 +351,7 @@ public final class FactorRiskModel {
                 present[ps++] = j;
             }
         }
-        double[] fr = MathUtils.nanArray(p);
+        double[] fr = Numerics.nanArray(p);
         // free parameters: market, ps-1 sectors, k styles
         int q = 1 + Math.max(ps - 1, 0) + k;
         if (ps == 0 || live < q + 1) {
@@ -389,7 +390,7 @@ public final class FactorRiskModel {
         }
         double[] g;
         try {
-            g = MathUtils.solveLinear(xtx, xty);
+            g = LinearAlgebra.solveLinear(xtx, xty);
         } catch (IllegalArgumentException singular) {
             return fr;
         }
@@ -544,7 +545,7 @@ public final class FactorRiskModel {
         int n = capsNow.length;
         int t = u.length;
         double d = Math.pow(0.5, 1.0 / settings.specificHalfLife());
-        double[] sigma = MathUtils.nanArray(n);
+        double[] sigma = Numerics.nanArray(n);
         int[] live = new int[n];
         int m = 0;
         for (int i = 0; i < n; i++) {
@@ -580,10 +581,10 @@ public final class FactorRiskModel {
         for (int a = 0; a < m; a++) {
             keys[a] = capsNow[idx[a]];
         }
-        MathUtils.pairSort(keys, idx);
+        Numerics.pairSort(keys, idx);
         int buckets = Math.min(settings.sizeBuckets(), m);
         double q = settings.shrinkage();
-        double[] out = MathUtils.nanArray(n);
+        double[] out = Numerics.nanArray(n);
         for (int b = 0; b < buckets; b++) {
             int lo = (int) ((long) b * m / buckets);
             int hi = (int) ((long) (b + 1) * m / buckets);
@@ -823,7 +824,7 @@ public final class FactorRiskModel {
                 fx[a] += factorCov[a][b] * xp[b];
             }
         }
-        double factorVar = MathUtils.dot(xp, fx);
+        double factorVar = LinearAlgebra.dot(xp, fx);
         double specVar = 0;
         double[] vw = new double[n];
         for (int i = 0; i < n; i++) {

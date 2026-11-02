@@ -1,5 +1,6 @@
 package com.quantfinlib;
 
+import com.quantfinlib.stats.Stats;
 import com.quantfinlib.core.BarSeries;
 import com.quantfinlib.indicators.Indicators;
 import com.quantfinlib.optimization.PortfolioOptimizer;
@@ -120,7 +121,7 @@ class FormulaPinsTest {
         // Ignoring rf lands at {0.706, 0.294} and fails the tolerance.
         PortfolioOptimizer opt = new PortfolioOptimizer(
                 new double[]{0.06, 0.10},
-                new double[][]{{0.01, 0}, {0, 0.04}}, 42);
+                new double[][]{{0.01, 0}, {0, 0.04}});
         PortfolioOptimizer.Allocation tangency = opt.maxSharpe(0.02);
         assertEquals(2.0 / 3, tangency.weights(0), 1e-9,
                 "the analytic tangency, rf included");
@@ -139,7 +140,7 @@ class FormulaPinsTest {
         for (int i = 0; i < r.length; i++) {
             r[i] = 0.01 * rnd.nextGaussian();
         }
-        double mean = com.quantfinlib.util.MathUtils.mean(r);
+        double mean = Stats.mean(r);
         double[] h = Garch11.conditionalVariances(r, p);
         double lastR = r[r.length - 1] - mean;
         double oneStep = 2e-6 + 0.08 * lastR * lastR + 0.9 * h[h.length - 1];

@@ -1,5 +1,6 @@
 package com.quantfinlib.microstructure;
 
+import com.quantfinlib.stats.Stats;
 import com.quantfinlib.volatility.HarRv;
 import org.junit.jupiter.api.Test;
 
@@ -137,8 +138,8 @@ class QuantSignalsTest {
         double[] rv = new double[n];
         java.util.Arrays.fill(rv, 0, 22, 0.2);
         for (int t = 21; t < n - 1; t++) {
-            double w = com.quantfinlib.util.MathUtils.mean(rv, t - 4, t + 1);
-            double m = com.quantfinlib.util.MathUtils.mean(rv, t - 21, t + 1);
+            double w = Stats.mean(rv, t - 4, t + 1);
+            double m = Stats.mean(rv, t - 21, t + 1);
             rv[t + 1] = Math.max(1e-6, 0.02 + 0.4 * rv[t] + 0.3 * w + 0.2 * m
                     + 0.005 * (2 * rnd.nextDouble() - 1));
         }

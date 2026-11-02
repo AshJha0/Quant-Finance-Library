@@ -1,6 +1,6 @@
 package com.quantfinlib.risk;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.SpecialFunctions;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -475,7 +475,7 @@ public final class SaCcr {
         }
         double d1 = (Math.log(underlying / strike) + 0.5 * vol * vol * expiryYears)
                 / (vol * Math.sqrt(expiryYears));
-        double delta = call ? MathUtils.normCdf(d1) : -MathUtils.normCdf(-d1);
+        double delta = call ? SpecialFunctions.normCdf(d1) : -SpecialFunctions.normCdf(-d1);
         return bought ? delta : -delta;
     }
 

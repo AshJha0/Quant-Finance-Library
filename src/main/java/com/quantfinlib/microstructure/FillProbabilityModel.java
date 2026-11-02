@@ -1,6 +1,7 @@
 package com.quantfinlib.microstructure;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Numerics;
+import com.quantfinlib.stats.SpecialFunctions;
 
 /**
  * Passive-fill probability for a limit order resting away from the touch —
@@ -50,7 +51,7 @@ public final class FillProbabilityModel {
             return 0.0;
         }
         double sigmaAbs = price * volPerSqrtSecond * Math.sqrt(horizonSeconds);
-        return MathUtils.clamp(2 * MathUtils.normCdf(-distance / sigmaAbs), 0, 1);
+        return Numerics.clamp(2 * SpecialFunctions.normCdf(-distance / sigmaAbs), 0, 1);
     }
 
     /**

@@ -11,6 +11,11 @@
  * decision is appended to an audit log together with the grant that settled it.
  * {@link com.quantfinlib.entitlements.EntitlementPreTradeCheck} adapts this to
  * the order path so a pre-trade gate can call it before its own limit checks.
+ *
+ * <p><b>3.0 notice.</b> This package moves to the separate artifact
+ * {@code quant-finance-library-lowlatency} (module {@code com.quantfinlib.lowlatency})
+ * in 3.0; the package name is unchanged, so only your dependency changes,
+ * not your imports. See docs/MIGRATION_3.0.md.</p>
  */
 @NullMarked
 package com.quantfinlib.entitlements;

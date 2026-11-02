@@ -13,6 +13,12 @@
  * <p>Parsers read the columns and elements named in each class's javadoc. They were tested
  * against small hand-made fixtures that follow the published layouts, not against a full
  * bulk file, so check a real download once before relying on them in production.</p>
+ *
+ * <p><b>3.0 notice.</b> Renamed to {@code com.quantfinlib.regreporting.registry} in 3.0
+ * (the {@code report} and {@code reporting} names were one letter apart with
+ * unrelated meanings), and moved with the rest of the reference tier to the
+ * separate artifact {@code quant-finance-library-lowlatency}. Types and members
+ * are unchanged; update the import. See docs/MIGRATION_3.0.md.</p>
  */
 @NullMarked
 package com.quantfinlib.reporting.registry;

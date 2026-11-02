@@ -1,7 +1,7 @@
 package com.quantfinlib.hedging;
 
 import com.quantfinlib.risk.TailRisk;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Stats;
 
 import java.util.Arrays;
 import java.util.Locale;
@@ -25,9 +25,9 @@ public final class HedgingErrorDistribution {
         this.premium = premium;
         this.sortedPnls = pnls.clone();
         Arrays.sort(this.sortedPnls);
-        this.mean = MathUtils.mean(pnls);
-        this.std = MathUtils.stdDev(pnls);
-        this.meanTradingCosts = MathUtils.mean(tradingCosts);
+        this.mean = Stats.mean(pnls);
+        this.std = Stats.sampleStdDev(pnls);
+        this.meanTradingCosts = Stats.mean(tradingCosts);
         double r = 0;
         for (int x : rebalances) {
             r += x;
@@ -45,7 +45,7 @@ public final class HedgingErrorDistribution {
     public double best()              { return sortedPnls[sortedPnls.length - 1]; }
 
     public double percentile(double p) {
-        return MathUtils.percentileSorted(sortedPnls, p);
+        return Stats.quantileSorted(sortedPnls, p);
     }
 
     /** Fraction of paths where the hedge lost money. */

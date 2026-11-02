@@ -18,6 +18,14 @@
  * {@code PortfolioBacktester} overload and {@code StockScreener.membersAsOf})
  * with {@link com.quantfinlib.data.UniverseCsvLoader} as its documented CSV
  * interchange format for user-supplied membership/lifecycle data.
+ *
+ * <p><b>3.0 notice.</b> The tick-file types ({@code TickFileWriter},
+ * {@code TickFileReader}, {@code TickCapture}, {@code AsyncTickCapture}) move to
+ * the artifact {@code quant-finance-library-lowlatency} in 3.0. Because the rest
+ * of this package stays in the main artifact and a package cannot be split
+ * across two modules, they also change package (planned:
+ * {@code com.quantfinlib.marketdata.tick}). Everything else here is unchanged.
+ * See docs/MIGRATION_3.0.md.</p>
  */
 @NullMarked
 package com.quantfinlib.data;

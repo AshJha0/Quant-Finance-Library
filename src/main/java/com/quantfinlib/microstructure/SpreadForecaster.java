@@ -1,7 +1,7 @@
 package com.quantfinlib.microstructure;
 
 import com.quantfinlib.persist.Checkpoint;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Numerics;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -185,7 +185,7 @@ public final class SpreadForecaster {
         if (!hasDeviation) {
             return 0;
         }
-        return deviation * MathUtils.decayFactor(now - deviationTime, deviationHalfLifeNanos);
+        return deviation * Numerics.decayFactor(now - deviationTime, deviationHalfLifeNanos);
     }
 
     // ------------------------------------------------------------------

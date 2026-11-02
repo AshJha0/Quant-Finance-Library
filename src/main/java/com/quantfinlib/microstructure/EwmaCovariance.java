@@ -1,7 +1,7 @@
 package com.quantfinlib.microstructure;
 
 import com.quantfinlib.persist.Checkpoint;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Numerics;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -123,7 +123,7 @@ public final class EwmaCovariance {
     /** Decayed correlation in [-1, 1]; 0 while either variance is 0. */
     public double correlation(int i, int j) {
         double denom = Math.sqrt(variance(i) * variance(j));
-        return denom > 0 ? MathUtils.clamp(covariance(i, j) / denom, -1, 1) : 0;
+        return denom > 0 ? Numerics.clamp(covariance(i, j) / denom, -1, 1) : 0;
     }
 
     // ------------------------------------------------------------------

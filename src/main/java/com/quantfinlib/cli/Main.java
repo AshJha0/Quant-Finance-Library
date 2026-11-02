@@ -160,6 +160,7 @@ public final class Main {
         return CsvBarLoader.load(Path.of(required(opts, "csv")), required(opts, "symbol"));
     }
 
+    @SuppressWarnings("removal") // ema/rsi/macd/bollinger samples, deprecated in 2.4.0
     private static TradingStrategy buildStrategy(Map<String, String> opts) {
         String name = opts.getOrDefault("strategy", "sma").toLowerCase(Locale.ROOT);
         return switch (name) {

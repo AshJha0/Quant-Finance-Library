@@ -1,6 +1,6 @@
 package com.quantfinlib.microstructure;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Stats;
 
 /**
  * The Lo-MacKinlay variance ratio test — the question that comes before
@@ -65,7 +65,7 @@ public final class VarianceRatio {
                 throw new IllegalArgumentException("returns must be finite");
             }
         }
-        double mu = MathUtils.mean(returns);
+        double mu = Stats.mean(returns);
         // 1-period variance (sample).
         double var1 = 0;
         for (double r : returns) {

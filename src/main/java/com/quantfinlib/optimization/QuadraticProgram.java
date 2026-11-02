@@ -1,6 +1,6 @@
 package com.quantfinlib.optimization;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.LinearAlgebra;
 
 /**
  * Convex quadratic programming by the primal active-set method (Nocedal and
@@ -299,7 +299,7 @@ public final class QuadraticProgram {
     }
 
     private static double objective(double[][] q, double[] c, double[] x) {
-        return 0.5 * MathUtils.quadraticForm(x, q) + dot(c, x);
+        return 0.5 * LinearAlgebra.quadraticForm(x, q) + dot(c, x);
     }
 
     private static int[] indices(boolean[] flags) {

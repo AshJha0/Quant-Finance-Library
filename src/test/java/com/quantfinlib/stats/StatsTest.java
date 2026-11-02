@@ -138,7 +138,7 @@ class StatsTest {
         return sorted[Math.max(k, 0)];
     }
 
-    /** v2.0 body of {@code util.MathUtils.percentileSorted}. */
+    /** v2.0 body of {@code util.Stats.quantileSorted}. */
     private static double legacyPercentileSorted(double[] sorted, double p) {
         if (sorted.length == 0) {
             return Double.NaN;
@@ -187,7 +187,7 @@ class StatsTest {
                 double c = Stats.quantileSorted(sorted, p);
                 double legacy = legacyPercentileSorted(sorted, p);
                 assertEquals(Double.doubleToLongBits(legacy), Double.doubleToLongBits(c),
-                        "MathUtils.percentileSorted p=" + p);
+                        "Stats.quantileSorted p=" + p);
                 // Factors only sees finite scores (it filters first).
                 if (!Double.isNaN(sorted[sorted.length - 1])) {
                     double f = legacyFactorsQuantile(sorted, p);

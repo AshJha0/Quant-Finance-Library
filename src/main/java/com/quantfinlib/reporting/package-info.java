@@ -53,6 +53,12 @@
  * <p>{@link com.quantfinlib.reporting.ReportingIdentifiers} checks identifier
  * syntax and check digits: LEI (ISO 17442, ISO 7064 MOD 97-10), ISIN (ISO 6166,
  * Luhn) and MIC (ISO 10383 shape only; the registry itself is not bundled).
+ *
+ * <p><b>3.0 notice.</b> Renamed to {@code com.quantfinlib.regreporting} in 3.0
+ * (the {@code report} and {@code reporting} names were one letter apart with
+ * unrelated meanings), and moved with the rest of the reference tier to the
+ * separate artifact {@code quant-finance-library-lowlatency}. Types and members
+ * are unchanged; update the import. See docs/MIGRATION_3.0.md.</p>
  */
 @NullMarked
 package com.quantfinlib.reporting;

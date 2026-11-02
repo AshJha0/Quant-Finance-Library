@@ -1,7 +1,7 @@
 package com.quantfinlib.pricing;
 
 import com.quantfinlib.pricing.BlackScholes.OptionType;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.SpecialFunctions;
 
 /**
  * Bachelier (normal) model for options on a forward: the forward follows
@@ -35,7 +35,7 @@ public final class Bachelier {
         }
         double sd = normalVol * Math.sqrt(timeYears);
         double d = (forward - strike) / sd;
-        return df * (w * (forward - strike) * MathUtils.normCdf(w * d) + sd * MathUtils.normPdf(d));
+        return df * (w * (forward - strike) * SpecialFunctions.normCdf(w * d) + sd * SpecialFunctions.normPdf(d));
     }
 
     /** Sensitivity to the forward: df·Φ(d) for a call, −df·Φ(−d) for a put. */
@@ -48,7 +48,7 @@ public final class Bachelier {
             return df * w * (m > 0 ? 1 : m == 0 ? 0.5 : 0);
         }
         double d = (forward - strike) / (normalVol * Math.sqrt(timeYears));
-        return df * w * MathUtils.normCdf(w * d);
+        return df * w * SpecialFunctions.normCdf(w * d);
     }
 
     /** Vega per 1.00 of normal vol: df·√T·φ(d). */
@@ -62,7 +62,7 @@ public final class Bachelier {
             return forward == strike ? df * Math.sqrt(timeYears) / SQRT_2PI : 0;
         }
         double d = (forward - strike) / (normalVol * Math.sqrt(timeYears));
-        return df * Math.sqrt(timeYears) * MathUtils.normPdf(d);
+        return df * Math.sqrt(timeYears) * SpecialFunctions.normPdf(d);
     }
 
     /**
@@ -114,7 +114,7 @@ public final class Bachelier {
             } else {
                 break;
             }
-            double slope = -MathUtils.normCdf(-u) / h - 1 / u;
+            double slope = -SpecialFunctions.normCdf(-u) / h - 1 / u;
             double next = u - f / slope;
             if (!(next > lo && next < hi)) {
                 next = Double.isInfinite(hi) ? 2 * u + 1 : 0.5 * (lo + hi);
@@ -131,10 +131,10 @@ public final class Bachelier {
     /** h(u) = φ(u) − u Φ(−u), written through the Mills ratio for large u. */
     private static double hOf(double u) {
         if (u < 2) {
-            return MathUtils.normPdf(u) - u * MathUtils.normCdf(-u);
+            return SpecialFunctions.normPdf(u) - u * SpecialFunctions.normCdf(-u);
         }
-        double phi = MathUtils.normPdf(u);
-        double mills = MathUtils.normCdf(-u) / phi;
+        double phi = SpecialFunctions.normPdf(u);
+        double mills = SpecialFunctions.normCdf(-u) / phi;
         return phi * (1 - u * mills);
     }
 }

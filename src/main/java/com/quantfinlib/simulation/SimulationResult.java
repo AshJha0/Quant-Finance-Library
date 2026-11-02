@@ -1,7 +1,7 @@
 package com.quantfinlib.simulation;
 
 import com.quantfinlib.risk.TailRisk;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Stats;
 
 import java.util.Arrays;
 
@@ -73,8 +73,8 @@ public final class SimulationResult {
     public double[] confidenceInterval(double level) {
         double alpha = (1 - level) / 2;
         return new double[]{
-                MathUtils.percentileSorted(sortedFinals, alpha),
-                MathUtils.percentileSorted(sortedFinals, 1 - alpha)
+                Stats.quantileSorted(sortedFinals, alpha),
+                Stats.quantileSorted(sortedFinals, 1 - alpha)
         };
     }
 
@@ -87,11 +87,11 @@ public final class SimulationResult {
     }
 
     public double expectedValue() {
-        return MathUtils.mean(sortedFinals);
+        return Stats.mean(sortedFinals);
     }
 
     public double medianValue() {
-        return MathUtils.percentileSorted(sortedFinals, 0.5);
+        return Stats.quantileSorted(sortedFinals, 0.5);
     }
 
     @Override

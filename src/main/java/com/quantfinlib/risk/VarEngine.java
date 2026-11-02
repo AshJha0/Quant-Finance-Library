@@ -1,6 +1,6 @@
 package com.quantfinlib.risk;
 
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.SpecialFunctions;
 
 import java.util.SplittableRandom;
 
@@ -72,7 +72,7 @@ public final class VarEngine {
                                        double confidence) {
         double z = zOf(confidence);
         return portfolioStdev(exposures, covariance)
-                * MathUtils.normPdf(z) / (1 - confidence);
+                * SpecialFunctions.normPdf(z) / (1 - confidence);
     }
 
     // ------------------------------------------------------------------
@@ -157,7 +157,7 @@ public final class VarEngine {
         double z = zOf(confidence);
         double lossSkew = -c.skew();
         double es = -c.mean() + Math.sqrt(c.variance())
-                * MathUtils.normPdf(z) / (1 - confidence) * (1 + z * lossSkew / 6);
+                * SpecialFunctions.normPdf(z) / (1 - confidence) * (1 + z * lossSkew / 6);
         return Math.max(0, es);
     }
 
@@ -360,7 +360,7 @@ public final class VarEngine {
         if (!(confidence > 0.5 && confidence < 1)) {
             throw new IllegalArgumentException("confidence must be in (0.5, 1)");
         }
-        return MathUtils.normInv(confidence);
+        return SpecialFunctions.normInv(confidence);
     }
 
     private static int requireSquare(double[] exposures, double[][] covariance) {

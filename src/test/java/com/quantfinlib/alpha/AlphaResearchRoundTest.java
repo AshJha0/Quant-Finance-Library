@@ -3,7 +3,7 @@ package com.quantfinlib.alpha;
 import com.quantfinlib.backtest.validation.BlockBootstrap;
 import com.quantfinlib.backtest.validation.SharpeValidation;
 import com.quantfinlib.risk.RiskMetrics;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.Stats;
 import org.junit.jupiter.api.Test;
 
 import java.time.DayOfWeek;
@@ -161,7 +161,7 @@ class AlphaResearchRoundTest {
         double[] samples = BlockBootstrap.sharpeSamples(iid, 10, 500, 252, 7);
         assertEquals(500, samples.length);
         assertTrue(samples[0] <= samples[499], "sorted ascending, ready for percentiles");
-        assertEquals(sampleSharpe, MathUtils.percentileSorted(samples, 0.5), 0.35,
+        assertEquals(sampleSharpe, Stats.quantileSorted(samples, 0.5), 0.35,
                 "the distribution centers on the sample estimate");
         assertArrayEquals(samples, BlockBootstrap.sharpeSamples(iid, 10, 500, 252, 7),
                 "deterministic per seed: replayable");
@@ -175,9 +175,9 @@ class AlphaResearchRoundTest {
             ar[i] = 0.9 * prev + 0.01 * rnd.nextGaussian();
             prev = ar[i];
         }
-        double stdBlocked = MathUtils.stdDev(
+        double stdBlocked = Stats.sampleStdDev(
                 BlockBootstrap.sharpeSamples(ar, 25, 400, 252, 3));
-        double stdIid = MathUtils.stdDev(
+        double stdIid = Stats.sampleStdDev(
                 BlockBootstrap.sharpeSamples(ar, 1, 400, 252, 3));
         assertTrue(stdBlocked > 1.2 * stdIid,
                 "blocks preserve the dependence the iid resample destroys: "

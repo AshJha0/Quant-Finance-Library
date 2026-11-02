@@ -2,7 +2,7 @@ package com.quantfinlib.simulation;
 
 import com.quantfinlib.pricing.BlackScholes;
 import com.quantfinlib.pricing.BlackScholes.OptionType;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.SpecialFunctions;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -38,8 +38,8 @@ class PathMonteCarloTest {
         double varG = vol * vol * t * (n + 1) * (2.0 * n + 1) / (6.0 * n * n);
         double d1 = (muG - Math.log(k) + varG) / Math.sqrt(varG);
         double d2 = d1 - Math.sqrt(varG);
-        double exact = Math.exp(-r * t) * (Math.exp(muG + 0.5 * varG) * MathUtils.normCdf(d1)
-                - k * MathUtils.normCdf(d2));
+        double exact = Math.exp(-r * t) * (Math.exp(muG + 0.5 * varG) * SpecialFunctions.normCdf(d1)
+                - k * SpecialFunctions.normCdf(d2));
         MonteCarloSimulator.Estimate e = new MonteCarloSimulator(3).price(new double[]{s},
                 new double[]{r - q}, new double[]{vol}, ONE, t, n, 200_000, true, r, p -> {
                     double logSum = 0;
@@ -59,8 +59,8 @@ class PathMonteCarloTest {
         double sig = Math.sqrt(v1 * v1 + v2 * v2 - 2 * rho * v1 * v2);
         double d1 = (Math.log(s1 / s2) + (q2 - q1 + 0.5 * sig * sig) * t) / (sig * Math.sqrt(t));
         double d2 = d1 - sig * Math.sqrt(t);
-        double margrabe = s1 * Math.exp(-q1 * t) * MathUtils.normCdf(d1)
-                - s2 * Math.exp(-q2 * t) * MathUtils.normCdf(d2);
+        double margrabe = s1 * Math.exp(-q1 * t) * SpecialFunctions.normCdf(d1)
+                - s2 * Math.exp(-q2 * t) * SpecialFunctions.normCdf(d2);
         double r = 0.04;
         MonteCarloSimulator.Estimate e = new MonteCarloSimulator(5).price(
                 new double[]{s1, s2}, new double[]{r - q1, r - q2}, new double[]{v1, v2},

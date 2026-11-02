@@ -1,7 +1,7 @@
 package com.quantfinlib.credit;
 
 import com.quantfinlib.rates.YieldCurve;
-import com.quantfinlib.util.MathUtils;
+import com.quantfinlib.stats.SpecialFunctions;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -17,6 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * identity, and a single-bucket FX forward against direct quadrature of
  * E[D E(T) P(default | X)].
  */
+@SuppressWarnings("removal") // exercises 2.x API deprecated for removal in 2.4.0
 class WrongWayCvaTest {
 
     private static final double A = 0.05;
@@ -95,7 +96,7 @@ class WrongWayCvaTest {
                 List.of(new ExposureSimulator.FxForward(notional, strike, tMat)), null,
                 new double[]{t}, 400_000, 3L);
         CreditCurve c = cpty();
-        double k = MathUtils.normInv(c.defaultProbability(t));
+        double k = SpecialFunctions.normInv(c.defaultProbability(t));
         double pd = dom().discountFactor(t);
         double fwdFactor = f.discountFactor(tMat) / f.discountFactor(t);
         double fwdD = dom().discountFactor(tMat) / pd;
@@ -110,7 +111,7 @@ class WrongWayCvaTest {
                         * Math.exp(-0.5 * vol * vol * t + vol * Math.sqrt(t) * x);
                 double e = notional * Math.max(st * fwdFactor - strike * fwdD, 0);
                 double w = (j == 0 || j == nSteps) ? 0.5 : 1;
-                sum += w * e * MathUtils.normCdf((k + rho * x) / s) * Math.exp(-0.5 * x * x);
+                sum += w * e * SpecialFunctions.normCdf((k + rho * x) / s) * Math.exp(-0.5 * x * x);
             }
             double exact = 0.6 * pd * sum * h / Math.sqrt(2 * Math.PI);
             double mc = CvaApproximator.cvaWrongWay(prof, c, 0.6, rho, ExposureProfile.Factor.FX);
