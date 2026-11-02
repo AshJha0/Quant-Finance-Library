@@ -1,6 +1,6 @@
 # Design for 4.0: a narrower stable promise
 
-Status: implemented in 4.0.0 (branch r40/moves), as revised in 3.2.0. Written for 3.1.0. The
+Status: implemented in 4.0.0, as revised in 3.2.0 and accepted by the owner on 2026-11-02. Written for 3.1.0. The
 rules in [STABILITY.md](STABILITY.md) govern when any of it may ship: each removal is deprecated, with its replacement, in at
 least one 3.x minor (3.2.0) before 4.0 removes it, and 3.x has no breaking changes.
 Revised in 3.2.0: the move list is smaller than the 3.1 draft, for the reasons in
@@ -88,6 +88,12 @@ classes leave, under a new package name with a deprecation path. The stable tier
 therefore wider than the 3.1 page hoped. The alternative, moving `backtest` and
 `alpha` out of the stable tier too, would break far more users for little gain.
 
+**Owner decision, 2026-11-02.** The revised design is accepted as it stands: the packages
+that stable code depends on (`execution`, `microstructure`, `persist`, `screener`, `ml`
+and most of `data`) stay in the stable jar, because moving them would create module
+cycles, and `-research` holds only `dsl`. A later major may move more once the stable
+code no longer depends on it; nothing in 4.x will.
+
 ### Deprecation versus announcement
 
 A move to another jar keeps the package and class names. JPMS forbids the same package
@@ -140,7 +146,7 @@ change that breaks it is a breaking change.
    `package-info.java`; the `io` package and `marketdata.AggregatedBook` with
    deprecations of the types they replace; MIGRATION_4.0.md.
 3. 4.0.0, directly after 3.2.0: modules split, `java.net.http` gone from core, the
-   deprecated types removed, japicmp run against 3.0.0 with the 4.0 break list.
+   deprecated types removed, japicmp run against 3.2.0 with the 4.0 break list.
 
 ## Worked example: a pricing user in 4.0
 
