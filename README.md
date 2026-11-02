@@ -20,6 +20,8 @@ connectivity stack; see [docs/STABILITY.md](docs/STABILITY.md).
   library splits into two artifacts (stable tier and low-latency lane), `reporting`
   becomes `regreporting`, and everything 2.4.0 deprecated for removal is gone.
   [docs/MIGRATION_3.0.md](docs/MIGRATION_3.0.md) lists every change.
+- At 2.4.0 the full suite (`./mvnw verify -Pfull`) ran 1,893 tests (5 skipped that
+  need optional external files or network: ISDA grids, ESMA XSDs, GLEIF).
 - Version 2.4 is additive over 2.3 and changes no result by default. It deprecated
   for removal everything 3.0 takes out and added busts and corrections in
   `PaperTradingGateway`, the FRTB default risk charge for securitisations, the

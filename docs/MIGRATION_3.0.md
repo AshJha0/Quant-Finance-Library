@@ -383,6 +383,10 @@ Additions in the stable `risk` package need no migration: new methods on
 CRE41.9, CRE41.15 or the fund-haircut rule yourself before calling the 2.4
 methods, you can drop that code; results for the same inputs are the same.
 
+Behaviour changes in `regreporting.emir` and `regreporting.cat`: some reports that
+2.4 accepted are now rejected, and a few it rejected are accepted, because the checks
+now follow the published ESMA and CAT texts. CHANGELOG [3.0.0] lists them under Fixed.
+
 ## 12. How the breaks are checked
 
 `./mvnw -Papi-compat -DskipTests verify` compares the stable module with the
