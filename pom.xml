@@ -3,7 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.quantfinlib</groupId>
     <artifactId>quant-finance-library-parent</artifactId>
-    <version>3.0.0-SNAPSHOT</version>
+    <version>3.0.0</version>
     <packaging>pom</packaging>
     <name>Quant-Finance-Library (parent)</name>
     <description>Pure-JDK quantitative finance library: pricing, market risk, alpha research and backtesting, plus a reference low-latency trading lane.</description>
@@ -39,7 +39,7 @@
     </scm>
     <properties>
         <maven.compiler.release>25</maven.compiler.release>
-        <project.build.outputTimestamp>2026-11-02T14:39:10Z</project.build.outputTimestamp>
+        <project.build.outputTimestamp>2026-11-02T16:39:15Z</project.build.outputTimestamp>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <junit.version>6.1.3</junit.version>
         <jmh.version>1.37</jmh.version>
