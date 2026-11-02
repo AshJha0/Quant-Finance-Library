@@ -4663,7 +4663,7 @@ can this tag be published (release).
 ```mermaid
 flowchart TD
     subgraph PR22["every push and PR (ci.yml)"]
-        T22["tests, JDK 25<br/>+ committed stand-ins:<br/>IsdaGoldenSubsetTest, EsmaXsdGoldenTest"]
+        T22["tests, JDK 25 (3 OS) and JDK 21<br/>+ committed stand-ins:<br/>IsdaGoldenSubsetTest, EsmaXsdGoldenTest"]
         API22["api-compat (japicmp)<br/>vs the 3.0.0 jars, no allow-list"]
     end
     subgraph NIGHT22["nightly.yml"]

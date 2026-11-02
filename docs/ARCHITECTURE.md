@@ -276,8 +276,11 @@ unchanged.
 
 ## CI and release gates
 
-Every push and pull request runs `ci.yml` (tests on JDK 25 and the japicmp API
-check). Tests that need files we do not commit skip locally; PR CI runs the
+Every push and pull request runs `ci.yml`: tests on JDK 25 (Ubuntu, Windows,
+macOS) and JDK 21 (Ubuntu, a portability guard; released jars target 25), the
+japicmp API check, and a reproducible-build job (two clean builds, same jar
+hashes; `scripts/check-reproducible.sh`). Release builds add a CycloneDX SBOM
+(`-Psbom`). Tests that need files we do not commit skip locally; PR CI runs the
 committed stand-ins `IsdaGoldenSubsetTest` (48 invented CDS contracts) and
 `EsmaXsdGoldenTest` (SHA-256 of the validated documents).
 
