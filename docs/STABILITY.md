@@ -29,7 +29,12 @@ and `ExposureProfile`; in `risk`, `SaCcr`, `SaCcrTrade` and `FactorRiskModel`; i
 `AlphaRiskModels`, `AlphaCombiner`, `BacktestAttribution` and `CapacityCurve`; and
 `backtest.StrategyRunner`; the `stats` package (`Stats`); and in `core` the exception
 types `QuantFinException`, `WireProtocolException`, `MalformedDataException` and
-`ConfigurationException`. Which exception type a site throws is part of its documented
+`ConfigurationException`. Types added in 2.2 are stable on the same terms:
+`rates.HolidayCalendars`; in `credit`, `IsdaCdsModel.Conventions`,
+`MultiCurrencyExposureSimulator` and `CvaApproximator.Bilateral`; in `risk`,
+`SaCcrHaircuts`, `FrtbSa`, `FrtbDrc`, `FrtbRrao` and `FrtbNmrf`; in `data`,
+`CorporateEvents` and `CorporateEventPositions`; `StrategyRunner.Sizing`; and
+`core.MalformedFileException`. Which exception type a site throws is part of its documented
 behaviour; the message text is not.
 
 The jar is the named module `com.quantfinlib`, and it exports the reference packages
@@ -47,15 +52,18 @@ results computed by iterative solvers.
 These packages show how a low-latency trading lane is put together on the JVM, and
 they are tested. They are not a certified trading or connectivity stack: they have not
 been through venue certification, have not run against a production venue, and leave
-out parts a production system needs (entitlements, regulatory reporting, a
-drop-copy session, operational tooling).
+out parts a production system needs (a drop-copy session, regulator-grade order
+audit trails, operational tooling).
 
 | Package | What it is |
 |---|---|
-| `trading` | Risk gate, order gateway, order state machine, quoter, auto hedger, paper venue, sharding; from 2.1 `PositionLedger`, `DropCopyReconciler`, `LimitsConfig` and `LimitsManager` |
+| `trading` | Risk gate, order gateway, order state machine, quoter, auto hedger, paper venue, sharding; from 2.1 `PositionLedger`, `DropCopyReconciler`, `LimitsConfig` and `LimitsManager`; from 2.2 `FillListener` and `LedgerFillListener` |
 | `marketdata` | Ring buffers, market-data bus, ITCH 5.0 codec, L3 book builder, NBBO |
 | `orderbook` | Reference matching engine (`OrderBook`), price-ladder engine (`HftOrderBook`) and call auctions (`AuctionBook`, from 2.1) |
-| `fix` | FIX 4.4 session, journal store, garbage-free encoders and views; from 2.1 session schedules (`FixSessionSchedule`, `FixSessionOptions`) |
+| `fix` | FIX 4.4 session, journal store, garbage-free encoders and views; from 2.1 session schedules (`FixSessionSchedule`, `FixSessionOptions`); from 2.2 FIX 4.2 and 5.0 SP2 (`FixVersion`) and repeating groups (`FixDictionary`, `FixGroupDef`, `FixGroup`) |
+| `risk.simm` | ISDA SIMM calculator (2.2); structure checked against the public methodology, no official calibration shipped, so results depend on the calibration file you supply |
+| `entitlements` | Entitlement service and pre-trade check (2.2) |
+| `reporting` | MiFIR RTS 22 transaction report builder and identifier checks (2.2); not validated against the ESMA schema |
 | `sbe` | SBE-style binary codecs (schema 2) and channel adapters |
 | `feed` | WebSocket feed, MoldUDP64 receiver |
 | `data` tick files | `TickFileWriter`, `TickFileReader`, `TickCapture`, `AsyncTickCapture` |
@@ -68,7 +76,7 @@ keeps reading the previous version, and is listed under "Changed" in the changel
 
 ## How compatibility is checked
 
-Compatibility is checked by japicmp against the released 2.0.0 jar
+Compatibility is checked by japicmp against the released 2.1.0 jar
 (`./mvnw -Papi-compat -DskipTests verify` after `scripts/fetch-api-baseline.sh`; the
 CI job is `API compatibility`). The stable packages fail the build on any
 binary-incompatible change. The reference packages are compared and reported in

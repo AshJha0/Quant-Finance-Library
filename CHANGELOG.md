@@ -6,6 +6,50 @@ Entries for 1.x releases are archived in [docs/history/CHANGELOG-1.x.md](docs/hi
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-11-02
+
+Minor release. No 2.1 public signature is removed or changed, and the API-compatibility check now runs against 2.1.0. Two defaults change (`StrategyRunner` sizing, and one record gains a component); [docs/MIGRATION_2.2.md](docs/MIGRATION_2.2.md) says how to keep 2.1 behaviour.
+
+### Added
+
+- `rates.HolidayCalendars`: rule-based holiday calendars for the New York Fed, London, TARGET and Tokyo, with `easterSunday`.
+- `credit.IsdaCdsModel.Conventions`: business calendar and the half-day accrual-on-default adjustment as options, with overloads that take them. Checked against the official ISDA CDS Standard Model RFR test grids (USD SOFR, 2021-04-26 and 2022-06-21, 14,328 rows): cash settlement within 1e-6 USD per 10mm notional, clean upfront within 1e-13 (own test; runs only when `QFL_ISDA_GRID_DIR` points at grids converted by `scripts/isda-grid-to-csv.py`, as the grids are not redistributable).
+- `credit.MultiCurrencyExposureSimulator`: multi-curve swaps with a fixed basis, several FX pairs with correlated Hull-White foreign rates and the quanto drift, and a per-pair wrong-way FX driver. `Market.fromLegacy` reproduces the 2.1 simulator.
+- `CvaApproximator.bilateral` and `Bilateral`: first-to-default CVA and DVA with independent defaults and a flat hazard per bucket.
+- `risk.SaCcr`: basis and volatility hedging sets (`SaCcrTrade.asBasis`, `asVolatility`, `SaCcr.HedgingSetType`), `oneMarginAgreementManyNettingSets`, `subNettingSets` and `SubNettingSet`. `risk.SaCcrHaircuts`: Basel II paragraph 151 supervisory haircuts with square-root-of-time scaling and the 8% currency-mismatch haircut.
+- `risk.FrtbSa` (sensitivities-based method: delta, vega and curvature under three correlation scenarios), `FrtbDrc` (non-securitisation default risk charge), `FrtbRrao` (residual risk add-on) and `FrtbNmrf` (MAR33 stress scenario capital). Styled after BCBS d457 and not certified; inputs left to the caller are marked in the javadoc.
+- `risk.simm`: `SimmCalculator`, loadable `SimmParameters`, `CrifSensitivity` CSV reader, `calculateWithAddOns`. Its structure is checked against the public ISDA SIMM methodology (v2.9+2606 formulas). Only an illustrative calibration ships; the official calibration and the ISDA unit tests are licensed by ISDA. See [docs/SIMM.md](docs/SIMM.md).
+- `fix`: `FixVersion` (FIX 4.2, 4.4, 5.0 SP2 over FIXT.1.1) selected by `FixSessionOptions.withVersion`, `FixDictionary`, `FixGroupDef`, `FixGroup`, `FixMessage.Builder.group` and repeating-group validation on receipt (session reject reasons 15 and 16).
+- `com.quantfinlib.entitlements`: `EntitlementService` (default deny, deny overrides allow, user, desk and role grants with validity windows, audit log), `EntitlementPreTradeCheck`.
+- `com.quantfinlib.reporting`: `Rts22ReportBuilder` and `Rts22TransactionReport` (MiFIR RTS 22 fields, CSV and XML for inspection), `ReportingIdentifiers` (LEI, ISIN, MIC checks), regime-neutral `TransactionReport` and `TransactionReportSink`.
+- `data.CorporateEvents` (bonus issues, reverse splits, regular and special dividends with a policy, spin-offs, rights and TERP, symbol and ISIN changes, cash-and-stock mergers) and `data.CorporateEventPositions`; an opt-in `PortfolioBacktester.run` overload that applies them.
+- `StrategyRunner.Sizing` (`wholeShares`, `lots`, `fractionalShares`) and a `run` overload that takes it; `Backtester.runWholeLots`.
+- `trading.FillListener`, `HftOrderGateway.addFillListener`, `fillListenerErrorCount`, an `onFill` overload carrying the venue execution id, and `LedgerFillListener` (with `forPaper` for the paper gateway).
+- `core.MalformedFileException` (an `IOException` that implements `QuantFinException`) for bad magic numbers or versions in tick files, checkpoints, FIX journals and scorecard state.
+
+### Changed
+
+- `StrategyRunner.run` without a `Sizing` now trades whole shares on all three engines, so they agree fill for fill. Pass `Sizing.fractionalShares()` for the 2.1 bar engine.
+- `FixSessionOptions` has a third record component, `version`. The two-argument constructor remains and binary compatibility holds; record deconstruction patterns need the extra component.
+- SIMM equity, commodity and FX vega amounts are read as raw dV/dsigma, and the calculator applies the volatility weighting. Set `RC.vega.amountIsVolWeighted = 1` in the calibration when the CRIF already holds vol-weighted amounts.
+- Format faults in tick files, checkpoints, FIX journals and scorecard state throw `MalformedFileException` instead of a plain `IOException`; existing `catch (IOException)` blocks still catch them.
+- The API-compatibility baseline is 2.1.0.
+
+### Fixed
+
+- `FrtbSa` records copy their arrays defensively; `SaCcr` compares supervisory factors and correlations with `Double.compare` when checking a hedging set for consistency.
+- `LedgerFillListener.rejectedCount` is an atomic counter (it is updated from the gateway thread), and `StrategyRunner` passes the lot size to `runWholeLots` with an explicit cast.
+
+### Tests and quality
+
+- 1,745 tests in the full suite. PIT mutation score for `volatility` rose from 63% to 82% and for `risk` from 74% to 80%. The Heston COS test pins a 40-digit reference value at 1e-10. Haug's table values are reproduced by independent computation (53 cells).
+
+### Docs
+
+- New [docs/MIGRATION_2.2.md](docs/MIGRATION_2.2.md) and [docs/SIMM.md](docs/SIMM.md); COOKBOOK recipes 333 to 342; LEARN, ARCHITECTURE, DIAGRAMS, MARKET_RISK and STABILITY updated for the new packages.
+- LEARN Part IV: stacked-colon sentences rewritten; a garbled passage in the iceberg answer repaired.
+- The API docs on GitHub Pages are built from the newest release tag.
+
 ## [2.1.0] - 2026-11-02
 
 Minor release. Everything is additive: code written for 2.0 compiles and behaves the same, apart from the notes in [docs/MIGRATION_2.1.md](docs/MIGRATION_2.1.md). An API-compatibility check against 2.0.0 now runs in CI.
@@ -415,6 +459,7 @@ Major release. It corrects several pricing, risk and backtesting results, makes 
 - `sbe.MessageHeader`, `sbe.Decimal64`.
 - `TickFileReader.info` (version, clock domain, anchor) and `FileInfo.toEpochNanos`.
 
-[Unreleased]: https://github.com/AshJha0/Quant-Finance-Library/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/AshJha0/Quant-Finance-Library/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/AshJha0/Quant-Finance-Library/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/AshJha0/Quant-Finance-Library/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/AshJha0/Quant-Finance-Library/compare/v1.17.0...v2.0.0

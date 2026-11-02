@@ -238,6 +238,78 @@ public final class CvaApproximator {
         return MathUtils.normCdf((threshold + shift) / scale);
     }
 
+    /**
+     * Bilateral CVA and DVA with first-to-default conditioning.
+     *
+     * @param cva counterparty-default loss, charged only if the bank has not defaulted first
+     * @param dva own-default benefit, counted only if the counterparty has not defaulted first
+     */
+    public record Bilateral(double cva, double dva) {
+        /**
+         * Bilateral adjustment, a charge when positive.
+         *
+         * @return {@code cva - dva}
+         */
+        public double total() {
+            return cva - dva;
+        }
+    }
+
+    /**
+     * Bilateral CVA/DVA from a simulated profile with first-to-default
+     * (Brigo and Capponi, "Bilateral counterparty risk with application to
+     * CDSs", 2008; Gregory, The xVA Challenge, 3rd ed., 2015, ch. 14).
+     *
+     * <p>Plain idea: a counterparty default only costs the bank if the bank
+     * is still alive, and an own default only helps if the counterparty is
+     * still alive. Formal statement, with the two defaults independent of
+     * each other and of the exposure, and each hazard taken flat inside every
+     * profile bucket (so the bucket integral is exact for curves whose
+     * hazard is piecewise flat on the bucket grid):</p>
+     *
+     * <pre>
+     *   CVA = LGD_c sum_i DEE_i  * Lc_i / (Lc_i + Lo_i) * (S(t_{i-1}) - S(t_i))
+     *   DVA = LGD_o sum_i DENE_i * Lo_i / (Lc_i + Lo_i) * (S(t_{i-1}) - S(t_i))
+     *   S(t) = Q_c(t) Q_o(t),  L_i = ln(Q(t_{i-1}) / Q(t_i))
+     * </pre>
+     *
+     * <p>Worked example: flat hazards 2 % and 1 %, one bucket (0, 5] with
+     * DEE = 10: CVA = 0.6 * 10 * 2/3 * (1 - e^{-0.15}) = 0.557, against the
+     * unilateral 0.6 * 10 * (1 - e^{-0.1}) = 0.571 (own arithmetic). As the
+     * own hazard goes to zero the CVA leg tends to the unilateral
+     * {@link #cva(ExposureProfile, CreditCurve, double)} (tested). Wrong-way
+     * risk is not combined with this method.</p>
+     *
+     * @param profile      simulated exposure
+     * @param counterparty counterparty credit curve
+     * @param lgd          counterparty LGD in (0, 1]
+     * @param own          the bank's own credit curve
+     * @param ownLgd       own LGD in (0, 1]
+     * @return both legs
+     */
+    public static Bilateral bilateral(ExposureProfile profile, CreditCurve counterparty, double lgd,
+                                      CreditCurve own, double ownLgd) {
+        Objects.requireNonNull(profile, "profile");
+        Objects.requireNonNull(counterparty, "counterparty");
+        Objects.requireNonNull(own, "own");
+        checkLgd(lgd);
+        checkLgd(ownLgd);
+        double c = 0, d = 0, qc0 = 1, qo0 = 1;
+        for (int i = 0; i < profile.timesLength(); i++) {
+            double t = profile.time(i);
+            double qc = counterparty.survivalProbability(t), qo = own.survivalProbability(t);
+            double lc = Math.log(qc0 / qc), lo = Math.log(qo0 / qo);
+            double ds = qc0 * qo0 - qc * qo;
+            if (lc + lo > 0) {
+                c += profile.discountedExpectedExposure(i) * lc / (lc + lo) * ds;
+                d += profile.discountedExpectedNegativeExposure(i) * lo / (lc + lo) * ds;
+            }
+            qc0 = qc;
+            qo0 = qo;
+        }
+        return new Bilateral(lgd * c, ownLgd * d);
+    }
+
     private static void checkLgd(double lgd) {
         if (!(lgd > 0) || !(lgd <= 1)) {
             throw new IllegalArgumentException("lgd must be in (0, 1], got " + lgd);

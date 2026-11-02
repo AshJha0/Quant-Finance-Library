@@ -1,5 +1,8 @@
 /**
- * Zero-dependency FIX 4.4 engine.
+ * Zero-dependency FIX engine: FIX 4.4 by default, FIX 4.2 and FIX 5.0 SP2
+ * over FIXT.1.1 through {@link com.quantfinlib.fix.FixVersion}, with
+ * repeating groups defined and validated by
+ * {@link com.quantfinlib.fix.FixDictionary}.
  * {@link com.quantfinlib.fix.FixMessage} (validated codec: BodyLength and
  * CheckSum framing, length-prefixed data fields, repeated tags kept in order)
  * and {@link com.quantfinlib.fix.FixSession} (initiator and acceptor): Logon

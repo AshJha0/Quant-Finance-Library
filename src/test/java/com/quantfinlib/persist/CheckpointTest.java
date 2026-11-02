@@ -291,7 +291,7 @@ class CheckpointTest {
             w.section("volume", four::writeState);
         }
         VolumeCurve five = new VolumeCurve(5, 0.5);
-        assertThrows(IOException.class,
+        assertThrows(com.quantfinlib.core.MalformedFileException.class,
                 () -> Checkpoint.reader(file).section("volume", five::readState));
     }
 

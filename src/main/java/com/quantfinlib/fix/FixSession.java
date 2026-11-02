@@ -298,6 +298,8 @@ public final class FixSession implements AutoCloseable {
     private final FixSessionSchedule schedule;    // null: always open, never rolls
     private final boolean useNextExpected;
     private long ourLogonSeq = -1;                // guarded by writeLock
+    private final FixVersion version;
+    private volatile String peerDefaultApplVerId;
     private volatile long pendingLogonSeq;        // peer Logon number consumed after its 789 replay
 
     private FixSession(Socket socket, OutputStream out, Config config, Listener listener,
@@ -330,6 +332,7 @@ public final class FixSession implements AutoCloseable {
         // store rolls so the abandoned history cannot be replayed.
         this.schedule = options.schedule();
         this.useNextExpected = options.nextExpectedMsgSeqNum();
+        this.version = options.version();
         this.sentResetLogon = !acceptor && config.resetOnLogon();
         if (sentResetLogon) {
             store.reset();
@@ -354,6 +357,16 @@ public final class FixSession implements AutoCloseable {
             this.readerThread = null;
             this.heartbeatThread = null;
         }
+    }
+
+    /** Protocol version this session speaks (FIX 4.4 unless set in {@link FixSessionOptions}). */
+    public FixVersion version() {
+        return version;
+    }
+
+    /** DefaultApplVerID(1137) the peer sent on a FIXT.1.1 Logon, or null before logon or pre-FIXT. */
+    public String peerDefaultApplVerId() {
+        return peerDefaultApplVerId;
     }
 
     /** Connects, sends Logon, and blocks until the handshake completes. */
@@ -493,6 +506,9 @@ public final class FixSession implements AutoCloseable {
         FixMessage.Builder logon = FixMessage.builder(FixMessage.LOGON)
                 .field(FixMessage.ENCRYPT_METHOD, "0")
                 .field(FixMessage.HEART_BT_INT, config.heartbeatSeconds());
+        if (version.isFixt()) {
+            logon.field(FixVersion.DEFAULT_APPL_VER_ID, version.applVerId());
+        }
         if (config.resetOnLogon()) {
             logon.field(FixMessage.RESET_SEQ_NUM_FLAG, "Y");
         }
@@ -562,7 +578,11 @@ public final class FixSession implements AutoCloseable {
     /** Venue side: sends an execution report for a received order. */
     public void sendExecutionReport(ExecutionReport report) {
         requireEstablished();
-        send(report.toBuilder().field(FixMessage.TRANSACT_TIME, utcNow()));
+        FixMessage.Builder b = report.toBuilder().field(FixMessage.TRANSACT_TIME, utcNow());
+        if (version.requiresExecTransType()) {
+            b.field(FixVersion.EXEC_TRANS_TYPE, '0');   // FIX 4.2: ExecTransType New
+        }
+        send(b);
     }
 
     /** Sends an OrderCancelRequest (35=F) for a working order. */
@@ -722,8 +742,8 @@ public final class FixSession implements AutoCloseable {
                     long seq = outgoingSeq++;
                     store.recordSent(seq, new FixSessionStore.StoredMessage(
                             b.msgType(), b.body(), sendingTime), !ADMIN_TYPES.contains(b.msgType()));
-                    frames[i] = b.encode(config.senderCompId(), config.targetCompId(), seq,
-                            sendingTime);
+                    frames[i] = b.encode(version, config.senderCompId(), config.targetCompId(),
+                            seq, sendingTime, false, null);
                 }
                 store.sync();   // durable before the peer can see the sequence numbers
                 for (byte[] frame : frames) {
@@ -741,8 +761,8 @@ public final class FixSession implements AutoCloseable {
     private void writeReplay(FixMessage.Builder builder, long seqNum, String origSendingTime)
             throws IOException {
         synchronized (writeLock) {
-            out.write(builder.encode(config.senderCompId(), config.targetCompId(), seqNum,
-                    utcNow(), true, origSendingTime));
+            out.write(builder.encode(version, config.senderCompId(), config.targetCompId(),
+                    seqNum, utcNow(), true, origSendingTime));
             out.flush();
             lastSentNanos = clock.nanoTime();
         }
@@ -839,6 +859,12 @@ public final class FixSession implements AutoCloseable {
         long seq = parsePositive(m.getString(FixMessage.MSG_SEQ_NUM, null));
         if (seq < 1) {
             logoutAndDisconnect("MsgSeqNum(34) missing or invalid");
+            return;
+        }
+        if (!version.beginString().equals(m.beginString())) {
+            // FIX session rules: a wrong BeginString ends the session.
+            logoutAndDisconnect("BeginString " + m.beginString() + " does not match session "
+                    + version.beginString());
             return;
         }
         if (!established) {
@@ -964,6 +990,19 @@ public final class FixSession implements AutoCloseable {
                     + " 56=" + m.getString(FixMessage.TARGET_COMP_ID, ""));
             return;
         }
+        if (version.isFixt()) {
+            String applVer = m.getString(FixVersion.DEFAULT_APPL_VER_ID, null);
+            if (applVer == null) {
+                refuseLogon("DefaultApplVerID(1137) required on a FIXT.1.1 Logon");
+                return;
+            }
+            if (!applVer.equals(version.applVerId())) {
+                refuseLogon("DefaultApplVerID(1137)=" + applVer + " not supported, expected "
+                        + version.applVerId());
+                return;
+            }
+            peerDefaultApplVerId = applVer;
+        }
         if (schedule != null && acceptor) {
             long now = clock.currentTimeMillis();
             if (!schedule.isInSession(now)) {
@@ -1039,6 +1078,9 @@ public final class FixSession implements AutoCloseable {
             FixMessage.Builder reply = FixMessage.builder(FixMessage.LOGON)
                     .field(FixMessage.ENCRYPT_METHOD, "0")
                     .field(FixMessage.HEART_BT_INT, heartbeatNanos / 1_000_000_000L);
+            if (version.isFixt()) {
+                reply.field(FixVersion.DEFAULT_APPL_VER_ID, version.applVerId());
+            }
             if (reset) {
                 reply.field(FixMessage.RESET_SEQ_NUM_FLAG, "Y");
             }

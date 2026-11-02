@@ -404,7 +404,7 @@ public final class FileSessionStore implements FixSessionStore, AutoCloseable {
         }
         readFully(journal, header, 0);
         if (header.getLong(0) != JOURNAL_MAGIC) {
-            throw new IOException(journalPath + " is not a FIX journal");
+            throw new com.quantfinlib.core.MalformedFileException(journalPath + " is not a FIX journal");
         }
         baseSeq = header.getLong(8);
         lastSeq = baseSeq - 1;

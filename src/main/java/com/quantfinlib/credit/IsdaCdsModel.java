@@ -1,5 +1,6 @@
 package com.quantfinlib.credit;
 
+import com.quantfinlib.rates.BusinessCalendar;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
@@ -32,8 +33,10 @@ import java.util.Objects;
  *   following; the last accrual period ends on maturity + 1 day (the
  *   maturity date itself is protected and accrues) and pays on the
  *   adjusted maturity. Accrual is ACT/360.</li>
- *   <li>Business days are Monday to Friday. Holidays are not applied:
- *   pass an adjusted date where a holiday matters.</li>
+ *   <li>Business days are Monday to Friday by default (the 2.1
+ *   behaviour). Pass {@link Conventions} with a holiday calendar (for
+ *   example {@code HolidayCalendars.calendar(Market.NEW_YORK_FED, ...)})
+ *   to adjust accrual, payment and settlement dates for holidays too.</li>
  * </ul>
  *
  * <p>Model (all times ACT/365F from the trade date, curves as
@@ -67,13 +70,33 @@ import java.util.Objects;
  * with recovery 40% for standard contracts and fixed coupon 100bp or
  * 500bp.</p>
  *
- * <p>Known gaps against the C library: the "half-day" accrual-on-default
- * adjustment some vendors apply is not included, and the published
- * Markit test grid is not reproduced in the tests (it could not be
- * verified offline); the tests instead pin the closed-form segment
- * integrals against independent Gauss-Legendre quadrature to 1e-10
- * and the conventions against hand-built schedules. Research lane,
- * deterministic.</p>
+ * <p>Half-day accrual on default (optional, {@link Conventions#halfDayAccrual}):
+ * the plain idea is that a default can happen at any time during the
+ * default day, on average at mid-day, and the protection seller is owed
+ * the coupon accrued up to that moment, which the integral above,
+ * counting from the start of the accrual day, sets half a day short.
+ * With the option on, the accrued at default becomes
+ * {@code a (t - tS + 1/730)}, adding {@code a / 730 * integral h Q P dt}
+ * per period (O'Kane 2008, sec. 6.6; R. White, "The Pricing and Risk
+ * Management of Credit Default Swaps, with a Focus on the ISDA Model",
+ * OpenGamma 2013, on the accrual-on-default term). Off by default, which
+ * keeps the 2.1 numbers. The ISDA Standard Model itself includes the
+ * half-day term: the official RFR test grids below match only with it on.</p>
+ *
+ * <p>Verification against the official ISDA CDS Standard Model RFR test
+ * grids (cdsmodel.com, USD SOFR 2021-04-26 and 2022-06-21, 7164 rows
+ * each; published reference): with half-day accrual on, a weekends-only
+ * calendar for the 2021 grid and the New York calendar for the 2022 grid,
+ * cash settlement amounts agree within 1e-6 USD on 10mm notional and
+ * clean upfronts within 1e-13. With half-day accrual off the clean
+ * upfront is off by up to 4.6e-5 (about 460 USD on 10mm). The grids are
+ * copyright and not in the repository; {@code IsdaGridVerificationTest}
+ * runs when {@code QFL_ISDA_GRID_DIR} points at CSVs made by
+ * {@code scripts/isda-grid-to-csv.py}, and the swap-curve bootstrap it
+ * needs lives in that test. The in-repo tests also pin the closed-form
+ * segment integrals against Gauss-Legendre quadrature to 1e-10 and the
+ * holiday and half-day variants against an independent re-implementation.
+ * Research lane, deterministic.</p>
  */
 public final class IsdaCdsModel {
 
@@ -87,6 +110,45 @@ public final class IsdaCdsModel {
     private static final double SMALL = 1e-6;
 
     private IsdaCdsModel() {
+    }
+
+    /**
+     * Model conventions beyond the contract terms.
+     *
+     * @param calendar       business-day calendar for accrual, payment and
+     *                       settlement adjustment
+     * @param halfDayAccrual add half a day of accrued coupon at default
+     *                       (mid-day default convention)
+     */
+    public record Conventions(BusinessCalendar calendar, boolean halfDayAccrual) {
+        /** The 2.1 behaviour: weekends only, no half-day adjustment. */
+        public static final Conventions DEFAULT =
+                new Conventions(BusinessCalendar.weekendsOnly(), false);
+
+        /** Validates the calendar. */
+        public Conventions {
+            Objects.requireNonNull(calendar, "calendar");
+        }
+
+        /**
+         * Conventions with a holiday calendar and no half-day adjustment.
+         *
+         * @param calendar the calendar
+         * @return the conventions
+         */
+        public static Conventions of(BusinessCalendar calendar) {
+            return new Conventions(calendar, false);
+        }
+
+        /**
+         * The same calendar with the half-day option set.
+         *
+         * @param on whether to apply the half-day adjustment
+         * @return new conventions
+         */
+        public Conventions withHalfDayAccrual(boolean on) {
+            return new Conventions(calendar, on);
+        }
     }
 
     /**
@@ -150,9 +212,31 @@ public final class IsdaCdsModel {
         if (tenorYears < 1 || tenorYears > 30) {
             throw new IllegalArgumentException("tenorYears must be in [1, 30], got " + tenorYears);
         }
+        return standardContract(tradeDate, tenorYears, coupon, recovery, BusinessCalendar.weekendsOnly());
+    }
+
+    /**
+     * A standard contract with settlement and accrual start adjusted on a
+     * holiday calendar.
+     *
+     * @param tradeDate  trade date
+     * @param tenorYears tenor in years, 1 to 30
+     * @param coupon     fixed coupon
+     * @param recovery   recovery rate
+     * @param calendar   business-day calendar
+     * @return the contract
+     */
+    public static Contract standardContract(LocalDate tradeDate, int tenorYears, double coupon,
+                                            double recovery, BusinessCalendar calendar) {
+        Objects.requireNonNull(tradeDate, "tradeDate");
+        Objects.requireNonNull(calendar, "calendar");
+        if (tenorYears < 1 || tenorYears > 30) {
+            throw new IllegalArgumentException("tenorYears must be in [1, 30], got " + tenorYears);
+        }
         LocalDate stepIn = tradeDate.plusDays(1);
-        return new Contract(tradeDate, stepIn, addBusinessDays(tradeDate, 3),
-                accrualStartDate(stepIn), standardMaturity(tradeDate, tenorYears), coupon, recovery);
+        return new Contract(tradeDate, stepIn, calendar.addBusinessDays(tradeDate, 3),
+                accrualStartDate(stepIn, calendar), standardMaturity(tradeDate, tenorYears),
+                coupon, recovery);
     }
 
     /**
@@ -214,10 +298,22 @@ public final class IsdaCdsModel {
      * @return adjusted accrual start
      */
     public static LocalDate accrualStartDate(LocalDate stepInDate) {
+        return accrualStartDate(stepInDate, BusinessCalendar.weekendsOnly());
+    }
+
+    /**
+     * Accrual start on a holiday calendar: the last IMM date, adjusted
+     * following on {@code calendar}, on or before the step-in date.
+     *
+     * @param stepInDate step-in date
+     * @param calendar   business-day calendar
+     * @return adjusted accrual start
+     */
+    public static LocalDate accrualStartDate(LocalDate stepInDate, BusinessCalendar calendar) {
         LocalDate imm = previousImmDate(stepInDate);
-        LocalDate adj = adjustFollowing(imm);
+        LocalDate adj = calendar.roll(imm, BusinessCalendar.Roll.FOLLOWING);
         if (adj.isAfter(stepInDate)) {
-            adj = adjustFollowing(previousImmDate(imm.minusDays(1)));
+            adj = calendar.roll(previousImmDate(imm.minusDays(1)), BusinessCalendar.Roll.FOLLOWING);
         }
         return adj;
     }
@@ -268,6 +364,19 @@ public final class IsdaCdsModel {
      * @return the periods in order
      */
     public static List<Period> schedule(Contract c) {
+        return schedule(c, BusinessCalendar.weekendsOnly());
+    }
+
+    /**
+     * The coupon schedule with accrual and payment dates adjusted
+     * following on a holiday calendar.
+     *
+     * @param c        the contract
+     * @param calendar business-day calendar
+     * @return the periods in order
+     */
+    public static List<Period> schedule(Contract c, BusinessCalendar calendar) {
+        Objects.requireNonNull(calendar, "calendar");
         List<LocalDate> raw = new ArrayList<>();
         LocalDate d = c.maturityDate();
         // Roll back from maturity in 3-month steps to the accrual start.
@@ -280,8 +389,8 @@ public final class IsdaCdsModel {
         LocalDate prev = start;
         for (int i = 0; i < raw.size(); i++) {
             boolean last = i == raw.size() - 1;
-            LocalDate end = last ? c.maturityDate().plusDays(1) : adjustFollowing(raw.get(i));
-            LocalDate pay = adjustFollowing(raw.get(i));
+            LocalDate pay = calendar.roll(raw.get(i), BusinessCalendar.Roll.FOLLOWING);
+            LocalDate end = last ? c.maturityDate().plusDays(1) : pay;
             if (!end.isAfter(prev)) {
                 continue;
             }
@@ -330,9 +439,26 @@ public final class IsdaCdsModel {
      * @return dirty RPV01 in years
      */
     public static double riskyAnnuityDirty(Contract c, IsdaCurve discount, IsdaCurve survival) {
+        return riskyAnnuityDirty(c, discount, survival, Conventions.DEFAULT);
+    }
+
+    /**
+     * Dirty risky annuity under explicit conventions (holiday calendar,
+     * half-day accrual on default).
+     *
+     * @param c           the contract
+     * @param discount    discount curve
+     * @param survival    survival curve
+     * @param conventions model conventions
+     * @return dirty RPV01 in years
+     */
+    public static double riskyAnnuityDirty(Contract c, IsdaCurve discount, IsdaCurve survival,
+                                           Conventions conventions) {
+        Objects.requireNonNull(conventions, "conventions");
+        double halfDay = conventions.halfDayAccrual() ? 0.5 / 365.0 : 0.0;
         LocalDate today = c.tradeDate();
         double sum = 0;
-        for (Period p : schedule(c)) {
+        for (Period p : schedule(c, conventions.calendar())) {
             if (!p.accrualEnd().isAfter(c.stepInDate())) {
                 continue;
             }
@@ -346,7 +472,7 @@ public final class IsdaCdsModel {
             for (int i = 1; i < grid.length; i++) {
                 Seg s = segment(discount, survival, grid[i - 1], grid[i]);
                 sum += a * s.lambda * s.q0p0
-                        * ((grid[i - 1] - tS) * e1(s.k, s.dt) + e2(s.k, s.dt));
+                        * ((grid[i - 1] - tS + halfDay) * e1(s.k, s.dt) + e2(s.k, s.dt));
             }
         }
         return sum / discount.value(years(today, c.cashSettleDate()));
@@ -364,24 +490,49 @@ public final class IsdaCdsModel {
 
     /** Clean risky annuity: dirty minus the accrued fraction. */
     public static double riskyAnnuityClean(Contract c, IsdaCurve discount, IsdaCurve survival) {
-        return riskyAnnuityDirty(c, discount, survival) - accruedYearFraction(c);
+        return riskyAnnuityClean(c, discount, survival, Conventions.DEFAULT);
+    }
+
+    /** Clean risky annuity under explicit conventions. */
+    public static double riskyAnnuityClean(Contract c, IsdaCurve discount, IsdaCurve survival,
+                                           Conventions conventions) {
+        return riskyAnnuityDirty(c, discount, survival, conventions) - accruedYearFraction(c);
     }
 
     /** Par spread: protection over clean risky annuity. */
     public static double parSpread(Contract c, IsdaCurve discount, IsdaCurve survival) {
-        return protectionLeg(c, discount, survival) / riskyAnnuityClean(c, discount, survival);
+        return parSpread(c, discount, survival, Conventions.DEFAULT);
+    }
+
+    /** Par spread under explicit conventions. */
+    public static double parSpread(Contract c, IsdaCurve discount, IsdaCurve survival,
+                                   Conventions conventions) {
+        return protectionLeg(c, discount, survival)
+                / riskyAnnuityClean(c, discount, survival, conventions);
     }
 
     /** Points upfront per unit notional paid by the protection buyer (clean). */
     public static double cleanUpfront(Contract c, IsdaCurve discount, IsdaCurve survival) {
+        return cleanUpfront(c, discount, survival, Conventions.DEFAULT);
+    }
+
+    /** Clean points upfront under explicit conventions. */
+    public static double cleanUpfront(Contract c, IsdaCurve discount, IsdaCurve survival,
+                                      Conventions conventions) {
         return protectionLeg(c, discount, survival)
-                - c.coupon() * riskyAnnuityClean(c, discount, survival);
+                - c.coupon() * riskyAnnuityClean(c, discount, survival, conventions);
     }
 
     /** Cash settlement amount per unit notional paid by the buyer (dirty). */
     public static double dirtyUpfront(Contract c, IsdaCurve discount, IsdaCurve survival) {
+        return dirtyUpfront(c, discount, survival, Conventions.DEFAULT);
+    }
+
+    /** Dirty upfront under explicit conventions. */
+    public static double dirtyUpfront(Contract c, IsdaCurve discount, IsdaCurve survival,
+                                      Conventions conventions) {
         return protectionLeg(c, discount, survival)
-                - c.coupon() * riskyAnnuityDirty(c, discount, survival);
+                - c.coupon() * riskyAnnuityDirty(c, discount, survival, conventions);
     }
 
     /**
@@ -395,8 +546,14 @@ public final class IsdaCdsModel {
      * @return clean upfront per unit notional
      */
     public static double quotedSpreadToUpfront(Contract c, double quotedSpread, IsdaCurve discount) {
-        double h = flatHazardForParSpread(c, quotedSpread, discount);
-        return cleanUpfront(c, discount, IsdaCurve.flat(h));
+        return quotedSpreadToUpfront(c, quotedSpread, discount, Conventions.DEFAULT);
+    }
+
+    /** Quoted spread to clean upfront under explicit conventions. */
+    public static double quotedSpreadToUpfront(Contract c, double quotedSpread, IsdaCurve discount,
+                                               Conventions conventions) {
+        double h = flatHazardForParSpread(c, quotedSpread, discount, conventions);
+        return cleanUpfront(c, discount, IsdaCurve.flat(h), conventions);
     }
 
     /**
@@ -409,12 +566,20 @@ public final class IsdaCdsModel {
      * @return the quoted spread, decimal
      */
     public static double upfrontToQuotedSpread(Contract c, double cleanUpfront, IsdaCurve discount) {
+        return upfrontToQuotedSpread(c, cleanUpfront, discount, Conventions.DEFAULT);
+    }
+
+    /** Clean upfront to quoted spread under explicit conventions. */
+    public static double upfrontToQuotedSpread(Contract c, double cleanUpfront, IsdaCurve discount,
+                                               Conventions conventions) {
+        Objects.requireNonNull(conventions, "conventions");
         if (!Double.isFinite(cleanUpfront)) {
             throw new IllegalArgumentException("upfront must be finite, got " + cleanUpfront);
         }
-        double h = solveFlatHazard(x -> cleanUpfront(c, discount, IsdaCurve.flat(x)) - cleanUpfront,
+        double h = solveFlatHazard(
+                x -> cleanUpfront(c, discount, IsdaCurve.flat(x), conventions) - cleanUpfront,
                 "upfront " + cleanUpfront);
-        return parSpread(c, discount, IsdaCurve.flat(h));
+        return parSpread(c, discount, IsdaCurve.flat(h), conventions);
     }
 
     /**
@@ -426,11 +591,18 @@ public final class IsdaCdsModel {
      * @return the hazard per year
      */
     public static double flatHazardForParSpread(Contract c, double parSpread, IsdaCurve discount) {
+        return flatHazardForParSpread(c, parSpread, discount, Conventions.DEFAULT);
+    }
+
+    /** Flat hazard for a par spread under explicit conventions. */
+    public static double flatHazardForParSpread(Contract c, double parSpread, IsdaCurve discount,
+                                                Conventions conventions) {
+        Objects.requireNonNull(conventions, "conventions");
         if (!(parSpread > 0) || parSpread == Double.POSITIVE_INFINITY) {
             throw new IllegalArgumentException("spread must be positive and finite, got " + parSpread);
         }
         Contract atPar = c.withCoupon(parSpread);
-        return solveFlatHazard(x -> cleanUpfront(atPar, discount, IsdaCurve.flat(x)),
+        return solveFlatHazard(x -> cleanUpfront(atPar, discount, IsdaCurve.flat(x), conventions),
                 "spread " + parSpread);
     }
 
@@ -447,6 +619,24 @@ public final class IsdaCdsModel {
      */
     public static IsdaCurve bootstrap(LocalDate tradeDate, int[] tenorYears, double[] parSpreads,
                                       double recovery, IsdaCurve discount) {
+        return bootstrap(tradeDate, tenorYears, parSpreads, recovery, discount, Conventions.DEFAULT);
+    }
+
+    /**
+     * Bootstraps under explicit conventions; the standard contracts are
+     * built on the conventions' calendar.
+     *
+     * @param tradeDate   trade date
+     * @param tenorYears  ascending tenors in years
+     * @param parSpreads  par spreads, decimal, &gt; 0
+     * @param recovery    recovery rate
+     * @param discount    discount curve
+     * @param conventions model conventions
+     * @return the survival curve
+     */
+    public static IsdaCurve bootstrap(LocalDate tradeDate, int[] tenorYears, double[] parSpreads,
+                                      double recovery, IsdaCurve discount, Conventions conventions) {
+        Objects.requireNonNull(conventions, "conventions");
         int n = tenorYears.length;
         if (n == 0 || parSpreads.length != n) {
             throw new IllegalArgumentException("need aligned, non-empty tenors and spreads");
@@ -461,7 +651,8 @@ public final class IsdaCdsModel {
             if (!(parSpreads[i] > 0) || parSpreads[i] == Double.POSITIVE_INFINITY) {
                 throw new IllegalArgumentException("spread must be positive: " + parSpreads[i]);
             }
-            contracts[i] = standardContract(tradeDate, tenorYears[i], parSpreads[i], recovery);
+            contracts[i] = standardContract(tradeDate, tenorYears[i], parSpreads[i], recovery,
+                    conventions.calendar());
             times[i] = years(tradeDate, contracts[i].maturityDate());
         }
         for (int k = 0; k < n; k++) {
@@ -470,7 +661,7 @@ public final class IsdaCdsModel {
                 double[] t = Arrays.copyOf(times, kk + 1);
                 double[] h = Arrays.copyOf(hazards, kk + 1);
                 h[kk] = x;
-                return cleanUpfront(contracts[kk], discount, IsdaCurve.ofHazardRates(t, h));
+                return cleanUpfront(contracts[kk], discount, IsdaCurve.ofHazardRates(t, h), conventions);
             }, "tenor " + tenorYears[k] + "y spread " + parSpreads[k]);
         }
         return IsdaCurve.ofHazardRates(times, hazards);

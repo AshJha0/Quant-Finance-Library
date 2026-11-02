@@ -3476,8 +3476,10 @@ shape (KS below 0.09)? Failing usually means missing risk factors: the model
 prices with fewer factors than move the real book. Amber adds a capital
 surcharge; red kicks the desk to the standardized approach. Everything here
 follows BCBS MAR32/MAR33 and is pinned by hand-computed tests, but it is
-not a certified implementation. Not implemented: NMRF capital, desk
-approvals and the standardized-approach floor (see `docs/MARKET_RISK.md`).
+not a certified implementation. NMRF stress capital is in `FrtbNmrf` and the
+standardised approach in `FrtbSa` (recipe 336). Not implemented: desk approvals,
+the risk-factor eligibility test and the standardised-approach floor (see
+`docs/MARKET_RISK.md`).
 
 ## 98. Backtest your VaR like a regulator
 
@@ -9939,8 +9941,8 @@ System.out.println(c.maturityDate() + " upfront " + upfront);
 The contract carries the IMM-roll maturity (20 June or 20 December), step-in at
 T+1 and cash settlement at T+3 business days. The quoted spread converts through
 a flat hazard rate (`flatHazardForParSpread`), so a 300bp quote on a 100bp coupon
-gives a positive upfront paid by the protection buyer. Holidays are not applied:
-the calendar is weekends only.
+gives a positive upfront paid by the protection buyer. The default calendar is
+weekends only; recipe 333 passes a holiday calendar instead.
 
 ## 304. Bootstrap an ISDA hazard curve and read par spreads
 
@@ -10042,8 +10044,8 @@ double mf = SaCcr.maturityFactor(2, csa);   // 1.5 sqrt(10 / 250) = 0.3
 
 A margined netting set caps replacement cost at threshold plus minimum transfer
 amount less net independent collateral, and scales the add-on by the margined
-maturity factor. Basis and volatility hedging sets, several margin agreements on
-one netting set and collateral haircuts are not implemented.
+maturity factor. Basis and volatility hedging sets, several netting sets under
+one margin agreement and collateral haircuts are in recipe 335.
 
 ## 309. Fit an SVI slice and check it for butterfly arbitrage
 
@@ -10314,10 +10316,11 @@ boolean same = tick.fills().equals(paper.fills());
 
 The runner writes the bars as a tick tape and replays one `TradingStrategy`
 through the bar backtester, the tick backtester and the paper gateway under one
-contract: close fills, no costs, all-in long only. Tick and paper trade whole
-shares, so they always agree with each other, and they agree with the bar engine
-whenever cash divided by price is a whole number. A difference therefore points
-at an engine, not at the strategy.
+contract: close fills, no costs, all-in long only. From 2.2 all three trade whole
+shares by default, so they agree fill for fill. `Sizing.fractionalShares()` gives
+the 2.1 bar engine back, which matches the other two only when cash divided by
+price is a whole number. A difference therefore points at an engine, not at the
+strategy.
 
 ## 325. A FIX session that rolls at 17:00 New York
 
@@ -10478,3 +10481,211 @@ try {
 `ConfigurationException` and `MalformedDataException` are `IllegalArgumentException`s
 and `WireProtocolException` is an `IllegalStateException`, so a 2.0 catch block still
 catches them. `QuantFinException` is the marker interface they share.
+
+## 333. Holiday calendars and ISDA CDS conventions
+
+```java
+BusinessCalendar nyFed = HolidayCalendars.calendar(HolidayCalendars.Market.NEW_YORK_FED, 2020, 2040);
+boolean christmas = HolidayCalendars.holidays(HolidayCalendars.Market.TARGET, 2026)
+    .contains(LocalDate.of(2026, 12, 25));                              // true
+IsdaCdsModel.Conventions conv = IsdaCdsModel.Conventions.of(nyFed).withHalfDayAccrual(true);
+IsdaCdsModel.Contract c = IsdaCdsModel.standardContract(LocalDate.of(2022, 6, 21), 5, 0.01, 0.4, nyFed);
+double upfront = IsdaCdsModel.cleanUpfront(c, discount, survival, conv);
+```
+
+`HolidayCalendars` builds the New York Fed, London, TARGET and Tokyo calendars
+for a span of years from their rules, Easter included. `Conventions.DEFAULT` is
+still weekends only with no half-day adjustment, so 2.1 results do not move.
+Matching the official ISDA RFR test grid for 2022-06-21 needs both the New York
+calendar and the half-day accrual-on-default term switched on (own test against
+the ISDA grids, which run only when `QFL_ISDA_GRID_DIR` is set).
+
+## 334. Multi-currency exposure and bilateral CVA
+
+```java
+YieldCurve usd = YieldCurve.ofZeroRates(new double[]{1, 5, 10}, new double[]{0.040, 0.038, 0.037});
+YieldCurve eur = YieldCurve.ofZeroRates(new double[]{1, 5, 10}, new double[]{0.025, 0.026, 0.027});
+YieldCurve usdProj = YieldCurve.ofZeroRates(new double[]{1, 5, 10}, new double[]{0.041, 0.039, 0.038});
+MultiCurrencyExposureSimulator.Market market = new MultiCurrencyExposureSimulator.Market(
+    new MultiCurrencyExposureSimulator.Domestic(MultiCurrencyExposureSimulator.Curve.of(usd), 0.05, 0.01),
+    List.of(new MultiCurrencyExposureSimulator.Foreign(
+        MultiCurrencyExposureSimulator.Curve.of(eur), 0.04, 0.008, 1.08, 0.09)),
+    corr);                                    // factor order is documented on Market
+double[] dates = new double[20];
+for (int i = 0; i < dates.length; i++) dates[i] = 0.25 * (i + 1);
+ExposureProfile p = MultiCurrencyExposureSimulator.simulate(market,
+    List.of(new MultiCurrencyExposureSimulator.Swap(new ExposureSimulator.Swap(100, 0.039, true, 0, 5, 1),
+        MultiCurrencyExposureSimulator.Curve.of(usdProj))),
+    List.of(new MultiCurrencyExposureSimulator.FxForward(0, new ExposureSimulator.FxForward(50, 1.10, 2))),
+    null, dates, 10_000, 42L);
+CvaApproximator.Bilateral b = CvaApproximator.bilateral(p, cpty, 0.6, own, 0.6);
+double adjustment = b.total();
+```
+
+The swap discounts on the domestic curve and projects on its own curve, which
+is a fixed basis between the two. Each foreign currency has its own Hull-White
+rate and an FX spot with the quanto drift that keeps forwards arbitrage-free.
+`Market.fromLegacy` turns a 2.1 `ExposureSimulator.Market` into this form and
+reproduces its results. `bilateral` charges CVA only on the paths where the
+counterparty defaults first and DVA only where we default first, with the two
+defaults independent and the hazard flat within each bucket.
+
+## 335. SA-CCR basis and volatility hedging sets, haircuts
+
+```java
+List<SaCcrTrade> trades = List.of(
+    SaCcrTrade.interestRate("USD", 10_000, 0, 5, 5, 1, 20),
+    SaCcrTrade.interestRate("USD-SOFR/FF", 10_000, 0, 5, 5, 1, 5).asBasis(),
+    SaCcrTrade.interestRate("USD-VOL", 2_000, 0, 3, 3, 1, 3).asVolatility());
+double bond = SaCcrHaircuts.collateralValue(100, SaCcrHaircuts.CollateralKind.SOVEREIGN_DEBT,
+    SaCcrHaircuts.DebtRating.AAA_TO_AA, 7, true, 10, true);   // held, so reduced
+SaCcr.Result r = SaCcr.unmargined(trades, bond);
+SaCcr.Result shared = SaCcr.oneMarginAgreementManyNettingSets(
+    List.of(trades.subList(0, 1), trades.subList(1, 3)), 50);
+```
+
+A basis trade sits in its own hedging set with half the supervisory factor and a
+volatility trade in its own set with five times the factor. `SaCcrHaircuts`
+applies the Basel II paragraph 151 haircut table, scaled to the holding period
+by the square root of time, plus the 8% currency-mismatch haircut. Held
+collateral is reduced and posted collateral is increased. Several netting sets
+under one margin agreement, and sub-netting sets inside one agreement, have
+their own entry points. The CRE22 (2017) haircut table is not implemented.
+
+## 336. FRTB standardised approach, sensitivities-based method
+
+```java
+double[][] rho = FrtbSa.Girr.tenorMatrix(new double[]{1, 5, 10});
+FrtbSa.Bucket usdBucket = FrtbSa.Bucket.of(new double[]{1_000, -2_500, 800},
+    new double[]{FrtbSa.Girr.RISK_WEIGHTS[2], FrtbSa.Girr.RISK_WEIGHTS[5], FrtbSa.Girr.RISK_WEIGHTS[6]},
+    rho);
+FrtbSa.RiskClass girr = new FrtbSa.RiskClass(List.of(usdBucket), FrtbSa.constant(1, FrtbSa.Girr.GAMMA),
+    List.of(), new double[0][0], List.of(), new double[0][0]);
+double sbm = FrtbSa.sbmCapital(List.of(girr));      // largest of LOW, MEDIUM, HIGH
+double drc = FrtbDrc.bucketCharge(List.of(new FrtbDrc.NetJtd(
+    FrtbDrc.jtd(1_000_000, FrtbDrc.LGD_SENIOR, -20_000), FrtbDrc.CreditQuality.BBB.riskWeight())));
+double rrao = FrtbRrao.charge(0, 5_000_000);
+```
+
+Weighted sensitivities aggregate within a bucket, then across buckets, under the
+three correlation scenarios, and the charge is the largest of the three. The
+classes follow BCBS d457 but are not certified. Several inputs are left to the
+caller and marked so in the javadoc: CSR inter-bucket correlations, GIRR
+inflation and basis correlations, equity repo, and securitisation. `FrtbNmrf`
+aggregates stress scenario charges for non-modellable risk factors (MAR33).
+
+## 337. SIMM from a CRIF file and a calibration file
+
+```java
+SimmParameters cal;
+try (Reader r = Files.newBufferedReader(Path.of("simm-calibration.properties"))) {
+    cal = SimmParameters.parse(r);              // your licensed ISDA calibration
+}
+List<CrifSensitivity> crif;
+try (Reader r = Files.newBufferedReader(Path.of("crif.csv"))) {
+    crif = CrifSensitivity.parseCsv(r);
+}
+SimmResult im = new SimmCalculator(cal).calculate(crif);
+SimmResult demo = new SimmCalculator(SimmParameters.illustrative()).calculate(List.of(
+    new CrifSensitivity(SimmProductClass.RATES_FX, "Risk_IRCurve", "USD", "1", "5y", "SOFR", 1_000_000)));
+```
+
+The calculator follows the structure of the public ISDA SIMM methodology, and
+the numbers come from the calibration file. `illustrative()` is a made-up
+calibration for tests and demos, and its label says so. Equity, commodity and FX
+vega amounts are read as raw dV/dsigma; set `RC.vega.amountIsVolWeighted = 1`
+when your CRIF already holds vol-weighted amounts. See [SIMM.md](SIMM.md).
+
+## 338. FIX 4.2 or FIX 5.0 SP2, and repeating groups
+
+```java
+FixSessionOptions opts = FixSessionOptions.none().withVersion(FixVersion.FIX_5_0_SP2);
+FixGroup party = FixGroup.builder().field(448, "TRADER1").field(447, "D").field(452, "11").build();
+byte[] wire = FixMessage.builder("D")
+    .field(FixMessage.CL_ORD_ID, "c-1")
+    .group(FixDictionary.PARTIES, List.of(party))
+    .encode(FixVersion.FIX_5_0_SP2, "BUY", "SELL", 1, "20261102-09:00:00.000", false, null);
+FixDictionary fix44 = FixDictionary.forVersion(FixVersion.FIX_4_4);
+```
+
+The session writes the version's BeginString, and for FIXT.1.1 the
+DefaultApplVerID (tag 1137) on Logon. A group is written count tag first, then
+each instance starting with its delimiter tag. On receipt the dictionary for the
+session's version checks group order and counts and rejects with reason 15 or
+16. The order encoder on the hot path still writes FIX 4.4 only.
+
+## 339. An entitlement check before an order leaves
+
+```java
+EntitlementService ents = new EntitlementService()
+    .addUser("alice", "rates", "trader")
+    .grant(Grant.of("g1", Grant.Subject.desk("rates"), Grant.Effect.ALLOW,
+        new Permission(Action.SUBMIT_ORDER, "*", "XLON", "*"), "head-of-desk"))
+    .grant(Grant.of("g2", Grant.Subject.user("alice"), Grant.Effect.DENY,
+        new Permission(Action.SUBMIT_ORDER, "VOD", "*", "*"), "compliance"));
+EntitlementPreTradeCheck check = new EntitlementPreTradeCheck(ents, Clock.systemUTC());
+PreTradeLimitChecker.CheckResult ok = check.check("alice", Action.SUBMIT_ORDER, "BARC", "XLON", "A1");
+PreTradeLimitChecker.CheckResult no = check.check("alice", Action.SUBMIT_ORDER, "VOD", "XLON", "A1");
+ents.auditLog().forEach(d -> System.out.println(d.format()));
+```
+
+Nothing is allowed without a grant, and a matching deny beats any allow. A grant
+can name a user, a desk or a role and can carry a validity window. Every
+decision goes to the audit log together with the grant that decided it.
+
+## 340. A MiFIR RTS 22 transaction report from a fill
+
+```java
+Rts22ReportBuilder b = new Rts22ReportBuilder(executingLei)   // must pass the ISO 17442 check
+    .capacity(Rts22ReportBuilder.TradingCapacity.DEAL)
+    .venue("XLON").isin("GB00B03MLX29").priceCurrency("GBP");
+Rts22TransactionReport rep = b.fromExecution(fill, "T-0001");
+List<String> problems = rep.validate();
+String csv = rep.toCsv();
+boolean isinOk = ReportingIdentifiers.isValidIsin("GB00B03MLX29");
+```
+
+The builder fills the RTS 22 fields it can derive and checks LEI, ISIN and MIC
+by check digit and shape only. It does not look them up in GLEIF, FIRDS or
+ISO 10383. CSV and XML are for inspection: the XML is not the ESMA auth.016
+message and is not validated against its schema.
+
+## 341. Corporate events in a portfolio backtest
+
+```java
+Map<String, List<CorporateEvents.Event>> events = Map.of(
+    "ABC", List.of(new CorporateEvents.Dividend(exTs, 0.50, CorporateEvents.DividendKind.SPECIAL),
+                   new CorporateEvents.ReverseSplit(laterTs, 10)));
+PortfolioBacktester.Result r = PortfolioBacktester.run(strategy, data, signalData, config,
+    universe, cashDividends, participation, events);
+CorporateEventPositions.Outcome o = CorporateEventPositions.apply(
+    new CorporateEventPositions.Holding("ABC", "US0000000002", 100, 4_000),
+    new CorporateEvents.ReverseSplit(laterTs, 10), 400);
+```
+
+The overload is opt-in, and without events the backtester behaves as in 2.1.
+Each event adjusts the position on its ex date: a reverse split of 10 old for 1
+new turns 100 shares into 10, a dividend credits cash, a spin-off delivers the
+child. In a merger the backtester assumes the holder elects cash on exactly the
+maximum cash fraction, so there is no proration, and it keeps no cost basis.
+`CorporateEventPositions` handles elections and cost basis for one holding.
+
+## 342. Whole-share runner and a ledger fed by the gateway
+
+```java
+StrategyRunner.Run whole = StrategyRunner.run(StrategyRunner.Engine.BAR_BACKTESTER,
+    strategy, series, 1e6, work);                                // whole shares, the 2.2 default
+StrategyRunner.Run asIn21 = StrategyRunner.run(StrategyRunner.Engine.BAR_BACKTESTER,
+    strategy, series, 1e6, work, StrategyRunner.Sizing.fractionalShares());
+PositionLedger ledger = new PositionLedger(1, 1, 1, 64, 1_000);
+LedgerFillListener toLedger = new LedgerFillListener(ledger, 0, 0);
+gateway.addFillListener(toLedger);                // an HftOrderGateway
+long refused = toLedger.rejectedCount();          // fills the ledger refused, e.g. repeated exec ids
+```
+
+From 2.2 all three engines trade whole shares by default, so they agree fill for
+fill; `Sizing.lots(100)` rounds down to round lots. Every gateway fill reaches
+each registered `FillListener` with its execution id, and `LedgerFillListener`
+books it in the ledger. A listener that throws is counted in
+`fillListenerErrorCount` and does not stop the gateway. Busts and corrections
+are not handled.

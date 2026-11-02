@@ -29,6 +29,14 @@
  * BCBS MAR33, not certified) and
  * {@link com.quantfinlib.risk.PnlAttribution} (the FRTB PLAT:
  * Spearman + Kolmogorov-Smirnov with green/amber/red zones).</p>
+ *
+ * <p>Regulatory capital: {@link com.quantfinlib.risk.FrtbSa},
+ * {@link com.quantfinlib.risk.FrtbDrc}, {@link com.quantfinlib.risk.FrtbRrao}
+ * and {@link com.quantfinlib.risk.FrtbNmrf} (FRTB standardised approach and
+ * NMRF, styled after BCBS d457, not certified), and
+ * {@link com.quantfinlib.risk.SaCcr} with
+ * {@link com.quantfinlib.risk.SaCcrHaircuts} (BCBS 279). ISDA SIMM is in
+ * the {@code risk.simm} subpackage.</p>
  */
 @NullMarked
 package com.quantfinlib.risk;

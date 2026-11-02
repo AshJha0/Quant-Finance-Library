@@ -36,12 +36,19 @@ import java.util.Objects;
  * cash, a {@code SELL} while long sells everything, both at that close; an
  * open position is sold at the last close. These are the {@link Backtester}
  * rules under {@link FillPolicy#CLOSE} with no costs, the only setting in
- * which the three engines share a fill model: the bar engine buys
- * {@code cash/price} shares (fractional), while the tick and paper engines
- * trade whole shares, {@code floor(cash/price)}. Fills agree exactly when
- * every entry's {@code cash/price} is whole; otherwise they differ by the
- * fractional remainder, and the comparison is of order times, sides and
- * prices. Costs, spreads, limit orders and queue models are engine-specific
+ * which the three engines share a fill model.</p>
+ *
+ * <p><b>Sizing.</b> Since 2.2 every engine buys whole lots by default:
+ * {@code q = lot * floor(cash / (price * lot))}, lot 1 unless
+ * {@link Sizing#lots} says otherwise, and the bar engine keeps the
+ * remainder in cash ({@link Backtester#runWholeLots}). Fills and final
+ * equity then agree exactly on all three engines for any cash and price.
+ * Worked example (own test): 1000 of cash at 30 buys 33 shares everywhere,
+ * leaving 10 in cash. {@link Sizing#fractionalShares()} restores the 2.1 bar
+ * engine, which invests all cash in {@code cash/price} shares; the tick
+ * engines cannot hold fractions and still trade {@code floor(cash/price)},
+ * so under that sizing the engines agree only when {@code cash/price} is
+ * whole. Costs, spreads, limit orders and queue models are engine-specific
  * and are not part of the parity contract.</p>
  */
 public final class StrategyRunner {
@@ -52,12 +59,42 @@ public final class StrategyRunner {
     }
 
     /**
+     * How an entry is sized.
+     *
+     * @param lotSize    shares per lot (whole-lot sizing), ignored when fractional
+     * @param fractional true for the 2.1 bar-engine behaviour: invest all cash
+     * @since 2.2.0
+     */
+    public record Sizing(long lotSize, boolean fractional) {
+        public Sizing {
+            if (lotSize <= 0) {
+                throw new IllegalArgumentException("lotSize must be positive, got " + lotSize);
+            }
+        }
+
+        /** Whole shares, lot size 1: the default, exact three-engine parity. */
+        public static Sizing wholeShares() {
+            return new Sizing(1, false);
+        }
+
+        /** Whole multiples of {@code lotSize} shares. */
+        public static Sizing lots(long lotSize) {
+            return new Sizing(lotSize, false);
+        }
+
+        /** 2.1 behaviour: fractional shares on the bar engine, whole shares elsewhere. */
+        public static Sizing fractionalShares() {
+            return new Sizing(1, true);
+        }
+    }
+
+    /**
      * One fill.
      *
      * @param index    bar index of the fill
      * @param side     buy or sell
      * @param price    fill price
-     * @param quantity shares (fractional only on the bar engine)
+     * @param quantity shares (fractional only on the bar engine under {@link Sizing#fractionalShares()})
      */
     public record Fill(int index, Side side, double price, double quantity) {
         public Fill {
@@ -115,13 +152,26 @@ public final class StrategyRunner {
      */
     public static Run run(Engine engine, TradingStrategy strategy, BarSeries tape,
                           double capital, Path workDir) throws IOException {
+        return run(engine, strategy, tape, capital, workDir, Sizing.wholeShares());
+    }
+
+    /**
+     * As {@link #run(Engine, TradingStrategy, BarSeries, double, Path)} with
+     * an explicit entry {@link Sizing}.
+     *
+     * @since 2.2.0
+     */
+    public static Run run(Engine engine, TradingStrategy strategy, BarSeries tape,
+                          double capital, Path workDir, Sizing sizing) throws IOException {
+        Objects.requireNonNull(sizing, "sizing");
+        long lot = sizing.fractional() ? 1 : sizing.lotSize();
         if (!(capital > 0) || tape.size() == 0) {
             throw new IllegalArgumentException("need capital > 0 and a non-empty tape");
         }
         return switch (engine) {
-            case BAR_BACKTESTER -> runBars(strategy, tape, capital);
-            case TICK_BACKTESTER -> runTicks(strategy, tape, capital, tapeFile(tape, workDir));
-            case PAPER_GATEWAY -> runPaper(strategy, tape, capital, tapeFile(tape, workDir));
+            case BAR_BACKTESTER -> runBars(strategy, tape, capital, sizing);
+            case TICK_BACKTESTER -> runTicks(strategy, tape, capital, tapeFile(tape, workDir), lot);
+            case PAPER_GATEWAY -> runPaper(strategy, tape, capital, tapeFile(tape, workDir), lot);
         };
     }
 
@@ -131,9 +181,12 @@ public final class StrategyRunner {
         return file;
     }
 
-    private static Run runBars(TradingStrategy strategy, BarSeries tape, double capital) {
+    private static Run runBars(TradingStrategy strategy, BarSeries tape, double capital,
+                               Sizing sizing) {
         BacktestConfig cfg = new BacktestConfig(capital, 0, 0, 0, 0, 252, FillPolicy.CLOSE);
-        BacktestResult r = Backtester.run(withoutStops(strategy), tape, cfg);
+        BacktestResult r = sizing.fractional()
+                ? Backtester.run(withoutStops(strategy), tape, cfg)
+                : Backtester.runWholeLots(withoutStops(strategy), tape, cfg, (double) sizing.lotSize());
         List<Fill> fills = new ArrayList<>();
         for (Trade t : r.trades()) {
             fills.add(new Fill(t.entryIndex(), Side.BUY, t.entryPrice(), t.quantity()));
@@ -156,9 +209,11 @@ public final class StrategyRunner {
     private abstract static class Driver {
         final TradingStrategy strategy;
         final int last;
+        final long lot;
 
-        Driver(TradingStrategy strategy, BarSeries tape) {
+        Driver(TradingStrategy strategy, BarSeries tape, long lot) {
             this.strategy = strategy;
+            this.lot = lot;
             this.last = tape.size() - 1;
             withoutStops(strategy).init(tape);
         }
@@ -173,7 +228,7 @@ public final class StrategyRunner {
             double pos = position();
             Signal sig = strategy.onBar(index, pos);
             if (sig == Signal.BUY && pos == 0) {
-                long q = (long) Math.floor(cash() / price);
+                long q = (long) Math.floor(cash() / (price * lot)) * lot;
                 if (q > 0) {
                     market(Side.BUY, q);
                 }
@@ -187,7 +242,7 @@ public final class StrategyRunner {
     }
 
     private static Run runTicks(TradingStrategy strategy, BarSeries tape, double capital,
-                                Path file) throws IOException {
+                                Path file, long lot) throws IOException {
         TickStrategy adapter = new TickStrategy() {
             Driver driver;
 
@@ -198,7 +253,7 @@ public final class StrategyRunner {
 
             @Override
             public void init(TickTradingContext ctx) {
-                driver = new Driver(strategy, tape) {
+                driver = new Driver(strategy, tape, lot) {
                     @Override
                     double position() {
                         return ctx.position(0);
@@ -231,14 +286,14 @@ public final class StrategyRunner {
     }
 
     private static Run runPaper(TradingStrategy strategy, BarSeries tape, double capital,
-                                Path file) throws IOException {
+                                Path file, long lot) throws IOException {
         PaperTradingGateway gw = new PaperTradingGateway(capital);
         String symbol = tape.symbol();
         List<Fill> fills = new ArrayList<>();
         int[] now = new int[1];
         gw.addExecutionListener((id, sym, side, price, qty, ts) ->
                 fills.add(new Fill(now[0], side, price, qty)));
-        Driver driver = new Driver(strategy, tape) {
+        Driver driver = new Driver(strategy, tape, lot) {
             @Override
             double position() {
                 return gw.position(symbol);

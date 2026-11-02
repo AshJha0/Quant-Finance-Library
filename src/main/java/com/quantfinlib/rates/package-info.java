@@ -7,7 +7,8 @@
  * DV01; both whole-period and date-based with accrued interest),
  * {@link com.quantfinlib.rates.DayCount} (ACT/360, ACT/365, 30/360,
  * ACT/ACT ISDA), {@link com.quantfinlib.rates.BusinessCalendar}
- * (holidays, roll conventions, T+n settlement, coupon schedules),
+ * (holidays, roll conventions, T+n settlement, coupon schedules) with
+ * rule-based market calendars in {@link com.quantfinlib.rates.HolidayCalendars},
  * {@link com.quantfinlib.rates.ShortRateModels} (Vasicek, CIR and
  * curve-fitted Hull-White: closed-form zero-coupon bonds plus the
  * simulation steps a rates-factor Monte Carlo needs) and

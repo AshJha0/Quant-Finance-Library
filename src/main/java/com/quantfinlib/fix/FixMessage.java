@@ -122,8 +122,27 @@ public final class FixMessage {
             Map.entry(356, 357), Map.entry(360, 361), Map.entry(362, 363), Map.entry(364, 365),
             Map.entry(445, 446), Map.entry(618, 619), Map.entry(621, 622));
 
-    private static final byte[] PREFIX = ("8=" + BEGIN_STRING + SOH)
-            .getBytes(StandardCharsets.ISO_8859_1);
+    private static final byte[][] PREFIXES;
+
+    static {
+        FixVersion[] versions = FixVersion.values();
+        PREFIXES = new byte[versions.length][];
+        for (int i = 0; i < versions.length; i++) {
+            PREFIXES[i] = ("8=" + versions[i].beginString() + SOH)
+                    .getBytes(StandardCharsets.ISO_8859_1);
+        }
+    }
+
+    /** Length of a known {@code 8=<BeginString>SOH} prefix, or -1. */
+    private static int beginStringPrefixLength(byte[] bytes) {
+        for (byte[] prefix : PREFIXES) {
+            if (bytes.length >= prefix.length
+                    && Arrays.equals(bytes, 0, prefix.length, prefix, 0, prefix.length)) {
+                return prefix.length;
+            }
+        }
+        return -1;
+    }
 
     private final int[] tags;
     private final String[] values;
@@ -152,8 +171,8 @@ public final class FixMessage {
      */
     public static FixMessage parse(byte[] bytes) {
         int len = bytes.length;
-        if (len < PREFIX.length + 8 || !Arrays.equals(bytes, 0, PREFIX.length,
-                PREFIX, 0, PREFIX.length)) {
+        int prefixLen = beginStringPrefixLength(bytes);
+        if (prefixLen < 0 || len < prefixLen + 8) {
             throw FixParseException.garbled("missing BeginString: " + printable(bytes));
         }
         // Trailer: SOH "10=" d d d SOH at the very end.
@@ -176,7 +195,7 @@ public final class FixMessage {
         }
         // BodyLength is the second field and counts the bytes after its SOH
         // up to and including the SOH before CheckSum.
-        int p = PREFIX.length;
+        int p = prefixLen;
         if (bytes[p] != '9' || bytes[p + 1] != '=') {
             throw FixParseException.garbled("BodyLength not after BeginString");
         }
@@ -314,6 +333,16 @@ public final class FixMessage {
     // ------------------------------------------------------------------
     // Accessors
     // ------------------------------------------------------------------
+
+    /** BeginString(8) exactly as received. */
+    public String beginString() {
+        return values[0];
+    }
+
+    /** The protocol version named by BeginString(8). */
+    public FixVersion version() {
+        return FixVersion.fromBeginString(values[0]);
+    }
 
     public String msgType() {
         return first.get(MSG_TYPE);
@@ -456,6 +485,62 @@ public final class FixMessage {
             return field(tag, String.valueOf(value));
         }
 
+        /**
+         * Appends a repeating group: the count field, then for each instance
+         * the delimiter first, its other plain fields in the order they were
+         * set, then its nested groups. Refuses an instance without the
+         * delimiter, or with a field or nested group the definition does not
+         * list, so the encoder cannot write a group the peer will reject.
+         */
+        public Builder group(FixGroupDef def, java.util.List<FixGroup> instances) {
+            for (FixGroup g : instances) {
+                checkInstance(def, g);
+            }
+            field(def.countTag(), (long) instances.size());
+            for (FixGroup g : instances) {
+                writeInstance(def, g);
+            }
+            return this;
+        }
+
+        private static void checkInstance(FixGroupDef def, FixGroup g) {
+            if (g.get(def.delimiterTag()) == null) {
+                throw new IllegalArgumentException(def.name() + " instance lacks delimiter "
+                        + def.delimiterTag());
+            }
+            for (int tag : g.fields().keySet()) {
+                if (!def.isField(tag)) {
+                    throw new IllegalArgumentException(def.name() + " has no member " + tag);
+                }
+            }
+            g.groups().forEach((countTag, inner) -> {
+                FixGroupDef sub = def.nestedGroup(countTag);
+                if (sub == null) {
+                    throw new IllegalArgumentException(def.name() + " has no nested group "
+                            + countTag);
+                }
+                for (FixGroup i : inner) {
+                    checkInstance(sub, i);
+                }
+            });
+        }
+
+        private void writeInstance(FixGroupDef def, FixGroup g) {
+            field(def.delimiterTag(), g.get(def.delimiterTag()));
+            g.fields().forEach((tag, value) -> {
+                if (tag != def.delimiterTag()) {
+                    field(tag, value);
+                }
+            });
+            g.groups().forEach((countTag, inner) -> {
+                FixGroupDef sub = def.nestedGroup(countTag);
+                field(countTag, (long) inner.size());
+                for (FixGroup i : inner) {
+                    writeInstance(sub, i);
+                }
+            });
+        }
+
         /** Plain-decimal rendering (FIX forbids scientific notation). */
         public Builder field(int tag, double value) {
             BigDecimal decimal = BigDecimal.valueOf(value);
@@ -482,6 +567,18 @@ public final class FixMessage {
          */
         public byte[] encode(String senderCompId, String targetCompId, long seqNum,
                              String sendingTimeUtc, boolean possDup, String origSendingTime) {
+            return encode(FixVersion.FIX_4_4, senderCompId, targetCompId, seqNum,
+                    sendingTimeUtc, possDup, origSendingTime);
+        }
+
+        /**
+         * Framing for a given protocol version: BeginString(8) is
+         * {@code version.beginString()}. For FIXT.1.1 no ApplVerID(1128) is
+         * written, so the peer applies the DefaultApplVerID agreed on Logon.
+         */
+        public byte[] encode(FixVersion version, String senderCompId, String targetCompId,
+                             long seqNum, String sendingTimeUtc, boolean possDup,
+                             String origSendingTime) {
             String afterLength = "35=" + msgType + SOH
                     + "49=" + senderCompId + SOH
                     + "56=" + targetCompId + SOH
@@ -490,7 +587,7 @@ public final class FixMessage {
                     + "52=" + sendingTimeUtc + SOH
                     + (origSendingTime != null ? "122=" + origSendingTime + SOH : "")
                     + body;
-            String head = "8=" + BEGIN_STRING + SOH + "9=" + afterLength.length() + SOH;
+            String head = "8=" + version.beginString() + SOH + "9=" + afterLength.length() + SOH;
             byte[] payload = (head + afterLength).getBytes(StandardCharsets.ISO_8859_1);
             int sum = 0;
             for (byte b : payload) {
