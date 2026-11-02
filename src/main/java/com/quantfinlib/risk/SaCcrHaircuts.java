@@ -45,8 +45,26 @@ package com.quantfinlib.risk;
  * cash 0. Worked example (own hand computation): the same 1,000 of
  * A-rated 3-year corporate bonds, held, different currency, 10 days,
  * gives H = 4% under CRE22, so C = 1,000 * (1 - 0.04 - 0.08) = 880.
- * Securitisation collateral and the CRE22.50 table for jurisdictions
- * without external ratings are not implemented. Research lane,
+ *
+ * <p>Securitisation rows of CRE22.49 (10-day, percent, same buckets):
+ * AAA to AA- 2 / 8 / 8 / 16 / 16, A+ to BBB- 4 / 12 / 12 / 24 / 24, BB
+ * not eligible (published reference). The 2006 table of paragraph 151
+ * has no securitisation row, so {@link CollateralKind#SECURITISATION}
+ * is rejected under {@link Table#BASEL_II_2006}.</p>
+ *
+ * <p>{@link Table#CRE22_NO_EXTERNAL_RATINGS} is the CRE22.50 table for
+ * jurisdictions that do not allow external ratings. Debt is classed by
+ * {@link NoRatingsDebtClass} instead of a rating and goes through
+ * {@link #haircut10DayNoExternalRatings}: sovereigns by issuer risk weight
+ * 0% 0.5 / 2 / 2 / 4 / 4, 20% or 50% 1 / 3 / 3 / 6 / 6, 100% 15; other
+ * investment-grade non-securitisation 2 / 4 / 6 / 12 / 20; senior
+ * securitisation with SA risk weight under 100% 4 / 12 / 12 / 24 / 24;
+ * main-index equities and gold 20; other listed equities 30; cash 0;
+ * other exposure types 30 (published reference). Worked example (own
+ * hand computation): 1,000 of a senior securitisation with SA risk
+ * weight 50% and 4 years to run, held, same currency, 10 days: H = 12%,
+ * C = 880. UCITS and mutual funds (highest haircut of what the fund can
+ * hold, or look-through) are left to the caller. Research lane,
  * deterministic.</p>
  */
 public final class SaCcrHaircuts {
@@ -62,7 +80,26 @@ public final class SaCcrHaircuts {
         /** BCBS 128 (June 2006) paragraph 151. */
         BASEL_II_2006,
         /** Basel Framework CRE22.49 (December 2017 revision, external-ratings jurisdictions). */
-        CRE22
+        CRE22,
+        /**
+         * Basel Framework CRE22.50 (jurisdictions without external ratings).
+         * Debt kinds need {@link #haircut10DayNoExternalRatings}.
+         */
+        CRE22_NO_EXTERNAL_RATINGS
+    }
+
+    /** Debt classes of the CRE22.50 table (jurisdictions without external ratings). */
+    public enum NoRatingsDebtClass {
+        /** Sovereign issuer with a 0% risk weight. */
+        SOVEREIGN_RW_0,
+        /** Sovereign issuer with a 20% or 50% risk weight. */
+        SOVEREIGN_RW_20_OR_50,
+        /** Sovereign issuer with a 100% risk weight. */
+        SOVEREIGN_RW_100,
+        /** Other investment-grade securities (CRE22.34(4)(c)), non-securitisation. */
+        OTHER_INVESTMENT_GRADE,
+        /** Senior securitisation exposure with an SA risk weight below 100% (CRE22.34(4)(c)). */
+        SENIOR_SECURITISATION_SA_RW_BELOW_100
     }
 
     /** Collateral kinds of the supervisory haircut table. */
@@ -78,7 +115,11 @@ public final class SaCcrHaircuts {
         /** Debt issued by sovereigns. */
         SOVEREIGN_DEBT,
         /** Debt of other issuers (banks, corporates). */
-        OTHER_DEBT
+        OTHER_DEBT,
+        /** Securitisation exposures (CRE22.49 securitisation column; CRE22.51(3)). Not in BCBS 128 para 151. */
+        SECURITISATION,
+        /** Other exposure types, 30% (CRE22.50 only). */
+        OTHER_EXPOSURE
     }
 
     /** Issue rating buckets for debt collateral. */
@@ -107,6 +148,24 @@ public final class SaCcrHaircuts {
             return haircut10Day(kind, rating, maturityYears);
         }
         java.util.Objects.requireNonNull(kind, "kind");
+        if (table == Table.CRE22_NO_EXTERNAL_RATINGS) {
+            switch (kind) {
+                case CASH:
+                    return 0;
+                case GOLD:
+                case MAIN_INDEX_EQUITY:
+                    return 0.20;
+                case OTHER_LISTED_EQUITY:
+                case OTHER_EXPOSURE:
+                    return 0.30;
+                default:
+                    throw new IllegalArgumentException(
+                            "CRE22.50 debt is classed by issuer risk weight; use haircut10DayNoExternalRatings");
+            }
+        }
+        if (kind == CollateralKind.OTHER_EXPOSURE) {
+            throw new IllegalArgumentException("CRE22.49 has no row for other exposure types");
+        }
         switch (kind) {
             case CASH:
                 return 0;
@@ -122,8 +181,18 @@ public final class SaCcrHaircuts {
         if (!(maturityYears >= 0) || maturityYears == Double.POSITIVE_INFINITY) {
             throw new IllegalArgumentException("maturity must be >= 0 and finite, got " + maturityYears);
         }
-        int b = maturityYears <= 1 ? 0 : maturityYears <= 3 ? 1 : maturityYears <= 5 ? 2
-                : maturityYears <= 10 ? 3 : 4;
+        int b = cre22Bucket(maturityYears);
+        if (kind == CollateralKind.SECURITISATION) {
+            switch (rating) {
+                case AAA_TO_AA:
+                    return new double[]{0.02, 0.08, 0.08, 0.16, 0.16}[b];
+                case A_TO_BBB:
+                    return new double[]{0.04, 0.12, 0.12, 0.24, 0.24}[b];
+                default:
+                    throw new IllegalArgumentException(
+                            "BB-rated securitisation exposures are not eligible collateral (CRE22.49)");
+            }
+        }
         if (kind == CollateralKind.SOVEREIGN_DEBT) {
             switch (rating) {
                 case AAA_TO_AA:
@@ -145,6 +214,61 @@ public final class SaCcrHaircuts {
         }
     }
 
+    private static int cre22Bucket(double maturityYears) {
+        return maturityYears <= 1 ? 0 : maturityYears <= 3 ? 1 : maturityYears <= 5 ? 2
+                : maturityYears <= 10 ? 3 : 4;
+    }
+
+    /**
+     * Supervisory haircut on a 10-day holding period for debt under the
+     * CRE22.50 table (jurisdictions without external ratings).
+     *
+     * @param debtClass     issuer risk-weight class or securitisation class
+     * @param maturityYears residual maturity (&ge; 0, finite)
+     * @return H as a decimal
+     */
+    public static double haircut10DayNoExternalRatings(NoRatingsDebtClass debtClass, double maturityYears) {
+        java.util.Objects.requireNonNull(debtClass, "debtClass");
+        if (!(maturityYears >= 0) || maturityYears == Double.POSITIVE_INFINITY) {
+            throw new IllegalArgumentException("maturity must be >= 0 and finite, got " + maturityYears);
+        }
+        int b = cre22Bucket(maturityYears);
+        switch (debtClass) {
+            case SOVEREIGN_RW_0:
+                return new double[]{0.005, 0.02, 0.02, 0.04, 0.04}[b];
+            case SOVEREIGN_RW_20_OR_50:
+                return new double[]{0.01, 0.03, 0.03, 0.06, 0.06}[b];
+            case SOVEREIGN_RW_100:
+                return 0.15;
+            case OTHER_INVESTMENT_GRADE:
+                return new double[]{0.02, 0.04, 0.06, 0.12, 0.20}[b];
+            default:
+                return new double[]{0.04, 0.12, 0.12, 0.24, 0.24}[b];
+        }
+    }
+
+    /**
+     * Haircut value of one collateral item from a 10-day haircut the
+     * caller already has (for example from
+     * {@link #haircut10DayNoExternalRatings}).
+     *
+     * @param marketValue       X (&ge; 0)
+     * @param haircut10Day      H_10
+     * @param currencyMismatch  true when the currencies differ
+     * @param holdingBusinessDays holding period N
+     * @param held              true for collateral held, false for posted
+     * @return the signed contribution to C
+     */
+    public static double collateralValue(double marketValue, double haircut10Day, boolean currencyMismatch,
+                                         double holdingBusinessDays, boolean held) {
+        if (!(marketValue >= 0) || marketValue == Double.POSITIVE_INFINITY) {
+            throw new IllegalArgumentException("market value must be >= 0 and finite, got " + marketValue);
+        }
+        double h = scale(haircut10Day, holdingBusinessDays);
+        double hfx = currencyMismatch ? scale(CURRENCY_MISMATCH, holdingBusinessDays) : 0;
+        return held ? marketValue * Math.max(1 - h - hfx, 0) : -marketValue * (1 + h + hfx);
+    }
+
     /**
      * Supervisory haircut on a 10-day holding period, BCBS 128 para 151
      * (the 2006 table, the default kept for 2.2 compatibility).
@@ -164,6 +288,9 @@ public final class SaCcrHaircuts {
                 return 0.15;
             case OTHER_LISTED_EQUITY:
                 return 0.25;
+            case SECURITISATION:
+            case OTHER_EXPOSURE:
+                throw new IllegalArgumentException(kind + " has no row in BCBS 128 para 151");
             default:
                 break;
         }
@@ -229,9 +356,8 @@ public final class SaCcrHaircuts {
         if (!(marketValue >= 0) || marketValue == Double.POSITIVE_INFINITY) {
             throw new IllegalArgumentException("market value must be >= 0 and finite, got " + marketValue);
         }
-        double h = scale(haircut10Day(table, kind, rating, maturityYears), holdingBusinessDays);
-        double hfx = currencyMismatch ? scale(CURRENCY_MISMATCH, holdingBusinessDays) : 0;
-        return held ? marketValue * Math.max(1 - h - hfx, 0) : -marketValue * (1 + h + hfx);
+        return collateralValue(marketValue, haircut10Day(table, kind, rating, maturityYears),
+                currencyMismatch, holdingBusinessDays, held);
     }
 
     /**

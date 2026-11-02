@@ -5,6 +5,8 @@ import java.util.List;
 /**
  * FRTB standardised default risk charge (DRC) for non-securitisation
  * positions, styled after BCBS d457 chapter MAR22. Not certified.
+ * Securitisations (non-CTP and CTP, MAR22.27 to MAR22.45) are in
+ * {@link FrtbDrcSecuritisation}.
  *
  * <p><b>Plain idea.</b> Each position's loss if the issuer defaulted
  * tomorrow (jump to default, JTD) is scaled down for maturities under a

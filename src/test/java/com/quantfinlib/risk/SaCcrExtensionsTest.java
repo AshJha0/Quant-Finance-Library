@@ -161,4 +161,55 @@ class SaCcrExtensionsTest {
         assertEquals(860, SaCcrHaircuts.collateralValue(SaCcrHaircuts.Table.BASEL_II_2006, 1_000,
                 oth, a, 3, true, 10, true), 1e-9);
     }
+
+    @Test
+    void cre22SecuritisationRows() {
+        // CRE22.49 securitisation column, buckets <=1 / 1-3 / 3-5 / 5-10 / >10
+        SaCcrHaircuts.Table t = SaCcrHaircuts.Table.CRE22;
+        SaCcrHaircuts.CollateralKind sec = SaCcrHaircuts.CollateralKind.SECURITISATION;
+        double[] years = {1, 3, 5, 10, 11};
+        double[] aaa = {0.02, 0.08, 0.08, 0.16, 0.16};
+        double[] a = {0.04, 0.12, 0.12, 0.24, 0.24};
+        for (int i = 0; i < years.length; i++) {
+            assertEquals(aaa[i], SaCcrHaircuts.haircut10Day(t, sec, SaCcrHaircuts.DebtRating.AAA_TO_AA, years[i]), 0);
+            assertEquals(a[i], SaCcrHaircuts.haircut10Day(t, sec, SaCcrHaircuts.DebtRating.A_TO_BBB, years[i]), 0);
+        }
+        assertThrows(IllegalArgumentException.class,
+                () -> SaCcrHaircuts.haircut10Day(t, sec, SaCcrHaircuts.DebtRating.BB, 2));
+        // no securitisation row in BCBS 128 para 151, no other-exposure row in CRE22.49
+        assertThrows(IllegalArgumentException.class,
+                () -> SaCcrHaircuts.haircut10Day(sec, SaCcrHaircuts.DebtRating.AAA_TO_AA, 2));
+        assertThrows(IllegalArgumentException.class, () -> SaCcrHaircuts.haircut10Day(t,
+                SaCcrHaircuts.CollateralKind.OTHER_EXPOSURE, null, 0));
+        // held AAA 2y securitisation, posted side, 20 days: -1,000 * (1 + 0.08*sqrt 2) = -1,113.137
+        assertEquals(-1_000 * (1 + 0.08 * Math.sqrt(2)),
+                SaCcrHaircuts.collateralValue(t, 1_000, sec, SaCcrHaircuts.DebtRating.AAA_TO_AA, 2, false, 20, false),
+                1e-9);
+    }
+
+    @Test
+    void cre22NoExternalRatingsTable() {
+        // CRE22.50, buckets <=1 / 1-3 / 3-5 / 5-10 / >10
+        double[] years = {0.5, 2, 4, 7, 15};
+        double[][] expected = {
+            {0.005, 0.02, 0.02, 0.04, 0.04}, {0.01, 0.03, 0.03, 0.06, 0.06}, {0.15, 0.15, 0.15, 0.15, 0.15},
+            {0.02, 0.04, 0.06, 0.12, 0.20}, {0.04, 0.12, 0.12, 0.24, 0.24}};
+        SaCcrHaircuts.NoRatingsDebtClass[] cls = SaCcrHaircuts.NoRatingsDebtClass.values();
+        for (int c = 0; c < cls.length; c++) {
+            for (int i = 0; i < years.length; i++) {
+                assertEquals(expected[c][i], SaCcrHaircuts.haircut10DayNoExternalRatings(cls[c], years[i]), 0);
+            }
+        }
+        SaCcrHaircuts.Table t = SaCcrHaircuts.Table.CRE22_NO_EXTERNAL_RATINGS;
+        assertEquals(0.20, SaCcrHaircuts.haircut10Day(t, SaCcrHaircuts.CollateralKind.MAIN_INDEX_EQUITY, null, 0), 0);
+        assertEquals(0.30, SaCcrHaircuts.haircut10Day(t, SaCcrHaircuts.CollateralKind.OTHER_LISTED_EQUITY, null, 0), 0);
+        assertEquals(0.30, SaCcrHaircuts.haircut10Day(t, SaCcrHaircuts.CollateralKind.OTHER_EXPOSURE, null, 0), 0);
+        assertEquals(0, SaCcrHaircuts.haircut10Day(t, SaCcrHaircuts.CollateralKind.CASH, null, 0), 0);
+        assertThrows(IllegalArgumentException.class, () -> SaCcrHaircuts.haircut10Day(t,
+                SaCcrHaircuts.CollateralKind.SOVEREIGN_DEBT, SaCcrHaircuts.DebtRating.AAA_TO_AA, 1));
+        // worked example: 1,000 senior securitisation, SA RW 50%, 4y, held, same ccy, 10d: 1,000*(1-0.12) = 880
+        double h = SaCcrHaircuts.haircut10DayNoExternalRatings(
+                SaCcrHaircuts.NoRatingsDebtClass.SENIOR_SECURITISATION_SA_RW_BELOW_100, 4);
+        assertEquals(880, SaCcrHaircuts.collateralValue(1_000, h, false, 10, true), 1e-9);
+    }
 }
