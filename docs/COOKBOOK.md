@@ -11215,7 +11215,7 @@ List<String> problems = validator.validate(report, receivedByTr);
 // ... send it; once the trade repository has accepted it:
 history.accept(report);
 
-for (RuleProvenance r : EmirStatefulValidator.rules()) {    // 15 rules, each with its sheet row
+for (RuleProvenance r : EmirStatefulValidator.rules()) {    // 28 rules, each with its sheet row
     System.out.println(r.id() + " " + r.citation());
 }
 ```
@@ -11226,8 +11226,8 @@ you leave out skips its rules rather than failing them. Record a report in
 the history only after the repository accepted it, or a rejected NEWT makes
 the corrected one fail EMIR-VR-2151-03. The library does not ship the ISO
 4217 list (SIX changes it several times a year), so load your copy. The
-GLEIF branch tests, EMIR-VR-1003-01, 2001-03/04 and the "reported for that
-UTI" date rules are not checked; the package javadoc lists them. LEARN 17i.
+branch tests, the venue rule, the UTI rule and the "reported for that UTI"
+date rules came later in 3.1; see recipes 400 to 403. LEARN 17i.
 
 ## 365. CAT option orders, routes and the linkage check (3.1)
 
@@ -11280,3 +11280,96 @@ fails when a parser throws anything other than its documented exception
 (`FixParseException`, `WireProtocolException` or `IOException`), so a new
 parser should declare that exception and get a fuzz test with a small seed
 corpus. LEARN section 19.
+
+## 400. EMIR: reject a branch LEI (3.1)
+
+```java
+LeiRegistry gleif = GleifGoldenCopyLeiRegistry.load(Path.of("gleif-goldencopy.csv"));
+EmirStatefulValidator validator = EmirStatefulValidator.create().withLeiRegistry(gleif);
+
+LeiRecord rec = gleif.lookup(report.fields().get("otherCounterpartyId")).orElseThrow();
+System.out.println(rec.entityCategory() + " branch=" + rec.isBranch());   // GENERAL branch=Optional[false]
+
+for (String e : validator.validate(report)) {
+    if (e.startsWith("EMIR-VR-1009-04")) {          // 1.9 pertains to a branch
+        System.out.println(e);
+    }
+}
+```
+
+ESMA74-362-2683 asks that the LEI in fields 1.2, 1.3, 1.4 and 1.9 "pertain to a
+legal entity and not a branch" (rows 6, 7, 8 and 13). Since 3.1 the golden-copy
+loader reads `Entity.EntityCategory` and the API loader reads `entity.category`
+into `LeiRecord.entityCategory()`. Only `BRANCH` fails; a registry that does not
+know the category (an older extract, or a `LeiRecord` built with three
+arguments) skips the test instead of failing it. LEARN 17i.
+
+## 401. EMIR: field 1.3 and the venue (3.1)
+
+```java
+MicRegistry mics = Iso10383MicRegistry.load(Path.of("ISO10383_MIC.csv"));
+EmirStatefulValidator validator = EmirStatefulValidator.create().withMicRegistry(mics);
+
+EmirRefitReport onExchange = EmirRefitReportBuilder.of(EmirActionType.NEWT, EmirEventType.TRAD)
+    // ... counterparties, uti, terms as usual ...
+    .field("venueOfExecution", "XPAR")    // field 2.41
+    .entityResponsible("")                // 1.3 blank: XPAR is an EEA regulated market
+    .build();
+List<String> problems = validator.validate(onExchange);   // no EMIR-VR-1003-01
+```
+
+Field 1.3 (entity responsible for reporting) is filled unless the trade was
+done on a regulated market, and left blank when it was (row 7, condition 1).
+The library reads "regulated market" as ISO 10383 market category `RMKT` in an
+EEA country, active on the date of 2.42. A non-EEA `RMKT` would need the
+Commission's equivalence decisions, which ISO 10383 does not carry, so the rule
+is skipped for it, as it is for a MIC or category the registry does not know.
+`counterparties(...)` fills 1.3 with the reporting counterparty, so clear it for
+an on-exchange trade.
+
+## 402. EMIR: a UTI that changes under the same trade (3.1)
+
+```java
+java.util.function.Function<EmirRefitReport, String> tradeId =
+    r -> r.fields().getOrDefault("internalTradeId", "");
+InMemoryUtiHistory history = new InMemoryUtiHistory(tradeId);
+EmirStatefulValidator validator = EmirStatefulValidator.create()
+    .withHistory(history)
+    .withTradeKey(tradeId);
+
+history.accept(newt);                                     // built with .field("internalTradeId", "T-1")
+List<String> problems = validator.validate(modiWithNewUti);   // EMIR-VR-2001-03
+```
+
+The history is keyed by (field 1.4, UTI), so on its own a new UTI looks like a
+new trade, and the MODI then fails EMIR-VR-2151-02 rather than 2001-03. Rule
+2001-03 ("not allowed to change the content of this field once it is
+reported", row 26) needs another identity for the trade: your own trade id.
+Give the same function to the history and to the validator. A blank key skips
+the rule. A custom `UtiHistory` implements `firstUtiForTradeKey`; the default
+returns empty, which also skips it.
+
+## 403. EMIR: dates "reported for that UTI" (3.1)
+
+```java
+InMemoryUtiHistory history = new InMemoryUtiHistory();
+EmirStatefulValidator validator = EmirStatefulValidator.create().withHistory(history);
+history.accept(newt);       // 2.42 2026-03-02T10:00Z, 2.44 2031-03-04
+history.accept(term);       // 2.45 2026-03-02
+
+List<String> problems = validator.validate(corr);
+// a CORR without 2.45 after the TERM:            EMIR-VR-2045-07
+// a VALU dated after the 2.45 above:             EMIR-VR-2153-08
+// a REVI after the TERM that carries a 2.45:     EMIR-VR-2045-08
+```
+
+Several rules compare the current report with a value "reported for the given
+UTI": 2044-04, 2045-02/03/06/07/08 and 2153-06/08 (rows 69, 70 and 186), plus
+2042-03 (a MODI may not move 2.42) and 1008-02 (1.8 unchanged). When the
+current report leaves a date blank, the validator takes it from the latest
+accepted report that carried it; a REVI clears an earlier 2.45, because a
+revived trade is no longer terminated. Where the report carries the date
+itself, the single-report form in `EmirRefitReport.validate()` applies and the
+stateful form stays quiet, so a problem is reported once. Column AC of row 186
+numbers its last two conditions "6 7." and "7 8."; the codes are taken from
+column AD. LEARN 17i.

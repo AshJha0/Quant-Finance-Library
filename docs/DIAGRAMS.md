@@ -4597,7 +4597,7 @@ flowchart LR
     CAT_110["regreporting.cat<br/>CatEventBuilder (MENO/MEOR/MEOT/MEOF;<br/>MENQ/MONO/MOOR/MONQ from 3.1)"]
     LINK_110["CatLinkageChecker (3.1)<br/>Order/Trade/Fulfillment/Quote Keys<br/>across a batch"]
     EMIR_110["regreporting.emir<br/>EmirRefitReportBuilder"]
-    STATE_110["EmirStatefulValidator (3.1, opt-in)<br/>UTI history, receipt time,<br/>GLEIF status, ISO 4217"]
+    STATE_110["EmirStatefulValidator (3.1, opt-in)<br/>UTI history, receipt time,<br/>GLEIF status and branch, venue MIC,<br/>trade key, UTI dates, ISO 4217"]
     CHK_110["regreporting.registry<br/>ReferenceDataChecker"]
     REG_110["GLEIF golden copy or API,<br/>FIRDS FULINS, ISO 10383 MIC"]
     SINK_110["TransactionReportSink<br/>(e.g. CatJsonLinesSink)"]
@@ -4616,9 +4616,11 @@ report also runs the ESMA rules that need reference data and writes the
 submission file; the shipped loaders read status only, so the dated rules need
 richer reference data. Since 3.1 a batch of CAT events can be checked for
 linkage keys, and EMIR reports can be checked against the repository's state
-(history per UTI, receipt time, GLEIF status, ISO 4217) by the opt-in
+(history per UTI, receipt time, GLEIF status and entity category, the venue
+MIC, a caller trade key for UTI changes, the dates reported for the UTI,
+ISO 4217) by the opt-in
 `EmirStatefulValidator`. See LEARN sections 17e, 17g and 17i and recipes 347 to
-349, 353, 364 and 365.
+349, 353, 364, 365 and 400 to 403.
 
 ## 22. CI, nightly and release gates
 
