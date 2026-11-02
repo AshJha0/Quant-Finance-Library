@@ -1,0 +1,14 @@
+# BCBS Basel Framework MAR21.46 Table 2 "Delta GIRR correlations within the same bucket, with
+# different tenor and same curve" (consolidated framework PDF, QFL-sources/basel/basel-framework-full.pdf,
+# printed 02/11/2026, page 593). Values in percent as printed (one decimal). Row tenor, then columns
+# 0.25,0.5,1,2,3,5,10,15,20,30 years. Transcribed by hand; evidence class: externally anchored.
+0.25,100.0,97.0,91.4,81.1,71.9,56.6,40.0,40.0,40.0,40.0
+0.5,97.0,100.0,97.0,91.4,86.1,76.3,56.6,41.9,40.0,40.0
+1,91.4,97.0,100.0,97.0,94.2,88.7,76.3,65.7,56.6,41.9
+2,81.1,91.4,97.0,100.0,98.5,95.6,88.7,82.3,76.3,65.7
+3,71.9,86.1,94.2,98.5,100.0,98.0,93.2,88.7,84.4,76.3
+5,56.6,76.3,88.7,95.6,98.0,100.0,97.0,94.2,91.4,86.1
+10,40.0,56.6,76.3,88.7,93.2,97.0,100.0,98.5,97.0,94.2
+15,40.0,41.9,65.7,82.3,88.7,94.2,98.5,100.0,99.0,97.0
+20,40.0,40.0,56.6,76.3,84.4,91.4,97.0,99.0,100.0,98.5
+30,40.0,40.0,41.9,65.7,76.3,86.1,94.2,97.0,98.5,100.0
