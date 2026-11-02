@@ -62,7 +62,14 @@ public final class CfiCodeRegistry implements Predicate<String> {
     private static final Pattern GROUP_SHEET = Pattern.compile("[A-Z]{2}XXXX");
     private static final Pattern SECTION = Pattern.compile("(First|Second|Third|Fourth) attribute.*");
     private static final List<String> ORDINALS = List.of("First", "Second", "Third", "Fourth");
-    private static final long MAX_ENTRY_BYTES = 64L << 20;
+    // Input limits (zip-bomb guards). The SIX 2021 workbook has 319 entries
+    // and 1.5 MB uncompressed, so these leave a wide margin.
+    /** Largest uncompressed size of one workbook part read, in bytes (64 MiB). */
+    static final long MAX_ENTRY_BYTES = 64L << 20;
+    /** Most zip entries looked at, read or skipped (10 000). */
+    static final int MAX_ENTRIES = 10_000;
+    /** Largest uncompressed size of all parts read together, in bytes (256 MiB). */
+    static final long MAX_TOTAL_BYTES = 256L << 20;
 
     /** Group (two letters) to the allowed letters of attributes 1 to 4. */
     private final Map<String, List<Set<Character>>> groups;
@@ -75,6 +82,11 @@ public final class CfiCodeRegistry implements Predicate<String> {
 
     /**
      * Loads the SIX ISO 10962 workbook (.xlsx).
+     *
+     * <p>Input limits: at most 10 000 zip entries, 64 MiB uncompressed per
+     * workbook part read and 256 MiB for all parts read together; beyond any of
+     * them the load fails with an IOException before more is inflated. Only
+     * {@code xl/*.xml} and {@code .rels} parts are inflated at all.</p>
      *
      * @param file the workbook
      * @return the table
@@ -220,9 +232,19 @@ public final class CfiCodeRegistry implements Predicate<String> {
     }
 
     private static Map<String, byte[]> unzip(InputStream in) throws IOException {
+        return unzip(in, MAX_ENTRIES, MAX_ENTRY_BYTES, MAX_TOTAL_BYTES);
+    }
+
+    static Map<String, byte[]> unzip(InputStream in, int maxEntries, long maxEntryBytes, long maxTotalBytes)
+            throws IOException {
         Map<String, byte[]> parts = new HashMap<>();
+        long all = 0;
+        int entries = 0;
         try (ZipInputStream z = new ZipInputStream(in)) {
             for (ZipEntry e = z.getNextEntry(); e != null; e = z.getNextEntry()) {
+                if (++entries > maxEntries) {
+                    throw new IOException("workbook has more than " + maxEntries + " zip entries");
+                }
                 String n = e.getName();
                 if (e.isDirectory() || !(n.startsWith("xl/") && (n.endsWith(".xml") || n.endsWith(".rels")))) {
                     continue;
@@ -232,8 +254,12 @@ public final class CfiCodeRegistry implements Predicate<String> {
                 long total = 0;
                 for (int r = z.read(buf); r > 0; r = z.read(buf)) {
                     total += r;
-                    if (total > MAX_ENTRY_BYTES) {
+                    all += r;
+                    if (total > maxEntryBytes) {
                         throw new IOException("workbook part too large: " + n);
+                    }
+                    if (all > maxTotalBytes) {
+                        throw new IOException("workbook larger than " + maxTotalBytes + " bytes uncompressed");
                     }
                     out.write(buf, 0, r);
                 }
