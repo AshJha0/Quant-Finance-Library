@@ -106,13 +106,19 @@ jobs:
             exit 1
           fi
       - name: Build, test and package
-        run: ./mvnw -B --no-transfer-progress verify
+        run: ./mvnw -B --no-transfer-progress -Psbom verify
+      - name: Name the SBOMs per module
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          cp core/target/bom.json "core/target/quant-finance-library-$version-sbom.cdx.json"
+          cp lowlatency/target/bom.json "lowlatency/target/quant-finance-library-lowlatency-$version-sbom.cdx.json"
       - name: Create GitHub release with jars
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
             core/target/quant-finance-library-*.jar             lowlatency/target/quant-finance-library-lowlatency-*.jar \
+            core/target/*-sbom.cdx.json lowlatency/target/*-sbom.cdx.json \
             --title "quantfinlib $GITHUB_REF_NAME" \
             --generate-notes
       - name: Republish the site from main with the new tag
