@@ -588,9 +588,10 @@ CAT-LK01.
 sources it was given, so a missing source skips its rules), `UtiHistory`,
 `InMemoryUtiHistory`, `CurrencyRegistry`; `regreporting/cat/CatLinkageChecker`
 and the event types MENQ, MONO, MOOR and MONQ (rules CAT-R13 to CAT-R16).
-Still not checked for EMIR: 1009-08 (client code prefix) and 2001-04 (2.1 against 2.2 to
-2.4), whose fields this package does not populate, and third-country regulated markets in
-1003-01. For CAT the option lifecycle, multi-leg and supplement events, linkage across
+Since 3.2 the builder fills 2.2 to 2.4 and the validator checks 2001-04 (2.1 against 2.2 to
+2.4, with its siblings 2002-02, 2003-05 and 2004-04); `withColumnAdCodes()` reports the row 13
+client code prefix as 1009-08, column AD's number for it (recipes 470 and 471). Still not
+checked for EMIR: third-country regulated markets in 1003-01. For CAT the option lifecycle, multi-leg and supplement events, linkage across
 files and the schema gate came later in 3.1 (17j to 17l); still not checked are the other
 events of Tables 60 and 61, reference data and the official schema file. `check` is
 batch-local, so pass a whole day's events for a firm, or use `checkFiles`. Recipes 364 and 365.
