@@ -4,8 +4,9 @@ package com.quantfinlib.risk;
  * FRTB residual risk add-on, styled after BCBS d457 chapter MAR23. Not
  * certified. The add-on is a flat percentage of gross notional: 1.0%
  * for instruments with an exotic underlying, 0.1% for instruments
- * bearing other residual risks (per MAR23). Classifying an instrument
- * is the caller's job.
+ * bearing other residual risks (MAR23.8(2)(a) and (b), verified against
+ * d457). Classifying an instrument (MAR23.3, MAR23.4) is the caller's
+ * job.
  *
  * <p>Worked example (own test): exotic notional 1000 and other 5000
  * give 10 + 5 = 15.</p>

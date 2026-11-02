@@ -1,6 +1,7 @@
 package com.quantfinlib.risk;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * FRTB standardised approach, sensitivities-based method (SBM), styled
@@ -18,14 +19,19 @@ import java.util.List;
  * <pre>  K_b = √max(0, Σ WS_k² + Σ_{k≠l} ρ_kl WS_k WS_l)
  *  S_b = max(min(Σ WS_k, K_b), −K_b)
  *  Δ   = √(Σ K_b² + Σ_{b≠c} γ_bc S_b S_c)</pre>
- * If the radicand of Δ is negative the calculation is repeated with
- * S<sub>b</sub> = Σ WS<sub>k</sub> unclamped (the MAR21 alternative
- * specification); if that is still negative this class returns 0 and
- * the caller should treat the case as a data error. Curvature uses the
- * squared delta correlations and the ψ rule (cross term dropped when
- * both terms are negative), with CVR from up/down full revaluation.
- * Correlation scenarios: high = min(1.25ρ, 1), low = max(2ρ − 1,
- * 0.75ρ), applied to ρ and γ alike.
+ * For delta and vega the first pass uses S<sub>b</sub> = Σ WS<sub>k</sub>
+ * unclamped (MAR21.4(5)(a)); only if that radicand is negative is the
+ * calculation repeated with the clamped S<sub>b</sub> above, the
+ * alternative specification of MAR21.4(5)(b). If that is still negative
+ * this class returns 0. Curvature (MAR21.5) uses S<sub>b</sub> = Σ CVR
+ * of the selected scenario, the ψ rule (cross term dropped when both
+ * terms are negative) and floors the radicand at 0; the bucket takes
+ * the larger of the up and down scenario (MAR21.5(3)(a)), see
+ * {@link #curvature(List, List, double[][], Scenario)}. Curvature
+ * correlations are the squared delta correlations, and the high and low
+ * scenarios are applied to the squared value (MAR21.100, MAR21.101).
+ * Correlation scenarios (MAR21.6): high = min(1.25ρ, 1), low =
+ * max(2ρ − 1, 0.75ρ), applied to ρ and γ alike.
  *
  * <p><b>Worked example</b> (own test {@code FrtbSaTest}): two GIRR
  * sensitivities of 100 and −50 at tenors 1y and 2y in one currency,
@@ -35,8 +41,10 @@ import java.util.List;
  * <p>Correlation matrices are supplied by the caller; the supervisory
  * parameter helpers {@link Girr}, {@link Fx}, {@link Equity},
  * {@link Commodity} and {@link Csr} build the ones this library can
- * state with confidence. Everything else (CSR inter-bucket table,
- * securitisation, equity repo weights) is caller supplied.</p>
+ * take from d457 MAR21, each value checked against the text and cited
+ * on the constant (published reference, BCBS d457 January 2019).
+ * {@link SecNonCtp} covers CSR securitisation (non-CTP). Bucketing
+ * decisions (sector, rating, market cap) stay with the caller.</p>
  */
 public final class FrtbSa {
 
@@ -114,10 +122,7 @@ public final class FrtbSa {
                 if (curvature && ws[k] < 0 && ws[l] < 0) {
                     continue;
                 }
-                double r = sc.apply(rho[k][l]);
-                if (curvature) {
-                    r = r * r;
-                }
+                double r = curvature ? sc.apply(rho[k][l] * rho[k][l]) : sc.apply(rho[k][l]);
                 sum += r * ws[k] * ws[l];
             }
         }
@@ -173,12 +178,108 @@ public final class FrtbSa {
                 raw[b] += w;
             }
         }
-        double v = radicand(k, s, gamma, sc, curvature);
-        if (v < 0) {
-            v = radicand(k, raw, gamma, sc, curvature);
+        return combine(k, raw, s, gamma, sc, curvature);
+    }
+
+    /** MAR21.4(5): unclamped S_b first, clamped alternative; curvature floors at 0. */
+    private static double combine(double[] k, double[] raw, double[] clamped, double[][] gamma,
+            Scenario sc, boolean curvature) {
+        double v = radicand(k, raw, gamma, sc, curvature);
+        if (v < 0 && !curvature) {
+            v = radicand(k, clamped, gamma, sc, false);
         }
         return v < 0 ? 0 : Math.sqrt(v);
     }
+
+    /**
+     * Delta or vega capital where some buckets are "other sector"
+     * buckets (equity 11, CSR non-securitisation 16, securitisation
+     * non-CTP 25): their K_b is Σ|WS_k| with no correlation
+     * (MAR21.56(1), MAR21.69(1), MAR21.79(1)). {@code otherSector} holds
+     * zero-based indices into {@code buckets}.
+     */
+    public static double deltaVega(List<Bucket> buckets, double[][] gamma, Scenario sc,
+            Set<Integer> otherSector) {
+        int n = buckets.size();
+        if (gamma.length != n) {
+            throw new IllegalArgumentException("gamma must be nb x nb");
+        }
+        double[] k = new double[n];
+        double[] s = new double[n];
+        double[] raw = new double[n];
+        for (int b = 0; b < n; b++) {
+            double[] ws = buckets.get(b).weighted();
+            for (double w : ws) {
+                raw[b] += w;
+            }
+            k[b] = otherSector.contains(b) ? otherSectorK(ws)
+                    : bucketK(ws, buckets.get(b).rho(), sc, false);
+            s[b] = Math.max(-k[b], Math.min(k[b], raw[b]));
+        }
+        return combine(k, raw, s, gamma, sc, false);
+    }
+
+    /** Other-sector bucket delta or vega K_b = Σ|WS_k| (MAR21.56(1), MAR21.79(1)). */
+    public static double otherSectorK(double[] weighted) {
+        double t = 0;
+        for (double w : weighted) {
+            t += Math.abs(w);
+        }
+        return t;
+    }
+
+    /**
+     * Other-sector bucket curvature K_b = max(Σ max(CVR⁺, 0), Σ max(CVR⁻, 0))
+     * (MAR21.56(2), MAR21.79(2)).
+     */
+    public static double otherSectorCurvatureK(double[] cvrUp, double[] cvrDown) {
+        double u = 0;
+        double d = 0;
+        for (double v : cvrUp) {
+            u += Math.max(v, 0);
+        }
+        for (double v : cvrDown) {
+            d += Math.max(v, 0);
+        }
+        return Math.max(u, d);
+    }
+
+    /**
+     * Curvature capital with both shock directions (MAR21.5(3) and (4)).
+     * {@code up.get(b)} and {@code down.get(b)} hold CVR⁺_k and CVR⁻_k of
+     * bucket b with the delta ρ (squared internally). Each bucket takes
+     * the larger of K⁺ and K⁻; on a tie the up scenario is chosen if
+     * Σ CVR⁺ &gt; Σ CVR⁻. S_b is Σ CVR of the selected scenario, and the
+     * selection is made afresh under each correlation scenario.
+     */
+    public static double curvature(List<Bucket> up, List<Bucket> down, double[][] gamma,
+            Scenario sc) {
+        int n = up.size();
+        if (down.size() != n || gamma.length != n) {
+            throw new IllegalArgumentException("up, down and gamma must have nb buckets");
+        }
+        double[] k = new double[n];
+        double[] s = new double[n];
+        for (int b = 0; b < n; b++) {
+            double[] u = up.get(b).weighted();
+            double[] d = down.get(b).weighted();
+            double ku = bucketK(u, up.get(b).rho(), sc, true);
+            double kd = bucketK(d, down.get(b).rho(), sc, true);
+            double su = 0;
+            double sd = 0;
+            for (double v : u) {
+                su += v;
+            }
+            for (double v : d) {
+                sd += v;
+            }
+            boolean pickUp = ku > kd || (ku == kd && su > sd);
+            k[b] = pickUp ? ku : kd;
+            s[b] = pickUp ? su : sd;
+        }
+        return combine(k, s, s, gamma, sc, true);
+    }
+
 
     private static double radicand(double[] k, double[] s, double[][] gamma, Scenario sc,
             boolean curvature) {
@@ -189,10 +290,8 @@ public final class FrtbSa {
                 if (c == b || (curvature && s[b] < 0 && s[c] < 0)) {
                     continue;
                 }
-                double g = sc.apply(gamma[b][c]);
-                if (curvature) {
-                    g = g * g;
-                }
+                double g = curvature
+                        ? sc.apply(gamma[b][c] * gamma[b][c]) : sc.apply(gamma[b][c]);
                 sum += g * s[b] * s[c];
             }
         }
@@ -269,17 +368,21 @@ public final class FrtbSa {
         return m;
     }
 
-    /** Vega risk weight min(RW_σ·√(LH/10), 1) with RW_σ = 0.55 (per MAR21). */
+    /**
+     * Vega risk weight min(RW_σ·√(LH/10), 1) with RW_σ = 0.55 (MAR21.92
+     * footnote 24). Verified: gives 100% for every class except equity
+     * large cap and indices, 0.55·√2 = 77.78% (MAR21.92 Table 13).
+     */
     public static double vegaRiskWeight(int liquidityHorizonDays) {
         return Math.min(0.55 * Math.sqrt(liquidityHorizonDays / 10.0), 1.0);
     }
 
-    /** Vega option-maturity correlation exp(−1%·|T_k − T_l|/min(T_k, T_l)). */
+    /** Vega option-maturity correlation exp(−1%·|T_k − T_l|/min(T_k, T_l)) (MAR21.93(1), verified). */
     public static double vegaMaturityCorrelation(double tk, double tl) {
         return Math.exp(-0.01 * Math.abs(tk - tl) / Math.min(tk, tl));
     }
 
-    /** Vega liquidity horizons, days (per MAR21). */
+    /** Vega liquidity horizons, days (MAR21.92 Table 13, verified; CSR securitisation also 120). */
     public static final int VEGA_LH_GIRR = 60;
     public static final int VEGA_LH_CSR = 120;
     public static final int VEGA_LH_EQUITY_LARGE_CAP = 20;
@@ -305,16 +408,31 @@ public final class FrtbSa {
 
         /** The ten GIRR delta tenors, years. */
         public static final double[] TENORS = {0.25, 0.5, 1, 2, 3, 5, 10, 15, 20, 30};
-        /** Delta risk weights per tenor (per MAR21, d457 values). */
+        /** Delta risk weights per tenor (MAR21.42 Table 1, verified). */
         public static final double[] RISK_WEIGHTS =
                 {0.017, 0.017, 0.016, 0.013, 0.012, 0.011, 0.011, 0.011, 0.011, 0.011};
-        /** Inflation and cross-currency basis risk weight. */
+        /** Inflation and cross-currency basis risk weight (MAR21.43, verified). */
         public static final double INFLATION_RW = 0.016;
         public static final double XCCY_BASIS_RW = 0.016;
-        /** Cross-currency inter-bucket correlation. */
+        /** Cross-currency inter-bucket correlation (MAR21.50, verified). */
         public static final double GAMMA = 0.5;
+        /** Same tenor, different curve, same currency (MAR21.45). */
+        public static final double RHO_DIFFERENT_CURVE = 0.999;
+        /** Inflation curve against any tenor of the yield curve (MAR21.48). */
+        public static final double RHO_INFLATION = 0.4;
+        /** Cross-currency basis against yield curve, inflation or another basis curve (MAR21.49). */
+        public static final double RHO_XCCY_BASIS = 0.0;
 
-        /** Same-curve tenor correlation max(exp(−3%·|ΔT|/min T), 40%). */
+        /**
+         * Different tenor and different curve: the Table 2 value times
+         * 99.9% (MAR21.47; footnote 14 gives 88.69%·0.999 = 88.60% for
+         * 1y against 5y). Equal tenors give 99.9% (MAR21.45).
+         */
+        public static double differentCurveCorrelation(double tk, double tl) {
+            return tenorCorrelation(tk, tl) * RHO_DIFFERENT_CURVE;
+        }
+
+        /** Same-curve tenor correlation max(exp(−3%·|ΔT|/min T), 40%) (MAR21.46 footnote 13, verified). */
         public static double tenorCorrelation(double tk, double tl) {
             return Math.max(Math.exp(-0.03 * Math.abs(tk - tl) / Math.min(tk, tl)), 0.4);
         }
@@ -330,7 +448,7 @@ public final class FrtbSa {
             return m;
         }
 
-        /** Risk weight divided by √2 for the specified/domestic currencies (per MAR21). */
+        /** Risk weight divided by √2 for EUR, USD, GBP, AUD, JPY, SEK, CAD and the domestic currency (MAR21.44). */
         public static double reducedRw(double rw) {
             return rw / Math.sqrt(2);
         }
@@ -341,10 +459,12 @@ public final class FrtbSa {
         private Fx() {
         }
 
+        /** FX delta risk weight (MAR21.87, verified). */
         public static final double RISK_WEIGHT = 0.15;
+        /** FX inter-bucket correlation (MAR21.89, verified). */
         public static final double GAMMA = 0.6;
 
-        /** RW / √2 for the specified liquid currency pairs. */
+        /** RW / √2 for the specified currency pairs and their first-order crosses (MAR21.88). */
         public static double reducedRw() {
             return RISK_WEIGHT / Math.sqrt(2);
         }
@@ -355,11 +475,25 @@ public final class FrtbSa {
         private Equity() {
         }
 
-        /** Spot delta risk weights, index = bucket − 1. */
+        /** Spot delta risk weights, index = bucket − 1 (MAR21.77 Table 10, verified). */
         public static final double[] SPOT_RW =
                 {0.55, 0.60, 0.45, 0.55, 0.30, 0.35, 0.40, 0.50, 0.70, 0.50, 0.70, 0.15, 0.25};
+        /** Repo-rate delta risk weights, index = bucket − 1 (MAR21.77 Table 10). */
+        public static final double[] REPO_RW = {0.0055, 0.0060, 0.0045, 0.0055, 0.0030, 0.0035,
+            0.0040, 0.0050, 0.0070, 0.0050, 0.0070, 0.0015, 0.0025};
+        /** Spot against repo of the same issuer (MAR21.78(1)). */
+        public static final double RHO_SPOT_REPO_SAME_ISSUER = 0.999;
 
-        /** Intra-bucket correlation between two different issuers' spot. */
+        /**
+         * Spot against repo of different issuers in the same bucket: the
+         * spot-spot value times 99.9% (MAR21.78(4)). Repo against repo
+         * uses {@link #intraBucket} unchanged (MAR21.78(3)).
+         */
+        public static double spotRepoDifferentIssuer(int bucket) {
+            return intraBucket(bucket) * 0.999;
+        }
+
+        /** Intra-bucket correlation between two different issuers' spot (MAR21.78(2), verified). */
         public static double intraBucket(int bucket) {
             if (bucket >= 1 && bucket <= 4) {
                 return 0.15;
@@ -382,7 +516,7 @@ public final class FrtbSa {
             throw new IllegalArgumentException("bucket 1..13");
         }
 
-        /** Inter-bucket γ: 15% among 1-10, 75% between 12 and 13, 45% index vs 1-10, 0 with 11. */
+        /** Inter-bucket γ: 15% among 1-10, 75% between 12 and 13, 45% otherwise, 0 with 11 (MAR21.80, verified). */
         public static double gamma(int b, int c) {
             if (b == 11 || c == 11) {
                 return 0;
@@ -404,39 +538,185 @@ public final class FrtbSa {
         private Commodity() {
         }
 
-        /** Delta risk weights, index = bucket − 1. */
+        /** Delta risk weights, index = bucket − 1 (MAR21.82 Table 11, verified). */
         public static final double[] RW =
                 {0.30, 0.35, 0.60, 0.80, 0.40, 0.45, 0.20, 0.35, 0.25, 0.35, 0.50};
-        /** Intra-bucket commodity correlation ρ_cty, index = bucket − 1. */
+        /** Intra-bucket commodity correlation ρ_cty, index = bucket − 1 (MAR21.83 Table 12, verified). */
         public static final double[] RHO_CTY =
                 {0.55, 0.95, 0.40, 0.80, 0.60, 0.65, 0.55, 0.45, 0.15, 0.40, 0.15};
-        /** Inter-bucket γ (buckets 1-10); bucket 11 takes 0. */
+        /** Inter-bucket γ (buckets 1-10); bucket 11 takes 0 (MAR21.85, verified). */
         public static final double GAMMA = 0.20;
+        /** Different tenor (MAR21.83(2), verified). */
         public static final double RHO_TENOR = 0.99;
+        /** Different delivery location (MAR21.83(3), verified). */
         public static final double RHO_BASIS = 0.999;
+
+        /** Inter-bucket γ for buckets 1-11 (MAR21.85). */
+        public static double gamma(int b, int c) {
+            if (b < 1 || b > 11 || c < 1 || c > 11) {
+                throw new IllegalArgumentException("bucket 1..11");
+            }
+            if (b == c) {
+                return 1.0;
+            }
+            return b == 11 || c == 11 ? 0.0 : GAMMA;
+        }
     }
 
-    /** Credit spread risk, non-securitisation. */
+    /** Credit spread risk, non-securitisation (MAR21.51 to MAR21.57). */
     public static final class Csr {
         private Csr() {
         }
 
         /**
-         * Delta risk weights for buckets 1-18, index = bucket − 1, as
-         * recalled from d457. Treat as indicative and verify against the
-         * text before relying on them; the inter-bucket γ table is not
-         * provided and must be supplied by the caller.
+         * Delta risk weights for buckets 1-18, index = bucket − 1
+         * (MAR21.53 Table 4, verified against d457). Covered bonds rated
+         * AA- or better may use 1.5% instead of bucket 8's 2.5%
+         * (footnote 17); that choice is the caller's.
          */
         public static final double[] RW = {0.005, 0.01, 0.05, 0.03, 0.03, 0.02, 0.015, 0.025,
             0.02, 0.04, 0.12, 0.07, 0.085, 0.055, 0.05, 0.12, 0.015, 0.05};
+        /** Different names, buckets 1-15 (MAR21.54(1), verified). */
         public static final double RHO_NAME = 0.35;
+        /** Different names, index buckets 17-18 (MAR21.55(1)). */
+        public static final double RHO_NAME_INDEX = 0.80;
+        /** Different tenor (MAR21.54(2), verified). */
         public static final double RHO_TENOR = 0.65;
+        /** Different curve (bond against CDS) (MAR21.54(3), verified). */
         public static final double RHO_BASIS = 0.999;
+        /** Inter-bucket rating factor when IG meets HY/NR, buckets 1-15 (MAR21.57(1)). */
+        public static final double GAMMA_RATING = 0.5;
 
-        /** Intra-bucket ρ = ρ_name·ρ_tenor·ρ_basis (each 1 when equal). */
+        /** Intra-bucket ρ = ρ_name·ρ_tenor·ρ_basis for buckets 1-15 (MAR21.54). */
         public static double intraBucket(boolean sameName, boolean sameTenor, boolean sameBasis) {
             return (sameName ? 1 : RHO_NAME) * (sameTenor ? 1 : RHO_TENOR)
                     * (sameBasis ? 1 : RHO_BASIS);
         }
+
+        /** Intra-bucket ρ for index buckets 17-18 (MAR21.55). */
+        public static double intraBucketIndex(boolean sameName, boolean sameTenor,
+                boolean sameBasis) {
+            return (sameName ? 1 : RHO_NAME_INDEX) * (sameTenor ? 1 : RHO_TENOR)
+                    * (sameBasis ? 1 : RHO_BASIS);
+        }
+
+        /**
+         * Delta ρ to feed into curvature for CSR non-securitisation and
+         * CTP: only ρ_name applies (MAR21.100(1)); {@link FrtbSa#curvature}
+         * squares it.
+         */
+        public static double curvatureRho(boolean sameName, boolean indexBucket) {
+            return sameName ? 1 : indexBucket ? RHO_NAME_INDEX : RHO_NAME;
+        }
+
+        /** Sector table, MAR21.57 Table 5, by sector index 0..10 = 1/9 .. 7/15, 8, 16, 17, 18. */
+        private static final double[][] SECTOR = {
+            {1, 0.75, 0.10, 0.20, 0.25, 0.20, 0.15, 0.10, 0, 0.45, 0.45},
+            {0.75, 1, 0.05, 0.15, 0.20, 0.15, 0.10, 0.10, 0, 0.45, 0.45},
+            {0.10, 0.05, 1, 0.05, 0.15, 0.20, 0.05, 0.20, 0, 0.45, 0.45},
+            {0.20, 0.15, 0.05, 1, 0.20, 0.25, 0.05, 0.05, 0, 0.45, 0.45},
+            {0.25, 0.20, 0.15, 0.20, 1, 0.25, 0.05, 0.15, 0, 0.45, 0.45},
+            {0.20, 0.15, 0.20, 0.25, 0.25, 1, 0.05, 0.20, 0, 0.45, 0.45},
+            {0.15, 0.10, 0.05, 0.05, 0.05, 0.05, 1, 0.05, 0, 0.45, 0.45},
+            {0.10, 0.10, 0.20, 0.05, 0.15, 0.20, 0.05, 1, 0, 0.45, 0.45},
+            {0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0},
+            {0.45, 0.45, 0.45, 0.45, 0.45, 0.45, 0.45, 0.45, 0, 1, 0.75},
+            {0.45, 0.45, 0.45, 0.45, 0.45, 0.45, 0.45, 0.45, 0, 0.75, 1},
+        };
+
+        private static int sector(int b) {
+            if (b >= 1 && b <= 7) {
+                return b - 1;
+            }
+            if (b >= 9 && b <= 15) {
+                return b - 9;
+            }
+            return switch (b) {
+                case 8 -> 7;
+                case 16 -> 8;
+                case 17 -> 9;
+                case 18 -> 10;
+                default -> throw new IllegalArgumentException("bucket 1..18");
+            };
+        }
+
+        /**
+         * Inter-bucket γ = γ_rating·γ_sector (MAR21.57). γ_rating is 50%
+         * when both buckets are in 1-15 and one is IG (1-8) while the
+         * other is HY/NR (9-15), else 1; γ_sector is Table 5. Example:
+         * buckets 1 and 10 give 0.5·0.75 = 0.375.
+         */
+        public static double gamma(int b, int c) {
+            int sb = sector(b);
+            int sc = sector(c);
+            if (b == c) {
+                return 1.0;
+            }
+            boolean bothRated = b <= 15 && c <= 15;
+            double rating = bothRated && (b <= 8) != (c <= 8) ? GAMMA_RATING : 1.0;
+            return rating * SECTOR[sb][sc];
+        }
+
+        /** CTP delta risk weights, buckets 1-16 (MAR21.59 Table 6). */
+        public static final double[] CTP_RW = {0.04, 0.04, 0.08, 0.05, 0.04, 0.03, 0.02, 0.06,
+            0.13, 0.13, 0.16, 0.10, 0.12, 0.12, 0.12, 0.13};
+        /** CTP different-curve correlation (MAR21.60(1)). */
+        public static final double RHO_BASIS_CTP = 0.99;
+
+        /** CTP intra-bucket ρ (MAR21.60); γ is {@link #gamma} for buckets 1-16 (MAR21.61). */
+        public static double intraBucketCtp(boolean sameName, boolean sameTenor,
+                boolean sameBasis) {
+            return (sameName ? 1 : RHO_NAME) * (sameTenor ? 1 : RHO_TENOR)
+                    * (sameBasis ? 1 : RHO_BASIS_CTP);
+        }
+    }
+
+    /**
+     * CSR securitisation (non-CTP), buckets 1-25 (MAR21.62 to MAR21.71).
+     * Buckets 1-8 senior IG, 9-16 non-senior IG (RW ×1.25), 17-24 HY and
+     * non-rated (RW ×1.75), 25 other sector at 3.5%. Across buckets 1-24
+     * γ = 0; bucket 25 is aggregated by Σ|WS| ({@link FrtbSa#otherSectorK})
+     * and added to the risk-class total with no diversification
+     * (MAR21.71).
+     */
+    public static final class SecNonCtp {
+        private SecNonCtp() {
+        }
+
+        /** Senior IG risk weights, buckets 1-8 (MAR21.64 Table 8). */
+        public static final double[] SENIOR_IG_RW =
+            {0.009, 0.015, 0.02, 0.02, 0.008, 0.012, 0.012, 0.014};
+        /** Bucket 25 risk weight (MAR21.67). */
+        public static final double OTHER_RW = 0.035;
+        public static final double RHO_TRANCHE = 0.40;
+        public static final double RHO_TENOR = 0.80;
+        public static final double RHO_BASIS = 0.999;
+
+        /** Risk weight of bucket 1-25 (MAR21.64 to MAR21.67). */
+        public static double riskWeight(int bucket) {
+            if (bucket >= 1 && bucket <= 8) {
+                return SENIOR_IG_RW[bucket - 1];
+            }
+            if (bucket >= 9 && bucket <= 16) {
+                return SENIOR_IG_RW[bucket - 9] * 1.25;
+            }
+            if (bucket >= 17 && bucket <= 24) {
+                return SENIOR_IG_RW[bucket - 17] * 1.75;
+            }
+            if (bucket == 25) {
+                return OTHER_RW;
+            }
+            throw new IllegalArgumentException("bucket 1..25");
+        }
+
+        /** Intra-bucket ρ = ρ_tranche·ρ_tenor·ρ_basis (MAR21.68). */
+        public static double intraBucket(boolean sameTranche, boolean sameTenor,
+                boolean sameBasis) {
+            return (sameTranche ? 1 : RHO_TRANCHE) * (sameTenor ? 1 : RHO_TENOR)
+                    * (sameBasis ? 1 : RHO_BASIS);
+        }
+
+        /** Inter-bucket γ across buckets 1-24 is 0 (MAR21.70). */
+        public static final double GAMMA = 0.0;
     }
 }
