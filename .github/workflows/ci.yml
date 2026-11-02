@@ -24,14 +24,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # JDK 25 is the build and release JDK. JDK 21 runs with the jdk21 profile
-        # (auto-activated, compiles at release 21) to prove the sources need
-        # nothing newer; macOS checks the third free runner OS.
+        # Java 25 is the only supported JDK; macOS checks the third free runner OS.
         os: [ubuntu-latest, windows-latest, macos-latest]
         java: ['25']
-        include:
-          - os: ubuntu-latest
-            java: '21'
     defaults:
       run:
         shell: bash

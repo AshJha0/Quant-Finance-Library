@@ -39,8 +39,7 @@
     </scm>
     <properties>
         <maven.compiler.release>25</maven.compiler.release>
-        <!-- Lowest JDK the build accepts. The jdk21 profile lowers both this and
-             maven.compiler.release when the build runs on JDK 21-24 (CI matrix). -->
+        <!-- Lowest JDK the build accepts (Java 25 only). -->
         <qfl.minJdk>25</qfl.minJdk>
         <cyclonedx.version>2.9.1</cyclonedx.version>
         <project.build.outputTimestamp>2026-11-02T16:39:15Z</project.build.outputTimestamp>
@@ -282,19 +281,6 @@
         </plugins>
     </build>
     <profiles>
-        <!-- JDK 21 compatibility. The sources compile at release 21 (no 22+ language
-             feature or API is used), so CI also verifies on JDK 21. Activated
-             automatically on JDK 21-24; the released jars stay at release 25. -->
-        <profile>
-            <id>jdk21</id>
-            <activation>
-                <jdk>[21,25)</jdk>
-            </activation>
-            <properties>
-                <maven.compiler.release>21</maven.compiler.release>
-                <qfl.minJdk>21</qfl.minJdk>
-            </properties>
-        </profile>
         <!-- CycloneDX SBOM (target/bom.json and bom.xml per module), attached to
              GitHub releases by release.yml:  ./mvnw -Psbom -DskipTests package -->
         <profile>

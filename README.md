@@ -38,9 +38,8 @@ connectivity stack; see [docs/STABILITY.md](docs/STABILITY.md).
   months before a major removes it ([docs/STABILITY.md](docs/STABILITY.md)). The
   planned 4.0 module split is in [docs/DESIGN_4.0.md](docs/DESIGN_4.0.md).
 - Build integrity: each release attaches a CycloneDX SBOM per jar, and CI checks
-  that two clean builds give identical jar hashes. CI also compiles and tests on
-  JDK 21 (Ubuntu) and on macOS; the released jars target Java 25, so JDK 21 is a
-  portability check, not a supported runtime. See
+  that two clean builds give identical jar hashes. CI tests on Java 25 on
+  Ubuntu, Windows and macOS; Java 25 is the only supported JDK. See
   [docs/PUBLISHING.md](docs/PUBLISHING.md).
 - Version 3.0.0 changes no number; it reduces the public API. The library splits
   into two artifacts (stable tier and low-latency lane), `reporting` becomes

@@ -277,7 +277,7 @@ unchanged.
 ## CI and release gates
 
 Every push and pull request runs `ci.yml`: tests on JDK 25 (Ubuntu, Windows,
-macOS) and JDK 21 (Ubuntu, a portability guard; released jars target 25), the
+macOS), the
 japicmp API check, and a reproducible-build job (two clean builds, same jar
 hashes; `scripts/check-reproducible.sh`). Release builds add a CycloneDX SBOM
 (`-Psbom`). Tests that need files we do not commit skip locally; PR CI runs the

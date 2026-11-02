@@ -79,14 +79,7 @@ Anyone can check a release the same way: check out the tag, run the script (or o
 release page. Bump `project.build.outputTimestamp` when you cut a release; it does
 not have to be exact, it only has to be fixed.
 
-**Supported JDKs.** The sources use no language feature or API newer than Java 21:
-`./mvnw test-compile -Dmaven.compiler.release=21` on JDK 25 compiles both modules
-(main and test, 2026-11-02). CI therefore runs the full `verify` on JDK 21 (Ubuntu)
-as well as JDK 25 (Ubuntu, Windows, macOS). On JDK 21-24 the `jdk21` profile turns
-itself on, lowering `maven.compiler.release` and the enforcer floor to 21. The
-released jars are still built on JDK 25 at release 25, so a 3.x consumer needs
-JDK 25; JDK 21 in CI is a guard that keeps the sources portable, not a support
-promise for the published jars.
+**Supported JDK.** Java 25 only. The build's enforcer rule refuses an older JDK, and CI runs the full `verify` on JDK 25 on Ubuntu, Windows and macOS.
 
 ## JitPack
 

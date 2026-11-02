@@ -71,7 +71,7 @@ Minor release, additive over 3.0.0: no public member is removed, no signature ch
 - The API check job fetches and compares against the 3.0.0 jars.
 - CycloneDX SBOM: `-Psbom` (cyclonedx-maven-plugin 2.9.1, runtime scope) and `release.yml` attaches `*-<version>-sbom.cdx.json` for each jar to the GitHub release.
 - Reproducible build: `project.build.outputTimestamp` is fixed and `scripts/check-reproducible.sh` (two clean builds, SHA-256 of every jar compared) runs as the CI job `reproducible build`. Self-consistency on one machine; a cross-OS rebuild has not been compared.
-- CI matrix: ubuntu JDK 21 (profile `jdk21`, auto-activated on JDK 21 to 24, `--release 21`) and macOS JDK 25 alongside ubuntu JDK 25. Neither the JDK 21 runtime nor macOS has been run locally; CI is the first run.
+- CI matrix: macOS JDK 25 alongside Ubuntu and Windows JDK 25. Java 25 stays the only supported JDK.
 - `scripts/check-learn.py` in CI next to the COOKBOOK check: compiles LEARN Java blocks (there are none at present), checks backticked class and method names against the class files, and checks every link into LEARN.
 
 ## [3.0.0] - 2026-11-02
