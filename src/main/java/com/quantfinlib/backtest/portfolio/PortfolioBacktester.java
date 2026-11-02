@@ -6,6 +6,8 @@ import com.quantfinlib.backtest.PerformanceMetrics;
 import com.quantfinlib.backtest.TradeCostModel;
 import com.quantfinlib.core.BarSeries;
 import com.quantfinlib.data.CorporateActions;
+import com.quantfinlib.data.CorporateEventPositions;
+import com.quantfinlib.data.CorporateEvents;
 import com.quantfinlib.data.PointInTimeUniverse;
 
 import java.util.ArrayList;
@@ -376,6 +378,41 @@ public final class PortfolioBacktester {
                              PointInTimeUniverse universe,
                              Map<String, List<CorporateActions.CorporateAction>> cashDividends,
                              Participation participation) {
+        return run(strategy, data, signalData, config, universe, cashDividends, participation, Map.of());
+    }
+
+    /**
+     * The participation-capped run plus extended {@link CorporateEvents},
+     * booked on the position book on their ex-date (after the 2.1 cash
+     * dividends, before terminal events). Opt-in: an empty map gives the
+     * 2.1 behaviour exactly. {@code data} must be the unadjusted series.
+     * Shares and cash move as follows, with {@code P} the last close
+     * before the ex-date and shorts mirrored:
+     * <ul>
+     *   <li>stock dividend: quantity times {@code 1 + rate};</li>
+     *   <li>reverse split: quantity divided by {@code k}, fractions paid
+     *       in cash at the theoretical ex price {@code k * P};</li>
+     *   <li>dividend (regular or special): cash {@code qty * amount},
+     *       counted in {@link Result#dividendCashCredited()};</li>
+     *   <li>spin-off: {@code qty * ratio} shares of the child, which must
+     *       be a live series in {@code data};</li>
+     *   <li>rights issue: rights are assumed sold at their theoretical
+     *       value, cash {@code qty * (P - TERP)};</li>
+     *   <li>symbol change: the position moves to the new symbol when that
+     *       symbol is a series in {@code data}, else it stays put;</li>
+     *   <li>cash-and-stock merger: terminal for the target; the holder is
+     *       assumed to elect cash on exactly {@code maxCashFraction} (so no
+     *       proration), stock on the rest, fractions paid in cash. The
+     *       acquirer must be a live series.</li>
+     * </ul>
+     * Each applied event counts in {@link Result#lifecycleEventsApplied()}.
+     */
+    public static Result run(PortfolioStrategy strategy, Map<String, BarSeries> data,
+                             Map<String, BarSeries> signalData, Config config,
+                             PointInTimeUniverse universe,
+                             Map<String, List<CorporateActions.CorporateAction>> cashDividends,
+                             Participation participation,
+                             Map<String, List<CorporateEvents.Event>> corporateEvents) {
         if (data.isEmpty()) {
             throw new IllegalArgumentException("no series supplied");
         }
@@ -423,6 +460,14 @@ public final class PortfolioBacktester {
                     CorporateActions.CorporateAction::exTimestamp));
             divs.put(e.getKey(), new DividendStream(sorted));
         }
+        List<String> eventSymbols = new ArrayList<>(corporateEvents.keySet());
+        eventSymbols.sort(String::compareTo);
+        Map<String, List<CorporateEvents.Event>> evq = new HashMap<>();
+        for (String s : eventSymbols) {
+            List<CorporateEvents.Event> q = new ArrayList<>(corporateEvents.get(s));
+            q.sort(java.util.Comparator.comparingLong(CorporateEvents.Event::exTimestamp));
+            evq.put(s, q);
+        }
         // Any symbol's timeline works for bar timestamps: series are aligned.
         BarSeries clock = data.get(symbols.getFirst());
 
@@ -455,6 +500,21 @@ public final class PortfolioBacktester {
                         dividendCash += credit;
                     }
                     stream.cursor++;
+                }
+            }
+
+            // 1b) Extended corporate events (opt-in), same entitlement rule.
+            for (String symbol : eventSymbols) {
+                List<CorporateEvents.Event> q = evq.get(symbol);
+                while (!q.isEmpty() && q.getFirst().exTimestamp() <= now) {
+                    CorporateEvents.Event ev = q.removeFirst();
+                    if (dead.contains(symbol) || i == 0 || !data.containsKey(symbol)) {
+                        continue;
+                    }
+                    double[] out = applyEvent(ev, symbol, data, positions, dead, i);
+                    cash += out[0];
+                    dividendCash += out[1];
+                    eventsApplied++;
                 }
             }
 
@@ -562,6 +622,67 @@ public final class PortfolioBacktester {
                 equity, List.of(), config.periodsPerYear());
         return new Result(equity, metrics, totalCosts, totalTurnover, finalPositions,
                 dividendCash, eventsApplied, financingCost);
+    }
+
+    /** Books one extended event; returns {cash delta, dividend cash}. */
+    private static double[] applyEvent(CorporateEvents.Event ev, String symbol,
+                                       Map<String, BarSeries> data, Map<String, Double> positions,
+                                       Set<String> dead, int i) {
+        double qty = positions.getOrDefault(symbol, 0.0);
+        double sign = Math.signum(qty);
+        double prev = data.get(symbol).close(i - 1);
+        CorporateEventPositions.Holding h =
+                new CorporateEventPositions.Holding(symbol, "", Math.abs(qty), 0);
+        switch (ev) {
+            case CorporateEvents.Dividend d -> {
+                double c = qty * d.amount();
+                return new double[] {c, c};
+            }
+            case CorporateEvents.RightsIssue r -> {
+                return new double[] {qty * (prev - CorporateEvents.terp(prev, r)), 0};
+            }
+            case CorporateEvents.SpinOff s -> {
+                requireLive(data, dead, s.childSymbol(), symbol);
+                positions.merge(s.childSymbol(), qty * s.ratio(), Double::sum);
+                return new double[] {0, 0};
+            }
+            case CorporateEvents.SymbolChange c -> {
+                if (data.containsKey(c.newSymbol()) && !c.newSymbol().equals(symbol)) {
+                    requireLive(data, dead, c.newSymbol(), symbol);
+                    positions.merge(c.newSymbol(), qty, Double::sum);
+                    positions.put(symbol, 0.0);
+                    dead.add(symbol);
+                }
+                return new double[] {0, 0};
+            }
+            case CorporateEvents.CashStockMerger m -> {
+                requireLive(data, dead, m.acquirerSymbol(), symbol);
+                CorporateEventPositions.Outcome o = CorporateEventPositions.merger(
+                        h, m, m.maxCashFraction(), m.maxCashFraction());
+                positions.merge(m.acquirerSymbol(), sign * o.holdings().get(1).shares(), Double::sum);
+                positions.put(symbol, 0.0);
+                dead.add(symbol);
+                return new double[] {sign * o.cash(), 0};
+            }
+            case CorporateEvents.ReverseSplit r -> {
+                CorporateEventPositions.Outcome o =
+                        CorporateEventPositions.apply(h, r, prev * r.oldPerNew());
+                positions.put(symbol, sign * o.holdings().getFirst().shares());
+                return new double[] {sign * o.cash(), 0};
+            }
+            case CorporateEvents.StockDividend s -> {
+                positions.put(symbol, qty * (1 + s.rate()));
+                return new double[] {0, 0};
+            }
+        }
+    }
+
+    private static void requireLive(Map<String, BarSeries> data, Set<String> dead,
+                                    String target, String source) {
+        if (!data.containsKey(target) || dead.contains(target)) {
+            throw new IllegalArgumentException("event on " + source + " delivers " + target
+                    + ", which is not a live series in the backtest");
+        }
     }
 
     /**
