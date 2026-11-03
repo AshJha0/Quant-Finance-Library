@@ -208,9 +208,8 @@ jobs:
 
   mutation-io-research:
     # PIT on the two incubating modules of 4.0: io and report (module io) and
-    # dsl (module research). Report only for now: they have no floors in
-    # scripts/pit-thresholds.txt until a nightly run has measured them. Core
-    # runs in the same reactor with no matching targets.
+    # dsl (module research), with floors in scripts/pit-thresholds.txt (runs io
+    # and research). Core runs in the same reactor with no matching targets.
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -230,11 +229,12 @@ jobs:
       - name: Summary
         if: always()
         run: |
+          set -o pipefail
+          rc=0
           for m in io research; do
-            if [ -f "$m/target/pit-reports/mutations.xml" ]; then
-              python3 scripts/pit-summary.py "$m/target/pit-reports/mutations.xml" | tee -a "$GITHUB_STEP_SUMMARY"
-            fi
+            python3 scripts/pit-summary.py "$m/target/pit-reports/mutations.xml"               --thresholds scripts/pit-thresholds.txt --run "$m" | tee -a "$GITHUB_STEP_SUMMARY" || rc=1
           done
+          exit $rc
       - name: Upload report
         if: always()
         uses: actions/upload-artifact@v7

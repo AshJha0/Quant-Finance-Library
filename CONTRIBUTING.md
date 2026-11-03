@@ -13,6 +13,12 @@ You need JDK 25. Maven comes with the repository through the wrapper.
 
 On Windows use `mvnw.cmd` in place of `./mvnw`.
 
+The nightly `analysis` job runs exactly `./mvnw -B -Panalysis -DskipTests clean verify`.
+The `analysis` profile also cleans the tree itself, so `./mvnw -Panalysis verify`
+without `clean` runs the same checks. Before 4.0.1 it did not: the compiler plugin
+reused classes compiled earlier without Error Prone, and a ReferenceEquality error
+in the low-latency lane passed locally and failed the nightly run.
+
 `verify` fails if line coverage drops below 90 % for the library as a whole or
 below 80 % for any package. The `examples` package is excluded from coverage and
 ships in its own jar (classifier `examples`), not in the library jar.

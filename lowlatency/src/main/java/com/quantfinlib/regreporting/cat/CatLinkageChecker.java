@@ -376,12 +376,21 @@ public final class CatLinkageChecker {
 
     /** Whether an origin other than {@code self} has the full key {@code k}. */
     private static boolean hasOther(Map<String, List<Entry>> origins, String k, Entry self) {
+        // Identity is intended: Entry is a record, so two submissions of the same event
+        // in one file are equal by value, yet each must count as the other's match.
+        // Only the entry being checked is skipped; isSameEntry keeps the one
+        // ReferenceEquality suppression in a single named place.
         for (Entry o : origins.getOrDefault(k, List.of())) {
-            if (o != self) {
+            if (!isSameEntry(o, self)) {
                 return true;
             }
         }
         return false;
+    }
+
+    @SuppressWarnings("ReferenceEquality") // identity, not value equality, by design
+    private static boolean isSameEntry(Entry a, Entry b) {
+        return a == b;
     }
 
     private static List<String> orderFields(CatEventType t) {

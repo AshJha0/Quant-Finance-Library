@@ -6,6 +6,12 @@ Entries for 1.x releases are archived in [docs/history/CHANGELOG-1.x.md](docs/hi
 
 ## [Unreleased]
 
+#### Fixed
+
+- Nightly analysis: `CatLinkageChecker` compared entries with `!=`, which Error Prone's ReferenceEquality rejects. Identity is intended (equal records are distinct submissions), so the test moves to one documented helper. No behaviour or API change.
+- Build: the `analysis` profile now cleans first, so `./mvnw -Panalysis verify` runs the same checks as the nightly `clean verify`; before, classes compiled earlier without Error Prone were reused (CONTRIBUTING).
+- Nightly PIT floors: the stale `risk.simm` floor (package removed in 2.3.0) is dropped; `regreporting.cat` is re-baselined 92 -> 80 after the 4.0.0 LK06-LK09 rules; io, report and dsl get floors and the io/research job enforces them.
+
 ## [4.0.0] - 2026-11-02
 
 Major release: the module split announced in 3.2.0, with CAT moved to IM Technical Specifications v4.2.0 r4 (CAT-LK06 to LK09) and EMIR-VR-1003-01 for third-country venues. No number changes. Every move and removal below was announced, and every removed type deprecated with its replacement, in 3.2.0. [docs/MIGRATION_4.0.md](docs/MIGRATION_4.0.md) has one row per break with the import and dependency to change; japicmp against the 3.2.0 jars reports semver MAJOR, and its gate excludes exactly those rows and fails on anything else.

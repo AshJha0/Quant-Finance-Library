@@ -104,7 +104,7 @@
     <h1>quantfinlib</h1>
     <p class="lead">A Java library for quantitative finance research and risk, using only the
       JDK at runtime, with a reference low-latency trading lane.</p>
-    <p class="meta">Version 3.2.0 &middot; Java 25 &middot; MIT licence &middot;
+    <p class="meta">Version 4.0.0 &middot; Java 25 &middot; MIT licence &middot;
       <a href="https://github.com/AshJha0/Quant-Finance-Library">Source on GitHub</a></p>
   </header>
 
@@ -135,15 +135,18 @@
 &lt;dependency&gt;
   &lt;groupId&gt;com.github.AshJha0.Quant-Finance-Library&lt;/groupId&gt;
   &lt;artifactId&gt;quant-finance-library&lt;/artifactId&gt;
-  &lt;version&gt;v3.2.0&lt;/version&gt;
+  &lt;version&gt;v4.0.0&lt;/version&gt;
 &lt;/dependency&gt;
 
 &lt;!-- or the trading lane, which brings the stable tier with it --&gt;
 &lt;dependency&gt;
   &lt;groupId&gt;com.github.AshJha0.Quant-Finance-Library&lt;/groupId&gt;
   &lt;artifactId&gt;quant-finance-library-lowlatency&lt;/artifactId&gt;
-  &lt;version&gt;v3.2.0&lt;/version&gt;
-&lt;/dependency&gt;</code></pre>
+  &lt;version&gt;v4.0.0&lt;/version&gt;
+&lt;/dependency&gt;
+
+&lt;!-- optional: CSV and HTTP loaders (quant-finance-library-io), or the incubating
+     strategy DSL (quant-finance-library-research); same groupId and version --&gt;</code></pre>
   <p>Or build from source with a JDK 25:</p>
 <pre><code>git clone https://github.com/AshJha0/Quant-Finance-Library.git
 cd Quant-Finance-Library
@@ -162,8 +165,9 @@ cd Quant-Finance-Library
     <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/ULTRA_LOW_LATENCY.md">Trading lane</a><span>Order lifecycle, risk gate, protocols, tuning</span></li>
     <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/BENCHMARKS.md">Benchmarks</a><span>Method and results</span></li>
     <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/STABILITY.md">Stability</a><span>Stable APIs and versioning policy</span></li>
+    <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/MIGRATION_4.0.md">Migrating to 4.0</a><span>Every 4.0 removal and move, with the dependency to add</span></li>
     <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/MIGRATION_3.1.md">Migrating to 3.1</a><span>The 3.1 deprecations and their replacements</span></li>
-    <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/DESIGN_4.0.md">Design for 4.0</a><span>The planned module split and its schedule</span></li>
+    <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/DESIGN_4.0.md">Design for 4.0</a><span>The 4.0 module split and why some packages stayed in core</span></li>
     <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/MIGRATION_3.0.md">Migrating to 3.0</a><span>What 3.0 removes or moves, and the 2.4 replacement</span></li>
     <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/MIGRATION_2.4.md">Migrating to 2.4</a><span>Deprecations and new opt-in behaviour in 2.4</span></li>
     <li><a href="https://github.com/AshJha0/Quant-Finance-Library/blob/main/docs/MIGRATION_2.3.md">Migrating to 2.3</a><span>Removed SIMM package and the result changes in 2.3</span></li>
