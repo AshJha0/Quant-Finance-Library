@@ -374,7 +374,21 @@ part. Code that needs them should use a specialised library or add them.
 
 ## Performance
 
-Benchmark method, environment and results are in [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
+Median of three runs of tag `v4.0.0` on one Windows laptop (2026-11-04, JDK 27).
+This is software, in-process latency, not wire-to-wire, and the Windows clock
+steps by about 100 ns. Closed loop:
+
+| Measure | p50 | p99 | p99.9 |
+|---|---:|---:|---:|
+| Market data to strategy | 200 ns | 301 ns | 401 ns |
+| Order submit to venue thread | 301 ns | 401 ns | 603 ns |
+| Tick to two-sided quote | 501 ns | 703 ns | 3.41 µs |
+| Tick to order | 703 ns | 3.31 µs | 16.51 µs |
+
+Under a fixed offered load the tails are far larger, because queueing behind a
+stall is charged: p99 287 µs for market data at 500,000 ticks/s and 221 µs for
+orders at 200,000/s. Method, environment and every result are in
+[docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 
 ## Documentation
 

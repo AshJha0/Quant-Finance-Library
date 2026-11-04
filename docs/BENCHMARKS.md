@@ -1,6 +1,6 @@
 # Benchmarks
 
-This is the only place in the repository that quotes performance numbers. Other documents link here.
+This page holds every performance result. The README quotes a short summary of it; other documents link here.
 
 ## What these numbers are, and what they are not
 
@@ -21,7 +21,7 @@ Each latency benchmark reports two measurements.
 - **Closed loop:** one message in flight. The next message is sent only after the previous one is consumed. This shows the cost of the path itself, but it hides queueing: if the consumer stalls, the producer stops sending, so the stall delays one sample instead of many. This is coordinated omission.
 - **Open loop:** messages are sent at a fixed rate, and each latency is measured from the time the message was due to be sent, not from when it was actually sent. A stall then shows up in every message that queued behind it. This is the number that matters for a system that cannot pause its inputs.
 
-The gap between the two, for example a 401 ns closed-loop p99 against a 149 µs open-loop p99 in the market-data benchmark, is the effect of coordinated omission on this machine.
+The gap between the two, for example a 301 ns closed-loop p99 against a 287 µs open-loop p99 in the market-data benchmark at 4.0.0, is the effect of coordinated omission on this machine.
 
 ## Environment (2.0.0 release candidate run)
 
