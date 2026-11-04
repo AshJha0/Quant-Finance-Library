@@ -23,7 +23,7 @@ Each latency benchmark reports two measurements.
 
 The gap between the two, for example a 401 ns closed-loop p99 against a 149 µs open-loop p99 in the market-data benchmark, is the effect of coordinated omission on this machine.
 
-## Environment
+## Environment (2.0.0 release candidate run)
 
 | Item | Value |
 |---|---|
@@ -37,7 +37,63 @@ The gap between the two, for example a 401 ns closed-loop p99 against a 149 µs 
 | Runs | 3 runs of each benchmark, machine otherwise idle |
 | Clock step | about 100 ns, measured by `LatencyRecorder` |
 
-## Results
+## Results for 4.0.0
+
+Tag `v4.0.0`, 2026-11-04, the same laptop and JVM flags on Oracle JDK 27.0.1, machine otherwise idle. Each cell shows min / median / max across three runs. The JDK differs from the run below, so a change between the two is not a measure of the code alone. Latencies are quantised by the clock step of about 100 ns.
+
+### Market data bus: `HftLatencyBenchmark`
+
+| Measure | Min | Median | Max |
+|---|---|---|---|
+| Throughput, million ticks/s | 21.4 | 21.7 | 23.7 |
+| Closed loop p50 | 200 ns | 200 ns | 200 ns |
+| Closed loop p99 | 200 ns | 301 ns | 301 ns |
+| Closed loop p99.9 | 301 ns | 401 ns | 501 ns |
+| Open loop at 500,000 ticks/s, p50 | 200 ns | 200 ns | 200 ns |
+| Open loop at 500,000 ticks/s, p99 | 81.41 µs | 286.72 µs | 313.34 µs |
+| Open loop at 500,000 ticks/s, p99.9 | 1.76 ms | 2.28 ms | 2.38 ms |
+
+### Order path: `HftOrderBenchmark`
+
+| Measure | Min | Median | Max |
+|---|---|---|---|
+| Risk gate check, ns (reciprocal throughput, 1,024 random symbols) | 12.8 | 13.1 | 13.2 |
+| Submit to venue thread, closed loop p50 | 200 ns | 301 ns | 301 ns |
+| Submit to venue thread, closed loop p99 | 301 ns | 401 ns | 401 ns |
+| Submit to venue thread, closed loop p99.9 | 401 ns | 603 ns | 1.90 µs |
+| Open loop at 200,000 orders/s, p50 | 301 ns | 803 ns | 1.21 µs |
+| Open loop at 200,000 orders/s, p99 | 197.63 µs | 221.18 µs | 264.19 µs |
+| Open loop at 200,000 orders/s, p99.9 | 565.25 µs | 2.79 ms | 3.16 ms |
+| Tick to order end to end, closed loop p50 | 501 ns | 703 ns | 1.61 µs |
+| Tick to order end to end, closed loop p99 | 603 ns | 3.31 µs | 5.41 µs |
+| Tick to order end to end, closed loop p99.9 | 2.82 µs | 16.51 µs | 16.77 µs |
+| Throughput, million orders/s | 2.9 | 2.9 | 7.6 |
+
+### Market maker: `HftQuoterBenchmark`
+
+| Measure | Min | Median | Max |
+|---|---|---|---|
+| Closed loop tick to quote p50 | 501 ns | 501 ns | 603 ns |
+| Closed loop tick to quote p99 | 703 ns | 703 ns | 803 ns |
+| Closed loop tick to quote p99.9 | 2.91 µs | 3.41 µs | 3.62 µs |
+| Open loop at 100,000 ticks/s, p50 | 603 ns | 1.81 µs | 2.01 µs |
+| Open loop at 100,000 ticks/s, p99 | 13.76 µs | 16.64 µs | 97.79 µs |
+| Open loop at 100,000 ticks/s, p99.9 | 169.98 µs | 184.32 µs | 407.55 µs |
+
+### Matching engine: `HftBookBenchmark`
+
+| Measure | Min | Median | Max |
+|---|---|---|---|
+| Passive churn, million add/cancel ops/s | 7.9 | 9.3 | 10.1 |
+| Matching, million ops/s | 12.1 | 13.1 | 13.2 |
+| Per-op cost p50 (mean of 128-op batches) | 96 ns | 100 ns | 121 ns |
+| Per-op cost p99 (mean of 128-op batches) | 221 ns | 225 ns | 337 ns |
+
+Tick to order is the noisiest row: its p99 moved by almost a factor of ten across the three runs.
+
+## Results for the 2.0.0 release candidate
+
+Kept for the record; the Environment table above describes this run.
 
 Each cell shows min / median / max across the three runs.
 
