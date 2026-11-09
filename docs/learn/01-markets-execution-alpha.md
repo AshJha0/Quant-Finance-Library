@@ -154,7 +154,7 @@ you *their* prices privately. Three consequences that shape everything:
   spread, 5M a bit wider, 20M wider still. There's no single "the price" —
   it depends on your size.
 - **Benchmarks.** Many institutional FX orders are executed "at the fix" —
-  the WM/Refinitiv 4pm London benchmark, computed over a 5-minute window.
+  the WM/R 4pm London benchmark, computed over a 5-minute window.
   Executing evenly across that window replicates the benchmark.
 
 *In this library:* on the equities side, `marketdata/Nbbo.java` and

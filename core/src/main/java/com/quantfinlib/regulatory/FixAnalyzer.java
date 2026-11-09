@@ -8,7 +8,7 @@ package com.quantfinlib.regulatory;
  * aligned with the participant's net flow into the fix, and reversion
  * afterwards.
  *
- * <p>The published WM/Refinitiv methodology (since February 2015) takes a
+ * <p>The published WM/R methodology (since February 2015) takes a
  * five-minute window of one-second snapshots, computes the median of the
  * bids and the median of the offers separately (trade-based where trades
  * are available), and publishes the mid of the two medians.

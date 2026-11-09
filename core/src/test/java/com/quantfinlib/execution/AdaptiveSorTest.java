@@ -230,19 +230,19 @@ class AdaptiveSorTest {
         VenueScorecard card = new VenueScorecard(3);
         AdaptiveSor sor = new AdaptiveSor(card);
         sor.register("EBS", 0);
-        sor.register("LSEG", 1);
+        sor.register("VENUE_B", 1);
         sor.register("MIDMATCH", 2);
         List<VenueQuote> venues = List.of(
                 new VenueQuote("EBS", 1.08500, 5_000_000, 1.08502, 5_000_000,
                         0, 300 * US, false, Long.MAX_VALUE),
-                new VenueQuote("LSEG", 1.08500, 5_000_000, 1.08502, 8_000_000,
+                new VenueQuote("VENUE_B", 1.08500, 5_000_000, 1.08502, 8_000_000,
                         0, 150 * US, false, Long.MAX_VALUE),
                 new VenueQuote("MIDMATCH", 1.08500, 0, 1.08502, 0,
                         0, 400 * US, true, Long.MAX_VALUE));
         RoutingDecision d = sor.route(Side.BUY, 10_000_000, venues);
         assertEquals(10_000_000, d.routedQty());
-        assertEquals("LSEG", d.lit().get(0).venue(), "same rate: lower latency first");
-        assertEquals(8_000_000, litFor(d, "LSEG"));
+        assertEquals("VENUE_B", d.lit().get(0).venue(), "same rate: lower latency first");
+        assertEquals(8_000_000, litFor(d, "VENUE_B"));
         assertEquals(2_000_000, litFor(d, "EBS"));
         assertEquals(1, d.probes().size());
         assertEquals(1.08501, d.probes().get(0).price(), 1e-9, "mid-match fills at mid");

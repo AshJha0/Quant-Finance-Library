@@ -1,6 +1,6 @@
 /**
  * Benchmark-fix and regulatory execution metrics. The main classes:
- * {@link com.quantfinlib.regulatory.FixAnalyzer} (WM/Reuters-style fix
+ * {@link com.quantfinlib.regulatory.FixAnalyzer} (WM/R-style fix
  * calculation and "banging the close" screening),
  * {@link com.quantfinlib.regulatory.BestExecutionAnalyzer} (MiFID II-style
  * slippage, latency-to-fill and per-venue reporting) and
