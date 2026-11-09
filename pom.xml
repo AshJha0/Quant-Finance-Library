@@ -47,14 +47,14 @@
         <maven.compiler.release>25</maven.compiler.release>
         <!-- Lowest JDK the build accepts (Java 25 only). -->
         <qfl.minJdk>25</qfl.minJdk>
-        <cyclonedx.version>2.9.1</cyclonedx.version>
+        <cyclonedx.version>2.9.3</cyclonedx.version>
         <project.build.outputTimestamp>2026-11-02T16:39:15Z</project.build.outputTimestamp>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <junit.version>6.1.3</junit.version>
         <jmh.version>1.37</jmh.version>
-        <errorprone.version>2.51.0</errorprone.version>
-        <jspecify.version>1.0.0</jspecify.version>
-        <japicmp.version>0.26.5</japicmp.version>
+        <errorprone.version>2.52.0</errorprone.version>
+        <jspecify.version>1.0.1</jspecify.version>
+        <japicmp.version>0.27.0</japicmp.version>
         <pitest.version>1.30.1</pitest.version>
         <pitest.junit5.version>1.2.3</pitest.junit5.version>
         <!-- API compatibility baseline: the released 3.2.0 jars

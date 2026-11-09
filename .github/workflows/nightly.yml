@@ -93,7 +93,7 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.13'
       - name: Install openpyxl (reads the ISDA workbooks)
