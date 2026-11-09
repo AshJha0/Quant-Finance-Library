@@ -2490,7 +2490,7 @@ have it.
 
 ## 73. Execute at the WMR fix without banging it
 
-Orders benchmarked to the WM/Refinitiv 4pm fix are executed by spreading the
+Orders benchmarked to the WM/R 4pm fix are executed by spreading the
 parent evenly across the fixing's calculation window: the fix is computed
 from observations inside the window, so TWAP-in-window IS the neutral
 replication. Then screen the result the way a surveillance desk would.
@@ -4931,7 +4931,7 @@ System.out.println("done: " + roll.done());   // true: no delivery risk
 
 Falling behind one day just makes later days' due larger: the roll always catches up to the curve, and the constructor rejects any migration that does not end at exactly 1.0, because a roll that does not complete is a delivery notice waiting to happen. Each day's execution is recipe 144's spread algo with ratio 1, so the front and back legs never drift apart mid-roll; substitute your market's observed open-interest migration for the default smoothstep when you have it.
 
-## 146. Execute at the WM/Refinitiv fix, then screen for banging it
+## 146. Execute at the WM/R fix, then screen for banging it
 
 Orders benchmarked to the 4pm WMR fix are replicated by spreading the parent evenly across the fixing's calculation window: the fix is computed from observations inside the window, so TWAP-in-window IS the neutral execution. `WmrFixingScheduler` builds that plan and `FixAnalyzer` screens the result the way surveillance would.
 
@@ -8719,7 +8719,7 @@ that recipe 283 hardens against gaming.
 
 ## 266. Banging-the-close surveillance
 
-The WM/Reuters 4pm fix is set from rates sampled inside a window, which
+The WM/R 4pm fix is set from rates sampled inside a window, which
 makes it a target: trade heavily one way into the window, push the print,
 let it revert after. `FixAnalyzer` computes a WM/R-style fix (the median of
 the window's mids, or with `calculateFix(bids, offers)` the mid of separate
